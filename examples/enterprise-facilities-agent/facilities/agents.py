@@ -54,6 +54,18 @@ def call_tool(ctx, tool, args, st):
     return out
 
 
+ROUTER_PROMPT = (
+    "You route facilities requests to specialist agents. The agents are:\n"
+    "- facilities: searches the knowledge base (SOPs, safety rules, policies, maintenance procedures, how-to guidance). "
+    "Use it for ANY question about what the procedure, rule, limit or policy is, or what to do.\n"
+    "- maintenance: looks up a specific asset (ids like CH-12 or PUMP-3) and its work orders, and can raise a work order.\n"
+    "- analytics: counts and statistics over work orders (how many, trends, summaries).\n"
+    "Pick every agent needed. A question that mentions an asset AND asks what the procedure or rule is needs both facilities and maintenance. "
+    "Reply with only a JSON list such as [\"facilities\",\"maintenance\"], drawn from [\"facilities\",\"maintenance\",\"analytics\"]."
+)
+ANALYTICS_ONLY = re.compile(r"^\s*(how many|count|give me a summary|summary of|report|trend)", re.I)
+
+
 def build(ctx):
     def span(st, name, kind, t0):
         st.setdefault("spans", []).append(dict(name=name, kind=kind, start=t0, end=time.time()))
@@ -62,13 +74,15 @@ def build(ctx):
         t0 = time.time()
         q = st["question"].lower()
         plan = None
-        txt = converse(ctx, "You route facilities requests. Reply with only a JSON list drawn from [\"facilities\",\"maintenance\",\"analytics\"].", st["question"], 40)
+        txt = converse(ctx, ROUTER_PROMPT, st["question"], 60)
         if txt:
             try:
                 plan = [p for p in json.loads(re.search(r"\[.*\]", txt, re.S).group(0)) if p in ("facilities", "maintenance", "analytics")]
             except Exception:
                 plan = None
         st["llm_used"] = bool(plan)
+        if plan and "facilities" not in plan and not ANALYTICS_ONLY.search(q):
+            plan.insert(0, "facilities")     # grounding rule: every non-statistics question is answered from the knowledge base, with citations
         if not plan:
             plan = ["facilities"]
             if re.search(r"[A-Z]{1,3}-\d+|work order|status|ticket|asset", st["question"]):

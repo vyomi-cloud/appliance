@@ -255,5 +255,22 @@ if shutil.which("python3"):
     except Exception as e:
         check("compose is valid YAML", False, e)
 
+# ---- llm-chat adapter hot-reload hook (restarts llama-server inside the container when a trained adapter lands) ----------
+check("compose mounts the adapter dir read-only and runs llm-chat through the reload entrypoint",
+      "llm-chat-entry.sh:/entry.sh:ro" in comp and "mesh-data:/mesh-data:ro" in comp and 'entrypoint: ["/bin/sh", "/entry.sh"]' in comp and "VYOMI_LLM_ADAPTER_DIR: /mesh-data/llm-adapters" in comp)
+if shutil.which("sh"):
+    import tempfile, time
+    check("entry script is valid sh", subprocess.run(["sh", "-n", f"{d}/llm-chat-entry.sh"]).returncode == 0)
+    tmp = tempfile.mkdtemp(); fake = os.path.join(tmp, "fake"); ad = os.path.join(tmp, "ad"); os.makedirs(ad)
+    open(fake, "w").write('#!/bin/sh\necho "START $*"\nexec sleep 600\n'); os.chmod(fake, 0o755)
+    log = open(os.path.join(tmp, "log"), "w")
+    pr = subprocess.Popen(["sh", f"{d}/llm-chat-entry.sh", "-c", "4096"], stdout=log, stderr=subprocess.STDOUT,
+                          env=dict(os.environ, LLAMA_BIN=fake, VYOMI_LLM_ADAPTER_DIR=ad, VYOMI_LLM_ADAPTER_POLL="1"))
+    time.sleep(3); open(os.path.join(ad, "a.gguf"), "w").write("x"); time.sleep(3.5)
+    pr.terminate(); pr.wait(); subprocess.run(["pkill", "-f", "sleep 600"]); txt = open(os.path.join(tmp, "log")).read()
+    starts = [l for l in txt.splitlines() if l.startswith("START")]
+    check("entry script starts without adapters, then restarts llama-server with --lora-scaled <file>:0 when one lands",
+          len(starts) == 2 and "--lora-scaled" not in starts[0] and starts[1].endswith("a.gguf:0") and "-c 4096" in starts[1], txt)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

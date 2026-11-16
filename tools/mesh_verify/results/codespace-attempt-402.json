@@ -1,0 +1,6 @@
+{"where": "none: Codespace NOT created",
+ "date": "2026-11-17",
+ "command": "gh codespace create -R vyomi-cloud/appliance -b v4/ai-integration -m standardLinux32gb --idle-timeout 30m (GH_TOKEN of sudhirkumarganti)",
+ "preflight": {"codespace_scope": "ok (gh api user/codespaces)", "machines_endpoint_vyomi-cloud/appliance": "ok, lists basicLinux32gb (2c/8GB) and standardLinux32gb (4c/16GB)", "repo_public": true, "permissions": "pull only"},
+ "result": "HTTP 402: Usage not allowed: sudhirkumarganti, you are out of monthly free usage or have exceeded your budget for Codespaces.",
+ "retries": 0, "codespaces_created": 0, "codespaces_touched": "none (the account's 25 Shutdown codespaces were listed only)"}

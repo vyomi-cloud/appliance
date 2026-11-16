@@ -42,7 +42,10 @@ services:
     profiles: ["ai"]
     networks: [vyomi-net]
     restart: unless-stopped
-    volumes: [ai-models:/root/.cache]
+    # llm-chat-entry.sh: restarts llama-server when a trained chat adapter lands in mesh-data/llm-adapters (read-only mount; no docker socket needed)
+    entrypoint: ["/bin/sh", "/entry.sh"]
+    environment: { VYOMI_LLM_ADAPTER_DIR: /mesh-data/llm-adapters }
+    volumes: [ai-models:/root/.cache, mesh-data:/mesh-data:ro, ./llm-chat-entry.sh:/entry.sh:ro]
     # --jinja: native tool-call templates; -np 1: one slot on 2 cores (queue upstream); --cache-reuse: keep the shared prompt prefix
     command: ["-hf", "${VYOMI_AI_CHAT_HF:-unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M}", "--host", "0.0.0.0", "--port", "8080",
               "-c", "${VYOMI_AI_CHAT_CTX:-4096}", "--jinja", "-np", "1", "--cache-reuse", "256", "-t", "2", "--alias", "${VYOMI_MESH_AI_MODEL:-qwen3-4b}"]
