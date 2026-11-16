@@ -1,15 +1,6 @@
 {
- "at": "2026-11-16T07:11:40+00:00",
+ "at": "2026-11-16T08:11:44+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "sdk",
-   "service": "go:cloud.google.com/go/storage",
-   "kind": "release",
-   "key": "ver:go:cloud.google.com/go/storage:v1.71.0",
-   "title": "go:cloud.google.com/go/storage: v1.70.0 \u2192 v1.71.0",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
