@@ -160,6 +160,41 @@ def _f16():
     _check("F16 disassociating again is InvalidAssociationID.NotFound", r.status == 400 and "InvalidAssociationID.NotFound" in body(r))
 
 
+def _f18_f19():
+    s = types.SimpleNamespace()
+    call = lambda **p: v.dispatch(s, p)  # noqa: E731
+    body = lambda r: r.body.decode() if isinstance(r.body, bytes) else r.body  # noqa: E731
+    m = v._model(s)
+    vpc = re.search(r"<vpcId>(vpc-\w+)</vpcId>", body(call(Action="CreateVpc", CidrBlock="10.3.0.0/16"))).group(1)
+    sub = re.search(r"<subnetId>(subnet-\w+)</subnetId>", body(call(Action="CreateSubnet", VpcId=vpc, CidrBlock="10.3.1.0/24"))).group(1)
+    vol = re.search(r"<volumeId>(vol-\w+)</volumeId>", body(call(Action="CreateVolume", Size="1", AvailabilityZone="us-east-1a"))).group(1)
+    r = call(Action="AttachVolume", VolumeId=vol, InstanceId="i-0123456789ab", Device="/dev/sdf")
+    _check("F18 before registration the engine does not know a runtime-launched instance", r.status == 400)
+    ext = {"instance_id": "i-0123456789ab", "ami": "ami-ubuntu2204", "instance_type": "t3.micro", "state": "running", "subnet_id": sub,
+           "security_group_ids": [], "private_ip": "10.3.1.5", "storage_gb": 8, "created": "2026-11-16T00:00:00.000Z", "name": "app"}
+    v.register_external_instance(m, ext)
+    v.register_external_instance(m, ext)   # idempotent
+    r = call(Action="AttachVolume", VolumeId=vol, InstanceId="i-0123456789ab", Device="/dev/sdf")
+    _check("F18 after shadow registration AttachVolume works", r.status == 200 and "<status>attached</status>" in body(r))
+    out = body(call(Action="DescribeVolumes", **{"Filter.1.Name": "attachment.instance-id", "Filter.1.Value.1": "i-0123456789ab"}))
+    _check("F19 DescribeVolumes filters on attachment.instance-id: the root volume (synthetic id) and the attached data volume",
+           "vol-0123456789ab" in out and vol in out)
+    out = body(call(Action="DescribeVolumes", **{"VolumeId.1": vol}))
+    _check("F19 DescribeVolumes by id returns exactly that volume", out.count("<volumeId>" + vol + "</volumeId><size>") == 1 and "vol-0123456789ab</volumeId><size>" not in out)
+    call(Action="CreateTags", **{"ResourceId.1": vol, "Tag.1.Key": "Env", "Tag.1.Value": "prod"})
+    call(Action="CreateTags", **{"ResourceId.1": "i-0123456789ab", "Tag.1.Key": "Env", "Tag.1.Value": "dev"})
+    out = body(call(Action="DescribeTags", **{"Filter.1.Name": "resource-id", "Filter.1.Value.1": vol}))
+    _check("F20 DescribeTags honours the resource-id filter (provider reads one resource's tags)", vol in out and "i-0123456789ab" not in out)
+
+
+def _f21():
+    from core import dynamodb_core as d
+    view = d._continuous_backups_view({"pitr_enabled": True, "pitr_earliest": "2026-11-16T00:00:00.000Z"})
+    desc = view["PointInTimeRecoveryDescription"]
+    _check("F21 PITR restorable timestamps are epoch numbers, not ISO strings",
+           isinstance(desc["EarliestRestorableDateTime"], float) and isinstance(desc["LatestRestorableDateTime"], float))
+
+
 if __name__ == "__main__":
-    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12(); _f16()
-    print("Endurance F1/F4/F6-F16 regressions: ALL GREEN")
+    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12(); _f16(); _f18_f19(); _f21()
+    print("Endurance F1/F4/F6-F20 regressions: ALL GREEN")

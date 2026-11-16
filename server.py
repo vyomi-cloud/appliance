@@ -14716,6 +14716,21 @@ _EC2_CORE_INSTANCE_ACTIONS = ("DescribeInstances", "DescribeInstanceStatus", "St
                               "RebootInstances", "TerminateInstances", "MonitorInstances", "UnmonitorInstances")
 
 
+def _ec2_shadow_register_instances(params: dict, vpc_store) -> None:
+    """Instances launched by the runtime-backed RunInstances (Docker/LXD) live in ec2_state; core operations that name them
+    (AttachVolume, CreateImage, ModifyInstanceAttribute...) would answer InvalidInstanceID.NotFound. Register a shadow in the
+    core model first (idempotent, refreshes state). endurance F18."""
+    ids = [str(v) for k, v in params.items() if (k == "InstanceId" or k.startswith("InstanceId.")) and str(v).startswith("i-")]
+    if not ids:
+        return
+    from core import vpc_core as _vpc_core
+    model = _vpc_core._model(vpc_store)
+    for iid in ids:
+        ext = ec2_state["instances"].get(iid)
+        if isinstance(ext, dict):
+            _vpc_core.register_external_instance(model, ext)
+
+
 def _ec2_core_dispatch(params: dict) -> Response:
     """One EC2 Query action on the shared EC2/VPC core (core/vpc_core.py) over the space slot."""
     from core import vpc_core as _vpc_core
@@ -14723,10 +14738,57 @@ def _ec2_core_dispatch(params: dict) -> Response:
     vpc_store = _Ec2CoreSpaceStore()
     vpc_store.cw_store = aws_cloudwatch.get_store()
     vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]
+    _ec2_shadow_register_instances(params, vpc_store)
     r = _vpc_core.dispatch(vpc_store, dict(params))
     if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         _persist_state()
     return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
+
+
+def _ec2_describe_volumes_merged(params: dict) -> Response:
+    """Volumes live in TWO engines: runtime-launched instances' root volumes (legacy, synthesized) and everything core created
+    (CreateVolume, snapshot restores, shadow-registered instances). DescribeVolumes must list both, once each. endurance F19."""
+    if not _vpc_engine_is_core():
+        return _ec2_query_describe_volumes(params)
+    wanted = [str(v) for k, v in params.items() if k.startswith("VolumeId.") and v]
+    core_ids = set(((_Ec2CoreSpaceStore()._vpc_model or {}).get("volumes") or {}).keys())
+
+    def only(ids):
+        p = {k: v for k, v in params.items() if not k.startswith("VolumeId.")}
+        p.update({f"VolumeId.{i + 1}": v for i, v in enumerate(ids)})
+        return p
+
+    if wanted:
+        c_ids = [w for w in wanted if w in core_ids]
+        l_ids = [w for w in wanted if w not in core_ids]
+        if not l_ids:
+            return _ec2_core_dispatch(only(c_ids))
+        if not c_ids:
+            return _ec2_query_describe_volumes(params)
+        legacy, core = _ec2_query_describe_volumes(only(l_ids)), _ec2_core_dispatch(only(c_ids))
+    else:
+        legacy, core = _ec2_query_describe_volumes(params), _ec2_core_dispatch(params)
+    if legacy.status_code >= 300 or core.status_code >= 300:
+        return legacy if legacy.status_code >= 300 else core
+    import xml.etree.ElementTree as ET
+    ns = "http://ec2.amazonaws.com/doc/2016-11-15/"
+    ET.register_namespace("", ns)
+    try:
+        lroot = ET.fromstring(legacy.body if isinstance(legacy.body, (bytes, bytearray)) else str(legacy.body).encode())
+        croot = ET.fromstring(core.body if isinstance(core.body, (bytes, bytearray)) else str(core.body).encode())
+        pick = lambda r: next((e for e in r.iter() if e.tag.rsplit("}", 1)[-1] == "volumeSet"), None)  # noqa: E731
+        lset, cset = pick(lroot), pick(croot)
+        vid = lambda it: next((c.text for c in it if c.tag.rsplit("}", 1)[-1] == "volumeId"), "")  # noqa: E731
+        have = {vid(it) for it in cset}
+        for it in list(lset):
+            if vid(it) in have:
+                lset.remove(it)          # the core's shadow root volume supersedes the synthetic legacy one
+        for it in list(cset):
+            lset.append(it)
+        return Response(content='<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(lroot, encoding="unicode"),
+                        status_code=200, media_type=legacy.media_type)
+    except Exception:
+        return legacy
 
 
 def _ec2_core_instance_bridge(action: str, params: dict) -> Response | None:
@@ -14808,7 +14870,7 @@ async def api_ec2_query(request: Request):
                 return api_vpc_core_query(params)
             return _ec2_query_describe_security_groups(params)
         if action == "DescribeVolumes":
-            return _ec2_query_describe_volumes(params)
+            return _ec2_describe_volumes_merged(params)
         if action == "DescribeRegions":
             return _ec2_query_describe_regions(params)
         if action == "DescribeAvailabilityZones":

@@ -2842,6 +2842,52 @@ def _find_instance(m, instance_id) -> dict:
     return inst
 
 
+def register_external_instance(m: dict, ext: dict) -> dict:
+    """Shadow-register an instance that ANOTHER engine launched (the appliance's runtime-backed RunInstances keeps its Docker/LXD
+    instances in server.py's ec2_state) so core operations that name it (AttachVolume, DetachVolume, CreateImage, ModifyInstanceAttribute,
+    AssociateAddress, tags...) work instead of answering InvalidInstanceID.NotFound. Idempotent: re-registering refreshes state/network
+    fields. The root volume reuses the legacy synthetic id `vol-<suffix>` so both listings agree. (endurance F18)"""
+    iid = str(ext["instance_id"])
+    sn = m["subnets"].get(str(ext.get("subnet_id") or ""), {})
+    inst = m["instances"].get(iid)
+    fresh = inst is None
+    root_vol = "vol-" + iid[2:]
+    if fresh:
+        inst = {
+            "id": iid, "image_id": str(ext.get("ami") or ""), "instance_type": str(ext.get("instance_type") or "t3.micro"),
+            "launch_time": str(ext.get("created") or _now()), "source_dest_check": True, "architecture": "x86_64",
+            "root_device_type": "ebs", "root_device_name": "/dev/xvda", "virtualization_type": "hvm", "hypervisor": "nitro",
+            "platform": "", "platform_details": "Linux/UNIX", "ebs_optimized": True, "termination_protection": False, "stop_protection": False,
+            "shutdown_behavior": "stop", "tenancy": "default", "placement_group": "", "partition_number": None, "credit_spec": "standard",
+            "hibernation": False, "auto_recovery": "default", "hostname_type": "ip-name", "metadata_tokens": "required",
+            "metadata_endpoint": "enabled", "monitoring": False, "auto_public_ip": bool(ext.get("public_ip")), "external": True,
+            "block_devices": [{"device_name": "/dev/xvda", "volume_id": root_vol, "delete_on_termination": True}],
+        }
+        m["instances"][iid] = inst
+    priv, pub = str(ext.get("private_ip") or ""), str(ext.get("public_ip") or "")
+    inst.update({
+        "state": str(ext.get("state") or "running"), "az": str(ext.get("az") or sn.get("az") or _AZS[0]),
+        "vpc_id": str(ext.get("vpc_id") or sn.get("vpc_id") or ""), "subnet_id": str(ext.get("subnet_id") or ""),
+        "sg_ids": list(ext.get("security_group_ids") or []), "private_ip": priv, "public_ip": pub,
+        "private_dns": f"ip-{priv.replace('.', '-')}.ec2.internal" if priv else "",
+        "public_dns": f"ec2-{pub.replace('.', '-')}.compute-1.amazonaws.com" if pub else "",
+        "key_name": str(ext.get("key_pair") or ""), "user_data": str(ext.get("user_data") or ""),
+        "iam_instance_profile": str(ext.get("iam_instance_profile") or inst.get("iam_instance_profile", "")),
+        "tags": dict(ext.get("tags") or inst.get("tags") or {}),
+    })
+    if ext.get("name") and not inst["tags"].get("Name"):
+        inst["tags"]["Name"] = str(ext["name"])
+    if inst["tags"].get("Name"):
+        inst["name"] = inst["tags"]["Name"]
+    if root_vol not in m["volumes"]:
+        m["volumes"][root_vol] = {
+            "id": root_vol, "size": int(ext.get("storage_gb") or 8), "type": "gp3", "iops": 3000, "throughput": 125, "az": inst["az"],
+            "state": "in-use", "snapshot_id": "", "encrypted": False, "kms_key_id": "", "multi_attach": False, "created": inst["launch_time"],
+            "tags": {}, "attachments": [{"instance_id": iid, "device": "/dev/xvda", "delete_on_termination": True, "attach_time": inst["launch_time"]}],
+        }
+    return inst
+
+
 def _describe_instances(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("InstanceId.") or k.startswith("InstanceIds.")]
@@ -4888,8 +4934,8 @@ _vpcenc.install(_OPS)
 # over the response XML fixes the whole family; handlers that already filter (their own semantics) are skipped.
 _EXPLICIT_FILTER_ACTIONS = {"DescribeSecurityGroups", "DescribeSecurityGroupRules", "DescribeNetworkAcls", "DescribeManagedPrefixLists",
                             "DescribeTransitGateways", "DescribeTransitGatewayVpcAttachments", "DescribeTransitGatewayAttachments",
-                            "DescribeTransitGatewayRouteTables", "DescribeInstances", "DescribeImages", "DescribeSnapshots", "DescribeVolumes",
-                            "DescribeInstanceStatus", "DescribeTags", "DescribeInstanceTypes", "DescribeAvailabilityZones"}
+                            "DescribeTransitGatewayRouteTables", "DescribeInstances", "DescribeImages", "DescribeSnapshots",
+                            "DescribeInstanceStatus", "DescribeInstanceTypes", "DescribeAvailabilityZones"}
 
 
 def _camel(seg: str) -> str:

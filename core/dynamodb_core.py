@@ -988,8 +988,9 @@ def _continuous_backups_view(table: dict) -> dict:
     enabled = bool(table.get("pitr_enabled"))
     desc = {"PointInTimeRecoveryStatus": "ENABLED" if enabled else "DISABLED"}
     if enabled:
-        desc["EarliestRestorableDateTime"] = table.get("pitr_earliest") or _now()
-        desc["LatestRestorableDateTime"] = _now()
+        # wire timestamps are epoch NUMBERS: the Go/Java SDKs reject an ISO string (endurance F21: aws provider's UpdatePITR failed)
+        desc["EarliestRestorableDateTime"] = _wire_ts(table.get("pitr_earliest") or _now())
+        desc["LatestRestorableDateTime"] = _wire_ts(_now())
     return {"ContinuousBackupsStatus": "ENABLED", "PointInTimeRecoveryDescription": desc}
 
 
