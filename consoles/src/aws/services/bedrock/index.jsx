@@ -16,7 +16,8 @@ import { Guardrails, GuardrailDetail } from "./buildpages/Guardrails.jsx";
 import { Prompts, PromptDetail } from "./buildpages/Prompts.jsx";
 import { Flows, FlowDetail } from "./buildpages/Flows.jsx";
 import { Evaluations, EvaluationDetail, ModelAccess, Settings, PromptOptimization } from "./buildpages/Assess.jsx";
-import { AutomatedReasoning, DataAutomation } from "./buildpages/OutOfScope.jsx";
+import { AutomatedReasoning } from "./buildpages/OutOfScope.jsx";
+import DataAutomation from "./buildpages/DataAutomation.jsx";
 import ScopeSection from "../../../common/ScopeSection.jsx";
 import { scopeFor } from "../../../common/scopeHelp.js";
 

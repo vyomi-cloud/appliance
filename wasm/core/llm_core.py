@@ -157,14 +157,57 @@ def _endpoint() -> str | None:
         return DEFAULT_ENDPOINT
 
 
+# ── role endpoints: a SECOND/THIRD llama-server for the vision and reasoning models (Mesh only; one small model per role so an 8 GB
+# Codespace never holds more than the default chat model plus one role model). Configured by env or ``set_role_endpoint``.
+ROLE_ENV = {"vision": "VYOMI_LLM_VISION_ENDPOINT", "reasoning": "VYOMI_LLM_REASONING_ENDPOINT"}
+_ROLE_PROBE: dict = {}
+
+
+def set_role_endpoint(role: str, url: str | None) -> None:
+    _state.setdefault("roles", {})[role] = url.rstrip("/") if url else None
+    _ROLE_PROBE.pop(role, None)
+
+
+def role_endpoint(role: str | None) -> str | None:
+    if not role:
+        return None
+    if (_state.get("roles") or {}).get(role):
+        return _state["roles"][role]
+    ep = os.environ.get(ROLE_ENV.get(role, "")) if hasattr(os, "environ") else None
+    return ep.rstrip("/") if ep else None
+
+
+def role_available(role: str, probe: bool = True) -> bool:
+    """True when a llama-server for ``role`` is configured and (with ``probe``) answers /health. The probe is cached 15 s."""
+    ep = role_endpoint(role)
+    if not ep:
+        return False
+    if not probe:
+        return True
+    import time as _t
+    hit = _ROLE_PROBE.get(role)
+    if hit and hit[0] == ep and _t.time() - hit[1] < 15:
+        return hit[2]
+    try:
+        import urllib.request
+        with urllib.request.urlopen(ep + "/health", timeout=1.5) as r:
+            ok = r.status == 200
+    except Exception:  # noqa: BLE001
+        ok = False
+    _ROLE_PROBE[role] = (ep, _t.time(), ok)
+    return ok
+
+
 def model_name() -> str:
     return _state["model"] or os.environ.get("VYOMI_LLM_MODEL") or DEFAULT_MODEL
 
 
-def _http(path: str, payload: dict | None, timeout: float = 120.0):
+def _http(path: str, payload: dict | None, timeout: float = 120.0, role: str | None = None):
     import urllib.error
     import urllib.request
-    ep = _endpoint()
+    ep = role_endpoint(role) or _endpoint()
+    if role and role_endpoint(role):
+        timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))   # a CPU vision/reasoning call on 2 vCPUs can take minutes
     if not ep:
         raise LlmUnavailable("No local LLM backend is available on this substrate.")
     req = urllib.request.Request(ep + path, data=None if payload is None else json.dumps(payload).encode(),
@@ -183,11 +226,13 @@ def _http(path: str, payload: dict | None, timeout: float = 120.0):
                              f"(core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.") from e
 
 
-def _http_open(path: str, payload: dict, timeout: float = 120.0):
+def _http_open(path: str, payload: dict, timeout: float = 120.0, role: str | None = None):
     """POST and return the open response (iterate it for SSE lines); the caller closes it."""
     import urllib.error
     import urllib.request
-    ep = _endpoint()
+    ep = role_endpoint(role) or _endpoint()
+    if role and role_endpoint(role):
+        timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))
     if not ep:
         raise LlmUnavailable("No local LLM backend is available on this substrate.")
     req = urllib.request.Request(ep + path, data=json.dumps(payload).encode(), headers={"content-type": "application/json"}, method="POST")
@@ -210,7 +255,8 @@ def estimate_tokens(text: str) -> int:
 
 
 def status(probe: bool = True) -> dict:
-    st = {"available": False, "backend": None, "model": model_name(), "endpoint": None, "honest_limit": HONEST_LIMIT}
+    st = {"available": False, "backend": None, "model": model_name(), "endpoint": None, "honest_limit": HONEST_LIMIT,
+          "roles": {r: {"endpoint": role_endpoint(r), "available": role_available(r, probe)} for r in ROLE_ENV if role_endpoint(r)}}
     if _state["fn"]:
         st.update(available=True, backend="registered", endpoint="in-process")
         return st
@@ -627,7 +673,7 @@ def _lora_request(lora) -> list:
 def vision_available() -> bool:
     """True only when the local backend can read images: a multimodal llama-server (``--mmproj``) flagged with VYOMI_LLM_VISION=1, or a
     backend registered with ``set_vision(True)``. No vision model -> Bedrock/Vertex/Azure image parts are rejected, never ignored."""
-    return bool(_state.get("vision")) or os.environ.get("VYOMI_LLM_VISION", "") in ("1", "true", "yes")
+    return bool(_state.get("vision")) or os.environ.get("VYOMI_LLM_VISION", "") in ("1", "true", "yes") or role_available("vision")
 
 
 def set_vision(on: bool = True) -> None:
@@ -635,7 +681,8 @@ def set_vision(on: bool = True) -> None:
 
 
 def _http_body(msgs, o, stream, native_tools):
-    body = {"model": resolve_model(o.get("model")), "messages": _oa_messages(msgs), "max_tokens": o["max_tokens"],
+    mdl = ("vyomi-" + o["role"]) if role_endpoint(o.get("role")) else resolve_model(o.get("model"))
+    body = {"model": mdl, "messages": _oa_messages(msgs), "max_tokens": o["max_tokens"],
             "temperature": float(o["temperature"]), "stream": stream, "cache_prompt": True}   # llama.cpp reuses the KV of a shared prompt prefix
     if o.get("stop"):
         body["stop"] = list(o["stop"])[:4]
@@ -682,7 +729,8 @@ def _generate(msgs, o, native_tools=False) -> dict:
         return {"text": text, "tool_calls": [], "input_tokens": hit.get("input_tokens") or estimate_tokens(prompt_text),
                 "output_tokens": hit.get("output_tokens") or estimate_tokens(text), "finish_reason": fin(hit.get("finish_reason")),
                 "backend": hit.get("backend") or "wllama", "model": o["model"]}
-    if _state["fn"]:
+    role = o.get("role") if role_endpoint(o.get("role")) else None
+    if _state["fn"] and not role:
         fn = _state["fn"]
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
         ex = _fn_extras(fn, dict(o, tools=o.get("tools") if native_tools else None))
@@ -693,7 +741,7 @@ def _generate(msgs, o, native_tools=False) -> dict:
         return {"text": text, "tool_calls": calls, "input_tokens": info.get("input_tokens") or estimate_tokens(prompt_text),
                 "output_tokens": info.get("output_tokens") or estimate_tokens(text + json.dumps(calls) if calls else text),
                 "finish_reason": "tool_calls" if calls else fin(info.get("finish_reason")), "backend": "registered", "model": info.get("model") or model_name()}
-    if _state["afn"]:
+    if _state["afn"] and not role:
         args = (msgs, None, o["max_tokens"], o["temperature"], list(o["stop"]) if o.get("stop") else None)
         key = _akey(args)
         hit = _state["acache"].get(key)
@@ -709,12 +757,12 @@ def _generate(msgs, o, native_tools=False) -> dict:
                 "finish_reason": fin(hit.get("finish_reason")), "backend": "webllm", "model": model_name()}
     body = _http_body(msgs, o, False, native_tools)
     try:
-        r = _http("/v1/chat/completions", body)
+        r = _http("/v1/chat/completions", body, role=role)
     except LlmHttpError as e:
         if "response_format" in body and e.status in (400, 422, 500, 501):   # server can't constrain: remember, validate instead
             _state["no_rf"] = True
             body.pop("response_format")
-            r = _http("/v1/chat/completions", body)
+            r = _http("/v1/chat/completions", body, role=role)
         else:
             raise
     try:
@@ -725,9 +773,14 @@ def _generate(msgs, o, native_tools=False) -> dict:
         raise LlmUnavailable("Local LLM endpoint returned an unexpected response.") from e
     calls = _oa_calls(message)
     u = r.get("usage") or {}
-    return {"text": text, "tool_calls": calls, "input_tokens": u.get("prompt_tokens") or estimate_tokens(prompt_text),
-            "output_tokens": u.get("completion_tokens") or estimate_tokens(text),
-            "finish_reason": "tool_calls" if calls else fin(ch.get("finish_reason")), "backend": "llama.cpp", "model": r.get("model") or model_name()}
+    out = {"text": text, "tool_calls": calls, "input_tokens": u.get("prompt_tokens") or estimate_tokens(prompt_text),
+           "output_tokens": u.get("completion_tokens") or estimate_tokens(text),
+           "finish_reason": "tool_calls" if calls else fin(ch.get("finish_reason")), "backend": "llama.cpp", "model": r.get("model") or model_name()}
+    if role:
+        out["role"] = role
+    if message.get("reasoning_content"):     # llama-server --reasoning-format deepseek: the <think> block, split from the answer
+        out["reasoning"] = message["reasoning_content"]
+    return out
 
 
 def _add(a, b):
@@ -827,8 +880,19 @@ def _tools_native(msgs, o) -> dict:
     return r
 
 
+def _has_image(msgs) -> bool:
+    return any(isinstance(m.get("content"), list) and any(isinstance(x, dict) and x.get("type") == "image_url" for x in m["content"]) for m in msgs)
+
+
+def _pick_role(msgs, role=None, reasoning=None):
+    """Which llama-server answers: images -> the vision model; ``reasoning`` (or role='reasoning') -> the reasoning model; else the default
+    chat model. A role is only returned when its endpoint is configured (otherwise the default model answers, as before)."""
+    want = role or ("vision" if _has_image(msgs) else ("reasoning" if reasoning else None))
+    return want if want and role_endpoint(want) else None
+
+
 def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, model=None, tools=None, tool_choice=None,
-         response_format=None, top_p=None, seed=None, lora=None) -> dict:
+         response_format=None, top_p=None, seed=None, lora=None, role=None, reasoning=None) -> dict:
     msgs = _norm_messages(messages, system)
     if not any(m["role"] == "user" for m in msgs):
         raise ValueError("at least one user message is required")
@@ -838,7 +902,7 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
         tools = []
     o = {"max_tokens": max(1, int(max_tokens or 256)), "temperature": temperature, "stop": list(stop) if stop else None, "model": model,
          "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None,
-         "response_format": response_format or None, "lora": lora or None}
+         "response_format": response_format or None, "lora": lora or None, "role": _pick_role(msgs, role, reasoning)}
     if tools:
         r = _tools_native(msgs, o) if (_backend_native_tools() and not _is_custom(model)) else _tools_prompted(msgs, o)
         if response_format and not r["tool_calls"]:
@@ -853,9 +917,9 @@ def chat(messages, system=None, max_tokens=256, temperature=0.7, stop=None, mode
 def _http_stream(msgs, o, native_tools):
     """Yield events straight off the backend's SSE stream (llama.cpp / Ollama ``stream: true``)."""
     body = _http_body(msgs, o, True, native_tools)
-    resp = _http_open("/v1/chat/completions", body)
+    resp = _http_open("/v1/chat/completions", body, role=o.get("role"))
     prompt_text = "\n".join(_ctext(m["content"]) for m in msgs)
-    text, calls, usage, finish, mdl = [], {}, {}, None, None
+    text, think, calls, usage, finish, mdl = [], [], {}, {}, None, None
     try:
         for raw in resp:
             line = raw.decode("utf-8", "replace").strip()
@@ -873,6 +937,10 @@ def _http_stream(msgs, o, native_tools):
                 usage = ev["usage"]
             for ch in ev.get("choices") or []:
                 d = ch.get("delta") or {}
+                if d.get("reasoning_content"):
+                    think.append(d["reasoning_content"])
+                    if o.get("emit_reasoning"):
+                        yield {"type": "reasoning", "text": d["reasoning_content"]}
                 if d.get("content"):
                     text.append(d["content"])
                     yield {"type": "text", "text": d["content"]}
@@ -902,11 +970,15 @@ def _http_stream(msgs, o, native_tools):
     yield {"type": "done", "text": full, "tool_calls": final_calls,
            "finish_reason": "tool_calls" if final_calls else ("length" if finish == "length" else "stop"),
            "input_tokens": usage.get("prompt_tokens") or estimate_tokens(prompt_text),
-           "output_tokens": usage.get("completion_tokens") or estimate_tokens(full), "backend": "llama.cpp", "model": mdl or model_name()}
+           "output_tokens": usage.get("completion_tokens") or estimate_tokens(full), "backend": "llama.cpp", "model": mdl or model_name(),
+           **({"reasoning": "".join(think)} if think else {}), **({"role": o["role"]} if o.get("role") else {})}
 
 
-def _replay(r):
+def _replay(r, emit_reasoning=False):
     """Events for an already-complete result (buffered paths: prompt-translated tools, structured output, non-streaming backends)."""
+    if r.get("reasoning") and emit_reasoning:
+        for i in range(0, len(r["reasoning"]), 24):
+            yield {"type": "reasoning", "text": r["reasoning"][i:i + 24]}
     if r["text"]:
         for i in range(0, len(r["text"]), 12):
             yield {"type": "text", "text": r["text"][i:i + 12]}
@@ -919,8 +991,8 @@ def _replay(r):
 
 
 def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=None, model=None, tools=None, tool_choice=None,
-                response_format=None, top_p=None, seed=None):
-    """Generator of events {type: text|tool_start|tool_args|done}. Plain chat (and native tool calls on a server that has them)
+                response_format=None, top_p=None, seed=None, role=None, reasoning=None):
+    """Generator of events {type: reasoning|text|tool_start|tool_args|done}. Plain chat (and native tool calls on a server that has them)
     stream token-by-token from the backend as it generates; backends/paths that cannot (prompt-translated tools and
     structured output - both must be validated whole - or a non-streaming registered/WebLLM backend) emit the finished answer
     as events. Errors surface on the first ``next()``."""
@@ -932,10 +1004,11 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
     if choice == "none":
         tools = []
     o = {"max_tokens": max(1, int(max_tokens or 256)), "temperature": temperature, "stop": list(stop) if stop else None, "model": model,
-         "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None, "response_format": response_format or None}
+         "top_p": top_p, "seed": seed, "tools": tools or None, "tool_choice": choice if tools else None, "response_format": response_format or None,
+         "role": _pick_role(msgs, role, reasoning), "emit_reasoning": bool(reasoning)}
     kw = dict(system=None, max_tokens=o["max_tokens"], temperature=temperature, stop=stop, model=model, tools=tools or None,
-              tool_choice=choice if tools else None, response_format=response_format, top_p=top_p, seed=seed)
-    if _state["fn"] and _state["stream_fn"] and not tools and not response_format and not _is_custom(model):
+              tool_choice=choice if tools else None, response_format=response_format, top_p=top_p, seed=seed, role=o["role"], reasoning=reasoning)
+    if _state["fn"] and _state["stream_fn"] and not tools and not response_format and not _is_custom(model) and not o["role"]:
         sysm = next((m["content"] for m in msgs if m["role"] == "system"), None)
         parts, ptxt = [], "\n".join(_ctext(m["content"]) for m in msgs)
         for piece in _state["stream_fn"](_flatten_for_prompt(msgs, None, "none"), sysm, o["max_tokens"], temperature, o["stop"]):
@@ -947,7 +1020,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
         yield {"type": "done", "text": full, "tool_calls": [], "finish_reason": "stop", "input_tokens": estimate_tokens(ptxt),
                "output_tokens": estimate_tokens(full), "backend": "registered", "model": model_name()}
         return
-    http = not _state["fn"] and not _state["afn"] and not _is_custom(model) and _endpoint()
+    http = (o["role"] or (not _state["fn"] and not _state["afn"])) and not _is_custom(model) and (role_endpoint(o["role"]) or _endpoint())
     if http and not response_format and (not tools or (_backend_native_tools() and choice == "auto")):
         try:
             yield from _http_stream(msgs if tools else _flatten_for_prompt(msgs, None, "none"), o, bool(tools))
@@ -956,7 +1029,7 @@ def chat_stream(messages, system=None, max_tokens=256, temperature=0.7, stop=Non
             if not tools or e.status not in (400, 404, 422, 500, 501) or "tool" not in (e.body or str(e)).lower():
                 raise
             _state["no_native"] = True
-    yield from _replay(chat(msgs, **kw))
+    yield from _replay(chat(msgs, **kw), o["emit_reasoning"])
 
 
 def hash_embed(text: str, dim: int = HASH_DIM) -> list[float]:

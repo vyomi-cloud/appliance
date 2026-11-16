@@ -52,6 +52,8 @@ class FakeLLM:
                 fin = out.get("finish_reason") or ("tool_calls" if oa_calls else "stop")
                 if not body.get("stream"):
                     msg = {"role": "assistant", "content": content or None}
+                    if out.get("reasoning"):
+                        msg["reasoning_content"] = out["reasoning"]
                     if oa_calls:
                         msg["tool_calls"] = oa_calls
                     return self._json(200, {"model": fake.model, "choices": [{"index": 0, "finish_reason": fin, "message": msg}],
@@ -67,6 +69,9 @@ class FakeLLM:
                     self.wfile.flush()
                 base = {"model": fake.model, "object": "chat.completion.chunk"}
                 send(dict(base, choices=[{"index": 0, "delta": {"role": "assistant", "content": ""}, "finish_reason": None}]))
+                rs = out.get("reasoning") or ""
+                for i in range(0, len(rs), 6):
+                    send(dict(base, choices=[{"index": 0, "delta": {"reasoning_content": rs[i:i + 6]}, "finish_reason": None}]))
                 for i in range(0, len(content), 4):
                     time.sleep(fake.delay)
                     send(dict(base, choices=[{"index": 0, "delta": {"content": content[i:i + 4]}, "finish_reason": None}]))

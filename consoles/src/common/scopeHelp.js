@@ -26,9 +26,9 @@ def("aws.bedrock.overview", ["/bedrock"], {
   title: "Amazon Bedrock: scope and limits",
   intro: "This console is backed by the Bedrock APIs of the simulator. Models are local open models, not the vendor models.",
   real: ["Model listing, Converse, InvokeModel and token counting go through the real Bedrock wire shapes.", "Standard ids (anthropic.claude-*, amazon.titan-*, amazon.nova-*, meta.llama3-*, cohere.*) are listed as aliases and answered by the local open model. Each model reports vyomiBackedBy and says so."],
-  limits: ["Text only: image and document inputs are rejected.", "Not in scope: Automated Reasoning and Data Automation (explained on their pages). Flows, Guardrails, Prompt Management, Evaluations, Settings, Model access and Prompt optimization are built; see each page for its limits.", "No real model quality is implied by an alias."],
+  limits: ["Images (Converse, Claude InvokeModel) need the Mesh vision model and are rejected without it; documents (PDF, DOCX, XLSX, CSV, HTML, Markdown, text) are parsed and read as text. Reasoning (thinking / reasoning_config) needs the Mesh reasoning model and is rejected without it.", "Not in scope: Automated Reasoning (explained on its page). Data Automation is built on the small vision model; see its page for limits. Flows, Guardrails, Prompt Management, Evaluations, Settings, Model access and Prompt optimization are built; see each page for its limits.", "No real model quality is implied by an alias."],
   nano: ["Chat is answered by WebLLM and needs WebGPU; small models only."],
-  mesh: ["Chat is answered by llama.cpp with Qwen2.5-3B Q4 (about 2 GB RAM). Tool selection with a 3B model is the open quality risk."],
+  mesh: ["Chat is answered by llama.cpp with Qwen2.5-3B Q4 (about 2 GB RAM). Tool selection with a 3B model is the open quality risk.", "Optional role models, listed only while running: SmolVLM-500M for images (Apache-2.0) and DeepSeek-R1-Distill-Qwen-1.5B for reasoning (MIT). The 8 GB Codespace has about 2.8 GB for AI, so starting a role model stops the default chat model unless the budget is raised."],
 });
 def("aws.bedrock.quickstart", ["/bedrock/quickstart"], {
   title: "Quickstart: scope and limits",
@@ -189,8 +189,12 @@ def("aws.bedrock.automated-reasoning", ["/bedrock/automated-reasoning"], {
   intro: "Needs an SMT-solver pipeline that formalises natural-language policies. Use Guardrails content, topic and grounding checks instead.",
 });
 def("aws.bedrock.data-automation", ["/bedrock/data-automation"], {
-  title: "Data Automation: not in scope",
-  intro: "Multimodal extraction needs managed document, image, audio and video models; the local model is text only.",
+  title: "Data Automation: scope and limits",
+  intro: "Projects, blueprints and InvokeDataAutomationAsync / InvokeDataAutomation on the real wire, with S3 in and out (job_metadata.json, standard_output and custom_output result.json).",
+  real: ["Text-layer documents (PDF, DOCX, XLSX, PPTX, CSV, HTML, Markdown, text) are parsed without a model.", "Images (png, jpeg, gif, webp) are read by a small open vision model (SmolVLM-500M) for OCR text and a one-line summary.", "Blueprint (custom) output is one JSON-schema-constrained model call per blueprint: typed values, or null when a field is absent."],
+  limits: ["Quality is that of a small open model: no confidence scores, bounding boxes, layout elements or tables; dense layouts and handwriting are unreliable, so check the values.", "Scanned PDFs have no OCR (no page rasteriser) and fail with a ClientError. Audio and video are not supported.", "Libraries, blueprint optimization, CopyBlueprintStage, EventBridge notifications, KMS and PII settings are accepted or rejected but not executed."],
+  nano: ["Images need the Mesh vision model, so Nano runs text documents only; custom (blueprint) output on Nano is not supported because the in-browser model cannot run in a background job."],
+  mesh: ["Needs the vision pack for images; custom output on text documents uses the default chat model."],
 });
 
 /* ---------------------------------------------------------------- GCP Agent Platform */

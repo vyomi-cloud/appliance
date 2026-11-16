@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import base64
 import contextvars
+import hashlib
 import itertools
 import json
 import re
@@ -55,6 +56,16 @@ _ACCT = "123456789012"
 BEDROCK_MODELS = [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT"], ["EMBEDDING"] if m["kind"] == "embed" else ["TEXT"],
                    m["kind"] != "embed", m["id"]) for m in CAT.MODELS]
 _BM = {m[0]: m for m in BEDROCK_MODELS}
+
+
+def _special_bm():
+    """Role models (core/ai_model_catalog.SPECIAL) that are served right now, as Bedrock model tuples. Vision lists IMAGE input."""
+    return [(CAT.cloud_id("aws", m["id"]), m["vendor"], m["name"], ["TEXT", "IMAGE"] if "vision" in m["caps"] else ["TEXT"], ["TEXT"], True, m["id"])
+            for m in CAT.served_special()]
+
+
+def _native_id(mid):
+    return mid in CAT._BYNAME or mid in CAT._SPECIAL_BYNAME
 
 # Standard Bedrock ids listed as ALIASES of the local model (v4 reference-app lane `models`). They are honest: same TEXT-only
 # modalities the local model has (no vision/doc input), `vyomiBackedBy` says which catalogue model answers, and the lifecycle
@@ -157,6 +168,9 @@ def _resolve_model(mid):
     base = re.sub(r"^(us|eu|apac|us-gov|global)\.", "", mid)
     if base in _BM:
         return _BM[base]
+    sp = {t[0]: t for t in _special_bm()}
+    if base in sp:
+        return sp[base]
     cid = CAT.resolve("aws", base)          # compat alias (anthropic.claude*, amazon.nova*, ...): resolves, and is listed via BEDROCK_ALIASES
     if cid is None:
         cid = next((v for k, v in _EXTRA_ALIASES.items() if base.startswith(k)), None)
@@ -373,8 +387,11 @@ def _converse_messages(msgs_in):
             keys = set(blk) - {"cachePoint"}
             if not keys:                      # a bare cachePoint marker: handled by _cache_account, carries no content
                 continue
-            if "reasoningContent" in keys:
-                return "reasoningContent blocks are not supported: no served local model emits reasoning"
+            if "reasoningContent" in keys:      # a previous turn's thoughts: accepted and dropped (the model never re-reads its own reasoning)
+                rc = blk["reasoningContent"]
+                if mm["role"] != "assistant" or not isinstance(rc, dict) or not ({"reasoningText", "redactedContent"} & set(rc)):
+                    return "Invalid reasoningContent block: needs reasoningText or redactedContent, in an assistant message"
+                continue
             if len(keys) != 1 or not keys <= {"text", "toolUse", "toolResult", "document", "image", "guardContent"}:
                 return "Only text, document, image, guardContent, toolUse and toolResult content blocks are supported by the local model (video is not)"
             if "guardContent" in blk:       # Bedrock guardrails content block: the text reaches the model; qualifiers steer the guardrail
@@ -427,6 +444,48 @@ def _converse_messages(msgs_in):
     return out
 
 
+_NO_REASONING = ("Reasoning/thinking is not available: no reasoning model is running. It is served on Mesh only, by a small open reasoning "
+                 "model (DeepSeek-R1-Distill-Qwen-1.5B via llama.cpp; start the reasoning pack) - remove the thinking / reasoning_config field or use Mesh.")
+
+
+def _role_extras(mid, ex, want_reasoning, images=False):
+    """Pick the llama-server role for this request: the catalogue's vision/reasoning models always use their own role; a request that
+    asks for reasoning (Converse additionalModelRequestFields.thinking / reasoning_config, Claude ``thinking``) goes to the reasoning model.
+    Returns an error string when reasoning is asked for and no reasoning model is served."""
+    cid = CAT.resolve("aws", mid) or mid
+    role = CAT.ROLE_OF.get(cid)
+    if role == "reasoning":
+        want_reasoning = True
+    if want_reasoning:
+        if not llm.role_endpoint("reasoning"):
+            return _NO_REASONING
+        ex["reasoning"] = True
+        if not images:
+            ex["role"] = "reasoning"
+    elif role and not images:
+        ex["role"] = role
+    return None
+
+
+def _reasoning_request(amf, claude=False):
+    """additionalModelRequestFields / Claude body -> (wanted: bool, error|None). Accepts thinking {type, budget_tokens} (Claude style),
+    reasoning_config / reasoningConfig {type, ...} (Nova/DeepSeek style) with type enabled|disabled."""
+    if not isinstance(amf, dict):
+        return False, None
+    for key in ("thinking", "reasoning_config", "reasoningConfig"):
+        if key not in amf:
+            continue
+        cfg = amf[key]
+        if not isinstance(cfg, dict) or cfg.get("type") not in ("enabled", "disabled"):
+            return False, f"{key}.type: must be enabled or disabled"
+        if cfg["type"] == "enabled":
+            b = cfg.get("budget_tokens")
+            if key == "thinking" and (not isinstance(b, int) or isinstance(b, bool) or b < 1024):
+                return False, "thinking.enabled.budget_tokens: Input should be greater than or equal to 1024"
+            return True, None
+    return False, None
+
+
 def _converse_request(p, mid, max_key="maxTokens"):
     """Converse (and Nova InvokeModel) body -> (messages, system, max_tokens, temperature, stop, extras) or an error string."""
     msgs = _converse_messages(p.get("messages"))
@@ -435,9 +494,13 @@ def _converse_request(p, mid, max_key="maxTokens"):
     if "guardrailConfig" in p and not isinstance(p["guardrailConfig"], dict):
         return "guardrailConfig must be a structure"
     amf = p.get("additionalModelRequestFields")
-    if isinstance(amf, dict) and ({"thinking", "reasoning_config", "reasoningConfig"} & set(amf)):
-        return "Reasoning/thinking is not supported: no served local model emits reasoning content (remove additionalModelRequestFields.thinking)"
+    want, err = _reasoning_request(amf)
+    if err:
+        return err
     ex = {"model": mid}
+    err = _role_extras(mid, ex, want, images=any(isinstance(x.get("content"), list) for x in msgs))
+    if err:
+        return err
     ic = p.get("inferenceConfig") or {}
     if ic.get("topP") is not None:
         ex["top_p"] = ic["topP"]
@@ -469,8 +532,9 @@ def _claude_request(p, mid):
     if "max_tokens" not in p:
         return "max_tokens: field required"
     out, pending = [], {}
-    if isinstance(p.get("thinking"), dict) and p["thinking"].get("type") == "enabled":
-        return "thinking is not supported: no served local model emits reasoning content"
+    want, err = _reasoning_request({"thinking": p["thinking"]} if "thinking" in p else None)
+    if err:
+        return err
     for mm in p["messages"]:
         c = mm.get("content") if isinstance(mm, dict) else None
         if mm.get("role") not in ("user", "assistant"):
@@ -512,8 +576,9 @@ def _claude_request(p, mid):
                 if isinstance(part, str):
                     return part
                 images.append(part)
-            elif ty in ("thinking", "redacted_thinking"):
-                return "thinking blocks are not supported: no served local model emits reasoning"
+            elif ty in ("thinking", "redacted_thinking"):      # earlier turn's thoughts: accepted and dropped
+                if mm["role"] != "assistant":
+                    return "thinking blocks are only allowed in assistant messages"
             else:
                 return f"messages.content: block type {ty!r} is not supported by the local model (video/search results are not)"
         out += results
@@ -525,6 +590,9 @@ def _claude_request(p, mid):
         elif texts or images:
             out.append({"role": "user", "content": ([{"type": "text", "text": "".join(texts)}] + images) if images else "".join(texts)})
     ex = {"model": mid}
+    err = _role_extras(mid, ex, want, images=any(isinstance(x.get("content"), list) for x in out))
+    if err:
+        return err
     if p.get("top_p") is not None:
         ex["top_p"] = p["top_p"]
     if p.get("tools"):
@@ -614,7 +682,8 @@ def _usage(r, ca=None):
 
 
 def _converse_content(r):
-    content = [{"text": r["text"]}] if (r["text"] or not r.get("tool_calls")) else []
+    content = [{"reasoningContent": {"reasoningText": {"text": r["reasoning"]}}}] if r.get("reasoning") else []
+    content += [{"text": r["text"]}] if (r["text"] or not r.get("tool_calls")) else []
     content += [{"toolUse": {"toolUseId": c["id"], "name": c["name"], "input": c["arguments"]}} for c in r.get("tool_calls") or []]
     return content
 
@@ -622,7 +691,8 @@ def _converse_content(r):
 def _bedrock_response(m, p, r):
     mid, txt, fam = m[0], r["text"], _fam(m)
     if fam.startswith("anthropic."):
-        content = [{"type": "text", "text": txt}] if (txt or not r.get("tool_calls")) else []
+        content = [{"type": "thinking", "thinking": r["reasoning"], "signature": hashlib.sha256(r["reasoning"].encode()).hexdigest()[:44]}] if r.get("reasoning") else []
+        content += [{"type": "text", "text": txt}] if (txt or not r.get("tool_calls")) else []
         content += [{"type": "tool_use", "id": c["id"], "name": c["name"], "input": c["arguments"]} for c in r.get("tool_calls") or []]
         return {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant", "model": mid,
                 "content": content, "stop_reason": "tool_use" if r.get("tool_calls") else ("max_tokens" if r["finish_reason"] == "length" else "end_turn"),
@@ -670,10 +740,19 @@ def _chunks(text, n=12):
 def _converse_events(it, t0, F, cache_fn=None):
     """Seam events -> Converse stream frames: text deltas as they arrive; toolUse blocks start/delta(input fragments)/stop."""
     yield F("messageStart", {"role": "assistant"})
-    idx, text_idx, tool_open, tool_blk, got_args = -1, None, None, {}, set()
+    idx, text_idx, tool_open, tool_blk, got_args, think_idx = -1, None, None, {}, set(), None
     try:
         for ev in it:
             ty = ev["type"]
+            if ty == "reasoning":
+                if think_idx is None:
+                    idx += 1
+                    think_idx = idx
+                yield F("contentBlockDelta", {"contentBlockIndex": think_idx, "delta": {"reasoningContent": {"text": ev["text"]}}})
+                continue
+            if think_idx is not None:           # the thought block ends where the answer / a tool call starts
+                yield F("contentBlockStop", {"contentBlockIndex": think_idx})
+                think_idx = None
             if ty == "text":
                 if text_idx is None:
                     idx += 1
@@ -759,9 +838,18 @@ def _invoke_frames(m, it, t0):
             yield _chunk_frame({"type": "message_start", "message": {"id": "msg_bdrk_" + uuid.uuid4().hex[:24], "type": "message", "role": "assistant",
                                                                     "model": mid, "content": [], "stop_reason": None, "stop_sequence": None,
                                                                     "usage": {"input_tokens": 0, "output_tokens": 0}}})
-            idx, text_idx, tool_idx, nxt = None, None, {}, 0
+            idx, text_idx, tool_idx, nxt, think_idx = None, None, {}, 0, None
             for ev in it:
                 first[0] = first[0] or time.time()
+                if ev["type"] == "reasoning":
+                    if think_idx is None:
+                        think_idx, nxt = nxt, nxt + 1
+                        yield _chunk_frame({"type": "content_block_start", "index": think_idx, "content_block": {"type": "thinking", "thinking": ""}})
+                    yield _chunk_frame({"type": "content_block_delta", "index": think_idx, "delta": {"type": "thinking_delta", "thinking": ev["text"]}})
+                    continue
+                if think_idx is not None:
+                    yield _chunk_frame({"type": "content_block_stop", "index": think_idx})
+                    think_idx = None
                 if ev["type"] == "text":
                     if text_idx is None:
                         text_idx, nxt = nxt, nxt + 1
@@ -978,7 +1066,7 @@ def bedrock_dispatch(method, path, query, headers, body):
     if path in ("/foundation-models",) and method == "GET":
         outm = (query or {}).get("byOutputModality")
         prov = (query or {}).get("byProvider")
-        ms = [m for m in BEDROCK_MODELS if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
+        ms = [m for m in BEDROCK_MODELS + _special_bm() if (not outm or outm.upper() in m[4]) and (not prov or prov.lower() == m[1].lower())]
         al = [a for a in (BEDROCK_ALIASES if list_aliases() else []) if (not outm or outm.upper() in a[4]) and (not prov or prov.lower() == a[1].lower())]
         return _j(200, {"modelSummaries": [_summary(m) for m in ms] + [_alias_summary(a) for a in al]})
     if path == "/inference-profiles" and method == "GET":
@@ -1001,7 +1089,7 @@ def bedrock_dispatch(method, path, query, headers, body):
         mid = unquote(mt.group(1))
         if mid in _ALIAS_BY_ID:
             return _j(200, {"modelDetails": _alias_summary(_ALIAS_BY_ID[mid])})
-        m = _BM.get(mid)
+        m = _BM.get(mid) or {t[0]: t for t in _special_bm()}.get(mid)
         if not m:
             return _b_err("ResourceNotFoundException", f"Could not resolve the foundation model from the provided model identifier.", 404)
         return _j(200, {"modelDetails": _summary(m)})
@@ -1040,7 +1128,7 @@ def bedrock_dispatch(method, path, query, headers, body):
     p = _body(body)
     if p is None:
         return _b_err("ValidationException", "Malformed input request, please reformat your input and try again.", 400)
-    if m[0] in CAT._BYNAME:     # native ids: Converse-style body -> nova family, else Llama-style
+    if _native_id(m[0]):     # native ids: Converse-style body -> nova family, else Llama-style
         m = m + ("amazon.nova-vyomi" if isinstance(p.get("messages"), list) else "vyomi-prompt",)
     t0 = time.time()
     if op.startswith("converse"):
@@ -1085,7 +1173,7 @@ def bedrock_dispatch(method, path, query, headers, body):
                       {"x-vyomi-local-model": r["model"]})
         return _stream_out(200, {}, _converse_frames(it, t0, lambda n: _cache_account(p, "converse", n)), "application/vnd.amazon.eventstream")
     # InvokeModel[WithResponseStream]
-    if m[6] == CAT.DEFAULT_EMBED and m[0] in CAT._BYNAME:      # native ids: 768-d nomic-style embedding, Titan-free body
+    if m[6] == CAT.DEFAULT_EMBED and _native_id(m[0]):      # native ids: 768-d nomic-style embedding, Titan-free body
         if op != "invoke":
             return _b_err("ValidationException", "This model doesn't support the InvokeModelWithResponseStream operation.", 400)
         txt = p.get("inputText") or p.get("prompt") or p.get("input")
@@ -1176,8 +1264,10 @@ def _backed_by(mid):
 
 
 def _alias_summary(a):
+    ins = a[3] + ["IMAGE"] if (a[0].startswith(("anthropic.claude", "amazon.nova-lite", "amazon.nova-pro")) and "IMAGE" not in a[3]
+                                and llm.role_available("vision")) else a[3]       # only while the local vision model is up (Mesh)
     return {"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{a[0]}", "modelId": a[0], "modelName": a[2],
-            "providerName": a[1], "inputModalities": a[3], "outputModalities": a[4], "responseStreamingSupported": a[5],
+            "providerName": a[1], "inputModalities": ins, "outputModalities": a[4], "responseStreamingSupported": a[5],
             "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
             "vyomiBackedBy": _backed_by(a[0])}
 
@@ -1193,6 +1283,15 @@ def _profile(a, pre):
 # ───────────────────────────── Vertex AI ─────────────────────────────
 # Vertex / Gemini-API model ids: the ten catalogue models by bare id (and ollama/vyomi by-name ids); legacy gemini-*/text-embedding-*
 # ids still RESOLVE through the hidden alias map but are never listed (core/ai_model_catalog.py).
+def _with_role(cloud, model, ex):
+    """Add the llama-server role of a catalogue role model (vision / reasoning) to a request's extras, keyed by the deployment/model id."""
+    cid = CAT.resolve(cloud, model)
+    role = CAT.ROLE_OF.get(cid)
+    if role:
+        ex.setdefault("role", role)
+    return ex
+
+
 def _vx_known(model):
     return CAT.resolve("gcp", model) is not None
 
@@ -1235,11 +1334,22 @@ def _gem_request(p):
     for c in contents:
         if not isinstance(c, dict):
             return "contents: each content must be an object"
-        texts, calls, results = [], [], []
+        texts, calls, results, images = [], [], [], []
         for pt in c.get("parts") or []:
             keys = set(pt) - {"thought", "thoughtSignature"}
             if keys == {"text"}:
+                if pt.get("thought") and c.get("role") == "model":      # an earlier turn's thought summary: dropped, never re-fed
+                    continue
                 texts.append(pt["text"])
+            elif keys == {"inlineData"}:
+                idt = pt["inlineData"] or {}
+                mt_ = str(idt.get("mimeType") or "")
+                if not mt_.startswith("image/"):
+                    return f"inlineData.mimeType {mt_!r} is not supported by the local model (images only: png, jpeg, gif, webp)."
+                part = _image_part(mt_.split("/", 1)[1].replace("jpg", "jpeg"), idt.get("data"))
+                if isinstance(part, str):
+                    return part
+                images.append(part)
             elif keys == {"functionCall"}:
                 fc = pt["functionCall"] or {}
                 if not fc.get("name"):
@@ -1258,8 +1368,10 @@ def _gem_request(p):
                 results.append({"role": "tool", "tool_call_id": (hit or (fr.get("id") or "call_" + uuid.uuid4().hex[:24],))[0], "name": name,
                                 "content": json.dumps(fr.get("response", {}))})
             else:
-                return "Only text, functionCall and functionResponse parts are supported by the local model (inlineData/fileData are not)."
-        if calls or texts:
+                return "Only text, inlineData (image), functionCall and functionResponse parts are supported by the local model (fileData/audio/video are not)."
+        if images and c.get("role") != "model":
+            msgs.append({"role": "user", "content": [{"type": "text", "text": "".join(texts)}] + images})
+        elif calls or texts:
             if c.get("role") == "model" or calls:
                 m = {"role": "assistant", "content": "".join(texts)}
                 if calls:
@@ -1301,6 +1413,14 @@ def _gem_request(p):
     elif p.get("toolConfig"):
         return "toolConfig requires tools"
     gc = p.get("generationConfig") or {}
+    tcfg = gc.get("thinkingConfig")
+    if tcfg is not None:      # Gemini thinking: includeThoughts -> thought summaries (the reasoning model's reasoning stream), Mesh only
+        if not isinstance(tcfg, dict):
+            return "generationConfig.thinkingConfig must be an object."
+        if tcfg.get("includeThoughts") or (tcfg.get("thinkingBudget") or 0) > 0:
+            if not llm.role_endpoint("reasoning"):
+                return _NO_REASONING
+            ex["reasoning"], ex["role"] = True, "reasoning"
     mime = gc.get("responseMimeType")
     if mime == "application/json":
         sch = gc.get("responseJsonSchema") or _lower_types(gc.get("responseSchema"))
@@ -1322,8 +1442,9 @@ def _gem_request(p):
     return msgs, si or None, gc.get("maxOutputTokens", 512), gc.get("temperature", 1.0), gc.get("stopSequences"), ex
 
 
-def _gem_parts(text, calls):
-    parts = [{"text": text}] if (text or not calls) else []
+def _gem_parts(text, calls, thought=None):
+    parts = [{"text": thought, "thought": True}] if thought else []
+    parts += [{"text": text}] if (text or not calls) else []
     parts += [{"functionCall": {"name": c["name"], "args": c["arguments"]}} for c in calls or []]
     return parts
 
@@ -1346,7 +1467,9 @@ def _gem_stream(model, it, sse):
         return s
     try:
         for ev in it:
-            if ev["type"] == "text":
+            if ev["type"] == "reasoning":
+                yield enc({"candidates": [{"content": {"role": "model", "parts": [{"text": ev["text"], "thought": True}]}, "index": 0}], "modelVersion": model})
+            elif ev["type"] == "text":
                 yield enc({"candidates": [{"content": {"role": "model", "parts": [{"text": ev["text"]}]}, "index": 0}], "modelVersion": model})
             elif ev["type"] == "done":
                 fin = "MAX_TOKENS" if ev["finish_reason"] == "length" else "STOP"
@@ -1370,7 +1493,7 @@ def _gdev_dispatch(method, path, query, headers, body):
     method = method.upper()
     mt = re.match(r"^/v1(?:beta)?/models/?$", path)
     if mt and method == "GET":
-        return _j(200, {"models": [_gdev_model(m) for m in CAT.IDS]})
+        return _j(200, {"models": [_gdev_model(m) for m in CAT.IDS + [x["id"] for x in CAT.served_special()]]})
     mt = re.match(r"^/v1(?:beta)?/models/([^/:]+)$", path)
     if mt and method == "GET":
         m = mt.group(1)
@@ -1447,9 +1570,9 @@ def vertex_dispatch(method, path, query, headers, body):
             return _g_err(400, "INVALID_ARGUMENT", req)
         msgs, si = req[0], req[1]
         if op == "countTokens":
-            n = sum(llm.estimate_tokens(m["content"]) for m in msgs) + llm.estimate_tokens(si or "")
-            return _j(200, {"totalTokens": n, "totalBillableCharacters": sum(len(m["content"]) for m in msgs)})
-        req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model))
+            n = sum(llm.estimate_tokens(llm._ctext(m["content"])) for m in msgs) + llm.estimate_tokens(si or "")
+            return _j(200, {"totalTokens": n, "totalBillableCharacters": sum(len(llm._ctext(m["content"])) for m in msgs)})
+        req = (req[0], req[1], req[2], req[3], req[4], _with_role("gcp", model, dict(req[5], model=model)))
         try:
             if op == "streamGenerateContent":
                 it = _prime(llm.chat_stream(*req[:5], **req[5]))
@@ -1463,7 +1586,7 @@ def vertex_dispatch(method, path, query, headers, body):
             return _g_err(400, "INVALID_ARGUMENT", str(e))
         if op == "generateContent":
             fin = "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"
-            return _j(200, {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"])}, "index": 0, "finishReason": fin}],
+            return _j(200, {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"], r.get("reasoning"))}, "index": 0, "finishReason": fin}],
                             "usageMetadata": _gem_usage(r), "modelVersion": model, "responseId": uuid.uuid4().hex[:20]},
                       {"x-vyomi-local-model": r["model"]})
         sse = (query or {}).get("alt") == "sse"
@@ -1543,8 +1666,22 @@ def _az_chat_request(p):
             return ("messages", "Invalid value for 'role' in messages.")
         c = m.get("content")
         if isinstance(c, list):
-            if any(not isinstance(x, dict) or x.get("type") not in ("text",) for x in c):
-                return ("messages", "Only text content parts are supported by the local model (image_url/input_audio are not).")
+            if any(not isinstance(x, dict) or x.get("type") not in ("text", "image_url") for x in c):
+                return ("messages", "Only text and image_url content parts are supported by the local model (input_audio/file are not).")
+            if any(x.get("type") == "image_url" for x in c):      # vision: only data: URLs (the simulator never fetches the internet); needs the vision model
+                if not llm.vision_available():
+                    return ("messages", _NO_VISION)
+                parts = []
+                for x in c:
+                    if x.get("type") == "text":
+                        parts.append({"type": "text", "text": x.get("text", "")})
+                        continue
+                    url = (x.get("image_url") or {}).get("url") if isinstance(x.get("image_url"), dict) else x.get("image_url")
+                    if not isinstance(url, str) or not re.match(r"^data:image/(png|jpe?g|gif|webp);base64,", url):
+                        return ("messages", "image_url.url must be a base64 data:image/(png|jpeg|gif|webp) URL; the simulator does not fetch remote images.")
+                    parts.append({"type": "image_url", "image_url": {"url": url}})
+                out.append({"role": role, "content": parts})
+                continue
             c = "".join(x.get("text", "") for x in c)
         if role == "tool":
             if not m.get("tool_call_id"):
@@ -1603,6 +1740,10 @@ def _az_chat_request(p):
     for k in ("top_p", "seed"):
         if p.get(k) is not None:
             ex[k] = p[k]
+    if p.get("reasoning_effort") in ("low", "medium", "high"):     # o-series style: answered by the small reasoning model, reasoning_content returned
+        if not llm.role_endpoint("reasoning"):
+            return ("reasoning_effort", _NO_REASONING)
+        ex["reasoning"], ex["role"] = True, "reasoning"
     stop = [p["stop"]] if isinstance(p.get("stop"), str) else p.get("stop")
     return out, None, p.get("max_completion_tokens") or p.get("max_tokens") or 512, p.get("temperature", 1.0), stop, ex
 
@@ -1611,6 +1752,8 @@ def _az_msg(r):
     msg = {"role": "assistant", "content": r["text"] if (r["text"] or not r["tool_calls"]) else None}
     if r["tool_calls"]:
         msg["tool_calls"] = [{"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": json.dumps(c["arguments"])}} for c in r["tool_calls"]]
+    if r.get("reasoning"):       # DeepSeek-R1-style deployments on Foundry expose the thought as reasoning_content
+        msg["reasoning_content"] = r["reasoning"]
     return msg
 
 
@@ -1942,7 +2085,7 @@ def _az_block_input(acct, dep, req):
     pol = _az_rai_policy(acct, dep, "Prompt")
     if not pol:
         return None
-    text = "\n".join(str(m.get("content") or "") if isinstance(m, dict) else str(m) for m in req[0])
+    text = "\n".join(llm._ctext(m.get("content") or "") if isinstance(m, dict) else str(m) for m in req[0])
     r = _guardrails().evaluate(pol, text, "INPUT")
     if not r["blocked"]:
         return None
@@ -2051,7 +2194,7 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         req = _az_chat_request(p)
         if len(req) == 2:
             return _a_err(400, "BadRequest", req[1], req[0])
-    req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model))
+    req = (req[0], req[1], req[2], req[3], req[4], _with_role("azure", model, dict(req[5], model=model)))
     blocked_in = _az_block_input(acct, dep, req)      # a user-managed content filter on the deployment (Foundry > Guardrails + controls)
     if blocked_in is not None:
         return blocked_in

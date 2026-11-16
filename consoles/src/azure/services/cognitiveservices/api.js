@@ -5,7 +5,7 @@
  * Served by core/azure_cognitiveservices_core.py through core/azure_arm_core.py — the same
  * azure-mgmt-cognitiveservices / armcognitiveservices SDK shapes work unchanged. */
 import { restJson } from "../../../common/wire.js";
-import { AI_MODELS } from "../../../common/aiModels.js";
+import { AI_MODELS, markServed } from "../../../common/aiModels.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
 
 export const ARM = armType("Microsoft.CognitiveServices", "accounts", "2024-10-01");
@@ -60,7 +60,7 @@ export const DEPLOY_SKUS = ["Standard", "GlobalStandard", "ProvisionedManaged", 
 export const MODELS = AI_MODELS.map((m) => [m.vendor, m.id, "1", 1000]);
 /** Live availability per model name (account models list); without the Mesh only the local small model is available. */
 export const modelAvailability = async (rg, name) => {
-  try { return Object.fromEntries(((await restJson("GET", `${ARM.path(rg, name)}/models`, { query: { "api-version": API_VERSION } })).value || []).map((x) => [x.model?.name, x.vyomiAvailability])); }
+  try { const a = Object.fromEntries(((await restJson("GET", `${ARM.path(rg, name)}/models`, { query: { "api-version": API_VERSION } })).value || []).map((x) => [x.model?.name, x.vyomiAvailability])); markServed(a); return a; }
   catch { return {}; }
 };
 

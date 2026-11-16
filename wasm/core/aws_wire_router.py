@@ -2083,6 +2083,9 @@ class AwsWireRouter:
             from core import bedrock_agents_core, bedrock_ctl_core
             from core import bedrock_guardrails_core
             bedrock_guardrails_core.bind(self.s3)   # guardrail state lives in the persisted account bag
+            from core import bedrock_bda_core   # Bedrock Data Automation (blueprints, projects, runtime): lane limmodels
+            if bedrock_bda_core.handles(path.split("?", 1)[0], bytes(body), lheaders):
+                return bedrock_bda_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             from core import bedrock_build_core
             bedrock_build_core.bind(self.s3, self.logs)
             if bedrock_build_core.handles(path.split("?", 1)[0]):   # Build/Assess/Configure: prompts, flows, evaluations, invocation logging (lane uiaws)
