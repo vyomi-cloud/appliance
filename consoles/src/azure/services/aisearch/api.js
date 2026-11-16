@@ -28,6 +28,7 @@ const coll = (kind) => ({
 export const indexes = coll("indexes");
 export const datasources = coll("datasources");
 export const indexers = coll("indexers");
+export const skillsets = coll("skillsets");
 export const indexCount = (rg, name, ix) => arm("GET", `${base(rg, name)}/indexes/${e(ix)}/docs/count`, undefined, {}, V);
 export const searchDocs = (rg, name, ix, body) => arm("POST", `${base(rg, name)}/indexes/${e(ix)}/docs/search`, body, {}, V);
 export const indexDocs = (rg, name, ix, value) => arm("POST", `${base(rg, name)}/indexes/${e(ix)}/docs/index`, { value }, {}, V);

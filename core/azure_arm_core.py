@@ -2568,7 +2568,8 @@ class AzureArm:
             r = files_engine.dispatch(self.state, method, sub, rg, chain, payload, query)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.search":
-            r = search_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)
+            r = search_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base,
+                                      cosmos_store=getattr(self, "cosmos_store", None), sql_store=self.sql_store)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         if ns == "microsoft.storagemover" and (rg is not None or len(chain) == 1):
             r = mover_engine.dispatch(self.state, method, sub, rg, chain, payload, query, blob_store=self.blob_store, base=self._base)

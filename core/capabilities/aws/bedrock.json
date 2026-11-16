@@ -25,11 +25,12 @@
    "offline": "limited"
   },
   "limitations": [
-   "Ingestion really reads the S3 data source, chunks (fixed size / hierarchical parent-child / semantic embedding-breakpoint / none) and embeds with the local embedding seam; Retrieve is exact cosine kNN with metadata filters. Text, CSV, HTML, Markdown, PDF (pure-Python pypdf; scanned PDFs have no OCR), DOCX, XLSX and PPTX are parsed (legacy .doc/.xls/.ppt fail); parsingStrategy BEDROCK_FOUNDATION_MODEL keeps tables as markdown but is not a model call, BEDROCK_DATA_AUTOMATION is rejected; .metadata.json sidecars (plain and typed) feed Retrieve filters; unreadable documents are listed per file in the ingestion job's failureReasons. On Nano PDF needs pypdf to be loaded into Pyodide (otherwise PDFs fail with an explicit reason). The vector store type named at creation is recorded but the index always lives in the account (no OpenSearch/Pinecone/etc). Without an embedding model on the backend, vyomi-hash-embed (a deterministic bag-of-words embedding) is used, so retrieval is lexical-ish, not semantic. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
+   "Ingestion really reads the S3 data source, chunks (fixed size / hierarchical parent-child / semantic embedding-breakpoint / none) and embeds with the local embedding seam; Retrieve is exact cosine kNN (no ANN index) with overrideSearchType HYBRID (BM25 via SQLite FTS5 fused with the vector ranking by reciprocal rank fusion, the default) or SEMANTIC (vector only; scores are cosine similarities) and the full RetrievalFilter set (equals, notEquals, greaterThan/OrEquals, lessThan/OrEquals, in, notIn, startsWith, stringContains, listContains, andAll, orAll, validated like Bedrock: one operator per filter, 2-5 members, typed values), plus implicitFilterConfiguration (the small local model derives the filter from the question; invented attributes are ignored). Reranking works on Retrieve (rerankingConfiguration, metadataConfiguration) and the bedrock-agent-runtime Rerank API (amazon.rerank-v1:0 and cohere.rerank-v3-5:0 ARNs, TEXT documents only, 1000 sources, numberOfResults): by default the reranker is NOT a cross-encoder but embedding similarity blended with query-term coverage (the response trace says 'embedding+lexical'); set VYOMI_RERANK_ENDPOINT to a Jina/Cohere/llama.cpp-style /v1/rerank server (for example llama-server --reranking with a bge-reranker GGUF) to get a real cross-encoder on the Mesh; none is shipped, and Nano always uses the embedding blend. Text, CSV, HTML, Markdown, PDF (pure-Python pypdf; scanned PDFs have no OCR), DOCX, XLSX and PPTX are parsed (legacy .doc/.xls/.ppt fail); parsingStrategy BEDROCK_FOUNDATION_MODEL keeps tables as markdown but is not a model call, BEDROCK_DATA_AUTOMATION is rejected; .metadata.json sidecars (plain and typed) feed Retrieve filters; unreadable documents are listed per file in the ingestion job's failureReasons. On Nano PDF needs pypdf to be loaded into Pyodide (otherwise PDFs fail with an explicit reason). The vector store type named at creation is recorded but the index always lives in the account (no OpenSearch/Pinecone/etc). Without an embedding model on the backend, vyomi-hash-embed (a deterministic bag-of-words embedding) is used, so retrieval is lexical-ish, not semantic. Every model id is answered by one small local model (llama.cpp on the appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer."
   ],
   "tests": [
    "tests/conformance/test_bedrock_agents_core.py",
-   "tests/conformance/test_bedrock_kb_runtime_caps.py"
+   "tests/conformance/test_bedrock_kb_runtime_caps.py",
+   "tests/conformance/test_bedrock_kb_search_limvector.py"
   ]
  },
  "bedrock.agents": {
@@ -58,8 +59,8 @@
   ],
   "tests": [
    "tests/conformance/test_bedrock_agents_core.py",
-  "tests/conformance/test_agentcore_gateway_targets.py"
- ]
+   "tests/conformance/test_agentcore_gateway_targets.py"
+  ]
  },
  "bedrock.agentcore.runtime": {
   "mesh": true,
@@ -74,8 +75,8 @@
   "tests": [
    "tests/conformance/test_ai_agent_runtimes.py",
    "tests/conformance/test_bedrock_agents_core.py",
-  "tests/conformance/test_agentcore_gateway_targets.py"
- ]
+   "tests/conformance/test_agentcore_gateway_targets.py"
+  ]
  },
  "bedrock.guardrails": {
   "title": "Guardrails (CreateGuardrail, versions, ApplyGuardrail, Converse guardrailConfig) - Dev Simplified",

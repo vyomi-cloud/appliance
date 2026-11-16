@@ -178,5 +178,33 @@
   "tests": [
    "tests/conformance/test_ai_agent_runtimes.py"
   ]
+ },
+ "gcp.vertex-ai.rag-engine": {
+  "title": "RAG Engine (ragCorpora, ragFiles upload / import from Cloud Storage, retrieveContexts)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Files arrive by ragFiles:upload (JSON text, base64 content, or the real multipart/related and multipart/form-data bodies) or ragFiles:import from the simulated Cloud Storage (gcsSource.uris: an object or a prefix; unchanged objects are skipped, changed ones re-imported in place). Text, Markdown, CSV, HTML, DOCX, XLSX, PPTX and text-layer PDF are parsed (pure Python, no layout/OCR parsing; legacy .doc/.xls/.ppt fail per file). Chunks are embedded with the local embedding seam (MiniLM in the browser, nomic on the Mesh; a labelled hash embedder when no model runs) and retrieved by exact cosine kNN (no HNSW); ragRetrievalConfig supports topK, hybridSearch.alpha (weighted rank fusion with BM25; alpha 0 = sparse only), vectorDistanceThreshold / vectorSimilarityThreshold and ranking (rerank = embedding + lexical blend, not Google's rank service). Drive, Slack, Jira and SharePoint sources, Spanner / Pinecone / Weaviate / Vertex Vector Search backends and metadata filters are not supported."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_rag_limvector.py",
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
+ },
+ "gcp.vertex-ai.search": {
+  "title": "Vertex AI Search (data stores, documents import, engines, servingConfigs:search, generated summary)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Documents come in inline, or from the simulated Cloud Storage (gcsSource.inputUris with dataSchema content, custom or document; BigQuery, Spanner, Firestore and Cloud SQL imports are rejected). Search ranks by hybrid BM25 + embedding reciprocal rank fusion (semantic candidates need cosine >= 0.3); there is no filter / facet / boost / spell-correction spec and no Google semantic ranker. contentSearchSpec.summarySpec returns a generated, cited summary (summaryWithMetadata.citationMetadata) from the small local chat model (not Gemini); with no model running the response carries summarySkippedReasons LLM_ADDON_NOT_ENABLED instead of failing the search."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_rag_limvector.py",
+   "tests/conformance/test_gcp_agentplatform_core.py"
+  ]
  }
 }

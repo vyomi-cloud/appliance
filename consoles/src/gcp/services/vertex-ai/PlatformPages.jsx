@@ -2,7 +2,7 @@
  * Metadata, Monitoring, Agent Registry, ADK, Topology, and the declared "Not in scope" pages. Every list/create/delete here is a real call on the
  * native aiplatform / discoveryengine REST wire (core/gcp_agentplatform_core, gcp_agentengine_core, gcp_vertex_core); no data is made up. */
 import { useState } from "react";
-import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Checkbox, Chip, Dialog, FormControlLabel, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import DeleteIcon from "@mui/icons-material/esm/DeleteOutline.js";
@@ -149,52 +149,66 @@ export function MemoryBank() {
 }
 
 /* ── RAG Engine ── */
-function CorpusDetail({ corpus, onClose }) {
+function CorpusDetail({ corpus, onClose, onChanged }) {
   const notify = useNotify();
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [mode, setMode] = useState("dense");
   const [q, setQ] = useState(""); const [res, setRes] = useState(null); const [err, setErr] = useState(null);
   const f = useAsync(() => api.list("ragFiles", { parent: corpus.name }), [corpus.name]);
+  const changed = () => { f.reload(); onChanged?.(); };   // the corpus list shows file and chunk counts, so it is refreshed too
   const run = async () => {
     setErr(null);
-    try { const r = await json("POST", `/v1/${corpus.name.split("/ragCorpora/")[0]}:retrieveContexts`, { query: { text: q, ragRetrievalConfig: { topK: 4 } }, vertexRagStore: { ragResources: [{ ragCorpus: corpus.name }] } }); setRes(r.contexts?.contexts || []); } catch (e) { setErr(e); }
+    const ragRetrievalConfig = { topK: 4, ...(mode === "hybrid" ? { hybridSearch: { alpha: 0.5 } } : {}) };
+    try { const r = await json("POST", `/v1/${corpus.name.split("/ragCorpora/")[0]}:retrieveContexts`, { query: { text: q, ragRetrievalConfig }, vertexRagStore: { ragResources: [{ ragCorpus: corpus.name }] } }); setRes(r.contexts?.contexts || []); } catch (e) { setErr(e); }
   };
   const upload = async (v) => {
     await json("POST", `/upload/v1/${corpus.name}/ragFiles:upload`, { ragFile: { displayName: v.name }, text: v.text });
     notify.success(`Uploaded ${v.name}`);
   };
+  const importGcs = async (v) => {
+    const uris = v.uris.split(/[\s,]+/).filter(Boolean);
+    const op = await json("POST", `/v1/${corpus.name}/ragFiles:import`, { importRagFilesConfig: { gcsSource: { uris } } });
+    const r = op.response || {};
+    notify.success(`Imported ${r.importedRagFilesCount || 0}, skipped ${r.skippedRagFilesCount || 0}, failed ${r.failedRagFilesCount || 0}`);
+  };
   return (
     <Section title={`Corpus: ${corpus.displayName}`} actions={<Button onClick={onClose}>Close</Button>} description={corpus.name}>
       <Stack spacing={2}>
-        {bar(<><Button variant="contained" startIcon={<AddIcon />} onClick={() => setAdding(true)}>Upload text file</Button><Button startIcon={<RefreshIcon />} onClick={f.reload}>Refresh</Button></>)}
+        {bar(<><Button variant="contained" startIcon={<AddIcon />} onClick={() => setAdding(true)}>Upload text file</Button><Button variant="outlined" onClick={() => setImporting(true)}>Import from Cloud Storage</Button><Button startIcon={<RefreshIcon />} onClick={changed}>Refresh</Button></>)}
         <ResourceTable resourceName="files" items={f.data || []} rowKey={(x) => x.name} loading={f.loading} error={f.error} onRetry={f.reload}
           columns={[{ id: "n", header: "File", cell: (x) => x.displayName }, { id: "c", header: "Chunks", cell: (x) => x.vyomiChunks }, { id: "s", header: "Size (bytes)", cell: (x) => x.sizeBytes },
             { id: "st", header: "Status", cell: (x) => <StateChip s={x.fileStatus?.state} /> },
-            { id: "a", header: "Actions", cell: (x) => <IconButton size="small" aria-label={`Delete file ${x.displayName}`} onClick={async () => { await api.del(x.name); f.reload(); }}><DeleteIcon fontSize="small" /></IconButton> }]}
-          empty={<Typography variant="body2" color="text.secondary">No files. Upload text or markdown to index it.</Typography>} />
-        <Stack direction="row" spacing={1}><TextField size="small" label="Test retrieval" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 340 }} /><Button variant="outlined" disabled={!q.trim()} onClick={run}>Retrieve</Button></Stack>
+            { id: "src", header: "Source", cell: (x) => x.gcsSource?.uris?.[0] || "Direct upload" },
+            { id: "a", header: "Actions", cell: (x) => <IconButton size="small" aria-label={`Delete file ${x.displayName}`} onClick={async () => { await api.del(x.name); changed(); }}><DeleteIcon fontSize="small" /></IconButton> }]}
+          empty={<Typography variant="body2" color="text.secondary">No files. Upload text or import objects from Cloud Storage to index them.</Typography>} />
+        <Stack direction="row" spacing={1}><TextField select size="small" label="Search mode" value={mode} onChange={(e) => setMode(e.target.value)} sx={{ minWidth: 190 }} inputProps={{ "aria-label": "Search mode" }}><MenuItem value="dense">Dense (vector)</MenuItem><MenuItem value="hybrid">Hybrid (vector + BM25)</MenuItem></TextField><TextField size="small" label="Test retrieval" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 340 }} /><Button variant="outlined" disabled={!q.trim()} onClick={run}>Retrieve</Button></Stack>
         <ErrorAlert error={err} />
         {res && (res.length ? res.map((c, i) => (
-          <Box key={i} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}><Typography variant="caption" color="text.secondary">{c.sourceDisplayName} · distance {c.distance}</Typography><Typography variant="body2">{c.text}</Typography></Box>))
+          <Box key={i} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}><Typography variant="caption" color="text.secondary">{c.sourceDisplayName} · distance {c.distance} · score {c.score}</Typography><Typography variant="body2">{c.text}</Typography></Box>))
           : <Typography variant="body2" color="text.secondary">No chunk matched the query.</Typography>)}
       </Stack>
       <FormDialog open={adding} title="Upload text file" submitLabel="Upload" fields={[{ key: "name", label: "File name", default: "notes.txt" }, { key: "text", label: "Content", multiline: true }]}
-        onClose={(ok) => { setAdding(false); if (ok) f.reload(); }} onSubmit={upload} />
+        onClose={(ok) => { setAdding(false); if (ok) changed(); }} onSubmit={upload} />
+      <FormDialog open={importing} title="Import from Cloud Storage" submitLabel="Import" fields={[{ key: "uris", label: "Cloud Storage URIs", default: "gs://", multiline: true, helper: "One gs://bucket/object or gs://bucket/prefix per line" }]}
+        onClose={(ok) => { setImporting(false); if (ok) changed(); }} onSubmit={importGcs} />
     </Section>
   );
 }
 
 export function RagEngine() {
   const [sel, setSel] = useState(null);
+  const [rev, setRev] = useState(0);
   return (
     <Page title="RAG Engine">
       <Stack spacing={2}>
-        <ResourceList coll="ragCorpora" title="RAG corpora" singular="RAG corpus" regionScoped hideId
+        <ResourceList key={rev} coll="ragCorpora" title="RAG corpora" singular="RAG corpus" regionScoped hideId
           fields={[{ key: "displayName", label: "Corpus name" }, { key: "description", label: "Description" }]}
           build={(v) => ({ body: { displayName: v.displayName, description: v.description } })}
           nameOf={(i) => i.displayName} href={null}
           columns={[{ id: "files", header: "Files", cell: (i) => i.vyomiStats?.files }, { id: "chunks", header: "Chunks", cell: (i) => i.vyomiStats?.chunks },
             { id: "open", header: "Detail", cell: (i) => <Link href="#" onClick={(e) => { e.preventDefault(); setSel(i); }}>Manage files</Link> }]} />
-        {sel && <CorpusDetail corpus={sel} onClose={() => setSel(null)} />}
+        {sel && <CorpusDetail corpus={sel} onClose={() => setSel(null)} onChanged={() => setRev((n) => n + 1)} />}
       </Stack>
     </Page>
   );
@@ -205,12 +219,15 @@ const DE = (loc = "global") => `/v1/projects/${encodeURIComponent(api_project())
 
 function SearchBox({ servingPath }) {
   const [q, setQ] = useState(""); const [res, setRes] = useState(null); const [err, setErr] = useState(null);
-  const go = async () => { setErr(null); try { setRes(await json("POST", `${servingPath}/servingConfigs/default_search:search`, { query: q, pageSize: 10 })); } catch (e) { setErr(e); } };
+  const [sum, setSum] = useState(false);
+  const go = async () => { setErr(null); try { setRes(await json("POST", `${servingPath}/servingConfigs/default_search:search`, { query: q, pageSize: 10, ...(sum ? { contentSearchSpec: { summarySpec: { summaryResultCount: 3, includeCitations: true } } } : {}) })); } catch (e) { setErr(e); } };
   return (
     <Stack spacing={1}>
-      <Stack direction="row" spacing={1}><TextField size="small" label="Search" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 340 }} onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) go(); }} /><Button variant="outlined" disabled={!q.trim()} onClick={go}>Search</Button></Stack>
+      <Stack direction="row" spacing={1}><TextField size="small" label="Search" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 340 }} onKeyDown={(e) => { if (e.key === "Enter" && q.trim()) go(); }} /><Button variant="outlined" disabled={!q.trim()} onClick={go}>Search</Button><FormControlLabel control={<Checkbox checked={sum} onChange={(e) => setSum(e.target.checked)} inputProps={{ "aria-label": "Generate summary" }} />} label="Generate summary" /></Stack>
       <ErrorAlert error={err} />
-      {res && <Typography variant="body2" color="text.secondary">{res.totalSize || 0} results (lexical BM25; no generated summary)</Typography>}
+      {res && <Typography variant="body2" color="text.secondary">{res.totalSize || 0} results (hybrid: BM25 + embeddings)</Typography>}
+      {res?.summary?.summaryText && <Alert severity="info" data-testid="search-summary">{res.summary.summaryText}<Typography variant="caption" display="block">{res.summary.vyomiModel}</Typography></Alert>}
+      {res?.summary?.summarySkippedReasons && <Alert severity="warning">No summary: {res.summary.summarySkippedReasons.join(", ")}{res.summary.vyomiNote ? ` (${res.summary.vyomiNote})` : ""}</Alert>}
       {(res?.results || []).map((r) => (
         <Box key={r.id} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 1.5 }}>
           <Typography variant="subtitle2">{r.document?.structData?.title || r.id}</Typography><Typography variant="body2" color="text.secondary">{r.vyomiSnippet}</Typography></Box>))}
@@ -223,10 +240,11 @@ function StoreDetail({ ds, onClose }) {
   const [adding, setAdding] = useState(false);
   const base = `/v1/${ds.name}`;
   const d = useAsync(() => api.list("documents", { parent: `${ds.name}/branches/default_branch` }), [ds.name]);
+  const [importing, setImporting] = useState(false);
   return (
     <Section title={`Data store: ${ds.displayName}`} description={ds.name} actions={<Button onClick={onClose}>Close</Button>}>
       <Stack spacing={2}>
-        {bar(<><Button variant="contained" startIcon={<AddIcon />} onClick={() => setAdding(true)}>Add document</Button><Button startIcon={<RefreshIcon />} onClick={d.reload}>Refresh</Button></>)}
+        {bar(<><Button variant="contained" startIcon={<AddIcon />} onClick={() => setAdding(true)}>Add document</Button><Button variant="outlined" onClick={() => setImporting(true)}>Import from Cloud Storage</Button><Button startIcon={<RefreshIcon />} onClick={d.reload}>Refresh</Button></>)}
         <ResourceTable resourceName="documents" items={d.data || []} rowKey={(x) => x.name} loading={d.loading} error={d.error} onRetry={d.reload}
           columns={[{ id: "id", header: "Document ID", cell: (x) => x.id }, { id: "t", header: "Title", cell: (x) => x.structData?.title || "—" },
             { id: "a", header: "Actions", cell: (x) => <IconButton size="small" aria-label={`Delete document ${x.id}`} onClick={async () => { await api.del(x.name); d.reload(); }}><DeleteIcon fontSize="small" /></IconButton> }]}
@@ -236,6 +254,10 @@ function StoreDetail({ ds, onClose }) {
       <FormDialog open={adding} title="Add document" fields={[{ key: "id", label: "Document ID" }, { key: "title", label: "Title" }, { key: "body", label: "Content", multiline: true }]}
         onClose={(ok) => { setAdding(false); if (ok) d.reload(); }}
         onSubmit={async (v) => { await json("POST", `${base}/branches/default_branch/documents`, { structData: { title: v.title, body: v.body } }, { documentId: v.id }); notify.success("Added document"); }} />
+      <FormDialog open={importing} title="Import from Cloud Storage" submitLabel="Import"
+        fields={[{ key: "uris", label: "Cloud Storage URIs", default: "gs://", multiline: true, helper: "One gs:// object or prefix per line" }, { key: "schema", label: "Data schema", options: ["content", "custom", "document"], default: "content", helper: "content = one document per file; custom / document = JSON lines" }]}
+        onClose={(ok) => { setImporting(false); if (ok) d.reload(); }}
+        onSubmit={async (v) => { const op = await json("POST", `${base}/branches/default_branch/documents:import`, { gcsSource: { inputUris: v.uris.split(/[\s,]+/).filter(Boolean), dataSchema: v.schema } }); notify.success(`Imported ${op.metadata?.successCount || 0} documents (${op.metadata?.failureCount || 0} failed)`); }} />
     </Section>
   );
 }

@@ -1,0 +1,33 @@
+{
+  "$doc": "Vyomi capability registry \u2014 Azure AI Search (Microsoft.Search). Proven by tests/conformance/test_capabilities.py.",
+  "azure.aisearch.query": {
+    "title": "Queries (BM25 keyword, vector, hybrid, semantic ranker)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Keyword ranking is Okapi BM25 (SQLite FTS5) with phrases, negation, $filter, orderby, facets and count. Vector fields are Collection(Edm.Single) scanned exactly (no HNSW graph); vectorQueries of kind vector or text (text is embedded by the field profile's vectorizer, which is the local embedding model, not the Azure OpenAI deployment it names), per-query weight, and hybrid = BM25 + vector reciprocal rank fusion (k=60). queryType semantic with a semanticConfiguration returns @search.rerankerScore (0-4), @search.captions and @search.answers, but the ranker is an approximation (embedding similarity + query-term coverage over the configured title/content fields), NOT Microsoft's L2 cross-encoder, so scores and order will differ from Azure. No scoring profiles, suggesters, synonym maps, geo or Lucene parser."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_search_limvector.py",
+      "tests/conformance/test_azure_search_core.py",
+      "tests/conformance/test_azure_search_vector_core.py"
+    ]
+  },
+  "azure.aisearch.indexers": {
+    "title": "Data sources, indexers and skillsets (Blob, Cosmos DB, Azure SQL)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Indexers really run for azureblob (text, JSON, CSV), cosmosdb (NoSQL, from the simulated Cosmos store, optional query) and azuresql (table or view, from the simulated Azure SQL database) data sources, with fieldMappings (base64Encode/Decode, urlEncode/Decode, jsonArrayToStringCollection), outputFieldMappings, HighWaterMarkChangeDetectionPolicy (incremental, tracking state in the run status) and SoftDeleteColumnDeletionDetectionPolicy. SqlIntegratedChangeTracking, azuretable and adlsgen2 sources, managed-identity connection strings, schedules (runs are on demand) and the blob NativeBlobSoftDelete policy are not executed. Skillsets execute SplitSkill (pages or sentences), MergeSkill and AzureOpenAIEmbeddingSkill (local embedding model) with index projections; every other skill type (OCR, entity, language, image, custom WebApi) fails the indexer naming the skill. No knowledge store."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_search_limvector.py",
+      "tests/conformance/test_azure_search_vector_core.py",
+      "tests/conformance/test_azure_search_core.py"
+    ]
+  }
+}
