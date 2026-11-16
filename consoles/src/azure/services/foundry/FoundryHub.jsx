@@ -15,6 +15,8 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { FineTuningDetail, FineTuningList } from "./FineTuning.jsx";
+import { AgentsPage, ContentFiltersPage, NotInScope } from "./FoundryPages.jsx";
+import { CreateSearchService, link as searchLink } from "../aisearch/SearchServices.jsx";
 
 const CHIPS = ["Browse all resources in this subscription", "Are any resources impacted by outages", "Filter resources by region"];
 const KIND_LABEL = { AIServices: "Foundry", OpenAI: "Azure OpenAI", SpeechServices: "Speech service", TextAnalytics: "Language service",
@@ -26,7 +28,11 @@ const PAGES = {
   openai: { label: "Azure OpenAI", kinds: ["OpenAI"], glyph: "cognitiveservices" },
   finetuning: { label: "Fine-tuning", custom: true },
   search: { label: "AI Search", search: true, glyph: "cognitiveservices" },
-  ml: { label: "Machine Learning", none: "Machine Learning workspaces", chips: ["Get workload templates for ML workspaces"] },
+  agents: { label: "Agents", custom: true },
+  filters: { label: "Content filters", custom: true },
+  evaluations: { label: "Evaluations", custom: true },
+  promptflow: { label: "Prompt flow", custom: true },
+  ml: { label: "Machine Learning", custom: true },
   speech: { label: "Speech service", kinds: ["SpeechServices"] },
   language: { label: "Language service", kinds: ["TextAnalytics"] },
   translator: { label: "Translator", kinds: ["TextTranslation"] },
@@ -38,11 +44,16 @@ export const PAGE_LABEL = { ...Object.fromEntries(Object.entries(PAGES).map(([k,
 const MENU = [
   { id: "overview", label: "Overview" },
   { id: "all", label: "All resources" },
-  { group: "All models, agents & tools", items: ["foundry", "openai", "finetuning", "search", "ml"].map((id) => ({ id, label: PAGES[id].label })) },
+  { group: "All models, agents & tools", items: ["foundry", "openai", "agents", "finetuning", "filters", "evaluations", "promptflow", "search", "ml"].map((id) => ({ id, label: PAGES[id].label })) },
   { group: "Single-capability", items: ["speech", "language", "translator", "safety", "vision"].map((id) => ({ id, label: PAGES[id].label })) },
   { group: "Earlier-generation", items: [{ id: "anomaly", label: PAGES.anomaly.label }] },
   { group: "Help", items: [{ id: "docs", label: "Documentation" }] },
 ];
+const OUT = {
+  evaluations: { reason: "Foundry evaluations run built-in LLM-judge and safety evaluators on Azure-hosted infrastructure with Azure AI Evaluation SDK jobs. Vyomi serves a small local model, so a judge score would not mean what the cloud's score means, and Vyomi has no evaluation job runner.", instead: "Run the open-source azure-ai-evaluation or promptfoo packages on your machine against the Vyomi chat endpoint, and use the Agents page to try an agent by hand." },
+  promptflow: { reason: "Prompt flow is an authoring and runtime product (visual DAG editor, flow runtime, managed online endpoints). Vyomi does not host a flow runtime, and the page cannot be honest without one.", instead: "Orchestrate calls with the openai SDK against Vyomi: chat completions, the Assistants API (Agents page), AI Search for retrieval, and Fine-tuning for trained models." },
+  ml: { reason: "Azure Machine Learning workspaces need managed compute clusters, registries and pipeline services that cannot run in a browser tab or a small Codespace.", instead: "Fine-tuning (heads and imported LoRA adapters) for training jobs, and AI Search plus Azure OpenAI for retrieval and generation." },
+};
 const MODELS = AI_CHAT.slice(0, 9).map((m) => [m.name, m.vendor]);  // only the models this simulator actually serves
 
 function Overview({ total }) {
@@ -88,9 +99,9 @@ function Overview({ total }) {
 
 function ResourceList({ id }) {
   const sub = useSubscription();
+  const [creating, setCreating] = useState(false);
   const page = id === "all" ? { label: "All resources", all: true } : PAGES[id];
   const { data, loading, error, reload } = useAsync(async () => {
-    if (page.none) return [];
     const [accts, search] = await Promise.all([page.search ? [] : api.listAccounts(), page.search || page.all ? api.listSearch().catch(() => []) : []]);
     const rows = [...accts.filter((a) => page.all || page.kinds?.includes(a.kind)), ...search.map((s) => ({ ...s, kind: "Search" }))];
     return rows;
@@ -100,17 +111,18 @@ function ResourceList({ id }) {
     <div className="vy-page" data-testid="foundry-list">
       <BrowseGrid
         resourceName={page.label.toLowerCase()} items={data || []} loading={loading} error={error} onRefresh={reload}
-        onCreate={() => navigate("cognitiveservices", "create")} subscriptionLabel={subName} csvName={`foundry-${id}.csv`}
+        onCreate={() => (page.search ? setCreating(true) : navigate("cognitiveservices", "create"))} subscriptionLabel={subName} csvName={`foundry-${id}.csv`}
         pills={[{ key: "rg", label: "Resource group", value: (r) => r.resourceGroup }, { key: "loc", label: "Location", value: (r) => locationLabel(r.location) }]}
         columns={[
-          { key: "name", label: "Name", render: (r) => (r.kind === "Search" ? r.name : <Link href={`#/cognitiveservices/${encodeURIComponent(r.resourceGroup)}/${encodeURIComponent(r.name)}`}>{r.name}</Link>) },
+          { key: "name", label: "Name", render: (r) => (r.kind === "Search" ? <Link href={searchLink(r)}>{r.name}</Link> : <Link href={`#/cognitiveservices/${encodeURIComponent(r.resourceGroup)}/${encodeURIComponent(r.name)}`}>{r.name}</Link>) },
           { key: "type", label: "Type", value: (r) => (r.kind === "Search" ? "AI Search" : KIND_LABEL[r.kind] || r.kind) },
           { key: "resourceGroup", label: "Resource group" },
           { key: "location", label: "Location", value: (r) => locationLabel(r.location) },
           { key: "subscription", label: "Subscription", value: () => subName },
         ]}
-        emptyAction={page.none ? <span>{page.none} are not simulated.</span> : <Link href="#/cognitiveservices/create">Create</Link>}
+        emptyAction={page.search ? <Link as="button" onClick={() => setCreating(true)}>Create</Link> : <Link href="#/cognitiveservices/create">Create</Link>}
       />
+      <CreateSearchService open={creating} onClose={() => setCreating(false)} onCreated={reload} />
     </div>
   );
 }
@@ -120,7 +132,7 @@ export default function FoundryHub({ params = {} }) {
   const sub = useSubscription();
   const { data } = useAsync(() => api.listAccounts().catch(() => []), [sub.id]);
   const page = panel === "overview" ? null : panel === "all" ? { label: "All resources" } : PAGES[panel] || { label: panel };
-  const chips = panel === "finetuning" ? [] : page?.chips || (panel === "overview" ? [] : CHIPS);
+  const chips = PAGES[panel]?.custom ? [] : page?.chips || (panel === "overview" ? [] : CHIPS);
   const title = page ? `Microsoft Foundry | ${page.label}` : "Microsoft Foundry";
   return (
     <ResourceBlade
@@ -130,6 +142,9 @@ export default function FoundryHub({ params = {} }) {
       {chips.length > 0 && <div className="vy-fdy-chips">{chips.map((c) => <button key={c} type="button">{c}</button>)}</div>}
       {panel === "overview" ? <Overview total={(data || []).length} />
         : panel === "docs" ? <div className="vy-page"><p>Foundry documentation lives on learn.microsoft.com.</p></div>
+        : panel === "agents" ? <AgentsPage />
+        : panel === "filters" ? <ContentFiltersPage />
+        : OUT[panel] ? <NotInScope title={PAGES[panel].label} {...OUT[panel]} />
         : panel === "finetuning" ? (params.jobId ? <FineTuningDetail id={decodeURIComponent(params.jobId)} /> : <FineTuningList />)
         : <ResourceList id={panel} />}
     </ResourceBlade>

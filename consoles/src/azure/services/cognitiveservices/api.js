@@ -93,6 +93,26 @@ export const listLocks = async (rg, name) => (await restJson("GET", lockPath(rg,
 export const putLock = (rg, name, lockName, body) => restJson("PUT", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
 export const deleteLock = (rg, name, lockName) => restJson("DELETE", lockPath(rg, name, lockName), { query: { "api-version": LOCK_API_VERSION } });
 
+// Locks at the resource group and subscription scope: the Locks blade lists every lock that applies to the account, with its scope.
+const scopePath = (scope, rg) => (scope === "Subscription" ? `/subscriptions/${getSubscription()}` : `/subscriptions/${getSubscription()}/resourceGroups/${encodeURIComponent(rg)}`);
+const scopeLockPath = (scope, rg, lockName) => `${scopePath(scope, rg)}/providers/Microsoft.Authorization/locks${lockName ? `/${encodeURIComponent(lockName)}` : ""}`;
+export const listAllLocks = async (rg, name) => {
+  const own = await listLocks(rg, name);
+  const more = await Promise.all(["Resource group", "Subscription"].map(async (sc) => {
+    try { return (await restJson("GET", scopeLockPath(sc, rg), { query: { "api-version": LOCK_API_VERSION } })).value || []; } catch { return []; }
+  }));
+  const acctId = ARM.path(rg, name).toLowerCase(), rgId = scopePath("Resource group", rg).toLowerCase();
+  const seen = new Set(), out = [];
+  for (const l of [...own, ...more.flat()]) {   // a list at a scope also returns the locks beneath it, so classify by the lock's own id
+    const id = String(l.id || "").toLowerCase().replace(/\/providers\/microsoft\.authorization\/locks\/[^/]+$/, "");
+    const scope = id === acctId ? "Resource" : id === rgId ? "Resource group" : /^\/subscriptions\/[^/]+$/.test(id) ? "Subscription" : null;
+    if (scope && !seen.has(l.id)) { seen.add(l.id); out.push({ ...l, _scope: scope }); }
+  }
+  return out;
+};
+export const putScopeLock = (scope, rg, lockName, body) => restJson("PUT", scopeLockPath(scope, rg, lockName), { query: { "api-version": LOCK_API_VERSION }, body });
+export const deleteScopeLock = (scope, rg, lockName) => restJson("DELETE", scopeLockPath(scope, rg, lockName), { query: { "api-version": LOCK_API_VERSION } });
+
 // ── Activity log (Microsoft.Insights/eventtypes/management/values, filtered to this account) ──
 export const listActivityLog = async (rg, name, sinceIso) => {
   const rid = ARM.path(rg, name);

@@ -33,6 +33,7 @@ export const SERVICES = [
   { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions", load: () => import("./subscriptions/index.jsx") },
   { id: "cost", title: "Cost Management", type: "Microsoft.CostManagement", category: "Management and governance", icon: "cost", load: () => import("./cost/index.jsx") },
   { id: "cognitiveservices", title: "Azure AI services", type: "Microsoft.CognitiveServices/accounts", category: "AI + machine learning", icon: "cognitiveservices", load: () => import("./cognitiveservices/index.jsx") },
+  { id: "aisearch", title: "AI Search", type: "Microsoft.Search/searchServices", category: "AI + machine learning", icon: "cognitiveservices", load: () => import("./aisearch/index.jsx") },
   { id: "foundry", title: "Microsoft Foundry", type: "Microsoft.CognitiveServices/accounts (hub)", category: "AI + machine learning", icon: "cognitiveservices", load: () => import("./foundry/index.jsx") },
   { id: "appconfiguration", title: "App Configuration", type: "Microsoft.AppConfiguration/configurationStores", category: "Integration", icon: "appconfiguration", load: () => import("./appconfiguration/index.jsx") },
   { id: "streamanalytics", title: "Stream Analytics jobs", type: "Microsoft.StreamAnalytics/streamingjobs", category: "Integration", icon: "eventgrid", load: () => import("./streamanalytics/index.jsx") },

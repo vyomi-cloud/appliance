@@ -202,7 +202,8 @@ def("azure.foundry.overview", ["/foundry"], {
   title: "Foundry: scope and limits",
   intro: "The Microsoft Foundry hub blade over real ARM lists of Azure AI resources.",
   real: ["Overview and Dashboard follow the real chrome, title, chips and left menu. Resource lists are real ARM reads (Microsoft.CognitiveServices accounts by kind, Microsoft.Search services). Model tiles show only models this simulator serves."],
-  limits: ["Foundry project pages (model catalog, deployments, playground, evaluations, prompt flow, agents) are not built.", "Hero and capability-card illustrations are plain blocks. The group membership of the sub-menu was inferred; the capture never expanded it."],
+  real: ["Agents (Assistants API), Content filters (enforced on deployments), Fine-tuning and the AI Search blade are real. Evaluations, Prompt flow and Machine Learning say plainly that they are not in scope, with what to use instead."],
+  limits: ["Foundry project pages (model catalog, project deployments, playground) are not built.", "Hero and capability-card illustrations are plain blocks. The group membership of the sub-menu was inferred; the capture never expanded it."],
 });
 def("azure.foundry.finetuning", ["/foundry/finetuning", "/foundry/finetuning/:jobId"], {
   title: "Fine-tuning: scope and limits",
@@ -224,12 +225,38 @@ def("azure.foundry.openai", ["/foundry/openai"], {
 def("azure.foundry.search", ["/foundry/search"], {
   title: "AI Search: scope and limits",
   intro: "ARM list of Microsoft.Search/searchServices, backed by the azure_search_core engine.",
-  limits: ["Foundry has no RAG page here; project-level search, indexers and agentic retrieval pages are not built."],
+  real: ["Names open the AI Search blade: create a service, indexes (JSON definition), a search explorer with document upload, indexers (run + status), data sources and admin/query keys. All are real ARM calls into the azure_search_core engine."],
+  limits: ["Blob data sources are read by indexers; Cosmos and SQL ones are stored and their indexer reports the failure. Semantic ranker setup, skillset editor, vector profiles, scaling and networking panels are not built (the engine does not model them)."],
+});
+def("azure.aisearch", ["/aisearch", "/aisearch/:rg/:name", "/aisearch/:rg/:name/:panel"], {
+  title: "AI Search: scope and limits",
+  intro: "Microsoft.Search/searchServices over core/azure_search_core.py (pure Python, runs on Nano and the Mesh).",
+  real: ["Create, delete and list services; admin and query keys; indexes, documents (index, merge, delete) and queries with filters, facets and counts; data sources; indexers with run and status."],
+  limits: ["Ranking is TF-IDF, not BM25 with the full Lucene analyzers. Semantic ranker, vector (HNSW) and hybrid retrieval, and AI enrichment skillsets are not modelled."],
+});
+def("azure.foundry.agents", ["/foundry/agents"], {
+  title: "Agents: scope and limits",
+  intro: "Create agents and chat with them through the Assistants API (assistants, threads, messages, runs) on a deployment of an Azure OpenAI or Foundry resource.",
+  real: ["The page makes the same calls as the openai SDK; a run executes the model once over the thread."],
+  limits: ["Tools are limited to what the Assistants engine runs (no hosted code interpreter or file search sandbox). The model is the local open model, not an OpenAI model."],
+  nano: ["The chat model is WebLLM in the browser (WebGPU)."],
+  mesh: ["llama.cpp answers."],
+});
+def("azure.foundry.filters", ["/foundry/filters"], {
+  title: "Content filters: scope and limits",
+  intro: "Custom content filters (Microsoft.CognitiveServices raiPolicies) with per-category thresholds, assigned to a deployment.",
+  real: ["A deployment that names a custom filter returns HTTP 400 content_filter for a blocked prompt and finish_reason content_filter for a blocked completion. Matching runs on the guardrails engine."],
+  limits: ["Hate, Sexual, Violence and the Jailbreak prompt shield only; Self-harm, protected material, blocklists and annotate-only mode are not modelled. Detection is keyword lists plus the local embedding model: a development stand-in, not a safety guarantee. The Microsoft default policies do not block."],
+});
+def("azure.foundry.notinscope", ["/foundry/evaluations", "/foundry/promptflow"], {
+  title: "Not in scope for Vyomi",
+  intro: "These Foundry products need an evaluation job runner or a flow runtime Vyomi does not have.",
+  limits: ["The page states the reason and what to use instead."],
 });
 def("azure.foundry.ml", ["/foundry/ml"], {
   title: "Machine Learning: scope and limits",
   intro: "Machine Learning workspaces.",
-  metadata: ["Not simulated: the page says so."],
+  limits: ["Not in scope: managed compute clusters, registries and pipeline services cannot run in a browser tab or a small Codespace. The page says so and points to Fine-tuning."],
 });
 def("azure.foundry.other", ["/foundry/all", "/foundry/foundry", "/foundry/speech", "/foundry/language", "/foundry/translator", "/foundry/safety", "/foundry/vision", "/foundry/anomaly", "/foundry/docs"], {
   title: "Foundry lists: scope and limits",

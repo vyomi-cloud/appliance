@@ -1911,6 +1911,54 @@ def _azure_custom_models(method, path, lh, body):
 
 
 
+def _az_rai_policy(acct, dep, source):
+    """Azure OpenAI content filter (a user-managed raiPolicy on the deployment) -> a bedrock_guardrails_core policy dict, or None.
+    Hate/Sexual/Violence map to the guardrail content filters and Jailbreak to PROMPT_ATTACK (input only); a severity threshold of
+    Low/Medium/High blocks at filter strength HIGH/MEDIUM/LOW. SelfHarm is not modelled by the engine. Built-in policies do not block."""
+    name = str((dep.get("properties") or {}).get("raiPolicyName") or "")
+    pol = ((acct or {}).get("_rai") or {}).get(name.lower())
+    if not pol:
+        return None
+    kinds = {"hate": "HATE", "sexual": "SEXUAL", "violence": "VIOLENCE", "jailbreak": "PROMPT_ATTACK"}
+    strength = {"low": "HIGH", "medium": "MEDIUM", "high": "LOW"}
+    flt = []
+    for f in (pol.get("properties") or {}).get("contentFilters") or []:
+        t = kinds.get(str(f.get("name", "")).lower())
+        if not t or not f.get("enabled", True) or not f.get("blocking", True):
+            continue
+        if (t == "PROMPT_ATTACK" and source != "Prompt") or (t != "PROMPT_ATTACK" and str(f.get("source", "Prompt")).lower() != source.lower()):
+            continue
+        st = strength.get(str(f.get("severityThreshold", "Medium")).lower(), "MEDIUM")
+        flt.append({"type": t, "inputStrength": st, "outputStrength": "NONE" if t == "PROMPT_ATTACK" else st})
+    return {"contentPolicyConfig": {"filtersConfig": flt}, "blockedInputMessaging": "", "blockedOutputsMessaging": ""} if flt else None
+
+
+def _az_filtered(assess):
+    return {k: {"filtered": True, "severity": str(v.get("confidence", "medium")).lower()} for k, v in
+            ((str(f["type"]).lower().replace("prompt_attack", "jailbreak"), f) for f in (assess.get("contentPolicy") or {}).get("filters", []))}
+
+
+def _az_block_input(acct, dep, req):
+    pol = _az_rai_policy(acct, dep, "Prompt")
+    if not pol:
+        return None
+    text = "\n".join(str(m.get("content") or "") if isinstance(m, dict) else str(m) for m in req[0])
+    r = _guardrails().evaluate(pol, text, "INPUT")
+    if not r["blocked"]:
+        return None
+    return _j(400, {"error": {"message": "The response was filtered due to the prompt triggering Azure OpenAI's content management policy. "
+                                         "Please modify your prompt and retry.", "type": None, "param": "prompt", "code": "content_filter", "status": 400,
+                              "innererror": {"code": "ResponsibleAIPolicyViolation", "content_filter_result": _az_filtered(r["assessment"])}}})
+
+
+def _az_block_output(acct, dep, text):
+    pol = _az_rai_policy(acct, dep, "Completion")
+    if not pol:
+        return None
+    r = _guardrails().evaluate(pol, text, "OUTPUT")
+    return _az_filtered(r["assessment"]) if r["blocked"] else None
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
     if re.match(r"^/openai(/v1)?/(files|fine_tuning)(/|$)", path):
         return _azure_files_ft(method, path, query, {k.lower(): v for k, v in (headers or {}).items()}, body)
@@ -2004,6 +2052,9 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         if len(req) == 2:
             return _a_err(400, "BadRequest", req[1], req[0])
     req = (req[0], req[1], req[2], req[3], req[4], dict(req[5], model=model))
+    blocked_in = _az_block_input(acct, dep, req)      # a user-managed content filter on the deployment (Foundry > Guardrails + controls)
+    if blocked_in is not None:
+        return blocked_in
     cid, now = ("chatcmpl-" if op == "chat/completions" else "cmpl-") + uuid.uuid4().hex[:29], int(time.time())
     stream = bool(p.get("stream")) and op == "chat/completions"
     try:
@@ -2023,6 +2074,12 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
     fin = "length" if r["finish_reason"] == "length" else "stop"
     usage = {"prompt_tokens": r["input_tokens"], "completion_tokens": r["output_tokens"], "total_tokens": r["input_tokens"] + r["output_tokens"]}
     hh = {"x-vyomi-local-model": r["model"]}
+    cf = _az_block_output(acct, dep, r.get("text") or "")
+    if cf:      # output filtered: empty content, finish_reason content_filter (what Azure returns)
+        ch = {"index": 0, "finish_reason": "content_filter", "content_filter_results": cf}
+        ch.update({"text": ""} if op == "completions" else {"message": {"role": "assistant", "content": None}})
+        return _j(200, {"id": cid, "object": "text_completion" if op == "completions" else "chat.completion", "created": now, "model": model,
+                        "choices": [ch], "usage": usage}, hh)
     if op == "completions":
         return _j(200, {"id": cid, "object": "text_completion", "created": now, "model": model,
                         "choices": [{"text": r["text"], "index": 0, "finish_reason": fin, "logprobs": None}], "usage": usage}, hh)
