@@ -49,4 +49,4 @@ a sweep (test output); do not commit them.
 2. Each test file now gets its own fresh `CLOUDLEARN_STATE_FILE` instead of sharing the parent sweep's persisted state. Sharing it made
    `test_bedrock_flows`, `test_bedrock_evals`, `test_model_import` and `test_training_jobs` fail inside the sweep while passing alone.
 
-Result with this recipe on the branch: 1472/1472 claims hold on nano (macOS arm64). Before the fixes: 1426/1472 (46 failures: 41 missing Azure SDKs/pyodide/node deps or vacuous pytest runs, 4 state pollution, 1 timing flake, plus the real regression below).
+Result with this recipe on the branch: 1472/1472 claims hold on nano (macOS arm64). Before the fixes: 1426/1472 (46 failures: 41 missing Azure SDKs/pyodide/node deps or vacuous pytest runs, 4 state pollution, 1 timing flake; the 4 Service Bus AMQP-on-Nano claims were a REAL regression: nano-endpoint.html CORES lagged relay-shared-worker.js, fixed in this commit).
