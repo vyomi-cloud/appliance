@@ -1,0 +1,8 @@
+# post-beta-hookverify: llm-chat adapter reload hook verified in the real llama.cpp server image (Mac, Docker Desktop arm64)
+
+Base origin/v4-on-main 4141d0577. Image `ghcr.io/ggml-org/llama.cpp:server` (arm64, `llama-server` 0.9.0-dev build 12124), model Qwen3-4B-Instruct-2507 Q4_K_M (sha256 3605803b...e597 verified), compose-shaped run (entrypoint `/bin/sh /entry.sh`, `-np 1 --jinja --cache-reuse 256 -t 4 -c 4096`, adapter dir mounted read-only).
+- Script runs unchanged in the image (`/app/llama-server`, dash, wc/sort/cut present). Adapter dropped in: only llama-server restarts (PID 10 -> 95, entry PID 1 and container unchanged). Downtime 11.8 s (4 CPU threads, VM); detection adds up to VYOMI_LLM_ADAPTER_POLL (10 s default). Removal: back to base, 11.3 s.
+- Request-level: `lora:[{"id":0,"scale":1}]` changes the greedy output, scale 0 / absent equals base exactly (md5 equal), after removal base output restored (md5 equal).
+- BUG FOUND + FIXED: a truncated adapter makes llama-server exit at start ("data is not within the file bounds"); the script exited with it, so the container crash-looped and base chat was down. Now it restarts without adapters and keeps watching (test in test_mesh_ai.py).
+- Caveat: with an adapter active and prompt cache on, repeated identical requests can differ from the first (cache_n>0 path); `cache_prompt:false` gives identical outputs.
+- Adapter was NOT trained on Qwen3-4B: bf16 training on this 16 GB Mac swapped (see report); the adapter is a PEFT-format random-weight LoRA (r=4, 504 tensors) converted with trainer/ llama.cpp b8996 convert_lora_to_gguf.py.
