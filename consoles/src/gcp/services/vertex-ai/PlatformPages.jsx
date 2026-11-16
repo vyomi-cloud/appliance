@@ -518,12 +518,7 @@ export function Topology() {
 /* ── declared "Not in scope" pages: a reason and what to use instead, never a bare "Coming soon" ── */
 const OOS = {
   "training-clusters": ["Training clusters", "Models", "#/vertex-ai/model-garden", "Training clusters are managed multi-node GPU/TPU Slurm or GKE capacity for large pretraining. A single-machine simulator has no accelerator fleet to schedule onto.", "Use Tuning (heads and chat LoRA run for real) or Training > custom jobs for the job lifecycle."],
-  "provisioned-throughput": ["Provisioned Throughput", "Models", "#/vertex-ai/model-garden", "Provisioned Throughput is a billing commitment that reserves model serving capacity. A local model has no shared capacity, quota or commitment to reserve.", "Use Endpoints for deployment and Model Garden for the served models."],
   "ray": ["Ray on Agent Platform", "Models", "#/vertex-ai/model-garden", "Ray clusters (persistentResources) need multi-node compute and the Ray runtime, which the simulator does not host.", "Run Ray locally and submit work through Training custom jobs for the job lifecycle."],
-  "mcp-servers": ["MCP Servers", "Agents", "#/vertex-ai/agent-garden", "The catalogue of managed Google MCP servers is a vendor-hosted service; the simulator does not run or proxy them.", "Declare your own tools in the agent spec under ADK (static, template, builtin, webhook), or register an MCP server on the AWS AgentCore Gateway."],
-  "policies": ["Policies", "Govern", "#/vertex-ai/agent-registry", "Agent Platform policies enforce org-level agent guardrails in a vendor control plane with no public API to model.", "Use IAM for access control and the Bedrock/AgentCore Cedar policy engine for tool-call policy."],
-  "gateways": ["Gateways", "Govern", "#/vertex-ai/agent-registry", "The Agent Gateway is a vendor-hosted traffic proxy for agent and MCP calls with no public API to model.", "Use API Gateway (Cloud API Gateway) in this console for fronting an agent's HTTP endpoint."],
-  "security": ["Security", "Govern", "#/vertex-ai/agent-registry", "Agent Platform security posture (Model Armor, threat detection) is a vendor analysis service.", "Use Security Command Center in this console, and IAM for identity."],
 };
 export function NotInScope({ id }) {
   const [title, group, groupHref, why, instead] = OOS[id];

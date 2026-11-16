@@ -42,6 +42,9 @@ except ImportError:  # Pyodide flat layout
     import knowledge_core as kc  # type: ignore
 
 _ACCT = "123456789012"
+# Hooks the wire router attaches before dispatching (both substrates): "iam_key" = access-key-id -> IAM key record | None (SigV4 verification),
+# "wire" = the router's own handle(method, path, query, headers, body) (smithyModel gateway targets call the simulator's AWS APIs through it).
+HOOKS: dict = {"iam_key": None, "wire": None}
 _REGION = "us-east-1"
 _ALNUM = string.ascii_uppercase + string.digits
 _TEXT_EXT = (".txt", ".md", ".markdown", ".csv", ".json", ".html", ".htm", ".xml", ".log", ".tsv", ".yaml", ".yml", ".rst")
@@ -2142,6 +2145,9 @@ def _create_runtime(st, p):
     _check_artifact(art)
     if not p.get("roleArn"):
         raise _bad("roleArn is required")
+    jwt_auth = (p.get("authorizerConfiguration") or {}).get("customJWTAuthorizer")
+    if p.get("authorizerConfiguration") and not (jwt_auth or {}).get("discoveryUrl"):
+        raise _bad("authorizerConfiguration.customJWTAuthorizer.discoveryUrl is required")
     net = (p.get("networkConfiguration") or {}).get("networkMode")
     if net not in ("PUBLIC", "VPC"):
         raise _bad("networkConfiguration.networkMode must be PUBLIC or VPC")
@@ -2153,6 +2159,7 @@ def _create_runtime(st, p):
           "agentRuntimeVersion": "1", "description": p.get("description", ""), "agentRuntimeArtifact": art, "roleArn": p["roleArn"],
           "networkConfiguration": p["networkConfiguration"], "protocolConfiguration": p.get("protocolConfiguration") or {"serverProtocol": "HTTP"},
           "environmentVariables": p.get("environmentVariables") or {}, "status": "CREATING", "createdAt": now, "lastUpdatedAt": now,
+          **({"authorizerConfiguration": p["authorizerConfiguration"]} if p.get("authorizerConfiguration") else {}),
           "workloadIdentityDetails": {"workloadIdentityArn": f"arn:aws:bedrock-agentcore:{_REGION}:{_ACCT}:workload-identity-directory/default/workload-identity/{name}-{_rid(10, _LOWER)}"},
           "_readyAt": time.time() + 1.0}
     st["runtimes"][rid] = rt
@@ -2230,6 +2237,8 @@ def _create_target(st, gw, p, s3=None):
     if kinds[0] == "openApiSchema":
         spec = gt.validate_openapi(mcp, s3)
         extra = {"_base": spec["servers"][0]["url"], "_ops": gt.openapi_operations(spec)}
+    elif kinds[0] == "smithyModel":
+        extra = {"_smithy": gt.validate_smithy(cfg, s3)}
     elif kinds[0] == "mcpServer":
         if not str((mcp["mcpServer"] or {}).get("endpoint", "")).startswith(("http://", "https://")):
             raise _bad("targetConfiguration.mcp.mcpServer.endpoint must be an http(s) URL")
@@ -2263,6 +2272,9 @@ def _mcp_tools(gw, st=None, headers=None):
         elif t["_kind"] == "openApiSchema":
             for o in t.get("_ops") or []:
                 out.append((f"{t['name']}___{o['tool']}", t, {"name": o["tool"], "description": o["description"], "inputSchema": o["inputSchema"]}))
+        elif t["_kind"] == "smithyModel":
+            for o in (t.get("_smithy") or {}).get("ops") or []:
+                out.append((f"{t['name']}___{o['tool']}", t, {"name": o["tool"], "description": o["description"], "inputSchema": o["inputSchema"]}))
         elif t["_kind"] == "mcpServer" and st is not None:
             c = t.get("_up")
             if not c or c[0] < time.time():   # upstream catalog cached 30 s
@@ -2286,15 +2298,26 @@ def _ext():
     return m
 
 
-def _mcp(st, lam, gid, p, headers):
+def _mcp(st, lam, gid, p, headers, req=None, internal=False):
     gw = _find_gw(st, gid)
     _ac_ready(gw)
     if gw["status"] != "READY":
         return _j(503, {"message": "Gateway is not READY"})
-    if gw["authorizerType"] == "CUSTOM_JWT":
+    if internal == "admin":   # a console/control-plane adapter (core/gcp_agentgov_core) already authorized its operator
+        pass
+    elif gw["authorizerType"] == "CUSTOM_JWT":
         _claims, deny = _gt().validate_inbound(gw, headers)
         if deny:
             return deny
+    elif gw["authorizerType"] == "AWS_IAM" and internal:   # a runtime's own gateway tool: the runtime invocation already authenticated its caller
+        pass
+    elif gw["authorizerType"] == "AWS_IAM":   # SigV4 verified against the simulator's IAM access keys (core/agentcore_gateway_targets.verify_sigv4)
+        rq = req or ("POST", f"/gateways/{gid}/mcp", {}, b"")
+        _ident, deny = _gt().verify_sigv4(rq[0], rq[1], rq[2], headers, rq[3], HOOKS.get("iam_key"))
+        if deny:
+            return deny
+        if _ident.get("verified"):
+            headers = dict(headers or {}, **{"x-vyomi-iam-principal": _ident["principal"]})
     elif gw["authorizerType"] != "NONE":
         h = {str(k).lower(): v for k, v in (headers or {}).items()}
         if not (h.get("authorization") or "").strip():
@@ -2331,9 +2354,11 @@ def _mcp(st, lam, gid, p, headers):
             return fail(-32602, f"Unknown tool: {prm.get('name')}")
         t, tool = hit
         _ac_ready(t)
-        if t["_kind"] in ("openApiSchema", "mcpServer"):
+        if t["_kind"] in ("openApiSchema", "mcpServer", "smithyModel"):
             gt = _gt()
             try:
+                if t["_kind"] == "smithyModel":
+                    return ok(gt.call_smithy(t["_smithy"], tool["name"], prm.get("arguments") or {}))
                 if t["_kind"] == "openApiSchema":
                     return ok(gt.call_openapi(st, t, t["_ops"], t["_base"], tool["name"], prm.get("arguments") or {}, headers))
                 return ok(gt.mcp_upstream(st, t, "tools/call", {"name": tool["name"], "arguments": prm.get("arguments") or {}}, headers))
@@ -2419,6 +2444,13 @@ def _runtimes(st, method, path, query, headers, body, lam=None, s3=None):
     rt.setdefault("_endpoints", {})
     rt.setdefault("_sessions", {})
     _ac_ready(rt)
+    if (tail == "invocations" and method == "POST") or (tail == "invocations/.well-known/agent-card.json" and method == "GET"):
+        if (rt.get("authorizerConfiguration") or {}).get("customJWTAuthorizer"):   # inbound JWT: signature, expiry, issuer, audience / client / scope really verified
+            _claims, deny = _gt().validate_inbound(rt, headers)
+            if deny:
+                return deny
+    if tail == "invocations/.well-known/agent-card.json" and method == "GET":
+        return _agent_card(rt, headers or {})
     if tail == "invocations" and method == "POST":
         return _invoke_runtime(rt, query or {}, headers or {}, body, st, lam, s3)
     if tail == "stopruntimesession" and method == "POST":
@@ -2631,6 +2663,21 @@ def _invoke_runtime(rt, query, headers, body, st=None, lam=None, s3=None):
                     "usage": r["usage"], "model": r["model"], "truncated": r["truncated"]}, hdrs)
 
 
+def _agent_card(rt, headers):
+    """GET /runtimes/{arn}/invocations/.well-known/agent-card.json: the A2A agent card of an A2A runtime (same auth as invoke)."""
+    if (rt.get("protocolConfiguration") or {}).get("serverProtocol") != "A2A":
+        return _j(404, {"message": "Only runtimes with serverProtocol A2A publish an agent card"})
+    raw_spec = (rt.get("environmentVariables") or {}).get(_SPEC_ENV)
+    ag = _agent_core()
+    try:
+        spec = ag.parse_spec(raw_spec) if raw_spec else {"instructions": "", "tools": []}
+    except ag.SpecError as e:
+        return _rt_client_err(f"Invalid Vyomi agent spec: {e}")
+    h = {k.lower(): v for k, v in headers.items()}
+    base = f"{'https' if h.get('x-forwarded-proto') == 'https' else 'http'}://{h.get('host', 'localhost')}"
+    return _j(200, _gt().a2a_card(rt, spec, f"{base}/runtimes/{urllib.parse.quote(rt['agentRuntimeArn'], safe='')}/invocations/"))
+
+
 def _invoke_protocol(rt, proto, spec, ag, h, body, st, lam):
     """serverProtocol MCP / A2A runtimes: the payload is a JSON-RPC 2.0 request (as the real service forwards it to the container)."""
     gt = _gt()
@@ -2658,6 +2705,12 @@ def _invoke_protocol(rt, proto, spec, ag, h, body, st, lam):
         return r["text"]
     try:
         out = gt.runtime_a2a(rt, spec, req, run_agent, rt.setdefault("_a2a_tasks", {}))
+        if isinstance(out, dict) and "_sse" in out:   # message/stream: Server-Sent Events, one JSON-RPC response per task event
+            try:
+                from core import ai_models_core as am
+            except ImportError:
+                import ai_models_core as am  # type: ignore
+            return am._stream_out(200, hdrs, ("data: " + json.dumps(ev) + "\n\n" for ev in out["_sse"]), "text/event-stream")
     except llm.LlmUnavailable as e:
         return {"status": 503, "headers": {"content-type": "application/json", "x-amzn-errortype": "ServiceUnavailableException"}, "body": json.dumps({"message": f"{e}"}).encode()}
     return _j(200, out, hdrs)
@@ -2665,6 +2718,7 @@ def _invoke_protocol(rt, proto, spec, ag, h, body, st, lam):
 
 def agentcore_dispatch(s3, lam, method, path, query, headers, body):
     method = method.upper()
+    _orig_path = path
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
     try:
@@ -2694,7 +2748,7 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
             else:
                 gw = _find_gw(st, segs[1])
                 if len(segs) == 3 and segs[2] == "mcp" and method == "POST":
-                    return _mcp(st, lam, segs[1], p, headers)
+                    return _mcp(st, lam, segs[1], p, headers, (method, _orig_path, query, body))
                 if len(segs) == 2:
                     if method == "GET":
                         return _j(200, _pub(gw))
@@ -2732,6 +2786,8 @@ def agentcore_dispatch(s3, lam, method, path, query, headers, body):
                                     cfg = p["targetConfiguration"]
                                     if "lambda" in (cfg.get("mcp") or {}):
                                         _tool_schema(cfg)
+                                    if "smithyModel" in (cfg.get("mcp") or {}):
+                                        t["_smithy"] = _gt().validate_smithy(cfg, s3)
                                     if "openApiSchema" in (cfg.get("mcp") or {}):
                                         _sp = _gt().validate_openapi(cfg["mcp"], s3)
                                         t["_base"], t["_ops"] = _sp["servers"][0]["url"], _gt().openapi_operations(_sp)

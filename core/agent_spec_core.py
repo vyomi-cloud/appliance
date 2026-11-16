@@ -15,7 +15,7 @@ simulator does NOT. Instead the "agent" is data:
       "type": "static",   "result": {"temp_c": 21}},                       # fixed value, or "cases":[{"match":{"city":"Paris"},"result":...}]
      {"name": "greet",       "type": "template", "template": "Hello {name}!"},  # str.format over the call arguments
      {"name": "calc",        "type": "builtin",  "builtin": "calculator"},       # calculator | current_time | echo
-     {"name": "lookup",      "type": "webhook",  "url": "http://host/hook", "headers": {...}},  # POST arguments as JSON (offline substrate only)
+     {"name": "lookup",      "type": "webhook",  "url": "http://host/hook", "headers": {...}},  # POST arguments as JSON (Nano: via the allow-listed egress relay)
      {"name": "fn1",         "type": "function"}]}                              # in-process Python function from register_function()
 
 ``run`` is a real tool-calling loop: the model is asked with the tool schemas, every tool call it emits is executed, the result is
@@ -23,7 +23,7 @@ fed back as a tool message and the model is called again until it answers in tex
 backend llm_core raises LlmUnavailable (callers map it to 503) - there is no canned answer.
 
 Honest limits: not the Google ADK / LangChain / Strands / any framework, no container or pickled class, no memory service, tools
-are the declarative kinds above (webhook needs network egress, so it is unavailable inside Nano's browser sandbox), quality is
+are the declarative kinds above (webhook needs network egress: on Nano it goes through the allow-listed egress relay, and fails with the relay's reason when none is reachable), quality is
 the small local model's. On Nano's async model bridge the loop is re-run to resume after each model await, so webhook / function
 tools may execute more than once there - keep them idempotent.
 """
@@ -33,6 +33,7 @@ import ast
 import json
 import operator
 import re
+import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -161,6 +162,15 @@ def exec_tool(tool: dict, args: dict):
             if fn is None:
                 return {"error": f"no in-process function registered for {tool['name']}"}, True
             return fn(dict(args)), False
+        if kind == "webhook" and sys.platform == "emscripten":   # Nano: through the allow-listed egress relay (awaited + replayed by llm_core.arun)
+            status, _h, raw_b = llm.http_request("POST", tool["url"], dict({"content-type": "application/json"}, **(tool.get("headers") or {})), json.dumps(args).encode(), float(tool.get("timeout", 10)))
+            raw = raw_b.decode("utf-8", "replace")
+            if status >= 400:
+                return {"error": f"webhook returned HTTP {status}: {raw[:300]}"}, True
+            try:
+                return json.loads(raw), False
+            except ValueError:
+                return raw, False
         if kind == "webhook":
             req = urllib.request.Request(tool["url"], data=json.dumps(args).encode(), method="POST",
                                          headers=dict({"content-type": "application/json"}, **(tool.get("headers") or {})))

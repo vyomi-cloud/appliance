@@ -29,6 +29,7 @@ import DescriptionIcon from "@mui/icons-material/esm/DescriptionOutlined.js";
 import CodeIcon from "@mui/icons-material/esm/Code.js";
 import { TuningJobs, TuningDetail } from "./Tuning.jsx";
 import { Sessions, MemoryBank, RagEngine, SearchApps, AgentRetrieval, Evaluation, Metadata, Monitoring, AgentRegistry, Adk, Topology, NotInScope } from "./PlatformPages.jsx";
+import { McpServers, Gateways, GatewayDetail, Policies, Security, ProvisionedThroughput } from "./GovernancePages.jsx";
 import { Endpoints, EndpointDetail, Models, Datasets, Training, Pipelines, Batch, Workbench, VectorSearch, FeatureStore, Experiments } from "./Pages.jsx";
 
 const B = "#/vertex-ai";
@@ -124,6 +125,12 @@ export default {
     { pattern: "/vertex-ai/agent-registry", component: AgentRegistry },
     { pattern: "/vertex-ai/adk", component: Adk },
     { pattern: "/vertex-ai/topology", component: Topology },
-    ...["training-clusters", "provisioned-throughput", "ray", "mcp-servers", "policies", "gateways", "security"].map((id) => ({ pattern: `/vertex-ai/${id}`, component: () => <NotInScope id={id} /> })),
+    { pattern: "/vertex-ai/provisioned-throughput", component: ProvisionedThroughput },
+    { pattern: "/vertex-ai/mcp-servers", component: McpServers },
+    { pattern: "/vertex-ai/gateways", component: Gateways },
+    { pattern: "/vertex-ai/gateways/:location/:id", component: GatewayDetail },
+    { pattern: "/vertex-ai/policies", component: Policies },
+    { pattern: "/vertex-ai/security", component: Security },
+    ...["training-clusters", "ray"].map((id) => ({ pattern: `/vertex-ai/${id}`, component: () => <NotInScope id={id} /> })),
   ],
 };

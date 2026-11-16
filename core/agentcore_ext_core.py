@@ -526,7 +526,7 @@ def _k_gateway(tool, args):
     if not gw:
         return {"error": f"gateway {tool['gateway']} not found"}, True
     r = B._mcp(c["st"], c["lam"], gw["gatewayId"], {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool["tool"], "arguments": args}},
-               {"authorization": "Bearer " + c["jwt"]} if c.get("jwt") else {"authorization": "none"})
+               {"authorization": "Bearer " + c["jwt"]} if c.get("jwt") else {"authorization": "none"}, internal=True)
     d = json.loads(r["body"] or b"{}")
     if "error" in d:
         return {"error": d["error"]["message"]}, True

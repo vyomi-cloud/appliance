@@ -147,9 +147,9 @@ def("aws.bedrock.agentcore", ["/bedrock/agentcore", "/bedrock/agentcore/gateways
   title: "AgentCore: scope and limits",
   intro: "Runtime, Gateway with Cedar policy, Memory, and evaluation/observability over the AgentCore control and data planes.",
   real: ["Memory has control and data planes: events, sessions, actors and memory records with retrieval. Gateway serves MCP over JSON-RPC (tools/list filtered by policy, tools/call checked against Cedar; ENFORCE is default deny, LOG_ONLY allows). Policy engines validate Cedar and reject invalid policies.", "Runtime runs your handler as an OS process per runtime, version and session (idle TTL 15 minutes, up to 16 sessions); the agent calls the simulator with unmodified boto3.", "Traces and metrics flow through OpenTelemetry into the X-Ray and CloudWatch views."],
-  limits: ["Runtimes do not host real containers or Strands/LangGraph frameworks: the agent is the Vyomi JSON spec over the local model, or your handler in a local process. Docker backend is not verified.", "Dependencies are not installed per runtime; the host Python must already have them.", "JWT claims are decoded, not signature-verified, by the runtime. Memory extraction is inline and conversational only; memory is in-process and persists only with account state.", "Evaluators need a reachable model for judge-style scoring and otherwise fall back to the deterministic metric (the explanation says so). Batch and online evaluation configs and code-based evaluators are not implemented.", "InvokeAgentRuntimeCommand is unsupported. Streaming is buffered when the transport does not stream."],
-  nano: ["Memory, gateway and runtime spec run in pure Python. Runtime is a subset: handler functions only, same thread, no per-session isolation, and boto3 is not available. Cedar enforcement needs cedarpy, which is not in the browser: an ENFORCE engine fails closed and denies everything."],
-  mesh: ["Cedar is enforced with cedarpy. Process isolation only, not microVMs."],
+  limits: ["Runtimes do not host real containers or Strands/LangGraph frameworks: the agent is the Vyomi JSON spec over the local model, or your handler in a local process. Docker backend is not verified.", "Dependencies are not installed per runtime; the host Python must already have them.", "A runtime created with a customJWTAuthorizer verifies inbound JWTs; one without an authorizer is not authenticated. Memory extraction is inline and conversational only; memory is in-process and persists only with account state.", "Evaluators need a reachable model for judge-style scoring and otherwise fall back to the deterministic metric (the explanation says so). Batch and online evaluation configs and code-based evaluators are not implemented.", "InvokeAgentRuntimeCommand is unsupported. Streaming is buffered when the transport does not stream. A2A runtimes also publish the agent card at /.well-known/agent-card.json and answer message/stream as Server-Sent task events, emitted after the agent run completes (no token-level streaming)."],
+  nano: ["Memory, gateway and runtime spec run in pure Python. Runtime is a subset: handler functions only, same thread, no per-session isolation, and boto3 is not available. Cedar enforcement needs cedarpy, which is not in the browser: an ENFORCE engine fails closed and denies everything. Gateway openApi / mcpServer targets, OAuth token exchange, non-local JWKS discovery and agent-spec webhook tools reach the network through the allow-listed egress relay (hosted relay: public https origins on its allow-list; local tunnel: origins mapped with vyomi-tunnel gateway-backend) and report the reason when none is reachable. smithyModel targets run against the in-browser services."],
+  mesh: ["Cedar is enforced with cedarpy. Process isolation only, not microVMs.", "Gateway targets of kind smithyModel (restJson1 / awsJson1_x Smithy JSON AST) are callable against the simulator's own AWS APIs. AWS_IAM gateways verify the SigV4 signature of IAM access keys held by the simulator; ambient dev credentials are admitted as unverified unless VYOMI_AGENTCORE_SIGV4_STRICT=1."],
 });
 
 def("aws.bedrock.guardrails", ["/bedrock/guardrails", "/bedrock/guardrails/:id"], {
@@ -210,7 +210,7 @@ def("gcp.vertex.overview", ["/vertex-ai"], {
   title: "Agent Platform: scope and limits",
   intro: "The Vertex AI product, renamed Agent Platform. Resource counts and the legacy pages read the real aiplatform REST wire.",
   real: ["Prompts go through generateContent on the local model seam. Publisher models come from /v1/publishers/-/models. Deployments are Agent Engine reasoningEngines."],
-  limits: ["Lower Overview cards are approximate. There is no 'Enable billing' banner: account state is not simulated.", "Declared not in scope (each page says why and what to use instead): Provisioned Throughput, Claude models, Ray, MCP Servers, Policies, Gateways, Security, Training clusters."],
+  limits: ["Lower Overview cards are approximate. There is no 'Enable billing' banner: account state is not simulated.", "Declared not in scope (each page says why and what to use instead): Claude models, Ray, Training clusters. Gateways, MCP Servers, Policies, Security and Provisioned Throughput are real pages (see their own scope panels)."],
   nano: ["Chat is answered by WebLLM (WebGPU)."],
   mesh: ["Chat is answered by llama.cpp (Qwen2.5-3B Q4)."],
 });
@@ -300,9 +300,44 @@ def("gcp.vertex.registry", ["/vertex-ai/agent-registry", "/vertex-ai/adk", "/ver
   intro: "Views over the Agent Engine deployments: a catalogue, a deploy form and a graph of agent, model and tools.",
   limits: ["Agents are declarative Vyomi agent specs run by the local model; Google ADK Python code and pickled classes are not executed."],
 });
-def("gcp.vertex.out-of-scope", ["/vertex-ai/training-clusters", "/vertex-ai/provisioned-throughput", "/vertex-ai/ray", "/vertex-ai/mcp-servers", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security"], {
+def("gcp.vertex.out-of-scope", ["/vertex-ai/training-clusters", "/vertex-ai/ray"], {
   title: "Not in scope for Vyomi",
-  intro: "These pages need vendor-hosted capacity or a control plane the simulator does not host. Each page names the reason and what to use instead.",
+  intro: "These pages need vendor-hosted capacity the simulator does not host. Each page names the reason and what to use instead.",
+});
+def("gcp.vertex.gateways", ["/vertex-ai/gateways", "/vertex-ai/gateways/:location/:id"], {
+  title: "Gateways: scope and limits",
+  intro: "One MCP endpoint in front of your tool servers, with its own authorization and an optional Cedar policy.",
+  real: ["A gateway is a real MCP endpoint (POST /gateways/{id}/mcp: initialize, tools/list, tools/call) on the AgentCore gateway engine. Attaching an MCP server creates a real target; its tools are listed live and called through the gateway. JWT authorization verifies the token against the issuer's keys.", "The detail page lists the live tool catalog, calls a tool (policy applies) and attaches or detaches a policy."],
+  limits: ["Google publishes no API for Agent Gateway: the agentGateways resource is Vyomi's own (vyomiExtension). The backing AgentCore gateway also shows in the AWS console of the same account, prefixed gcp-.", "Authorization is None or JWT (OIDC); Google IAM and Google-managed identities are not modelled. Registries, traffic splitting and quotas are not implemented."],
+  nano: ["Tool calls to external MCP servers go through the allow-listed egress relay (a tool error with the reason when none is reachable). JWKS of non-local issuers use the same relay."],
+  mesh: ["Calls to MCP servers and JWKS discovery go straight out from the appliance."],
+});
+def("gcp.vertex.mcp-servers", ["/vertex-ai/mcp-servers"], {
+  title: "MCP Servers: scope and limits",
+  intro: "A registry of the MCP servers your agents may use, each with an optional auth header.",
+  real: ["Register any streamable-HTTP MCP server; List tools performs a live initialize and tools/list against it. Attach a server to a Gateway to serve its tools behind that gateway."],
+  limits: ["This is your own registry. Google's catalogue of managed MCP servers is a vendor-hosted service and is not simulated. Servers are called from the simulator, so they must be reachable from it.", "The auth header value is stored in the account state and never shown again; there is no OAuth flow for registry entries."],
+  nano: ["Reaching a server needs the allow-listed egress relay (hosted: public https origins on its allow-list; local tunnel: origins you map)."],
+});
+def("gcp.vertex.policies", ["/vertex-ai/policies"], {
+  title: "Policies: scope and limits",
+  intro: "Cedar policies that decide which callers may use which gateway tools.",
+  real: ["Each policy is a real Cedar policy evaluated by cedarpy on every gateway tools/call and on tools/list (principal = JWT subject, action = server___tool, context.input = arguments). ENFORCE denies by default; LOG_ONLY allows and records. Test runs the engine without a call."],
+  limits: ["Google's org-level agent policies have no public API: agentPolicies is Vyomi's own resource (vyomiExtension). One policy per gateway."],
+  nano: ["cedarpy is not in the browser: an ENFORCE gateway denies every call there (fail closed). Authoring and Test need Mesh or the offline appliance to give real decisions."],
+  mesh: ["Cedar is enforced with cedarpy."],
+});
+def("gcp.vertex.security", ["/vertex-ai/security"], {
+  title: "Security: scope and limits",
+  intro: "Model Armor templates and a tester for sanitizeUserPrompt / sanitizeModelResponse.",
+  real: ["Templates with Responsible AI filters, prompt-injection and jailbreak detection and basic sensitive-data protection are evaluated for real by the Bedrock Guardrails engine; findings carry byte ranges for sensitive data."],
+  limits: ["Detection is keyword, local-embedding and regex scoring: toy-grade next to Google's models, never a security control. Malicious-URI detection (Safe Browsing) and advanced sensitive-data templates (Cloud DLP) are reported EXECUTION_SKIPPED. Prompt injection applies to user prompts only.", "There are no floor settings and no Security Command Center or Cloud Logging findings: the page keeps the last 200 results of this simulator."],
+});
+def("gcp.vertex.provisioned-throughput", ["/vertex-ai/provisioned-throughput"], {
+  title: "Provisioned Throughput: scope and limits",
+  intro: "Orders for generative model units with a commitment term.",
+  real: ["Create, list and delete orders with a model, units, a term and an end date."],
+  limits: ["Bookkeeping only: nothing is reserved, enforced or billed, because a local model has no shared capacity to commit. Google publishes no create API for it, so the path is a Vyomi extension."],
 });
 def("gcp.vertex.endpoints", ["/vertex-ai/endpoints", "/vertex-ai/endpoints/:location/:id"], {
   title: "Endpoints: scope and limits",

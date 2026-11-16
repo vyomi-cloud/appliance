@@ -6,7 +6,11 @@ OAuth2 client-credentials), and the runtime MCP / A2A JSON-RPC protocol variants
                  gateway's discoveryUrl). Not PyJWT: the verifier already exists and PyJWT is not in Pyodide.
   * OpenAPI    = json (stdlib) or PyYAML (when importable) to parse the spec, urllib to call the upstream API.
   * mcpServer  = a minimal MCP streamable-HTTP client (JSON or SSE replies) over urllib.
-  * Outbound HTTP needs network egress: unavailable inside Nano's browser sandbox (declared; tools return isError there).
+  * Outbound HTTP: urllib on the appliance/host. Nano (Pyodide) has no socket: every call goes through llm_core.http_request, which awaits the
+                 allow-listed egress relay (wasm/gw-bridge.js `vyomiBackendFetch`: https backends on the hosted relay's allow-list, or origins
+                 mapped on the user's local tunnel) and replays the request (llm_core.arun). Without a relay the tool returns isError with the reason.
+  * smithyModel = Smithy JSON AST (inline or S3) -> tools -> the simulator's own wire router (in-process, so it works on both substrates).
+  * AWS_IAM    = SigV4 signature verified against the IAM access keys this simulator holds (stdlib hmac/hashlib; botocore is not in Pyodide).
 """
 from __future__ import annotations
 
@@ -21,9 +25,11 @@ import urllib.request
 try:
     from core import bedrock_agents_core as B
     from core import gateway_common as gc
+    from core import llm_core as llm
 except ImportError:  # Pyodide flat layout
     import bedrock_agents_core as B  # type: ignore
     import gateway_common as gc  # type: ignore
+    import llm_core as llm  # type: ignore
 
 _NANO = sys.platform == "emscripten"
 _DISC_SUFFIX = "/.well-known/openid-configuration"
@@ -44,6 +50,11 @@ def _bearer(headers):
 
 
 def _http_json(url, timeout=5.0):
+    if _NANO:   # through the egress relay (replayed by llm_core.arun)
+        status, _h, raw = llm.http_request("GET", url, {"accept": "application/json"}, None, timeout)
+        if status >= 400:
+            raise RuntimeError(f"HTTP {status} from {url}")
+        return json.loads(raw.decode("utf-8", "replace"))
     with urllib.request.urlopen(url, timeout=timeout) as r:  # noqa: S310 - operator-configured discovery URL
         return json.load(r)
 
@@ -66,7 +77,7 @@ def _discover(discovery_url):
 
 def _verifier():
     if not _VERIFIER:
-        _VERIFIER.append(gc.make_rs256_verifier())
+        _VERIFIER.append(gc.make_rs256_verifier(fetch_json=_http_json if _NANO else None))
     return _VERIFIER[0]
 
 
@@ -208,8 +219,6 @@ def oauth_token(rec, scopes, now=None):
     hit = _TOK.get(key)
     if hit and hit[0] > now:
         return hit[1]
-    if _NANO:
-        raise RuntimeError("OAuth token exchange needs outbound network, unavailable in Nano's browser sandbox")
     c = rec["_cfg"]
     disc = c.get("oauthDiscovery") or {}
     ep = (disc.get("authorizationServerMetadata") or {}).get("tokenEndpoint")
@@ -224,9 +233,10 @@ def oauth_token(rec, scopes, now=None):
     else:
         import base64
         hdrs["authorization"] = "Basic " + base64.b64encode(f"{urllib.parse.quote(c['clientId'], safe='')}:{urllib.parse.quote(c['clientSecret'], safe='')}".encode()).decode()
-    req = urllib.request.Request(ep, data=urllib.parse.urlencode(form).encode(), headers=hdrs, method="POST")
-    with urllib.request.urlopen(req, timeout=_UP_TIMEOUT) as r:  # noqa: S310 - operator-configured token endpoint
-        doc = json.load(r)
+    status, _ct, raw = _http("POST", ep, hdrs, urllib.parse.urlencode(form).encode())   # operator-configured token endpoint (egress relay on Nano)
+    if status >= 400:
+        raise RuntimeError(f"token endpoint returned HTTP {status}")
+    doc = json.loads(raw.decode("utf-8", "replace") or "{}")
     tok = doc.get("access_token")
     if not tok:
         raise RuntimeError("token endpoint returned no access_token")
@@ -394,7 +404,8 @@ def validate_openapi(mcp_cfg, s3=None):
 def _http(method, url, headers, data=None):
     """-> (status, content-type, bytes). HTTP errors are returned, not raised."""
     if _NANO:
-        raise RuntimeError("outbound HTTP needs network egress, which Nano's browser sandbox does not provide (use the Mesh appliance)")
+        status, hdrs, raw = llm.http_request(method, url, headers, data, _UP_TIMEOUT)
+        return status, {str(k).lower(): v for k, v in hdrs.items()}.get("content-type", ""), raw
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=_UP_TIMEOUT) as r:  # noqa: S310 - operator-configured upstream
@@ -440,6 +451,219 @@ def call_openapi(st, target, spec_ops, base, tool, args, inbound_headers):
     return res
 
 
+# ═════════════════════════ smithyModel targets (AWS service APIs through the simulator's own wire) ═════════════════════════
+_SM_UNIT = "smithy.api#Unit"
+_SM_PRIM = {"smithy.api#String": "string", "smithy.api#PrimitiveString": "string", "smithy.api#Integer": "integer", "smithy.api#PrimitiveInteger": "integer",
+            "smithy.api#Long": "integer", "smithy.api#PrimitiveLong": "integer", "smithy.api#Short": "integer", "smithy.api#Byte": "integer",
+            "smithy.api#Float": "number", "smithy.api#Double": "number", "smithy.api#PrimitiveDouble": "number", "smithy.api#PrimitiveFloat": "number",
+            "smithy.api#BigInteger": "integer", "smithy.api#BigDecimal": "number", "smithy.api#Boolean": "boolean", "smithy.api#PrimitiveBoolean": "boolean",
+            "smithy.api#Timestamp": "string", "smithy.api#Blob": "string", "smithy.api#Document": "object"}
+_SM_PROTOS = {"aws.protocols#restJson1": "restJson1", "aws.protocols#awsJson1_0": "awsJson1_0", "aws.protocols#awsJson1_1": "awsJson1_1"}
+
+
+def _smithy_doc(cfg, s3):
+    o = (cfg.get("mcp") or {}).get("smithyModel") or {}
+    raw = o.get("inlinePayload")
+    if raw is None and (o.get("s3") or {}).get("uri") and s3 is not None:
+        m = re.match(r"^s3://([^/]+)/(.+)$", o["s3"]["uri"])
+        if m:
+            from core import s3_object_core as so
+            r = so.get_object(s3, m.group(1), m.group(2), {}, {})
+            raw = r.body.decode("utf-8", "replace") if r.status == 200 else None
+    if raw is None:
+        raise B._bad("smithyModel needs inlinePayload (Smithy JSON AST) or an s3.uri that exists")
+    try:
+        doc = raw if isinstance(raw, dict) else json.loads(raw)
+    except ValueError:
+        raise B._bad("smithyModel is not valid Smithy JSON AST")
+    if not isinstance(doc, dict) or not isinstance(doc.get("shapes"), dict):
+        raise B._bad("smithyModel must be a Smithy JSON AST with a `shapes` map")
+    return doc
+
+
+def _sm_schema(shapes, ref, depth=0):
+    """Smithy shape id -> JSON Schema (depth-limited so recursive shapes terminate)."""
+    if ref in _SM_PRIM:
+        return {"type": _SM_PRIM[ref]}
+    sh = shapes.get(ref) or {}
+    t = sh.get("type")
+    if depth > 6:
+        return {"type": "object"}
+    if t in ("string", "enum"):
+        mem = sh.get("members") or {}
+        vals = [((m.get("traits") or {}).get("smithy.api#enumValue") or k) for k, m in mem.items()] if t == "enum" else []
+        return {"type": "string", **({"enum": vals} if vals else {})}
+    if t in ("integer", "long", "short", "byte", "intEnum", "bigInteger"):
+        return {"type": "integer"}
+    if t in ("float", "double", "bigDecimal"):
+        return {"type": "number"}
+    if t == "boolean":
+        return {"type": "boolean"}
+    if t in ("timestamp", "blob"):
+        return {"type": "string"}
+    if t in ("list", "set"):
+        return {"type": "array", "items": _sm_schema(shapes, (sh.get("member") or {}).get("target"), depth + 1)}
+    if t == "map":
+        return {"type": "object", "additionalProperties": _sm_schema(shapes, (sh.get("value") or {}).get("target"), depth + 1)}
+    if t == "structure":
+        props, req = {}, []
+        for k, m in (sh.get("members") or {}).items():
+            props[k] = _sm_schema(shapes, m.get("target"), depth + 1)
+            if "smithy.api#required" in (m.get("traits") or {}):
+                req.append(k)
+        return {"type": "object", "properties": props, **({"required": req} if req else {})}
+    return {"type": "object"}
+
+
+def smithy_operations(doc):
+    """Smithy AST -> {signing, protocol, prefix, ops: [{tool, description, inputSchema, method, uri, members}]}. Raises a modeled ValidationException."""
+    shapes = doc["shapes"]
+    svc_id, svc = next(((k, v) for k, v in shapes.items() if v.get("type") == "service"), (None, None))
+    if not svc:
+        raise B._bad("smithyModel declares no service shape")
+    traits = svc.get("traits") or {}
+    proto = next((v for k, v in _SM_PROTOS.items() if k in traits), None)
+    if not proto:
+        raise B._bad("smithyModel protocol is not supported: use aws.protocols#restJson1, awsJson1_0 or awsJson1_1 (query / ec2 / rpcv2 protocols are not executed)")
+    signing = ((traits.get("aws.auth#sigv4") or {}).get("name")) or ((traits.get("aws.api#service") or {}).get("arnNamespace")) or svc_id.split("#")[-1].lower()
+    ops = []
+    for ref in svc.get("operations") or []:
+        oid = ref["target"]
+        op = shapes.get(oid) or {}
+        name = oid.split("#")[-1]
+        http = (op.get("traits") or {}).get("smithy.api#http") or {}
+        inp_id = (op.get("input") or {}).get("target")
+        inp = shapes.get(inp_id) if inp_id and inp_id != _SM_UNIT else None
+        members = (inp or {}).get("members") or {}
+        schema = _sm_schema(shapes, inp_id) if inp else {"type": "object", "properties": {}}
+        ops.append({"tool": name, "description": ((op.get("traits") or {}).get("smithy.api#documentation") or f"{signing} {name}")[:300], "inputSchema": schema,
+                    "method": http.get("method", "POST"), "uri": http.get("uri", "/"),
+                    "members": {k: {kk.split("#")[-1]: vv for kk, vv in (m.get("traits") or {}).items()} for k, m in members.items()}})
+    if not ops:
+        raise B._bad("smithyModel declares no operations on its service")
+    return {"signing": signing, "protocol": proto, "prefix": svc_id.split("#")[-1], "ops": ops}
+
+
+def validate_smithy(cfg, s3=None):
+    return smithy_operations(_smithy_doc(cfg, s3))
+
+
+def call_smithy(model, tool, args):
+    """Execute one Smithy operation against the simulator's own wire router (hook B.HOOKS['wire'], set by the router) - no network, both substrates."""
+    wire = B.HOOKS.get("wire")
+    if wire is None:
+        raise RuntimeError("the simulator wire router is not attached to this runtime")
+    op = next(o for o in model["ops"] if o["tool"] == tool)
+    args = dict(args or {})
+    hdr = {"authorization": f"AWS4-HMAC-SHA256 Credential=vyomi-gateway/20260101/us-east-1/{model['signing']}/aws4_request, SignedHeaders=host, Signature=0",
+           "x-vyomi-via": "agentcore-gateway"}
+    if model["protocol"].startswith("awsJson"):
+        hdr.update({"x-amz-target": f"{model['prefix']}.{tool}", "content-type": "application/x-amz-json-" + ("1.0" if model["protocol"].endswith("1_0") else "1.1")})
+        r = wire("POST", "/", {}, hdr, json.dumps(args).encode())
+    else:
+        path, query, body = op["uri"], {}, {}
+        qpart = ""
+        if "?" in path:
+            path, qpart = path.split("?", 1)
+        greedy = {m.group(1) for m in re.finditer(r"\{(\w+)\+\}", op["uri"])}
+        for k, v in args.items():
+            t = op["members"].get(k, {})
+            if "httpLabel" in t:
+                path = re.sub(r"\{" + re.escape(k) + r"\+?\}", lambda _m, v=v, k=k: urllib.parse.quote(str(v), safe="/" if k in greedy else ""), path)
+            elif "httpQuery" in t:
+                query[t["httpQuery"]] = v if isinstance(v, list) else [str(v)]
+            elif "httpHeader" in t:
+                hdr[t["httpHeader"].lower()] = str(v)
+            elif "httpPayload" in t:
+                body = v
+            else:
+                body[(t.get("jsonName") or k)] = v
+        for kv in filter(None, qpart.split("&")):
+            k, _, v = kv.partition("=")
+            query.setdefault(k, [v])
+        send = b""
+        if body != {} and op["method"] not in ("GET", "HEAD", "DELETE"):
+            send = (body if isinstance(body, str) else json.dumps(body)).encode()
+            hdr["content-type"] = "application/json"
+        r = wire(op["method"], path, query, hdr, send)
+    txt = (r.get("body") or b"").decode("utf-8", "replace")
+    res = {"isError": r["status"] >= 400, "content": [{"type": "text", "text": f"HTTP {r['status']}: {txt}" if r["status"] >= 400 else txt}]}
+    if r["status"] < 400:
+        try:
+            doc = json.loads(txt)
+            if isinstance(doc, dict):
+                res["structuredContent"] = doc
+        except ValueError:
+            pass
+    return res
+
+
+# ═════════════════════════ AWS_IAM inbound auth: SigV4 verified against the simulator's IAM access keys ═════════════════════════
+_SIGV4_RE = re.compile(r"^AWS4-HMAC-SHA256\s+Credential=([^/,\s]+)/(\d{8})/([^/,\s]+)/([^/,\s]+)/aws4_request,\s*SignedHeaders=([^,\s]+),\s*Signature=([0-9a-fA-F]+)\s*$")
+
+
+def _hm(key, msg):
+    import hashlib
+    import hmac
+    return hmac.new(key, msg.encode(), hashlib.sha256).digest()
+
+
+def sigv4_signature(secret, method, path, query, headers, body, scope_date, region, service, signed, amzdate):
+    """Recompute the SigV4 signature of a request (the signer's algorithm, stdlib only). `path` is the on-the-wire path (encoded once)."""
+    import hashlib
+    import hmac
+    h = {str(k).lower(): " ".join(str(v).split()) for k, v in headers.items()}
+    cq = "&".join(f"{urllib.parse.quote(str(k), safe='-_.~')}={urllib.parse.quote(str(v), safe='-_.~')}" for k, vs in sorted((query or {}).items())
+                  for v in sorted(vs if isinstance(vs, list) else [vs]))
+    canon_uri = urllib.parse.quote(path or "/", safe="/~")      # non-S3 services encode the (already encoded) path a second time
+    chdr = "".join(f"{n}:{h.get(n, '')}\n" for n in signed)
+    payload = h.get("x-amz-content-sha256") or hashlib.sha256(body or b"").hexdigest()
+    creq = "\n".join([method.upper(), canon_uri, cq, chdr, ";".join(signed), payload])
+    sts = "\n".join(["AWS4-HMAC-SHA256", amzdate, f"{scope_date}/{region}/{service}/aws4_request", hashlib.sha256(creq.encode()).hexdigest()])
+    k = _hm(("AWS4" + secret).encode(), scope_date)
+    for part in (region, service, "aws4_request"):
+        k = _hm(k, part)
+    return hmac.new(k, sts.encode(), hashlib.sha256).hexdigest()
+
+
+def verify_sigv4(method, path, query, headers, body, lookup, now=None, strict=None):
+    """AWS_IAM gateway auth. -> (identity dict, None) when admitted else (None, error response).
+    An access key held by the simulator's IAM is verified with its secret (any mismatch: 403). A key the IAM does not hold (ambient dev
+    credentials such as test/test) cannot be verified: its structure, scope service and clock skew are checked and the caller is reported as
+    `unverified` - unless strict (env VYOMI_AGENTCORE_SIGV4_STRICT=1), which rejects it."""
+    import hmac
+    import os
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    auth = (h.get("authorization") or "").strip()
+    if not auth:
+        return None, _deny(403, "Missing Authentication Token", "invalid_request")
+    m = _SIGV4_RE.match(auth)
+    if not m:
+        return None, _deny(403, "Authorization header requires a SigV4 'Credential', 'SignedHeaders' and 'Signature' (AWS4-HMAC-SHA256)", "invalid_request")
+    akid, date, region, service, signed, sig = m.groups()
+    signed = signed.split(";")
+    if service != "bedrock-agentcore":
+        return None, _deny(403, f"Credential should be scoped to the bedrock-agentcore service, got {service}", "invalid_request")
+    amzdate = h.get("x-amz-date") or ""
+    if amzdate:
+        import calendar
+        try:
+            ts = calendar.timegm(time.strptime(amzdate, "%Y%m%dT%H%M%SZ"))
+        except ValueError:
+            return None, _deny(403, "x-amz-date is malformed", "invalid_request")
+        if abs((now if now is not None else time.time()) - ts) > 900:
+            return None, _deny(403, "Signature expired: request time is more than 15 minutes from now", "invalid_request")
+    key = lookup(akid) if lookup else None
+    if key is None:
+        if strict if strict is not None else os.environ.get("VYOMI_AGENTCORE_SIGV4_STRICT") == "1":
+            return None, _deny(403, "The security token included in the request is invalid (access key not known to this account)", "invalid_request")
+        return {"principal": akid, "verified": False, "note": "access key not held by IAM; signature not verifiable"}, None
+    got = sigv4_signature(key["secret_access_key"], method, path, query, h, body, date, region, service, signed, amzdate)
+    if not hmac.compare_digest(got, sig.lower()):
+        return None, _deny(403, "The request signature we calculated does not match the signature you provided. Check your AWS Secret Access Key and signing method.", "invalid_request")
+    return {"principal": key.get("user_name", akid), "accessKeyId": akid, "verified": True}, None
+
+
 # ═════════════════════════ mcpServer targets (proxy) ═════════════════════════
 def _mcp_post(url, headers, payload, session=None):
     h = {"content-type": "application/json", "accept": "application/json, text/event-stream", **headers}
@@ -458,10 +682,10 @@ def _mcp_post(url, headers, payload, session=None):
     return doc, sid
 
 
-def mcp_upstream(st, target, method, params, inbound_headers):
+def mcp_upstream(st, target, method, params, inbound_headers, extra=None):
     """Forward one JSON-RPC request to the target's mcpServer endpoint after a stateless initialize handshake."""
     url = ((target["targetConfiguration"].get("mcp") or {}).get("mcpServer") or {}).get("endpoint")
-    h, q = {}, {}
+    h, q = dict(extra or {}), {}
     apply_credentials(st, target, h, q, inbound_headers)
     if q:
         url += ("&" if "?" in url else "?") + urllib.parse.urlencode(q)
@@ -510,29 +734,43 @@ def runtime_mcp(spec, req, ag, name="agent"):
     return _rpc_err(rid, -32601, f"Method not found: {method}")
 
 
-def a2a_card(rt, spec):
+def a2a_card(rt, spec, url=None):
     return {"name": rt["agentRuntimeName"], "description": rt.get("description") or (spec.get("instructions") or "")[:200],
-            "url": rt["agentRuntimeArn"], "version": "1.0.0", "protocolVersion": "0.3.0", "preferredTransport": "JSONRPC",
-            "capabilities": {"streaming": False}, "defaultInputModes": ["text"], "defaultOutputModes": ["text"],
+            "url": url or rt["agentRuntimeArn"], "version": "1.0.0", "protocolVersion": "0.3.0", "preferredTransport": "JSONRPC",
+            "capabilities": {"streaming": True, "pushNotifications": False, "stateTransitionHistory": False}, "defaultInputModes": ["text"], "defaultOutputModes": ["text"],
             "skills": [{"id": t["name"], "name": t["name"], "description": t.get("description", ""), "tags": []} for t in spec.get("tools") or []]}
 
 
+def _a2a_run(rt, prm, run_agent):
+    msg = prm.get("message") or {}
+    text = " ".join(p.get("text", "") for p in msg.get("parts") or [] if p.get("kind", "text") == "text").strip()
+    if not text:
+        return None, None, None, None
+    ctx = msg.get("contextId") or "ctx-" + B._rid(16, B._LOWER)
+    out = run_agent(text, ctx)
+    return msg, ctx, out, "task-" + B._rid(16, B._LOWER)
+
+
 def runtime_a2a(rt, spec, req, run_agent, tasks):
-    """A2A JSON-RPC: message/send runs the agent and returns a completed Task; tasks/get; agent/getAuthenticatedExtendedCard."""
+    """A2A JSON-RPC: message/send runs the agent and returns a completed Task; message/stream the same as Server-Sent task events
+    (returned as {"_sse": [...]}; the agent run completes first, events are then emitted - no token-level streaming);
+    tasks/get; agent/getAuthenticatedExtendedCard."""
     rid, method, prm = req.get("id"), req.get("method"), req.get("params") or {}
-    if method == "message/send":
-        msg = prm.get("message") or {}
-        text = " ".join(p.get("text", "") for p in msg.get("parts") or [] if p.get("kind", "text") == "text").strip()
-        if not text:
+    if method in ("message/send", "message/stream"):
+        msg, ctx, out, tid = _a2a_run(rt, prm, run_agent)
+        if msg is None:
             return _rpc_err(rid, -32602, "message.parts needs a text part")
-        ctx = msg.get("contextId") or "ctx-" + B._rid(16, B._LOWER)
-        out = run_agent(text, ctx)
-        tid = "task-" + B._rid(16, B._LOWER)
-        task = {"kind": "task", "id": tid, "contextId": ctx, "status": {"state": "completed", "timestamp": B._iso()},
-                "artifacts": [{"artifactId": "art-" + B._rid(8, B._LOWER), "name": "response", "parts": [{"kind": "text", "text": out}]}],
-                "history": [msg, {"kind": "message", "role": "agent", "messageId": "m-" + B._rid(10, B._LOWER), "contextId": ctx, "parts": [{"kind": "text", "text": out}]}]}
+        art = {"artifactId": "art-" + B._rid(8, B._LOWER), "name": "response", "parts": [{"kind": "text", "text": out}]}
+        reply = {"kind": "message", "role": "agent", "messageId": "m-" + B._rid(10, B._LOWER), "contextId": ctx, "parts": [{"kind": "text", "text": out}]}
+        task = {"kind": "task", "id": tid, "contextId": ctx, "status": {"state": "completed", "timestamp": B._iso()}, "artifacts": [art], "history": [msg, reply]}
         tasks[tid] = task
-        return _rpc_ok(rid, task)
+        if method == "message/send":
+            return _rpc_ok(rid, task)
+        working = {"state": "working", "timestamp": B._iso()}
+        return {"_sse": [_rpc_ok(rid, {"kind": "task", "id": tid, "contextId": ctx, "status": working, "history": [msg]}),
+                         _rpc_ok(rid, {"kind": "status-update", "taskId": tid, "contextId": ctx, "status": working, "final": False}),
+                         _rpc_ok(rid, {"kind": "artifact-update", "taskId": tid, "contextId": ctx, "artifact": art, "append": False, "lastChunk": True}),
+                         _rpc_ok(rid, {"kind": "status-update", "taskId": tid, "contextId": ctx, "status": task["status"], "final": True})]}
     if method == "tasks/get":
         t = tasks.get(prm.get("id"))
         return _rpc_ok(rid, t) if t else _rpc_err(rid, -32001, "Task not found")
