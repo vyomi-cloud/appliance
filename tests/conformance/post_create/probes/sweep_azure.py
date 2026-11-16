@@ -76,6 +76,9 @@ def main():
          "properties": {"publisherEmail": "a@b.c", "publisherName": "qa"}})
     call("PUT", svc + "/apis/echo?api-version=2023-05-01-preview",
          {"properties": {"displayName": "echo", "path": "echo", "protocols": ["https"], "serviceUrl": "http://127.0.0.1:9000"}})
+    # The managed gateway routes only to a defined operation (a request matching none is 404 "Resource not found", as on real APIM).
+    call("PUT", svc + "/apis/echo/operations/healthz?api-version=2023-05-01-preview",
+         {"properties": {"displayName": "healthz", "method": "GET", "urlTemplate": "/healthz"}})
     st, sec = call("POST", svc + "/subscriptions/master/listSecrets?api-version=2023-05-01-preview", {})
     key = sec.get("primaryKey") if isinstance(sec, dict) else None
     check(st == 200 and bool(key), "APIM listSecrets returns a primaryKey", f"HTTP {st} {sec}")

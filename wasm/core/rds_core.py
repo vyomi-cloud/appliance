@@ -223,6 +223,15 @@ def _el(tag: str, value) -> str:
     return f"<{tag}>{_xml_escape(str(value))}</{tag}>"
 
 
+def _tagged(store, rec: dict, arn_key: str) -> dict:
+    """Describe responses carry TagList (the Terraform aws provider reads tags from there, never ListTagsForResource). F26"""
+    try:
+        tags = store.get_tags(rec.get(arn_key, ""))
+    except Exception:
+        tags = {}
+    return dict(rec, _tags=tags) if tags else rec
+
+
 def _db_instance_xml(db: dict) -> str:
     parts = [
         "<DBInstance>",
@@ -243,6 +252,12 @@ def _db_instance_xml(db: dict) -> str:
         (_el("DbiResourceId", db["dbi_resource_id"]) if db.get("dbi_resource_id") else ""),
         _el("InstanceCreateTime", db.get("created", "")),
         _el("DbInstancePort", db.get("endpoint_port", 5432)),
+        (_el("DBName", db["db_name"]) if db.get("db_name") else ""),
+        _el("StorageEncrypted", str(bool(db.get("storage_encrypted"))).lower()),
+        (_el("KmsKeyId", db["kms_key_id"]) if db.get("kms_key_id") else ""),
+        _el("CopyTagsToSnapshot", str(bool(db.get("copy_tags_to_snapshot"))).lower()),
+        _el("AutoMinorVersionUpgrade", str(bool(db.get("auto_minor_version_upgrade", True))).lower()),
+        (_tag_list_xml(db["_tags"]) if db.get("_tags") else ""),
         _el("BackupRetentionPeriod", db.get("backup_retention_period", 7)),
         _el("DeletionProtection", str(db.get("deletion_protection", False)).lower()),
         _el("LatestRestorableTime", db.get("updated", db.get("created", ""))),
@@ -306,6 +321,7 @@ def _db_snapshot_xml(snap: dict) -> str:
         _el("AllocatedStorage", snap.get("allocated_storage", 20)),
         _el("SnapshotCreateTime", snap.get("created", "")),
         _el("SnapshotType", snap.get("snapshot_type", "manual")),
+        (_tag_list_xml(snap["_tags"]) if snap.get("_tags") else ""),
         "</DBSnapshot>",
     ])
 
@@ -343,6 +359,7 @@ def _parameter_xml(name: str, p: dict) -> str:
         _el("IsModifiable", str(p.get("is_modifiable", True)).lower()),
         _el("Source", p.get("source", "engine-default")),
         _el("ApplyType", p.get("apply_type", "dynamic")),
+        (_el("ApplyMethod", p.get("apply_method") or "immediate") if p.get("source") == "user" else ""),
         _el("DataType", p.get("data_type", "string")),
         _el("Description", p.get("description", "")),
         "</Parameter>",
@@ -612,6 +629,13 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         "created": _now(),
         "updated": _now(),
         "runtime_backend": "sqlite",  # Nano data-plane engine
+        # real RDS always returns the immutable resource id; the Terraform aws provider uses it AS the resource id,
+        # so without it the instance reads back as 'root object absent' (endurance F24)
+        "dbi_resource_id": "db-" + "".join(c for c in db_id.upper() if c.isalnum())[:26].ljust(26, "X"),
+        "storage_encrypted": str(params.get("StorageEncrypted", "false")).lower() == "true" or bool(params.get("KmsKeyId")),
+        "kms_key_id": str(params.get("KmsKeyId", "")),
+        "copy_tags_to_snapshot": str(params.get("CopyTagsToSnapshot", "false")).lower() == "true",
+        "auto_minor_version_upgrade": str(params.get("AutoMinorVersionUpgrade", "true")).lower() == "true",
     }
     if _is_true(params.get("ManageMasterUserPassword")):
         if str(params.get("MasterUserPassword", "")).strip():
@@ -626,7 +650,7 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     store.mirror_create_instance(db_id, record)
     store.persist()
     _log_event(store, db_id, "db-instance", f"DB instance {db_id} created.", ["creation"], msg_store)
-    return _success("CreateDBInstance", _db_instance_xml(record))
+    return _success("CreateDBInstance", _db_instance_xml(_tagged(store, record, "db_instance_arn")))
 
 
 # Engine -> features whose IAM role association RDS accepts (AWS documents these per engine).
@@ -720,7 +744,7 @@ def _describe_db_instances(store: SqlStore, params: dict) -> RdsResponse:
                 for v in [params.get(k + ".Values.Value.1") or params.get(k + ".Values.member.1") or ""]}
         if want:
             ids = [i for i in ids if (store.get_instance(i) or {}).get("db_cluster_identifier") in want]
-    inner = "<DBInstances>" + "".join(_db_instance_xml(store.get_instance(i)) for i in ids) + "</DBInstances>"
+    inner = "<DBInstances>" + "".join(_db_instance_xml(_tagged(store, store.get_instance(i), "db_instance_arn")) for i in ids) + "</DBInstances>"
     return _success("DescribeDBInstances", inner)
 
 
@@ -763,7 +787,7 @@ def _modify_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
     db["updated"] = _now()
     store.persist()
     _log_event(store, db["db_instance_identifier"], "db-instance", "DB instance modified.", ["configuration change"], msg_store)
-    return _success("ModifyDBInstance", _db_instance_xml(db))
+    return _success("ModifyDBInstance", _db_instance_xml(_tagged(store, db, "db_instance_arn")))
 
 
 def _set_status(store: SqlStore, params: dict, action: str, status: str, msg_store=None) -> RdsResponse:
@@ -881,7 +905,7 @@ def _create_db_snapshot(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         store.set_tags(_snapshot_arn(store, snap_id), tags)
     store.persist()
     _log_event(store, db["db_instance_identifier"], "db-instance", f"Snapshot {snap_id} created.", ["backup"], msg_store)
-    return _success("CreateDBSnapshot", _db_snapshot_xml(snap))
+    return _success("CreateDBSnapshot", _db_snapshot_xml(_tagged(store, dict(snap, db_snapshot_arn=snap.get("db_snapshot_arn") or _snapshot_arn(store, snap_id)), "db_snapshot_arn")))
 
 
 def _delete_db_snapshot(store: SqlStore, params: dict) -> RdsResponse:
@@ -1035,7 +1059,7 @@ def _describe_db_snapshots(store: SqlStore, params: dict) -> RdsResponse:
     snaps = [store.get_snapshot(s) for s in store.snapshot_ids()]
     if db_id:
         snaps = [s for s in snaps if s.get("db_instance_identifier") == db_id]
-    inner = "<DBSnapshots>" + "".join(_db_snapshot_xml(s) for s in snaps) + "</DBSnapshots>"
+    inner = "<DBSnapshots>" + "".join(_db_snapshot_xml(_tagged(store, dict(s, db_snapshot_arn=s.get("db_snapshot_arn") or _snapshot_arn(store, s["db_snapshot_identifier"])), "db_snapshot_arn")) for s in snaps) + "</DBSnapshots>"
     return _success("DescribeDBSnapshots", inner)
 
 
@@ -1085,6 +1109,8 @@ def _create_db_subnet_group(store: SqlStore, params: dict) -> RdsResponse:
         "created": _now(),
     }
     store.put_subnet_group(name, record)
+    if _tags_from_params(params):
+        store.set_tags(record["db_subnet_group_arn"], _tags_from_params(params))
     store.persist()
     return _success("CreateDBSubnetGroup", _subnet_group_xml(record))
 
@@ -1127,6 +1153,8 @@ def _create_db_parameter_group(store: SqlStore, params: dict) -> RdsResponse:
         "parameters": _default_parameters(family),
     }
     store.put_parameter_group(name, record)
+    if _tags_from_params(params):
+        store.set_tags(record["db_parameter_group_arn"], _tags_from_params(params))
     store.persist()
     return _success("CreateDBParameterGroup", _parameter_group_xml(record))
 
@@ -1157,7 +1185,9 @@ def _describe_db_parameters(store: SqlStore, params: dict) -> RdsResponse:
     pg = store.get_parameter_group(name)
     if not pg:
         raise RdsError("DBParameterGroupNotFound", f"DB parameter group {name} not found.", 404)
-    inner = "<Parameters>" + "".join(_parameter_xml(n, p) for n, p in sorted(pg["parameters"].items())) + "</Parameters>"
+    src = str(params.get("Source", "")).strip()   # the provider asks for Source=user only (F27)
+    inner = "<Parameters>" + "".join(_parameter_xml(n, p) for n, p in sorted(pg["parameters"].items())
+                                      if not src or p.get("source", "engine-default") == src) + "</Parameters>"
     return _success("DescribeDBParameters", inner)
 
 
@@ -1174,6 +1204,7 @@ def _modify_db_parameter_group(store: SqlStore, params: dict) -> RdsResponse:
                                                 "is_modifiable": True, "apply_type": "dynamic", "description": ""})
         p["parameter_value"] = item.get("ParameterValue", "")
         p["source"] = "user"
+        p["apply_method"] = item.get("ApplyMethod") or "immediate"
     store.persist()
     return _success("ModifyDBParameterGroup", _el("DBParameterGroupName", name))
 

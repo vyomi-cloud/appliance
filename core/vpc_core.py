@@ -240,6 +240,8 @@ def _modify_vpc_attribute(store, params):
         v["enable_dns_hostnames"] = str(params["EnableDnsHostnames.Value"]).lower() == "true"
     if "EnableDnsSupport.Value" in params:
         v["enable_dns_support"] = str(params["EnableDnsSupport.Value"]).lower() == "true"
+    if "EnableNetworkAddressUsageMetrics.Value" in params:
+        v["enable_network_address_usage_metrics"] = str(params["EnableNetworkAddressUsageMetrics.Value"]).lower() == "true"
     return _envelope("ModifyVpcAttribute", "<return>true</return>")
 
 
@@ -250,10 +252,14 @@ def _describe_vpc_attribute(store, params):
     if v is None:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     attr = str(params.get("Attribute", ""))
-    key = "enable_dns_hostnames" if attr == "enableDnsHostnames" else "enable_dns_support"
-    tag = "enableDnsHostnames" if attr == "enableDnsHostnames" else "enableDnsSupport"
+    # attribute -> (stored key, default). DNS support defaults true like AWS; the other two default false.
+    known = {"enableDnsHostnames": ("enable_dns_hostnames", False), "enableDnsSupport": ("enable_dns_support", True),
+             "enableNetworkAddressUsageMetrics": ("enable_network_address_usage_metrics", False)}
+    if attr not in known:
+        raise VpcError("InvalidParameterValue", f"Invalid value '{attr}' for attribute. Allowed: {', '.join(sorted(known))}.")
+    key, default = known[attr]
     return _envelope("DescribeVpcAttribute", f"<vpcId>{_xml_escape(vpc_id)}</vpcId>"
-                                             f"<{tag}><value>{str(v.get(key, False)).lower()}</value></{tag}>")
+                                             f"<{attr}><value>{str(v.get(key, default)).lower()}</value></{attr}>")
 
 
 def delete_vpc_cascade(store, vpc_id: str) -> bool:
@@ -393,9 +399,130 @@ def _authorize(store, params, direction):
     for p in perms:
         p.setdefault("rule_id", _rid("sgr", 8))
         p.setdefault("description", "")
-    sg["ingress" if direction == "ingress" else "egress"].extend(perms)
+    key = "ingress" if direction == "ingress" else "egress"
+    dup = [p for p in perms for r in sg[key] if _perm_match(r, p)]
+    if dup:
+        raise VpcError("InvalidPermission.Duplicate", "The specified rule already exists.")
+    for p in perms:   # per-rule tags from TagSpecifications (security-group-rule)
+        p["rule_tags"] = _parse_tag_specifications(params).get("security-group-rule", {})
+    sg[key].extend(perms)
+    created = [v for v in _sg_rule_views(sg, direction=key) if v["perm"] in perms]
     action = "AuthorizeSecurityGroupIngress" if direction == "ingress" else "AuthorizeSecurityGroupEgress"
-    return _envelope(action, "<return>true</return>")
+    return _envelope(action, f"<return>true</return><securityGroupRuleSet>{''.join(_sg_rule_xml(v) for v in created)}</securityGroupRuleSet>")
+
+
+# ── security group RULES (the modern per-rule API: sgr-* ids) ───────────────
+# The model stores one permission per rule_id with a list of cidrs/sgs. The modern EC2 API (and the Terraform aws provider's
+# aws_vpc_security_group_*_rule) addresses ONE target per rule, so the first target keeps the permission's rule_id and any
+# further target gets a stable derived id. (endurance F8)
+def _perm_match(r: dict, p: dict) -> bool:
+    """Same protocol/ports and an overlapping target. Protocol -1 (all traffic) has no ports, so ports are ignored there,
+    as in EC2 (the Terraform provider sends FromPort=0 ToPort=0 for it). (endurance F11)"""
+    if r["protocol"] != p["protocol"]:
+        return False
+    if r["protocol"] != "-1" and (r.get("from_port") != p.get("from_port") or r.get("to_port") != p.get("to_port")):
+        return False
+    return bool(set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", [])))
+
+
+def _sg_target_rule_id(rule_id: str, idx: int) -> str:
+    if idx == 0:
+        return rule_id
+    import hashlib
+    return "sgr-" + hashlib.sha1(f"{rule_id}:{idx}".encode()).hexdigest()[:17]
+
+
+def _sg_rule_views(sg: dict, only_ids=None, direction=None) -> list:
+    out = []
+    for d in ("ingress", "egress"):
+        if direction and d != direction:
+            continue
+        for p in sg.get(d, []):
+            rid = p.get("rule_id") or ""
+            targets = [("cidr", c) for c in p.get("cidrs", [])] + [("sg", g) for g in p.get("sgs", [])]
+            for i, (kind, val) in enumerate(targets):
+                v = {"id": _sg_target_rule_id(rid, i), "group_id": sg["id"], "egress": d == "egress", "protocol": p["protocol"],
+                     "from_port": -1 if p.get("from_port") is None else p["from_port"],
+                     "to_port": -1 if p.get("to_port") is None else p["to_port"],
+                     "kind": kind, "value": val, "description": p.get("description", ""), "perm": p, "idx": i, "tags": p.get("rule_tags", {})}
+                if only_ids is None or v["id"] in only_ids:
+                    out.append(v)
+    return out
+
+
+def _sg_rule_xml(v: dict) -> str:
+    tgt = (f"<referencedGroupInfo><groupId>{_xml_escape(v['value'])}</groupId><userId>{OWNER_ID}</userId></referencedGroupInfo>"
+           if v["kind"] == "sg" else
+           (f"<cidrIpv6>{_xml_escape(v['value'])}</cidrIpv6>" if ":" in v["value"] else f"<cidrIpv4>{_xml_escape(v['value'])}</cidrIpv4>"))
+    return ("<item>"
+            f"<securityGroupRuleId>{_xml_escape(v['id'])}</securityGroupRuleId><groupId>{_xml_escape(v['group_id'])}</groupId>"
+            f"<groupOwnerId>{OWNER_ID}</groupOwnerId><isEgress>{str(v['egress']).lower()}</isEgress><ipProtocol>{_xml_escape(v['protocol'])}</ipProtocol>"
+            f"<fromPort>{v['from_port']}</fromPort><toPort>{v['to_port']}</toPort>{tgt}"
+            + (f"<description>{_xml_escape(v['description'])}</description>" if v["description"] else "")   # EC2 omits an unset description (F14)
+            + f"{_tags_xml(v['tags'])}</item>")
+
+
+def _describe_security_group_rules(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("SecurityGroupRuleId.")]
+    rows = []
+    for sg in m["sgs"].values():
+        rows.extend(_sg_rule_views(sg))
+    if ids:
+        have = {r["id"] for r in rows}
+        missing = [i for i in ids if i not in have]
+        if missing:
+            raise VpcError("InvalidSecurityGroupRuleId.NotFound", f"The security group rule ID '{missing[0]}' does not exist")
+        rows = [r for r in rows if r["id"] in ids]
+    for name, vals in _filters(params).items():
+        if name == "group-id":
+            rows = [r for r in rows if r["group_id"] in vals]
+        elif name == "security-group-rule-id":
+            rows = [r for r in rows if r["id"] in vals]
+        elif name == "tag" or name.startswith("tag:") or name in ("tag-key", "tag-value"):
+            rows = [r for r in rows if _tag_filter_ok(r["tags"], name, vals)]
+        elif name == "owner-id":
+            rows = [r for r in rows if OWNER_ID in vals]
+        else:
+            raise VpcError("InvalidParameterValue", f"The filter '{name}' is invalid")
+    return _envelope("DescribeSecurityGroupRules", f"<securityGroupRuleSet>{''.join(_sg_rule_xml(r) for r in rows)}</securityGroupRuleSet>")
+
+
+def _modify_security_group_rules(store, params):
+    m = _model(store)
+    sg = _find_sg(m, params.get("GroupId"))
+    idxs = sorted({k.split(".")[1] for k in params if k.startswith("SecurityGroupRule.") and len(k.split(".")) >= 3}, key=int)
+    for i in idxs:
+        rid = str(params.get(f"SecurityGroupRule.{i}.SecurityGroupRuleId", ""))
+        hit = _sg_rule_views(sg, {rid})
+        if not hit:
+            raise VpcError("InvalidSecurityGroupRuleId.NotFound", f"The security group rule ID '{rid}' does not exist")
+        v = hit[0]; p = v["perm"]
+        pre = f"SecurityGroupRule.{i}.SecurityGroupRule."
+        if pre + "Description" in params:
+            p["description"] = str(params[pre + "Description"])
+        if pre + "IpProtocol" in params:
+            p["protocol"] = str(params[pre + "IpProtocol"])
+        if pre + "FromPort" in params:
+            p["from_port"] = None if int(params[pre + "FromPort"]) == -1 else int(params[pre + "FromPort"])
+        if pre + "ToPort" in params:
+            p["to_port"] = None if int(params[pre + "ToPort"]) == -1 else int(params[pre + "ToPort"])
+        for key, kind in (("CidrIpv4", "cidr"), ("CidrIpv6", "cidr"), ("ReferencedGroupId", "sg")):
+            if pre + key in params:
+                lst = p["cidrs"] if kind == "cidr" else p["sgs"]
+                lst[lst.index(v["value"])] = str(params[pre + key])
+    return _envelope("ModifySecurityGroupRules", "<return>true</return>")
+
+
+def _update_sg_rule_descriptions(store, params, direction):
+    m = _model(store)
+    sg = _find_sg(m, params.get("GroupId"))
+    for p in _parse_ip_permissions(params):
+        for r in sg[direction]:
+            if _perm_match(r, p):
+                r["description"] = p.get("description", "")
+    return _envelope("UpdateSecurityGroupRuleDescriptions" + ("Ingress" if direction == "ingress" else "Egress"), "<return>true</return>")
+
 
 
 def _igw_xml(igw: dict) -> str:
@@ -477,7 +604,7 @@ def _route_xml(r: dict) -> str:
             f"<{tag}>{_xml_escape(t)}</{tag}><state>{state}</state><origin>{origin}</origin></item>")
 
 
-def _rt_xml(rt: dict) -> str:
+def _rt_xml(rt: dict, m: dict | None = None) -> str:
     routes = "".join(_route_xml(r) for r in rt["routes"])
     routes += "".join(f"<item><destinationCidrBlock>{_xml_escape(r['dest'])}</destinationCidrBlock><gatewayId>{_xml_escape(r['target'])}</gatewayId>"
                       "<state>active</state><origin>EnableVgwRoutePropagation</origin></item>" for r in rt.get("propagated", []))
@@ -485,10 +612,14 @@ def _rt_xml(rt: dict) -> str:
     assocs = ""
     if rt.get("main"):
         assocs += (f"<item><routeTableAssociationId>rtbassoc-main-{_xml_escape(rt['vpc_id'])}</routeTableAssociationId>"
-                   f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><main>true</main></item>")
+                   f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><main>true</main>"
+                   "<associationState><state>associated</state></associationState></item>")
     assocs += "".join(f"<item><routeTableAssociationId>rtbassoc-{_xml_escape(sid)}</routeTableAssociationId>"
                        f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><subnetId>{_xml_escape(sid)}</subnetId>"
-                       f"<main>false</main></item>" for sid in rt["subnets"])
+                       f"<main>false</main><associationState><state>associated</state></associationState></item>" for sid in rt["subnets"]
+                       # A subnet that merely falls back to the main route table has NO association record in EC2 (only an
+                       # explicit AssociateRouteTable creates one). Listing it made DisassociateRouteTable never "finish". (endurance F16)
+                       if not (rt.get("main") and m is not None and not m["subnets"].get(sid, {}).get("rt_explicit")))
     assocs += _extras_core.edge_assoc_xml(rt)
     return ("<item>"
             f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><vpcId>{_xml_escape(rt['vpc_id'])}</vpcId>"
@@ -524,7 +655,7 @@ def _describe_route_tables(store, params):
     if ids:
         _require_ids(ids, rows, "InvalidRouteTableID.NotFound", "routeTable")
         rows = [rt for rt in rows if rt["id"] in ids]
-    return _envelope("DescribeRouteTables", f"<routeTableSet>{''.join(_rt_xml(rt) for rt in rows)}</routeTableSet>")
+    return _envelope("DescribeRouteTables", f"<routeTableSet>{''.join(_rt_xml(rt, m) for rt in rows)}</routeTableSet>")
 
 
 def _delete_route_table(store, params):
@@ -598,6 +729,7 @@ def _associate_route_table(store, params):
     if rt_id not in m["route_tables"] or subnet_id not in m["subnets"]:
         raise VpcError("InvalidParameterValue", "Route table or subnet not found.")
     _reassign_subnet_route_table(m, subnet_id, rt_id)
+    m["subnets"][subnet_id]["rt_explicit"] = True
     return _envelope("AssociateRouteTable", f"<associationId>rtbassoc-{_xml_escape(subnet_id)}</associationId>"
                                             f"<associationState><state>associated</state></associationState>")
 
@@ -614,9 +746,13 @@ def _disassociate_route_table(store, params):
     sn = m["subnets"].get(subnet_id)
     if sn is None:
         raise VpcError("InvalidAssociationID.NotFound", f"The association ID '{assoc_id}' does not exist.")
+    cur = m["route_tables"].get(sn.get("route_table"), {})
+    if not (sn.get("rt_explicit") or not cur.get("main")):
+        raise VpcError("InvalidAssociationID.NotFound", f"The association ID '{assoc_id}' does not exist.")
     main_rt = next((rt["id"] for rt in m["route_tables"].values() if rt["vpc_id"] == sn["vpc_id"] and rt.get("main")), None)
     if main_rt:
         _reassign_subnet_route_table(m, subnet_id, main_rt)
+    sn["rt_explicit"] = False
     return _envelope("DisassociateRouteTable", "<return>true</return>")
 
 
@@ -673,6 +809,57 @@ def _create_network_acl(store, params):
                      f"<networkAcl>{_nacl_xml(m['nacls'][nacl_id])[len('<item>'):-len('</item>')]}</networkAcl>")
 
 
+def _tag_filter_ok(tags, name, vals):
+    """EC2 tag filters: tag:<Key> (value match), tag-key, tag-value. Wildcards * and ? are honoured like AWS."""
+    import fnmatch
+    tags = tags or {}
+    if name.startswith("tag:"):
+        return any(fnmatch.fnmatchcase(str(tags.get(name[4:], "\0")), v) for v in vals) and name[4:] in tags
+    if name == "tag-key":
+        return any(fnmatch.fnmatchcase(k, v) for k in tags for v in vals)
+    if name == "tag-value":
+        return any(fnmatch.fnmatchcase(str(t), v) for t in tags.values() for v in vals)
+    return None
+
+
+def _nacl_filter_ok(n, f):
+    for name, vals in f.items():
+        t = _tag_filter_ok(n.get("tags"), name, vals)
+        if t is not None:
+            if not t:
+                return False
+            continue
+        if name == "vpc-id":
+            ok = n["vpc_id"] in vals
+        elif name == "network-acl-id":
+            ok = n["id"] in vals
+        elif name == "default":
+            ok = str(bool(n.get("default"))).lower() in [str(v).lower() for v in vals]
+        elif name == "association.subnet-id":
+            ok = any(sid in vals for sid in n["subnets"])
+        elif name in ("association.association-id", "association.network-acl-association-id"):
+            ok = any(f"aclassoc-{sid}" in vals for sid in n["subnets"])
+        elif name == "association.network-acl-id":
+            ok = n["id"] in vals
+        elif name == "entry.cidr":
+            ok = any(e["cidr"] in vals for e in n["entries"])
+        elif name == "entry.egress":
+            ok = any(str(e["egress"]).lower() in [str(v).lower() for v in vals] for e in n["entries"])
+        elif name == "entry.rule-action":
+            ok = any(("allow" if e["allow"] else "deny") in vals for e in n["entries"])
+        elif name == "entry.rule-number":
+            ok = any(str(e["rule_number"]) in vals for e in n["entries"])
+        elif name == "entry.protocol":
+            ok = any(e["protocol"] in vals for e in n["entries"])
+        elif name == "owner-id":
+            ok = OWNER_ID in vals
+        else:
+            raise VpcError("InvalidParameterValue", f"The filter '{name}' is invalid")
+        if not ok:
+            return False
+    return True
+
+
 def _describe_network_acls(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("NetworkAclId.")]
@@ -682,6 +869,9 @@ def _describe_network_acls(store, params):
         if missing:
             raise VpcError("InvalidNetworkAclID.NotFound", f"The network ACL ID '{missing[0]}' does not exist")
         rows = [n for n in rows if n["id"] in ids]
+    f = _filters(params)
+    if f:
+        rows = [n for n in rows if _nacl_filter_ok(n, f)]
     return _envelope("DescribeNetworkAcls", f"<networkAclSet>{''.join(_nacl_xml(n) for n in rows)}</networkAclSet>")
 
 
@@ -989,7 +1179,66 @@ def _create_managed_prefix_list(store, params):
 
 def _describe_managed_prefix_lists(store, params):
     m = _model(store)
-    return _envelope("DescribeManagedPrefixLists", f"<prefixListSet>{''.join(_pl_xml(pl) for pl in m['prefix_lists'].values())}</prefixListSet>")
+    ids = [v for k, v in params.items() if k.startswith("PrefixListId.")]
+    rows = list(m["prefix_lists"].values())
+    if ids:
+        missing = [i for i in ids if i not in m["prefix_lists"]]
+        if missing:
+            raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{missing[0]}' does not exist.")
+        rows = [pl for pl in rows if pl["id"] in ids]
+    for name, vals in _filters(params).items():
+        t = None
+        if name.startswith("tag") :
+            rows = [pl for pl in rows if _tag_filter_ok(pl.get("tags"), name, vals)]
+        elif name == "prefix-list-id":
+            rows = [pl for pl in rows if pl["id"] in vals]
+        elif name == "prefix-list-name":
+            rows = [pl for pl in rows if pl["name"] in vals]
+        elif name == "owner-id":
+            rows = [pl for pl in rows if OWNER_ID in vals]
+        else:
+            raise VpcError("InvalidParameterValue", f"The filter '{name}' is invalid")
+    return _envelope("DescribeManagedPrefixLists", f"<prefixListSet>{''.join(_pl_xml(pl) for pl in rows)}</prefixListSet>")
+
+
+def _get_managed_prefix_list_entries(store, params):
+    m = _model(store)
+    pl = m["prefix_lists"].get(str(params.get("PrefixListId", "")))
+    if pl is None:
+        raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{params.get('PrefixListId', '')}' does not exist.")
+    want = int(params["TargetVersion"]) if params.get("TargetVersion") else pl["version"]
+    hist = pl.get("history", {})
+    entries = hist.get(str(want), pl["entries"]) if want != pl["version"] else pl["entries"]
+    items = "".join(f"<item><cidr>{_xml_escape(e['cidr'])}</cidr><description>{_xml_escape(e.get('description', ''))}</description></item>"
+                    for e in entries)
+    return _envelope("GetManagedPrefixListEntries", f"<entrySet>{items}</entrySet>")
+
+
+def _modify_managed_prefix_list(store, params):
+    m = _model(store)
+    pl_id = str(params.get("PrefixListId", ""))
+    pl = m["prefix_lists"].get(pl_id)
+    if pl is None:
+        raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{pl_id}' does not exist.")
+    cur = params.get("CurrentVersion")
+    if cur and int(cur) != pl["version"]:
+        raise VpcError("IncorrectState", f"The prefix list '{pl_id}' is at version {pl['version']}, not {cur}.")
+    pl.setdefault("history", {})[str(pl["version"])] = [dict(e) for e in pl["entries"]]
+    if params.get("PrefixListName"):
+        pl["name"] = str(params["PrefixListName"])
+    if params.get("MaxEntries"):
+        pl["max_entries"] = int(params["MaxEntries"])
+    add = []
+    for i in sorted({k.split(".")[1] for k in params if k.startswith("AddEntry.") and len(k.split(".")) >= 3}, key=int):
+        add.append({"cidr": str(params.get(f"AddEntry.{i}.Cidr", "")), "description": str(params.get(f"AddEntry.{i}.Description", ""))})
+    rm = {str(v) for k, v in params.items() if k.startswith("RemoveEntry.") and k.endswith(".Cidr")}
+    entries = [e for e in pl["entries"] if e["cidr"] not in rm] + [e for e in add if e["cidr"]]
+    if len(entries) > pl["max_entries"]:
+        raise VpcError("PrefixListMaxEntriesExceeded", f"The prefix list '{pl_id}' would exceed its maximum of {pl['max_entries']} entries.")
+    if add or rm:
+        pl["entries"] = entries
+        pl["version"] += 1
+    return _envelope("ModifyManagedPrefixList", f"<prefixList>{_pl_xml(pl)[len('<item>'):-len('</item>')]}</prefixList>")
 
 
 def _delete_managed_prefix_list(store, params):
@@ -2591,6 +2840,53 @@ def _find_instance(m, instance_id) -> dict:
     return inst
 
 
+def register_external_instance(m: dict, ext: dict) -> dict:
+    """Shadow-register an instance that ANOTHER engine launched (the appliance's runtime-backed RunInstances keeps its Docker/LXD
+    instances in server.py's ec2_state) so core operations that name it (AttachVolume, DetachVolume, CreateImage, ModifyInstanceAttribute,
+    AssociateAddress, tags...) work instead of answering InvalidInstanceID.NotFound. Idempotent: re-registering refreshes state/network
+    fields. The root volume reuses the legacy synthetic id `vol-<suffix>` so both listings agree. (endurance F18)"""
+    iid = str(ext["instance_id"])
+    sn = m["subnets"].get(str(ext.get("subnet_id") or ""), {})
+    inst = m["instances"].get(iid)
+    fresh = inst is None
+    root_vol = "vol-" + iid[2:]
+    if fresh:
+        inst = {
+            "id": iid, "image_id": str(ext.get("ami") or ""), "instance_type": str(ext.get("instance_type") or "t3.micro"),
+            "launch_time": str(ext.get("created") or _now()), "source_dest_check": True, "architecture": "x86_64",
+            "root_device_type": "ebs", "root_device_name": "/dev/xvda", "virtualization_type": "hvm", "hypervisor": "nitro",
+            "platform": "", "platform_details": "Linux/UNIX", "ebs_optimized": True, "termination_protection": False, "stop_protection": False,
+            "shutdown_behavior": "stop", "tenancy": "default", "placement_group": "", "partition_number": None, "credit_spec": "standard",
+            "hibernation": False, "auto_recovery": "default", "hostname_type": "ip-name", "metadata_tokens": "required",
+            "metadata_endpoint": "enabled", "monitoring": False, "auto_public_ip": bool(ext.get("public_ip")), "external": True,
+            "block_devices": [{"device_name": "/dev/xvda", "volume_id": root_vol, "delete_on_termination": True}],
+        }
+        m["instances"][iid] = inst
+    priv, pub = str(ext.get("private_ip") or ""), str(ext.get("public_ip") or "")
+    inst.update({
+        "state": str(ext.get("state") or "running"), "az": str(ext.get("az") or sn.get("az") or _AZS[0]),
+        "vpc_id": str(ext.get("vpc_id") or sn.get("vpc_id") or ""), "subnet_id": str(ext.get("subnet_id") or ""),
+        "sg_ids": list(ext.get("security_group_ids") or []), "private_ip": priv, "public_ip": pub,
+        "private_dns": f"ip-{priv.replace('.', '-')}.ec2.internal" if priv else "",
+        "public_dns": f"ec2-{pub.replace('.', '-')}.compute-1.amazonaws.com" if pub else "",
+        "key_name": str(ext.get("key_pair") or ""),
+        "iam_instance_profile": str(ext.get("iam_instance_profile") or inst.get("iam_instance_profile", "")),
+        "user_data": str(ext.get("user_data_b64") or ext.get("user_data") or inst.get("user_data", "")),
+        "tags": dict(ext["tags"] if "tags" in ext else (inst.get("tags") or {})),
+    })
+    if ext.get("name") and not inst["tags"].get("Name"):
+        inst["tags"]["Name"] = str(ext["name"])
+    if inst["tags"].get("Name"):
+        inst["name"] = inst["tags"]["Name"]
+    if root_vol not in m["volumes"]:
+        m["volumes"][root_vol] = {
+            "id": root_vol, "size": int(ext.get("storage_gb") or 8), "type": "gp3", "iops": 3000, "throughput": 125, "az": inst["az"],
+            "state": "in-use", "snapshot_id": "", "encrypted": False, "kms_key_id": "", "multi_attach": False, "created": inst["launch_time"],
+            "tags": {}, "attachments": [{"instance_id": iid, "device": "/dev/xvda", "delete_on_termination": True, "attach_time": inst["launch_time"]}],
+        }
+    return inst
+
+
 def _describe_instances(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("InstanceId.") or k.startswith("InstanceIds.")]
@@ -3411,7 +3707,10 @@ def _revoke(store, params, direction):
     key = "ingress" if direction == "ingress" else "egress"
     rule_ids = [v for k, v in params.items() if k.startswith("SecurityGroupRuleId.")]
     if rule_ids:
-        sg[key] = [r for r in sg[key] if r.get("rule_id") not in rule_ids]
+        for v in _sg_rule_views(sg, set(rule_ids), direction=key):   # remove just the addressed target of a permission
+            p = v["perm"]
+            (p["cidrs"] if v["kind"] == "cidr" else p["sgs"]).remove(v["value"])
+        sg[key] = [r for r in sg[key] if r.get("cidrs") or r.get("sgs")]
     else:
         perms = _parse_ip_permissions(params)
         if not perms and params.get("IpProtocol"):
@@ -3420,9 +3719,7 @@ def _revoke(store, params, direction):
                      "cidrs": [params["CidrIp"]] if params.get("CidrIp") else [],
                      "sgs": [params["SourceSecurityGroupId"]] if params.get("SourceSecurityGroupId") else []}]
 
-        def _hit(r, p):
-            return (r["protocol"] == p["protocol"] and r.get("from_port") == p.get("from_port") and r.get("to_port") == p.get("to_port")
-                    and (set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", []))))
+        _hit = _perm_match
         sg[key] = [r for r in sg[key] if not any(_hit(r, p) for p in perms)]
     action = "RevokeSecurityGroupIngress" if direction == "ingress" else "RevokeSecurityGroupEgress"
     return _envelope(action, "<return>true</return>")
@@ -3558,7 +3855,7 @@ def _lt_version_data_xml(data: dict) -> str:
         out.append(f"<keyName>{_xml_escape(data['KeyName'])}</keyName>")
     if data.get("SubnetId"):
         out.append(f"<networkInterfaceSet><item><subnetId>{_xml_escape(data['SubnetId'])}</subnetId></item></networkInterfaceSet>")
-    sg_ids = [v for k, v in data.items() if k.startswith("SecurityGroupIds.")]
+    sg_ids = [v for k, v in data.items() if k.startswith(("SecurityGroupIds.", "SecurityGroupId."))]   # SDK sends SecurityGroupId.N (F30)
     if sg_ids:
         out.append("<securityGroupIdSet>" + "".join(f"<item>{_xml_escape(g)}</item>" for g in sg_ids) + "</securityGroupIdSet>")
     if data.get("UserData"):
@@ -3575,6 +3872,16 @@ def _lt_version_data_xml(data: dict) -> str:
         for k, v in data.items() if k.endswith(".DeviceName") and k.startswith("BlockDeviceMapping."))
     if bdm:
         out.append(f"<blockDeviceMappingSet>{bdm}</blockDeviceMappingSet>")
+    specs = []
+    for k, v in sorted(data.items()):
+        mm = re.match(r"^TagSpecification\.(\d+)\.ResourceType$", k)
+        if mm:
+            tags = "".join(f"<item><key>{_xml_escape(str(tv))}</key><value>{_xml_escape(str(data.get(f'TagSpecification.{mm.group(1)}.Tag.{tm.group(1)}.Value', '')))}</value></item>"
+                           for tk, tv in sorted(data.items())
+                           for tm in [re.match(rf"^TagSpecification\.{mm.group(1)}\.Tag\.(\d+)\.Key$", tk)] if tm)
+            specs.append(f"<item><resourceType>{_xml_escape(str(v))}</resourceType><tagSet>{tags}</tagSet></item>")
+    if specs:
+        out.append("<tagSpecificationSet>" + "".join(specs) + "</tagSpecificationSet>")
     return "".join(out)
 
 
@@ -4310,6 +4617,10 @@ _OPS = {
     "CreateSecurityGroup": _create_security_group,
     "AuthorizeSecurityGroupIngress": lambda s, p: _authorize(s, p, "ingress"),
     "AuthorizeSecurityGroupEgress": lambda s, p: _authorize(s, p, "egress"),
+    "DescribeSecurityGroupRules": _describe_security_group_rules,
+    "ModifySecurityGroupRules": _modify_security_group_rules,
+    "UpdateSecurityGroupRuleDescriptionsIngress": lambda s, p: _update_sg_rule_descriptions(s, p, "ingress"),
+    "UpdateSecurityGroupRuleDescriptionsEgress": lambda s, p: _update_sg_rule_descriptions(s, p, "egress"),
     "RevokeSecurityGroupIngress": lambda s, p: _revoke(s, p, "ingress"),
     "RevokeSecurityGroupEgress": lambda s, p: _revoke(s, p, "egress"),
     "DescribeSecurityGroups": _describe_security_groups,
@@ -4347,6 +4658,8 @@ _OPS = {
     "CreateManagedPrefixList": _create_managed_prefix_list,
     "DescribeManagedPrefixLists": _describe_managed_prefix_lists,
     "DeleteManagedPrefixList": _delete_managed_prefix_list,
+    "GetManagedPrefixListEntries": _get_managed_prefix_list_entries,
+    "ModifyManagedPrefixList": _modify_managed_prefix_list,
     "CreateVpcPeeringConnection": _create_vpc_peering_connection,
     "DescribeVpcPeeringConnections": _describe_vpc_peering_connections,
     "AcceptVpcPeeringConnection": _accept_vpc_peering_connection,
@@ -4623,6 +4936,97 @@ from core import vpc_encryption_core as _vpcenc   # noqa: E402  (VPC Encryption 
 _vpcenc.install(_OPS)
 
 
+# ── generic EC2 Describe* filtering (endurance F9/F10/F12) ──────────────────────────────────────────────────────────
+# Real EC2 filter names are paths into the response: `association.subnet-id` is associationSet/item/subnetId, `vpc-id` is vpcId,
+# `tag:Name` is the tagSet entry with key Name. Almost no Describe* handler here honoured Filter.N or <Thing>Id.N, so the Terraform
+# provider (which reads everything back through filters) got every resource: "too many results: wanted 1, got 2". One post-filter
+# over the response XML fixes the whole family; handlers that already filter (their own semantics) are skipped.
+_EXPLICIT_FILTER_ACTIONS = {"DescribeSecurityGroups", "DescribeSecurityGroupRules", "DescribeNetworkAcls", "DescribeManagedPrefixLists",
+                            "DescribeTransitGateways", "DescribeTransitGatewayVpcAttachments", "DescribeTransitGatewayAttachments",
+                            "DescribeTransitGatewayRouteTables", "DescribeInstances", "DescribeImages", "DescribeSnapshots",
+                            "DescribeInstanceStatus", "DescribeInstanceTypes", "DescribeAvailabilityZones"}
+
+
+def _camel(seg: str) -> str:
+    parts = seg.split("-")
+    return parts[0] + "".join(w[:1].upper() + w[1:] for w in parts[1:])
+
+
+def _local(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
+
+
+def _path_values(el, segs):
+    """Every text value reachable from `el` along the filter path (descending through *Set/item wrappers)."""
+    if not segs:
+        yield (el.text or "")
+        return
+    want = {segs[0], segs[0] + "Set"}
+    for ch in el:
+        if _local(ch.tag) in want:
+            if _local(ch.tag).endswith("Set") and _local(ch.tag) != segs[0]:
+                for it in ch:
+                    yield from _path_values(it, segs[1:])
+            else:
+                yield from _path_values(ch, segs[1:])
+
+
+def _item_matches(item, name: str, vals) -> bool:
+    import fnmatch
+    if name.startswith("tag:") or name in ("tag-key", "tag-value"):
+        tags = {}
+        for ts in item:
+            if _local(ts.tag) == "tagSet":
+                for t in ts:
+                    k = next((c.text or "" for c in t if _local(c.tag) == "key"), "")
+                    v = next((c.text or "" for c in t if _local(c.tag) == "value"), "")
+                    tags[k] = v
+        r = _tag_filter_ok(tags, name, vals)
+        return bool(r)
+    segs = [_camel(x) for x in name.split(".")]
+    return any(fnmatch.fnmatchcase(v, pat) for v in _path_values(item, segs) for pat in vals)
+
+
+def _generic_describe_filter(action: str, params: dict, resp):
+    import xml.etree.ElementTree as ET
+    flt = _filters(params)
+    ids = {}
+    for k, v in params.items():
+        mm = re.match(r"^([A-Za-z]+)Id\.\d+$", k)
+        if mm:
+            ids.setdefault(mm.group(1), []).append(str(v))
+    if not (flt or ids) or resp.status != 200 or not action.startswith("Describe") or action in _EXPLICIT_FILTER_ACTIONS:
+        return resp
+    try:
+        ET.register_namespace("", EC2_NS)
+        root = ET.fromstring(resp.body.encode())
+    except ET.ParseError:
+        return resp
+    sets = [c for c in root if _local(c.tag).endswith("Set")]
+    if not sets:
+        return resp
+    box = sets[0]
+    items = list(box)
+    for base, wanted in ids.items():
+        tag = base[:1].lower() + base[1:] + "Id"
+        have = {(c.text or "") for it in items for c in it if _local(c.tag) == tag}
+        if not have:
+            continue            # this resource does not expose that id element: leave it alone
+        missing = [w for w in wanted if w not in have]
+        if missing:
+            raise VpcError(f"Invalid{base}ID.NotFound", f"The {base[:1].lower() + base[1:]} ID '{missing[0]}' does not exist")
+        items = [it for it in items if any(_local(c.tag) == tag and (c.text or "") in wanted for c in it)]
+    for name, vals in flt.items():
+        items = [it for it in items if _item_matches(it, name, vals)]
+    for it in list(box):
+        box.remove(it)
+    for it in items:
+        box.append(it)
+    resp.body = '<?xml version="1.0" encoding="UTF-8"?>' + ET.tostring(root, encoding="unicode")
+    return resp
+
+
+
 def dispatch(store, params: dict | None = None) -> VpcResponse:
     """Native EC2 Query-protocol router. `params` is the parsed form body
     ({"Action": "CreateVpc", "CidrBlock": "10.0.0.0/16", ...})."""
@@ -4632,6 +5036,6 @@ def dispatch(store, params: dict | None = None) -> VpcResponse:
     if op is None:
         return _error("InvalidAction", f"The action {action} is not implemented.", 400)
     try:
-        return op(store, params)
+        return _generic_describe_filter(action, params, op(store, params))
     except VpcError as e:
         return _error(e.code, e.message, e.status)

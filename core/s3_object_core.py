@@ -2384,6 +2384,9 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                 return _error_xml(_SUBRESOURCES_STORED[sub], f"The {sub} configuration does not exist", f"/{bucket}", 404)
             if sub == "policy":
                 return S3Response(status=200, headers=_amz_headers({"Content-Type": "application/json"}), body=doc.encode())
+            if sub == "lifecycle":   # the Terraform aws provider polls this echoed header until it equals what it sent (endurance F22)
+                return _xml_response(doc, extra={"x-amz-transition-default-minimum-object-size":
+                                                 cfg.get("lifecycle_tdmos") or "all_storage_classes_128K"})
             return _xml_response(doc)
         if method == "PUT":
             text = body.decode("utf-8", "replace").strip()
@@ -2410,6 +2413,9 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                 meta["tags"] = parse_tagging_xml(text.encode("utf-8"))
             if sub in ("cors", "lifecycle"):
                 meta.pop(sub, None)
+            if sub == "lifecycle":   # PutBucketLifecycleConfiguration: store + echo x-amz-transition-default-minimum-object-size (F22)
+                cfg["lifecycle_tdmos"] = headers.get("x-amz-transition-default-minimum-object-size") or "all_storage_classes_128K"
+                return _done(store, _empty_response(200, extra={"x-amz-transition-default-minimum-object-size": cfg["lifecycle_tdmos"]}))
             return _done(store, _empty_response(204 if sub in ("tagging", "policy", "cors", "lifecycle") else 200))
         if method == "DELETE":
             cfg.pop(sub, None)
@@ -2417,6 +2423,8 @@ def _bucket_subresource(store: ObjectStore, method: str, bucket: str, query: dic
                 meta["tags"] = {}
             if sub in ("cors", "lifecycle"):
                 meta.pop(sub, None)
+            if sub == "lifecycle":
+                cfg.pop("lifecycle_tdmos", None)
             return _done(store, _empty_response(204))
     return _error_xml("NotImplemented", f"Vyomi does not implement the bucket {sub} sub-resource yet.", f"/{bucket}?{sub}", 501)
 

@@ -897,6 +897,13 @@ _NANO_SHOWN = {
 # (core/wire_ingress); /api/servicebus/topics exists only in Nano's service worker.
 _APPLIANCE_SHOWN = {
     "microsoft.servicebus/namespaces": {"properties.serviceBusEndpoint": "__BASE__/azure-data/servicebus/__NAME__"},
+    # /api/azuresql/* is Nano's service worker only; the appliance serves the SQL data plane under /api/console/azure-sql/*.
+    "microsoft.sql/servers": {
+        "properties.fullyQualifiedDomainName": "__BASE__/api/console/azure-sql/databases",
+        "properties.vyomiAccess": {
+            "protocol": "HTTP data plane only (no TDS wire protocol, no port 1433)",
+            "listServers": "GET __BASE__/api/console/azure-sql/databases",
+            "query": "POST __BASE__/api/console/azure-sql/execute"}},
 }
 
 
