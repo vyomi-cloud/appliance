@@ -160,6 +160,7 @@ start_stack() {
       post /api/mesh/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
       selfcheck_report || true
       start_ai
+      mkdir -p "$HOME/.local/bin" && ln -sf "$HERE/vyomi-agent-demo" "$HOME/.local/bin/vyomi-agent-demo" 2>/dev/null || true
       log "mesh ready."; return 0
     fi; sleep 3
   done

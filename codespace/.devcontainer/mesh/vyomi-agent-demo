@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# vyomi-agent-demo: run the 13-component Facilities agent reference app (real boto3) against THIS Mesh.
+#   vyomi-agent-demo [--endpoint URL] [-- run_e2e.py args, e.g. --only 5,6]
+# Endpoint: --endpoint / $VYOMI_ENDPOINT, else the local simulator container (found via docker, or `sudo vyomi-gate sim-ip`
+# when the Codespace user has no docker). Nothing is published and no extra network access is opened; pip needs PyPI once.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# example dir: published workspace (examples/ next to .devcontainer/) or the appliance repo layout
+for c in "$HERE/../../examples/enterprise-facilities-agent" "$HERE/../../../examples/enterprise-facilities-agent" "${VYOMI_EXAMPLE_DIR:-/nonexistent}"; do
+  [ -f "$c/run_e2e.py" ] && { EX="$(cd "$c" && pwd)"; break; }
+done
+[ -n "${EX:-}" ] || { echo "vyomi-agent-demo: example sources not found (examples/enterprise-facilities-agent)." >&2; exit 1; }
+EP="${VYOMI_ENDPOINT:-}"; ARGS=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --endpoint) EP="${2:?--endpoint needs a URL}"; shift 2 ;;
+    --) shift; ARGS+=("$@"); break ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+if [ -z "$EP" ]; then
+  ip=$(docker ps --filter label=com.docker.compose.service=simulator --format '{{.Names}}' 2>/dev/null | head -1 | xargs -r -I{} docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' {} 2>/dev/null | awk '{print $1}')
+  [ -n "$ip" ] || ip=$(sudo -n /usr/local/sbin/vyomi-gate sim-ip 2>/dev/null)
+  [ -n "$ip" ] || { echo "vyomi-agent-demo: cannot find the Mesh simulator. Is it up? (bash .devcontainer/mesh/boot-mesh.sh resume) or pass --endpoint URL" >&2; exit 1; }
+  EP="http://$ip:9000"
+fi
+VENV="${VYOMI_DEMO_VENV:-$HOME/.vyomi-agent-demo-venv}"
+if [ ! -x "$VENV/bin/python" ] || ! "$VENV/bin/python" -c 'import boto3, langgraph, fastapi, uvicorn, anyio' 2>/dev/null; then
+  echo "[vyomi-agent-demo] installing example requirements into $VENV (first run only)"
+  "${VYOMI_DEMO_PYTHON:-python3}" -m venv "$VENV" || { echo "venv creation failed (needs python3-venv and Python 3.10+; set VYOMI_DEMO_PYTHON)" >&2; exit 1; }
+  "$VENV/bin/pip" install -q -r "$EX/requirements.txt" 2>&1 | tail -5
+  [ "${PIPESTATUS[0]}" = 0 ] || { echo "pip install failed" >&2; exit 1; }
+fi
+export AWS_ENDPOINT_URL="$EP" AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}" AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}" AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+echo "[vyomi-agent-demo] Mesh endpoint: $EP"
+cd "$EX" && exec "$VENV/bin/python" run_e2e.py --endpoint "$EP" ${ARGS[@]+"${ARGS[@]}"}
