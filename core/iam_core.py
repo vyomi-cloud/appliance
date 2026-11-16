@@ -146,15 +146,16 @@ def _error(code: str, message: str, status: int = 400) -> IamResponse:
 def _el(tag, value): return f"<{tag}>{_xml_escape(str(value))}</{tag}>"
 
 
-def _user_xml(store, u: dict) -> str:
+def _user_xml(store, u: dict, with_tags: bool = False) -> str:
     return ("<User>" + _el("Path", u.get("path", "/")) + _el("UserName", u["user_name"])
             + _el("UserId", u["user_id"]) + _el("Arn", u["arn"])
             + _el("CreateDate", u["created"])
             + (_el("PermissionsBoundary", u["permissions_boundary"]) if u.get("permissions_boundary") else "")
+            + (_tags_xml(u["tags"]) if with_tags and u.get("tags") else "")   # Get/Create return Tags; List does not (endurance F13)
             + "</User>")
 
 
-def _role_xml(store, r: dict) -> str:
+def _role_xml(store, r: dict, with_tags: bool = False) -> str:
     doc = r.get("assume_role_policy_document") or {}
     trust = _xml_escape(json.dumps(doc)) if doc else ""
     return ("<Role>" + _el("Path", r.get("path", "/")) + _el("RoleName", r["role_name"])
@@ -162,6 +163,7 @@ def _role_xml(store, r: dict) -> str:
             + _el("Description", r.get("description", "")) + _el("MaxSessionDuration", r.get("max_session_duration", 3600))
             + (f"<AssumeRolePolicyDocument>{trust}</AssumeRolePolicyDocument>" if trust else "")
             + (_el("PermissionsBoundary", r["permissions_boundary"]) if r.get("permissions_boundary") else "")
+            + (_tags_xml(r["tags"]) if with_tags and r.get("tags") else "")   # Get/Create return Tags; List does not (endurance F13)
             + (("<RoleLastUsed>" + _el("LastUsedDate", r["role_last_used"]["time"]) + _el("Region", r["role_last_used"].get("region", "us-east-1"))
                 + "</RoleLastUsed>") if r.get("role_last_used") else "<RoleLastUsed/>")
             + "</Role>")
@@ -235,12 +237,12 @@ def _create_user(store, params):
          "tags": _parse_tags(params), "permissions_boundary": None, "login_profile": None}
     store.users[name] = u
     store.persist()
-    return _envelope("CreateUser", _user_xml(store, u))
+    return _envelope("CreateUser", _user_xml(store, u, with_tags=True))
 
 
 def _get_user(store, params):
     u = _require_user(store, str(params.get("UserName", "")).strip())
-    return _envelope("GetUser", _user_xml(store, u))
+    return _envelope("GetUser", _user_xml(store, u, with_tags=True))
 
 
 def _as_member(xml: str, tag: str) -> str:
@@ -287,12 +289,12 @@ def _create_role(store, params):
          "tags": _parse_tags(params), "permissions_boundary": None}
     store.roles[name] = r
     store.persist()
-    return _envelope("CreateRole", _role_xml(store, r))
+    return _envelope("CreateRole", _role_xml(store, r, with_tags=True))
 
 
 def _get_role(store, params):
     r = _require_role(store, str(params.get("RoleName", "")).strip())
-    return _envelope("GetRole", _role_xml(store, r))
+    return _envelope("GetRole", _role_xml(store, r, with_tags=True))
 
 
 def _list_roles(store, params):

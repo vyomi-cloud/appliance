@@ -140,6 +140,23 @@ def _f9_f10_f12():
     _check("F12 DescribeSubnets filter with no match is empty, not everything", sub not in out)
 
 
+def _f16():
+    s = types.SimpleNamespace()
+    call = lambda **p: v.dispatch(s, p)  # noqa: E731
+    body = lambda r: r.body.decode() if isinstance(r.body, bytes) else r.body  # noqa: E731
+    vpc = re.search(r"<vpcId>(vpc-\w+)</vpcId>", body(call(Action="CreateVpc", CidrBlock="10.4.0.0/16"))).group(1)
+    sub = re.search(r"<subnetId>(subnet-\w+)</subnetId>", body(call(Action="CreateSubnet", VpcId=vpc, CidrBlock="10.4.1.0/24"))).group(1)
+    rt = re.search(r"<routeTableId>(rtb-\w+)</routeTableId>", body(call(Action="CreateRouteTable", VpcId=vpc))).group(1)
+    f = lambda aid: body(call(Action="DescribeRouteTables", **{"Filter.1.Name": "association.route-table-association-id", "Filter.1.Value.1": aid}))  # noqa: E731
+    aid = re.search(r"<associationId>([^<]+)</associationId>", body(call(Action="AssociateRouteTable", RouteTableId=rt, SubnetId=sub))).group(1)
+    _check("F16 explicit association exists", rt in f(aid))
+    call(Action="DisassociateRouteTable", AssociationId=aid)
+    _check("F16 after disassociate the association id is gone (implicit main-table fallback has no association record)",
+           "<routeTableId>" not in f(aid))
+    r = call(Action="DisassociateRouteTable", AssociationId=aid)
+    _check("F16 disassociating again is InvalidAssociationID.NotFound", r.status == 400 and "InvalidAssociationID.NotFound" in body(r))
+
+
 if __name__ == "__main__":
-    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12()
-    print("Endurance F1/F4/F6-F12 regressions: ALL GREEN")
+    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12(); _f16()
+    print("Endurance F1/F4/F6-F16 regressions: ALL GREEN")

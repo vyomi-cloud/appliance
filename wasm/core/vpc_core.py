@@ -606,7 +606,7 @@ def _route_xml(r: dict) -> str:
             f"<{tag}>{_xml_escape(t)}</{tag}><state>{state}</state><origin>{origin}</origin></item>")
 
 
-def _rt_xml(rt: dict) -> str:
+def _rt_xml(rt: dict, m: dict | None = None) -> str:
     routes = "".join(_route_xml(r) for r in rt["routes"])
     routes += "".join(f"<item><destinationCidrBlock>{_xml_escape(r['dest'])}</destinationCidrBlock><gatewayId>{_xml_escape(r['target'])}</gatewayId>"
                       "<state>active</state><origin>EnableVgwRoutePropagation</origin></item>" for r in rt.get("propagated", []))
@@ -618,7 +618,10 @@ def _rt_xml(rt: dict) -> str:
                    "<associationState><state>associated</state></associationState></item>")
     assocs += "".join(f"<item><routeTableAssociationId>rtbassoc-{_xml_escape(sid)}</routeTableAssociationId>"
                        f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><subnetId>{_xml_escape(sid)}</subnetId>"
-                       f"<main>false</main><associationState><state>associated</state></associationState></item>" for sid in rt["subnets"])
+                       f"<main>false</main><associationState><state>associated</state></associationState></item>" for sid in rt["subnets"]
+                       # A subnet that merely falls back to the main route table has NO association record in EC2 (only an
+                       # explicit AssociateRouteTable creates one). Listing it made DisassociateRouteTable never "finish". (endurance F16)
+                       if not (rt.get("main") and m is not None and not m["subnets"].get(sid, {}).get("rt_explicit")))
     assocs += _extras_core.edge_assoc_xml(rt)
     return ("<item>"
             f"<routeTableId>{_xml_escape(rt['id'])}</routeTableId><vpcId>{_xml_escape(rt['vpc_id'])}</vpcId>"
@@ -654,7 +657,7 @@ def _describe_route_tables(store, params):
     if ids:
         _require_ids(ids, rows, "InvalidRouteTableID.NotFound", "routeTable")
         rows = [rt for rt in rows if rt["id"] in ids]
-    return _envelope("DescribeRouteTables", f"<routeTableSet>{''.join(_rt_xml(rt) for rt in rows)}</routeTableSet>")
+    return _envelope("DescribeRouteTables", f"<routeTableSet>{''.join(_rt_xml(rt, m) for rt in rows)}</routeTableSet>")
 
 
 def _delete_route_table(store, params):
@@ -728,6 +731,7 @@ def _associate_route_table(store, params):
     if rt_id not in m["route_tables"] or subnet_id not in m["subnets"]:
         raise VpcError("InvalidParameterValue", "Route table or subnet not found.")
     _reassign_subnet_route_table(m, subnet_id, rt_id)
+    m["subnets"][subnet_id]["rt_explicit"] = True
     return _envelope("AssociateRouteTable", f"<associationId>rtbassoc-{_xml_escape(subnet_id)}</associationId>"
                                             f"<associationState><state>associated</state></associationState>")
 
@@ -744,9 +748,13 @@ def _disassociate_route_table(store, params):
     sn = m["subnets"].get(subnet_id)
     if sn is None:
         raise VpcError("InvalidAssociationID.NotFound", f"The association ID '{assoc_id}' does not exist.")
+    cur = m["route_tables"].get(sn.get("route_table"), {})
+    if not (sn.get("rt_explicit") or not cur.get("main")):
+        raise VpcError("InvalidAssociationID.NotFound", f"The association ID '{assoc_id}' does not exist.")
     main_rt = next((rt["id"] for rt in m["route_tables"].values() if rt["vpc_id"] == sn["vpc_id"] and rt.get("main")), None)
     if main_rt:
         _reassign_subnet_route_table(m, subnet_id, main_rt)
+    sn["rt_explicit"] = False
     return _envelope("DisassociateRouteTable", "<return>true</return>")
 
 
