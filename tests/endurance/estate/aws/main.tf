@@ -27,6 +27,8 @@ provider "aws" {
     sns            = var.endpoint
     cloudwatchevents = var.endpoint
     eventbridge    = var.endpoint
+    bedrock        = var.endpoint
+    bedrockagent   = var.endpoint
   }
 }
 
@@ -48,4 +50,10 @@ module "compute_data" {
 module "messaging" {
   source      = "./modules/stage3-messaging"
   kms_key_arn = module.network_identity.kms_key_arn
+}
+
+module "ai" {
+  source      = "./modules/stage6-ai"
+  kms_key_arn = module.network_identity.kms_key_arn
+  log_bucket  = module.compute_data.bucket
 }

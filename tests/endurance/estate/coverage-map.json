@@ -171,6 +171,40 @@
    "ui"
   ]
  },
+ "bedrock.agents": {
+  "module": "aws/modules/stage6-ai",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (74 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "aws_bedrockagent_agent.app",
+   "aws_bedrockagent_agent_alias.live"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "bedrock.guardrails": {
+  "module": "aws/modules/stage6-ai",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (74 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "aws_bedrock_guardrail.app",
+   "aws_bedrock_guardrail_version.v1"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
  "dynamodb.table.crud": {
   "module": "aws/modules/stage2-compute-data",
   "proof": {
@@ -421,6 +455,55 @@
   "stage": "2-compute-data",
   "tf": [
    "aws_ecr_repository.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "eventbridge.bus.crud": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_cloudwatch_event_bus.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "eventbridge.rule.crud": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_cloudwatch_event_rule.orders",
+   "aws_cloudwatch_event_rule.nightly"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "eventbridge.rule.targets": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_cloudwatch_event_target.to_sns"
   ],
   "verify": [
    "tf",
@@ -919,6 +1002,215 @@
   "stage": "1-network-identity",
   "tf": [
    "aws_secretsmanager_secret_version.db"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sns.subscription.crud": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sns_topic_subscription.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sns.subscription.filter-policy": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sns_topic_subscription.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sns.subscription.raw-delivery": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sns_topic_subscription.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sns.topic.access-policy": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue_policy.orders_from_sns"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sns.topic.crud": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sns_topic.events"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sns.topic.tags": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sns_topic.events"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.queue.attributes": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.queue.crud": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue.orders",
+   "aws_sqs_queue.dlq"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.queue.dlq-redrive": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.queue.fifo": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue.fifo"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.queue.redrive-allow-policy": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue_redrive_allow_policy.dlq"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.queue.tags": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sqs_queue.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "sqs.sns-subscriptions": {
+  "module": "aws/modules/stage3-messaging",
+  "proof": {
+   "tf": "stage4/6 report 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (75 resources incl. SQS/SNS/EventBridge/Bedrock)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "aws_sns_topic_subscription.orders"
   ],
   "verify": [
    "tf",
