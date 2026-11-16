@@ -26,7 +26,7 @@ def("aws.bedrock.overview", ["/bedrock"], {
   title: "Amazon Bedrock: scope and limits",
   intro: "This console is backed by the Bedrock APIs of the simulator. Models are local open models, not the vendor models.",
   real: ["Model listing, Converse, InvokeModel and token counting go through the real Bedrock wire shapes.", "Standard ids (anthropic.claude-*, amazon.titan-*, amazon.nova-*, meta.llama3-*, cohere.*) are listed as aliases and answered by the local open model. Each model reports vyomiBackedBy and says so."],
-  limits: ["Text only: image and document inputs are rejected.", "Not built: Flows, Guardrails UI, Prompt Management, Evaluations, Settings, Model access. Their links open the 'not simulated' page.", "No real model quality is implied by an alias."],
+  limits: ["Text only: image and document inputs are rejected.", "Not in scope: Automated Reasoning and Data Automation (explained on their pages). Flows, Guardrails, Prompt Management, Evaluations, Settings, Model access and Prompt optimization are built; see each page for its limits.", "No real model quality is implied by an alias."],
   nano: ["Chat is answered by WebLLM and needs WebGPU; small models only."],
   mesh: ["Chat is answered by llama.cpp with Qwen2.5-3B Q4 (about 2 GB RAM). Tool selection with a 3B model is the open quality risk."],
 });
@@ -142,6 +142,55 @@ def("aws.bedrock.agentcore", ["/bedrock/agentcore", "/bedrock/agentcore/gateways
   limits: ["Runtimes do not host real containers or Strands/LangGraph frameworks: the agent is the Vyomi JSON spec over the local model, or your handler in a local process. Docker backend is not verified.", "Dependencies are not installed per runtime; the host Python must already have them.", "JWT claims are decoded, not signature-verified, by the runtime. Memory extraction is inline and conversational only; memory is in-process and persists only with account state.", "Evaluators need a reachable model for judge-style scoring and otherwise fall back to the deterministic metric (the explanation says so). Batch and online evaluation configs and code-based evaluators are not implemented.", "InvokeAgentRuntimeCommand is unsupported. Streaming is buffered when the transport does not stream."],
   nano: ["Memory, gateway and runtime spec run in pure Python. Runtime is a subset: handler functions only, same thread, no per-session isolation, and boto3 is not available. Cedar enforcement needs cedarpy, which is not in the browser: an ENFORCE engine fails closed and denies everything."],
   mesh: ["Cedar is enforced with cedarpy. Process isolation only, not microVMs."],
+});
+
+def("aws.bedrock.guardrails", ["/bedrock/guardrails", "/bedrock/guardrails/:id"], {
+  title: "Guardrails: scope and limits",
+  intro: "CreateGuardrail, versions and ApplyGuardrail over core/bedrock_guardrails_core.py; the Test panel calls ApplyGuardrail on the chosen version.",
+  real: ["Content filters, denied topics, word filters (custom + profanity), PII and regex filters (block or mask), and contextual grounding/relevance scores are enforced on Converse, InvokeModel, streaming and ApplyGuardrail."],
+  limits: ["Matching uses a lexicon, regex and local-model scoring, not the managed classifiers; strengths are ordinal, not calibrated. Image content, Automated Reasoning and cross-region configs are rejected."],
+});
+def("aws.bedrock.prompt-management", ["/bedrock/prompt-management", "/bedrock/prompt-management/:id"], {
+  title: "Prompt management: scope and limits",
+  intro: "CreatePrompt, UpdatePrompt, CreatePromptVersion, GetPrompt and ListPrompts with a test run through Converse.",
+  real: ["Prompts keep a working draft and numbered immutable versions; {{variables}} are detected; Flow Prompt nodes can reference a prompt ARN."],
+  limits: ["TEXT variants only (no chat variants, tool configuration or A/B comparison view). Customer-managed encryption keys are not applied."],
+});
+def("aws.bedrock.flows", ["/bedrock/flows", "/bedrock/flows/:id"], {
+  title: "Flows: scope and limits",
+  intro: "CreateFlow, PrepareFlow, versions, aliases and InvokeFlow, executed by a small in-process runner.",
+  real: ["Input, Prompt (inline or a managed prompt), Condition, Collector and Output nodes with Data and Conditional connections; the Test panel uses the TSTALIASID test alias on the prepared draft."],
+  limits: ["LambdaFunction, KnowledgeBase, Agent, Lex, Storage, Retrieval, Iterator and loop nodes are rejected at create/update time. There is no drag-and-drop canvas: nodes are edited as JSON. Flow executions are not traced."],
+});
+def("aws.bedrock.evaluations", ["/bedrock/evaluations", "/bedrock/evaluations/:id"], {
+  title: "Model evaluations: scope and limits",
+  intro: "CreateEvaluationJob for automated model evaluation with a custom prompt dataset, scored against the local model.",
+  real: ["Jobs read a JSONL dataset from S3, answer each prompt with the selected model and write per-record scores plus report.json to the output location."],
+  limits: ["Metrics are token F1 (Accuracy), answer stability under a perturbed prompt (Robustness) and a guardrail-lexicon rate (Toxicity), not the managed scorers. At most 25 records per dataset. Human, RAG and LLM-as-a-judge jobs are rejected."],
+});
+def("aws.bedrock.model-access", ["/bedrock/model-access"], {
+  title: "Model access: scope and limits",
+  intro: "GetFoundationModelAvailability for every listed model.",
+  limits: ["Every served model is AVAILABLE and AUTHORIZED: there is no agreement or entitlement request workflow, because the models are local open models."],
+});
+def("aws.bedrock.settings", ["/bedrock/settings"], {
+  title: "Settings: scope and limits",
+  intro: "Put/Get/DeleteModelInvocationLoggingConfiguration.",
+  real: ["Each successful InvokeModel and Converse delivers a record to S3 (gzip JSON, AWSLogs layout) and/or a CloudWatch Logs group."],
+  limits: ["Image, video and embedding delivery flags are stored but those payloads are not produced. Large-data S3 overflow is not used."],
+});
+def("aws.bedrock.prompt-optimization", ["/bedrock/prompt-optimization"], {
+  title: "Prompt optimization: scope and limits",
+  intro: "OptimizePrompt, answered by a meta-prompt on the local model.",
+  limits: ["Not the managed optimizer: quality is that of the local model. Dataset-driven optimization jobs are not simulated."],
+});
+def("aws.bedrock.automated-reasoning", ["/bedrock/automated-reasoning"], {
+  title: "Automated Reasoning: not in scope",
+  intro: "Needs an SMT-solver pipeline that formalises natural-language policies. Use Guardrails content, topic and grounding checks instead.",
+});
+def("aws.bedrock.data-automation", ["/bedrock/data-automation"], {
+  title: "Data Automation: not in scope",
+  intro: "Multimodal extraction needs managed document, image, audio and video models; the local model is text only.",
 });
 
 /* ---------------------------------------------------------------- GCP Agent Platform */

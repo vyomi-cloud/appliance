@@ -2078,11 +2078,19 @@ class AwsWireRouter:
             from core import bedrock_agents_core, bedrock_ctl_core
             from core import bedrock_guardrails_core
             bedrock_guardrails_core.bind(self.s3)   # guardrail state lives in the persisted account bag
+            from core import bedrock_build_core
+            bedrock_build_core.bind(self.s3, self.logs)
+            if bedrock_build_core.handles(path.split("?", 1)[0]):   # Build/Assess/Configure: prompts, flows, evaluations, invocation logging (lane uiaws)
+                return bedrock_build_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
             if bedrock_ctl_core.handles(path.split("?", 1)[0]):   # Infer + Tune control plane (profiles, batch, provisioned, customization, routers, marketplace)
                 return bedrock_ctl_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, bytes(body))
             if bedrock_agents_core.handles(path.split("?", 1)[0]):   # Bedrock Agents / Knowledge Bases / agent-runtime share signing name `bedrock`
                 return bedrock_agents_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), self.lam)
-            return ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+            _r = ai_models_core.bedrock_dispatch(method, path, query or {}, lheaders, bytes(body))
+            _mi = re.match(r"^/model/(.+?)/(invoke|converse)$", path.split("?", 1)[0])
+            if _mi and _r.get("status") == 200:   # model-invocation logging delivery (S3 / CloudWatch Logs) when configured
+                bedrock_build_core.log_invocation(_mi.group(2), __import__("urllib.parse", fromlist=["unquote"]).unquote(_mi.group(1)), bytes(body), _r.get("body") or b"")
+            return _r
 
         if svc == "opensearch":
             from core import opensearch_core as _osc
