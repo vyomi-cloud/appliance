@@ -1,9 +1,19 @@
 {
- "at": "2026-11-16T18:12:03+00:00",
+ "at": "2026-11-16T19:12:10+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:bfe7c2f2ac18",
+   "title": "AgentCore runtime instances are now available in six more AWS Regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-aws-regions/",
+   "detail": "Amazon Bedrock AgentCore runtime instances are now available in six additional AWS Regions: US West (N. California), Canada (Central), Europe (London), Europe (Paris), Europe (Stockholm), and Asia Pacific (Seoul). Runtime instances run your agents on Amazon EC2 instances while AgentCore handles provisioning, patching, scaling, and lifecycle management. By expanding to these AWS Regions, more teams can use runtime instance capabilities such as GPU-accelerated, memory-optimized, or compute-optimized instance types, and long-running agent sessions of up to 14 days. You can run your agents closer ",
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/software.amazon.awssdk:s3: The read operation timed out",
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
+  "maven/software.amazon.awssdk:sqs: The read operation timed out"
  ]
 }
