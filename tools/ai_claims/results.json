@@ -1,205 +1,211 @@
 {
- "commit": "8d4c642fd",
+ "commit": "0fecc2c36",
  "python": "/private/tmp/ai-probe-venv13/bin/python",
- "ran_at": "2026-11-16T20:42:33+0530",
+ "ran_at": "2026-11-16T23:00:02+0530",
  "results": {
   "tests/cli/azure-netenforce-cli-smoke.sh": {
    "rc": 1,
-   "seconds": 14.3,
+   "seconds": 8.2,
    "status": "fail",
    "tail": "} | passed=4 failed=4"
   },
   "tests/conformance/test_agentcore_gateway_targets.py": {
    "rc": 0,
-   "seconds": 11.0,
+   "seconds": 7.9,
    "status": "pass",
    "tail": "  ok  A2A runtime: bad method -> -32601 | 38 passed, 0 failed"
   },
   "tests/conformance/test_agentcore_limits.py": {
    "rc": 0,
-   "seconds": 8.9,
+   "seconds": 5.9,
    "status": "pass",
    "tail": "  ok  non-A2A runtime has no agent card -> 404 | 34 passed, 0 failed"
   },
   "tests/conformance/test_ai_agent_lanes.py": {
-   "rc": 1,
-   "seconds": 8.5,
-   "status": "fail",
-   "tail": "          ~^^^^^^^^^^ | KeyError: '_items'"
+   "rc": 0,
+   "seconds": 4.7,
+   "status": "pass",
+   "tail": "/private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/6a85ca48-505a-4ca3-8031-1be6b68529c2/scratchpad/appliance-integration/tests/conformance/test_ai_agent_lanes.py:372: DeprecationWarning: The Assistants API is deprecated in favor of the Responses API |"
   },
   "tests/conformance/test_ai_agent_runtimes.py": {
    "rc": 0,
-   "seconds": 14.8,
+   "seconds": 6.0,
    "status": "pass",
    "tail": "  ok  DeleteAgentRuntime removes it | 25 passed, 0 failed"
   },
   "tests/conformance/test_ai_sdk_tools.py": {
    "rc": 0,
-   "seconds": 4.7,
+   "seconds": 2.0,
    "status": "pass",
    "tail": "  ok  UNIFIED: account endpoint streams from the real model | 19 passed, 0 failed"
   },
   "tests/conformance/test_azure_arm_core.py": {
    "rc": 0,
-   "seconds": 2.0,
+   "seconds": 0.3,
    "status": "pass",
    "tail": "  ok  reapply really records a timestamp | RESULT: PASS \u2014 Azure ARM core conforms (native ARM wire + LRO + catalog CRUD) on this substrate."
   },
   "tests/conformance/test_azure_cognitiveservices_core.py": {
    "rc": 0,
-   "seconds": 0.7,
+   "seconds": 0.1,
    "status": "pass",
    "tail": "[PASS] ARM dispatcher delegates to the engine | 28 passed, 0 failed"
   },
   "tests/conformance/test_azure_kudu_diagnose.py": {
    "rc": 0,
-   "seconds": 0.9,
+   "seconds": 0.1,
    "status": "pass",
    "tail": "  ok  unknown web event type rejected | ALL OK"
   },
   "tests/conformance/test_azure_netcfg_core.py": {
    "rc": 0,
-   "seconds": 0.8,
+   "seconds": 0.1,
    "status": "pass",
    "tail": "  ok  workload-profile env fits /27 | PASS test_azure_netcfg_core"
   },
   "tests/conformance/test_azure_netenforce.py": {
    "rc": 0,
-   "seconds": 6.2,
+   "seconds": 0.2,
    "status": "pass",
    "tail": "  ok  no Origin: no CORS headers | netenforce ok"
   },
   "tests/conformance/test_azure_netenforce_sdk.py": {
    "rc": 1,
-   "seconds": 0.2,
+   "seconds": 0.1,
    "status": "fail",
    "tail": "    from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient | ModuleNotFoundError: No module named 'azure.mgmt'"
   },
   "tests/conformance/test_azure_rbac_core.py": {
    "rc": 0,
-   "seconds": 0.1,
+   "seconds": 0.0,
    "status": "pass",
    "tail": "  ok  role assignments are listed | Azure RBAC checkAccess conformance: ALL GREEN"
   },
   "tests/conformance/test_azure_search_core.py": {
    "rc": 0,
-   "seconds": 0.9,
+   "seconds": 0.1,
    "status": "pass",
    "tail": "  ok  index in use by indexer | PASS test_azure_search_core"
   },
   "tests/conformance/test_azure_search_limvector.py": {
    "rc": 0,
-   "seconds": 6.8,
+   "seconds": 0.3,
    "status": "pass",
    "tail": "ok   bad textSplitMode rejected  | FAILS 0"
   },
   "tests/conformance/test_azure_search_vector_core.py": {
    "rc": 0,
-   "seconds": 3.2,
+   "seconds": 0.1,
    "status": "pass",
    "tail": "  ok  unsupported skill fails the indexer naming the skill | OK"
   },
   "tests/conformance/test_azure_tasks_core.py": {
    "rc": 0,
-   "seconds": 2.9,
+   "seconds": 0.1,
    "status": "pass",
    "tail": "  ok  delete task | ALL OK"
   },
   "tests/conformance/test_bedrock_agents_capabilities.py": {
    "rc": 0,
-   "seconds": 6.3,
+   "seconds": 0.7,
    "status": "pass",
    "tail": "  ok  agent keeps its remaining groups | 33 passed, 0 failed"
   },
   "tests/conformance/test_bedrock_agents_core.py": {
    "rc": 0,
-   "seconds": 7.2,
+   "seconds": 2.5,
    "status": "pass",
    "tail": "OK | EOF marker not found"
   },
   "tests/conformance/test_bedrock_agents_limits.py": {
-   "rc": 1,
-   "seconds": 8.1,
-   "status": "fail",
-   "tail": "          ~^^^^^^^^^^ | KeyError: '_items'"
+   "rc": 0,
+   "seconds": 1.9,
+   "status": "pass",
+   "tail": "/private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/6a85ca48-505a-4ca3-8031-1be6b68529c2/scratchpad/appliance-integration/tests/conformance/test_bedrock_agents_limits.py:473: DeprecationWarning: deprecated |   cl.beta.assistants.create(model=\"chat\", to"
   },
   "tests/conformance/test_bedrock_build.py": {
    "rc": 0,
-   "seconds": 22.2,
+   "seconds": 12.8,
    "status": "pass",
    "tail": "[PASS] delete guardrail | 30 passed, 0 failed"
   },
   "tests/conformance/test_bedrock_evals.py": {
    "rc": 0,
-   "seconds": 15.3,
+   "seconds": 7.8,
    "status": "pass",
    "tail": "[PASS] list filter by application type | 29 passed, 0 failed"
   },
   "tests/conformance/test_bedrock_flows.py": {
    "rc": 0,
-   "seconds": 15.9,
+   "seconds": 9.6,
    "status": "pass",
-   "tail": "[PASS] published version + alias execute the same graph | 26 passed, 0 failed"
+   "tail": "[PASS] InlineCode without code -> ValidationException | 34 passed, 0 failed"
   },
   "tests/conformance/test_bedrock_guardrails_caps.py": {
    "rc": 0,
-   "seconds": 4.8,
+   "seconds": 0.8,
    "status": "pass",
    "tail": "  ok  reloaded guardrail still intervenes at runtime | 29 passed, 0 failed"
   },
   "tests/conformance/test_bedrock_kb_runtime_caps.py": {
    "rc": 0,
-   "seconds": 7.7,
+   "seconds": 2.4,
    "status": "pass",
    "tail": "invalid pdf header: b'%PDF ' | EOF marker not found"
   },
   "tests/conformance/test_bedrock_kb_search_limvector.py": {
    "rc": 0,
-   "seconds": 4.9,
+   "seconds": 0.7,
    "status": "pass",
    "tail": "  ok  implicitFilterConfiguration needs attributes | 45 passed, 0 failed"
   },
   "tests/conformance/test_bedrock_limmodels.py": {
    "rc": 0,
-   "seconds": 5.6,
+   "seconds": 1.0,
    "status": "pass",
-   "tail": "  ok  role_start runs llama-server with the reasoning GGUF and --reasoning-format deepseek | 57 passed, 0 failed"
+   "tail": "  ok  role_start runs llama-server with the reasoning GGUF and --reasoning-format deepseek | 59 passed, 0 failed"
   },
   "tests/conformance/test_gcp_agentgov_core.py": {
    "rc": 0,
-   "seconds": 8.0,
+   "seconds": 3.0,
    "status": "pass",
    "tail": "  ok  delete mcp server + JWT gateway | 46 passed, 0 failed"
   },
   "tests/conformance/test_gcp_agentplatform_core.py": {
    "rc": 0,
-   "seconds": 6.3,
+   "seconds": 2.5,
    "status": "pass",
    "tail": "ok   delcorp  | FAILS 0"
   },
   "tests/conformance/test_gcp_rag_limvector.py": {
    "rc": 0,
-   "seconds": 6.3,
+   "seconds": 0.4,
    "status": "pass",
    "tail": "ok   no local model -> summarySkippedReasons, search still succeeds  | FAILS 0"
   },
   "tests/conformance/test_gcp_vertex_core.py": {
    "rc": 0,
-   "seconds": 6.7,
+   "seconds": 0.3,
    "status": "pass",
    "tail": "  ok  publisher countTokens still routes to ai_models_core | 53 passed, 0 failed"
   },
   "tests/conformance/test_llm_async_bridge.py": {
    "rc": 0,
-   "seconds": 4.6,
+   "seconds": 0.4,
    "status": "pass",
    "tail": "  ok  Converse toolUse over the async bridge (retry replayed through arun) | OK"
   },
   "tests/conformance/test_local_llm_seam.py": {
    "rc": 0,
-   "seconds": 4.0,
+   "seconds": 0.4,
    "status": "pass",
    "tail": "  ok  start is idempotent when running | 43 passed, 0 failed"
+  },
+  "tests/conformance/test_model_import.py": {
+   "rc": 0,
+   "seconds": 12.6,
+   "status": "pass",
+   "tail": "[PASS] bedrock: DeleteImportedModel -> gone, and invoking it is a ValidationException (never the default model) | 58 passed, 0 failed"
   }
  }
 }

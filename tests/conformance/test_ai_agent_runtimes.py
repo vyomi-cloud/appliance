@@ -277,7 +277,7 @@ def aws_lane(url, fake):
     inv = dp.invoke_agent_runtime(agentRuntimeArn=arn, runtimeSessionId="u" * 33, accept="text/event-stream", payload=json.dumps({"prompt": "calc please"}).encode())
     raw = inv["response"].read().decode()
     evs = [json.loads(l[6:]) for l in raw.split("\n\n") if l.startswith("data: ")]
-    check("Accept: text/event-stream -> SSE tool_use / tool_result / final events (42)", [e["event"] for e in evs] == ["tool_use", "tool_result", "message", "final"] and "42" in raw
+    check("Accept: text/event-stream -> SSE tool_use / tool_result / final events (42)", [e["event"] for e in evs][:2] == ["tool_use", "tool_result"] and evs[-1]["event"] == "final" and any(e["event"] == "token" for e in evs) and set(e["event"] for e in evs) <= {"tool_use", "tool_result", "token", "message", "final"} and "42" in raw
           and inv["contentType"].startswith("text/event-stream"), raw[:300])
     hook = lambda params, **kw: params["headers"].__setitem__("X-Amzn-Bedrock-AgentCore-Runtime-Session-Id", "short")  # noqa: E731 - bypass client-side length check
     dp.meta.events.register("before-call.bedrock-agentcore.InvokeAgentRuntime", hook)
