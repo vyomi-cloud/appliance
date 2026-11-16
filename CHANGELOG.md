@@ -4,6 +4,25 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.3] — 2026-11-17
+
+**AI stack (Beta).** Agent-app development against Bedrock, Vertex AI and Azure AI Foundry / OpenAI with the unmodified SDKs, in Nano and on Mesh. Every feature is Dev Simplified (a local small-model stand-in, not the managed service).
+
+### Added
+
+- **[Nano + Mesh]** Bedrock: Converse / InvokeModel, Agents, Knowledge Bases, Guardrails, AgentCore gateway and runtime, Flows, evaluations, Data Automation, custom model import.
+- **[Nano + Mesh]** Vertex AI: Gemini API, Model Garden, Agent Engine, RAG Engine, Model Armor. Azure: OpenAI chat, Responses and Assistants, AI Search queries, Foundry evaluations and flows.
+- **[Mesh]** Qwen3-4B-Instruct-2507 (Apache-2.0) is the default chat model; vision and reasoning packs; `llm-chat` LoRA reload hook.
+- **[all]** Third-party notices, SBOM, per-model licence chips and a Notices page in each console.
+
+### Fixes
+
+- Enterprise facilities reference app: router prompt fixed so policy and procedure questions reach the knowledge agent (13/13 end to end, Mac).
+
+### Known limits
+
+- Real-model numbers are from a Mac, not a Codespace; Mesh needs 4 vCPU / 16 GB.
+
 ## [4.0.2] — 2026-11-17
 
 Patch release. **3 simulator fixes** found by stage 3 (messaging + events) of the vyomi-endurance Terraform estate; the AWS estate (68 resources: VPC/IAM/KMS/Secrets, EC2/EBS/S3/RDS/DynamoDB/ECR, SQS/SNS/EventBridge) now passes apply, no-diff re-plan, destroy, rebuild and destroy on the real appliance.
