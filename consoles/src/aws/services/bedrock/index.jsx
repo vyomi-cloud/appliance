@@ -12,6 +12,11 @@ import { Agents, AgentDetail } from "./Agents.jsx";
 import { AgentCore, GatewayDetail } from "./AgentCore.jsx";
 import Studio from "./studio/Studio.jsx";
 import { INFER_TUNE_ROUTES } from "./inferTune/routes.jsx";
+import { Guardrails, GuardrailDetail } from "./buildpages/Guardrails.jsx";
+import { Prompts, PromptDetail } from "./buildpages/Prompts.jsx";
+import { Flows, FlowDetail } from "./buildpages/Flows.jsx";
+import { Evaluations, EvaluationDetail, ModelAccess, Settings, PromptOptimization } from "./buildpages/Assess.jsx";
+import { AutomatedReasoning, DataAutomation } from "./buildpages/OutOfScope.jsx";
 import ScopeSection from "../../../common/ScopeSection.jsx";
 import { scopeFor } from "../../../common/scopeHelp.js";
 
@@ -40,5 +45,19 @@ export default {
     { pattern: "/bedrock/agents/:id", component: AgentDetail, crumbs: (p) => [...top, c("Agents", "#/bedrock/agents"), c(p.id, `#/bedrock/agents/${p.id}`)] },
     { pattern: "/bedrock/agentcore", component: AgentCore, crumbs: () => [...top, c("AgentCore", "#/bedrock/agentcore")] },
     { pattern: "/bedrock/agentcore/gateways/:id", component: GatewayDetail, crumbs: (p) => [...top, c("AgentCore", "#/bedrock/agentcore"), c(p.id, `#/bedrock/agentcore/gateways/${p.id}`)] },
+    // lane uiaws: Build / Assess / Configure pages on core/bedrock_build_core.py + core/bedrock_guardrails_core.py
+    { pattern: "/bedrock/guardrails", component: Guardrails, crumbs: () => [...top, c("Guardrails", "#/bedrock/guardrails")] },
+    { pattern: "/bedrock/guardrails/:id", component: GuardrailDetail, crumbs: (p) => [...top, c("Guardrails", "#/bedrock/guardrails"), c(p.id, `#/bedrock/guardrails/${p.id}`)] },
+    { pattern: "/bedrock/prompt-management", component: Prompts, crumbs: () => [...top, c("Prompt management", "#/bedrock/prompt-management")] },
+    { pattern: "/bedrock/prompt-management/:id", component: PromptDetail, crumbs: (p) => [...top, c("Prompt management", "#/bedrock/prompt-management"), c(p.id, `#/bedrock/prompt-management/${p.id}`)] },
+    { pattern: "/bedrock/flows", component: Flows, crumbs: () => [...top, c("Flows", "#/bedrock/flows")] },
+    { pattern: "/bedrock/flows/:id", component: FlowDetail, crumbs: (p) => [...top, c("Flows", "#/bedrock/flows"), c(p.id, `#/bedrock/flows/${p.id}`)] },
+    { pattern: "/bedrock/evaluations", component: Evaluations, crumbs: () => [...top, c("Model evaluations", "#/bedrock/evaluations")] },
+    { pattern: "/bedrock/evaluations/:id", component: EvaluationDetail, crumbs: (p) => [...top, c("Model evaluations", "#/bedrock/evaluations"), c(p.id, `#/bedrock/evaluations/${p.id}`)] },
+    { pattern: "/bedrock/model-access", component: ModelAccess, crumbs: () => [...top, c("Model access", "#/bedrock/model-access")] },
+    { pattern: "/bedrock/settings", component: Settings, crumbs: () => [...top, c("Settings", "#/bedrock/settings")] },
+    { pattern: "/bedrock/prompt-optimization", component: PromptOptimization, crumbs: () => [...top, c("Advanced prompt optimization", "#/bedrock/prompt-optimization")] },
+    { pattern: "/bedrock/automated-reasoning", component: AutomatedReasoning, crumbs: () => [...top, c("Automated Reasoning", "#/bedrock/automated-reasoning")] },
+    { pattern: "/bedrock/data-automation", component: DataAutomation, crumbs: () => [...top, c("Data Automation", "#/bedrock/data-automation")] },
   ].map(withHelp),
 };
