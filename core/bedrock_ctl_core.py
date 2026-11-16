@@ -111,7 +111,9 @@ def _sort(items, query, field):
 # ───────────── inference profiles ─────────────
 def _sys_profiles():
     out = []
-    for a in (am.BEDROCK_ALIASES if am.list_aliases() else []):
+    # system-defined profiles front the models this deployment LISTS: the served catalogue models (and any running role model), plus the
+    # standard-id aliases only when VYOMI_LIST_BEDROCK_ALIASES=1 (same set GET /foundation-models returns)
+    for a in list(am.BEDROCK_MODELS) + list(am._special_bm()) + list(am.BEDROCK_ALIASES if am.list_aliases() else []):
         if "EMBEDDING" in a[4] or a[0].startswith(_NO_PROFILE):
             continue
         for pre, regs in _REGIONS.items():

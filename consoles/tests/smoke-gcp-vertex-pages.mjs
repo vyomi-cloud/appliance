@@ -42,12 +42,13 @@ await shot("01-dashboard");
 // Model Garden -> Deploy
 await go("#/vertex-ai/model-garden", "Model Garden");
 await page.getByTestId("garden-card").first().waitFor({ timeout: 15000 });
-check("Model Garden shows publisher models", (await page.getByTestId("garden-card").count()) >= 10);
+// the Garden lists only the models this substrate serves (model-only-served): the five in-browser WebLLM/embedding models on Nano, ten on Mesh
+check("Model Garden shows the served publisher models (catalogue only, no Google/partner stubs)", (await page.getByTestId("garden-card").count()) >= 5 && (await page.getByTestId("garden-card").filter({ hasText: "Qwen2.5 0.5B" }).count()) > 0);
 await shot("02-model-garden");
-const gemma = page.getByTestId("garden-card").filter({ hasText: "Gemma 2 9B" });
+const gemma = page.getByTestId("garden-card").filter({ hasText: "Qwen2.5 0.5B" });
 check("Model Garden drill-in nav (Tuning, Model Registry, Provisioned Throughput)", /Tuning[\s\S]*Model Registry[\s\S]*Provisioned Throughput/.test(await page.locator("nav").first().innerText()));
 await gemma.click();
-await page.getByRole("heading", { name: "Gemma 2 9B", level: 1 }).first().waitFor({ timeout: 15000 });
+await page.getByRole("heading", { name: "Qwen2.5 0.5B", level: 1 }).first().waitFor({ timeout: 15000 });
 check("model detail has Latest/Overview/Documentation tabs", (await page.getByRole("tab").allInnerTexts()).join() === "Latest,Overview,Documentation");
 // (the ten-model catalogue offers generate/embed only, no deploy action; deploy-from-garden is not exercised)
 await shot("02b-model-detail");
