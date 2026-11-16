@@ -212,7 +212,7 @@ export function Policies() {
   return (
     <Page title="Policies" group="Govern" groupHref="#/vertex-ai/agent-registry">
       <Stack spacing={1.5}>
-        <Alert severity="info" data-testid="gov-note">A policy is a Cedar policy that decides which agents and users may call which gateway tools, evaluated by the real Cedar engine on every call. {EXT} Cedar runs on Mesh and the offline appliance; on Nano an ENFORCE gateway denies every call (fail closed).</Alert>
+        <Alert severity="info" data-testid="gov-note">A policy is a Cedar policy that decides which agents and users may call which gateway tools, evaluated by the real Cedar engine on every call. {EXT} Cedar runs as cedarpy on Mesh and the offline appliance and as the same Cedar core compiled to WebAssembly on Nano; if the evaluator is not loaded an ENFORCE gateway denies every call (fail closed).</Alert>
         <ResourceList coll="agentPolicies" title="Policies" singular="policy" regionScoped hideId cap="gcp.vertex-ai.agent-policies"
           fields={[{ key: "id", label: "Policy ID", helper: "Lowercase letters, digits, hyphens" }, { key: "displayName", label: "Display name" }, { key: "description", label: "Description" },
             { key: "mode", label: "Enforcement", options: ["ENFORCE", "LOG_ONLY"], default: "ENFORCE" }, { key: "cedar", label: "Cedar policy", multiline: true, default: SAMPLE, helper: "Action is AgentCore::Action::\"<server>___<tool>\"; claims are principal tags; arguments are context.input" }]}

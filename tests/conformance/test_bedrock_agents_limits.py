@@ -47,6 +47,8 @@ def script(body):
         if rf:
             return {"content": json.dumps({"tool_calls": [{"name": name, "arguments": args}]})}
         return {"tool_calls": [{"name": name, "arguments": args}]}
+    if u.startswith("KBRG-TEMPLATE"):
+        return {"content": "KBRG-GENERATED: the lobby wifi password is Aurora-2026"}
     if u.startswith("Summarise this conversation"):
         return {"content": "SUMMARY: the user asked about the pump and is waiting for B2."}
     if "<category>" in u or "CLASSIFY-INPUT" in u:
@@ -293,6 +295,53 @@ def handler(e, c):
     check("ORCHESTRATION parser Lambda decided FINISH (rationale from the Lambda)", any(o.get("rationale", {}).get("text") == "custom parser" for o in orr), orr)
     evs = invoke(aid, al, "s-pb", "do something evil", enableTrace=True)
     check("PRE_PROCESSING parser marks the input invalid -> refused without orchestration", chunks(evs) == "Sorry, I am unable to assist you with this request.", chunks(evs))
+
+    # ───────────────────────── KNOWLEDGE_BASE_RESPONSE_GENERATION prompt applied
+    print("== KNOWLEDGE_BASE_RESPONSE_GENERATION")
+    s3.create_bucket(Bucket="kbrg")
+    s3.put_object(Bucket="kbrg", Key="d/wifi.txt", Body=b"The guest wifi password for the lobby is Aurora-2026. Contact facilities to rotate it.")
+    emb = "arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0"
+    kb = ag.create_knowledge_base(name="kbrg-kb", roleArn=ROLE, knowledgeBaseConfiguration={"type": "VECTOR", "vectorKnowledgeBaseConfiguration": {"embeddingModelArn": emb}},
+                                  storageConfiguration={"type": "OPENSEARCH_SERVERLESS"})["knowledgeBase"]["knowledgeBaseId"]
+    dsid = ag.create_data_source(knowledgeBaseId=kb, name="d", dataSourceConfiguration={"type": "S3", "s3Configuration": {"bucketArn": "arn:aws:s3:::kbrg", "inclusionPrefixes": ["d/"]}})["dataSource"]["dataSourceId"]
+    ag.start_ingestion_job(knowledgeBaseId=kb, dataSourceId=dsid)
+    kbp_arn = mk("kbparser-fn", """def handler(e, c):
+    return {'messageVersion': '1.0', 'promptType': e['promptType'], 'knowledgeBaseResponseGenerationParsedResponse': {'generatedResponse': {'generatedResponseParts': [{'text': 'PARSED<' + e['invokeModelRawResponse'] + '>'}]}}}
+""")
+
+    def kb_agent(name, cfgs, **extra):
+        a = new_agent(name, "You answer facilities questions from the knowledge base.", promptOverrideConfiguration={"promptConfigurations": cfgs, **extra})
+        ag.associate_agent_knowledge_base(agentId=a, agentVersion="DRAFT", knowledgeBaseId=kb, description="facilities docs", knowledgeBaseState="ENABLED")
+        return a, prep(a)
+    n0 = len(SEEN["systems"])
+    a1, al1 = kb_agent("kbrg-agent", [{"promptType": "KNOWLEDGE_BASE_RESPONSE_GENERATION", "promptCreationMode": "OVERRIDDEN", "promptState": "ENABLED",
+                                       "basePromptTemplate": "KBRG-TEMPLATE q=$query$ results=$search_results$", "parserMode": "DEFAULT",
+                                       "inferenceConfiguration": {"temperature": 0.11, "maximumLength": 120}}])
+    evs = invoke(a1, al1, "s-kbrg", "what is the lobby wifi password?", enableTrace=True)
+    ot = [t["trace"]["orchestrationTrace"] for t in traces(evs) if "orchestrationTrace" in t["trace"]]
+    mi = [o["modelInvocationInput"] for o in ot if o.get("modelInvocationInput", {}).get("type") == "KNOWLEDGE_BASE_RESPONSE_GENERATION"]
+    mo = [o["modelInvocationOutput"] for o in ot if "modelInvocationOutput" in o and mi and o["modelInvocationOutput"].get("traceId") == mi[0]["traceId"]]
+    check("the agent's own KB response-generation template is rendered ($query$, $search_results$) and run on the model", mi and mi[0]["text"].startswith("KBRG-TEMPLATE q=what is the lobby wifi")
+          and "<search_result>" in mi[0]["text"] and "Aurora-2026" in mi[0]["text"], mi)
+    check("  modelInvocationInput carries the prompt's inferenceConfiguration; the output trace has the raw generated text + usage",
+          mi[0]["inferenceConfiguration"]["temperature"] == 0.11 and mo and mo[0]["rawResponse"]["content"].startswith("KBRG-GENERATED") and mo[0]["metadata"]["usage"]["outputTokens"] > 0, (mi, mo))
+    check("  the generated answer (not the raw passages) is what orchestration receives", any("Answer generated from the knowledge base" in x and "KBRG-GENERATED" in x for x in SEEN["systems"][n0:]), SEEN["systems"][n0:][-1:])
+    check("  the model call used the prompt's inference temperature", 0.11 in SEEN["temps"][-4:], SEEN["temps"][-4:])
+    a2, al2 = kb_agent("kbrg-parser", [{"promptType": "KNOWLEDGE_BASE_RESPONSE_GENERATION", "promptCreationMode": "OVERRIDDEN", "promptState": "ENABLED",
+                                        "basePromptTemplate": "KBRG-TEMPLATE $query$", "parserMode": "OVERRIDDEN"}], overrideLambda=kbp_arn)
+    n1 = len(SEEN["systems"])
+    evs = invoke(a2, al2, "s-kbrg2", "what is the lobby wifi password?", enableTrace=True)
+    check("the parser Lambda (KB_RESPONSE_GENERATION) rewrites the generated text (generatedResponseParts)", any("PARSED<KBRG-GENERATED" in x for x in SEEN["systems"][n1:]), SEEN["systems"][n1:][-1:])
+    a3, al3 = kb_agent("kbrg-off", [{"promptType": "KNOWLEDGE_BASE_RESPONSE_GENERATION", "promptCreationMode": "OVERRIDDEN", "promptState": "DISABLED", "basePromptTemplate": "KBRG-TEMPLATE $query$", "parserMode": "DEFAULT"}])
+    n2 = len(SEEN["systems"])
+    evs = invoke(a3, al3, "s-kbrg3", "what is the lobby wifi password?", enableTrace=True)
+    check("promptState DISABLED: no extra model call; the retrieved passages go to orchestration verbatim", not any("KBRG-GENERATED" in x for x in SEEN["systems"][n2:]) and any("Aurora-2026" in x for x in SEEN["systems"][n2:]), SEEN["systems"][n2:][-1:])
+    a4 = new_agent("kbrg-default", "You answer facilities questions from the knowledge base.")
+    ag.associate_agent_knowledge_base(agentId=a4, agentVersion="DRAFT", knowledgeBaseId=kb, description="facilities docs", knowledgeBaseState="ENABLED")
+    al4 = prep(a4)
+    n3 = len(SEEN["systems"])
+    invoke(a4, al4, "s-kbrg4", "what is the lobby wifi password?")
+    check("no override configured: behaviour unchanged (passages in the system prompt, no generation step)", any("Aurora-2026" in x and "KBRG-GENERATED" not in x for x in SEEN["systems"][n3:]), SEEN["systems"][n3:][-1:])
 
     # ───────────────────────── idle-timeout session summary
     print("== session summary on idle timeout")

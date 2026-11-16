@@ -1143,7 +1143,7 @@ def _kb_response_generation(snap, lam, ctx, tr, fm, infer, infer_kw, query, resu
         return None
     tid = _tid()
     if c.get("promptState") == "DISABLED":
-        tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "parsedResponse": {"text": "Knowledge base response generation is disabled (promptState DISABLED): passages used verbatim."}}})
+        tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": "Knowledge base response generation is disabled (promptState DISABLED): passages used verbatim."}})
         return None
     sr = "<search_results>" + "".join(f"<search_result><content>{r['content']['text']}</content><source>{i + 1}</source></search_result>" for i, r in enumerate(results)) + "</search_results>"
     prompt = _render(c["basePromptTemplate"], {"query": query, "search_results": sr, "output_format_instructions": "", "question": query})
@@ -1158,7 +1158,7 @@ def _kb_response_generation(snap, lam, ctx, tr, fm, infer, infer_kw, query, resu
             text = "".join(pt.get("text", "") for pt in gr.get("generatedResponseParts") or []) or text
         elif isinstance(gr, str):
             text = gr
-    tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": raw}, "parsedResponse": {"text": text},
+    tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": raw},
                                                        "metadata": {"usage": {"inputTokens": rr["input_tokens"], "outputTokens": rr["output_tokens"]}}}})
     return text
 

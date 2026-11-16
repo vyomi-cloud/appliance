@@ -15,7 +15,7 @@ Honest limits: Google's Agent Gateway / Agent Registry / policy control planes a
 the console fields and the AgentCore engines) and every record says so (`vyomiExtension`). A GCP gateway is an AgentCore gateway: it also appears in the AWS
 console of the same account (names are prefixed `gcp-`). Model Armor: malicious-URI detection (Safe Browsing) and advanced SDP (Cloud DLP templates) are
 reported EXECUTION_SKIPPED; the content / prompt-attack detection is the keyword and embedding engine of Bedrock Guardrails, so it is toy-grade, not Google's models.
-Cedar policy decisions need cedarpy (Mesh/host); on Nano an ENFORCE gateway denies every call (fail closed), as on the AWS side.
+Cedar policy decisions use cedarpy (Mesh/host) or the same Cedar core as WebAssembly (Nano, core/cedar_wasm_shim); if the evaluator is not loaded an ENFORCE gateway fails closed.
 """
 from __future__ import annotations
 

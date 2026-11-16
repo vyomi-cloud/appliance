@@ -241,7 +241,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Vyomi's own resource over the AgentCore policy engine: a real Cedar policy (cedarpy) decides each gateway tool call (principal = JWT subject, action = <target>___<tool>, context.input = arguments); ENFORCE denies by default, LOG_ONLY allows and audits. Cedar needs cedarpy (Mesh/appliance); on Nano an ENFORCE gateway denies every call (fail closed). Google's org-level agent policies are not modelled."
+   "Vyomi's own resource over the AgentCore policy engine: a real Cedar policy (cedarpy) decides each gateway tool call (principal = JWT subject, action = <target>___<tool>, context.input = arguments); ENFORCE denies by default, LOG_ONLY allows and audits. Mesh/appliance decide with cedarpy; Nano with the same Cedar Rust core compiled to WebAssembly (cedar-wasm 4.14.0, vendored, parity-tested against cedarpy). If the evaluator fails to load, an ENFORCE gateway denies every call (fail closed). Google's org-level agent policies are not modelled."
   ],
   "tests": [
    "tests/conformance/test_gcp_agentgov_core.py"
