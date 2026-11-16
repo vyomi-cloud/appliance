@@ -668,7 +668,7 @@ builtins._embed_bridge_set = _embed_bridge_set
   try { import("./wllama-bridge.js").then((m) => m.installWllamaBridge(py)).catch((e) => console.warn("[nano] wllama bridge skipped:", e)); } catch (_) {}
   try { import("./db-bridge.js").then((m) => m.installDbBridge(py)).catch((e) => console.warn("[nano] db bridge skipped:", e)); } catch (_) {}
   window.__vyomiNanoReady = true;
-  try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
+  window.__vyNanoReady = true; try { dispatchEvent(new Event("vyomi-nano-ready")); } catch (_) {}
   banner("Nano: in-browser backend ready — this console runs with no server.");
   setTimeout(() => { const b = document.getElementById("nano-banner"); if (b) b.style.display = "none"; }, 4000);
 

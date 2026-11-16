@@ -2,7 +2,6 @@
  * Recommendations), Customize, a dismissible promo card, and cards with icon / title / ⋮ menu /
  * "→ Go to …" footer. Every value is live: project from the picker, product health and resource
  * counts from one real native call per product, API request rate from Vyomi's event log. */
-import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
 import { useMemo, useState } from "react";
 import {
   Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControlLabel, IconButton,
@@ -173,7 +172,6 @@ export default function Home() {
   const project = useProject();
   const [tab, setTab] = useState(0);
   const [hidden, setHidden] = useState(() => store.get("home.hidden", []));
-  const [promo, setPromo] = useState(() => !store.get("home.promoDismissed", false));
   const [customize, setCustomize] = useState(null);
   const probes = useProbes(project);
   const events = useEvents();
@@ -247,7 +245,6 @@ export default function Home() {
 
   return (
     <Box>
-      <NanoVideoBanner cloud="gcp" />
       <Stack direction="row" alignItems="flex-end" sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ flex: 1, borderBottom: 0, "&&": { mx: 0, px: 0 } }}>
           <Tab label="Dashboard" /><Tab label="Activity" /><Tab label="Recommendations" />
@@ -257,19 +254,6 @@ export default function Home() {
 
       {tab === 0 && (
         <>
-          {promo && (
-            <Paper variant="outlined" sx={{ borderRadius: 3, p: 3, mb: 2, position: "relative", bgcolor: "action.hover" }}>
-              <IconButton aria-label="Dismiss" onClick={() => { setPromo(false); store.set("home.promoDismissed", true); }} sx={{ position: "absolute", top: 8, right: 8 }}><CloseIcon /></IconButton>
-              <Typography variant="h2" sx={{ fontSize: 22, mb: 1 }}>Welcome to Vyomi Google Cloud</Typography>
-              <Typography variant="body2" sx={{ mb: 2, maxWidth: 820 }}>
-                Everything in this console runs against your local Vyomi simulator — the same native APIs gcloud, gsutil and the client libraries call. Products without a v4 page open in the classic Vyomi console.
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button variant="outlined" href="#/storage">Go to Cloud Storage</Button>
-                <Button variant="outlined" href="https://vyomi.cloud" target="_blank" rel="noopener">Learn more</Button>
-              </Stack>
-            </Paper>
-          )}
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" }, gap: 2, alignItems: "start" }}>
             {cols.map((col, i) => <Box key={i}>{col.filter(show).map((id) => <Box key={id}>{cards[id]}</Box>)}</Box>)}
           </Box>

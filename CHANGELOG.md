@@ -4,6 +4,16 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.2] — 2026-11-17
+
+Patch release. **3 simulator fixes** found by stage 3 (messaging + events) of the vyomi-endurance Terraform estate; the AWS estate (68 resources: VPC/IAM/KMS/Secrets, EC2/EBS/S3/RDS/DynamoDB/ECR, SQS/SNS/EventBridge) now passes apply, no-diff re-plan, destroy, rebuild and destroy on the real appliance.
+
+### Fixes — AWS
+
+- **[Nano + offline]** EventBridge: Describe/List responses carry timestamps as epoch numbers (Go/Java SDKs rejected ISO strings: DescribeEventBus, rules, archives, replays, API destinations)
+- **[Nano + offline]** EventBridge: a schedule-only rule no longer reports an `EventPattern` of `{}` (Terraform planned a diff on every run)
+- **[Nano + offline]** SQS: setting `RedrivePolicy` / `RedriveAllowPolicy` / `Policy` to an empty value removes the attribute (Terraform destroy hung on it)
+
 ## [3.0.47] — 2026-11-10
 
 Daily conformance release. **4 product fixes** (AWS 1, Azure 2, all clouds 1); 2 reach Nano and 4 reach the offline appliance; 3 test and harness improvements.

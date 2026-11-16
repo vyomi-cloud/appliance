@@ -792,10 +792,12 @@ def _delete_rule(store, body):
 def _describe_rule(store, body):
     bus = str(body.get("EventBusName", "default") or "default")
     rule = _require_rule(store, bus, str(body.get("Name", "")))
-    return EventsResponse(body={"Name": rule["name"], "Arn": rule["arn"], "EventBusName": rule["bus"],
-                                 "EventPattern": json.dumps(rule.get("pattern", {})),
-                                 "State": rule.get("state", "ENABLED"), "Description": rule.get("description", ""),
-                                 "ScheduleExpression": rule.get("schedule", "")})
+    out = {"Name": rule["name"], "Arn": rule["arn"], "EventBusName": rule["bus"],
+           "State": rule.get("state", "ENABLED"), "Description": rule.get("description", ""),
+           "ScheduleExpression": rule.get("schedule", "")}
+    if rule.get("pattern"):   # a schedule-only rule has NO EventPattern in real EventBridge; "{}" makes Terraform plan a diff (F35)
+        out["EventPattern"] = json.dumps(rule["pattern"])
+    return EventsResponse(body=out)
 
 
 def _list_rules(store, body):
@@ -803,7 +805,8 @@ def _list_rules(store, body):
     bus = str(body.get("EventBusName", "default") or "default")
     rules = [{"Name": r["name"], "Arn": r["arn"], "State": r.get("state", "ENABLED"),
               "EventBusName": r.get("bus", "default"), "Description": r.get("description", ""),
-              "EventPattern": json.dumps(r.get("pattern", {})), "ScheduleExpression": r.get("schedule", "")}
+              "ScheduleExpression": r.get("schedule", ""),
+              **({"EventPattern": json.dumps(r["pattern"])} if r.get("pattern") else {})}
              for r in _rules(store).values() if r.get("bus", "default") == bus and r["name"].startswith(prefix)]
     return EventsResponse(body={"Rules": rules})
 
@@ -1443,7 +1446,7 @@ _register_partner_ops()
 _NEEDS_LAMBDA = {"PutEvents", "StartReplay"}
 
 
-def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None,
+def _dispatch_raw(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None,
               kinesis_store=None, sfn_store=None, caller_account=None, lambda_store=None) -> EventsResponse:
     """Native EventBridge JSON router. `target` is the X-Amz-Target header,
     e.g. "AWSEvents.PutEvents". `lam_store` / `kinesis_store` / `sfn_store` (all optional)
@@ -1598,6 +1601,33 @@ def active_pipes_for_source(store, source_arn: str) -> list[dict]:
 _PIPE_START = re.compile(r"^/v1/pipes/([^/]+)/start$")
 _PIPE_STOP = re.compile(r"^/v1/pipes/([^/]+)/stop$")
 _PIPE_ITEM = re.compile(r"^/v1/pipes/([^/]+)$")
+
+
+_ISO_TS = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$")
+
+
+def _wire_times(o):
+    """EventBridge's JSON wire carries timestamps as epoch NUMBERS; the Go/Java SDKs reject an ISO string ("expected Timestamp to be
+    a JSON Number, got string") — fixes DescribeEventBus/ListRules/DescribeRule/Archives/Replays/ApiDestinations for Terraform (F34)."""
+    if isinstance(o, dict):
+        return {k: (_iso_to_epoch(v) if (k.endswith("Time") or k.endswith("Date")) and isinstance(v, str) and _ISO_TS.match(v) else _wire_times(v))
+                for k, v in o.items()}
+    if isinstance(o, list):
+        return [_wire_times(i) for i in o]
+    return o
+
+
+def _iso_to_epoch(v: str) -> float:
+    return datetime.strptime(v.replace("Z", "+0000") if "." in v else v.replace("Z", ".0+0000"),
+                             "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+
+
+def dispatch(store: MessagingStore, target: str, payload: dict | None = None, lam_store=None,
+             kinesis_store=None, sfn_store=None, caller_account=None, lambda_store=None) -> EventsResponse:
+    r = _dispatch_raw(store, target, payload, lam_store, kinesis_store, sfn_store, caller_account, lambda_store)
+    if isinstance(r.body, dict) and r.status < 300:
+        r.body = _wire_times(r.body)
+    return r
 
 
 def dispatch_pipes(store, method: str, path: str, query: dict | None = None,

@@ -402,6 +402,9 @@ def _get_queue_attributes(store, body):
              "MessageRetentionPeriod": str(_DEFAULT_RETENTION), "ReceiveMessageWaitTimeSeconds": "0",
              "ApproximateNumberOfMessagesDelayed": "0"}
     attrs.update({k: str(v) for k, v in dict(q.get("attributes", {})).items()})
+    # Real SQS reports SQS-managed SSE as on by default (since 2022) unless the queue uses a KMS key; the Terraform
+    # aws provider polls until this attribute shows up (endurance F2).
+    attrs.setdefault("SqsManagedSseEnabled", "false" if attrs.get("KmsMasterKeyId") else "true")
     delayed = sum(1 for m in q["messages"] if not m.get("deleted") and not m.get("receive_count")
                   and not _available(m, store.now()))
     attrs.update({
@@ -428,7 +431,11 @@ def _set_queue_attributes(store, body):
     incoming = dict(body.get("Attributes") or {})
     if incoming.get("RedrivePolicy"):
         _check_redrive_allowed(store, q["queue_arn"], incoming["RedrivePolicy"])
-    q.setdefault("attributes", {}).update(incoming)
+    attrs = q.setdefault("attributes", {})
+    for _k in [k for k, v in incoming.items() if k in ("RedrivePolicy", "RedriveAllowPolicy", "Policy") and v in ("", None)]:
+        incoming.pop(_k)
+        attrs.pop(_k, None)   # real SQS: an empty policy value REMOVES the attribute; Terraform's delete waits for it to vanish (F36)
+    attrs.update(incoming)
     if "VisibilityTimeout" in incoming:
         q["visibility_timeout"] = int(incoming["VisibilityTimeout"])
     if "DelaySeconds" in incoming:

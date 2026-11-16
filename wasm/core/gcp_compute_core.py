@@ -156,6 +156,7 @@ def _network_view(rec: dict) -> dict:
                          for s in rec.get("_subnets", [])],
         "routingConfig": {"routingMode": rec.get("routingMode", "REGIONAL")},
         "mtu": rec.get("mtu", DEFAULT_MTU),
+        "networkFirewallPolicyEnforcementOrder": rec.get("networkFirewallPolicyEnforcementOrder", "AFTER_CLASSIC_FIREWALL"),
         "creationTimestamp": rec["creationTimestamp"],
         "selfLink": _self_link("global", project, f"networks/{name}"),
     }
@@ -184,6 +185,7 @@ def _insert_network(store: ComputeStore, project: str, body: dict) -> ComputeRes
         "autoCreateSubnetworks": bool(body.get("autoCreateSubnetworks", False)),
         "mtu": int(body.get("mtu") or DEFAULT_MTU),
         "routingMode": (body.get("routingConfig") or {}).get("routingMode", "REGIONAL"),
+        "networkFirewallPolicyEnforcementOrder": body.get("networkFirewallPolicyEnforcementOrder") or "AFTER_CLASSIC_FIREWALL",
         "creationTimestamp": _ts(),
         "_subnets": [],
         "_hasDefaultRoute": True,

@@ -1,7 +1,6 @@
 /* Console Home — the widget dashboard of the native console, on live Vyomi data only:
  * every number and status comes from a real call (native wire or Vyomi's event log);
  * the layout (which widgets show) is a per-browser preference. */
-import NanoVideoBanner from "../../common/NanoVideoBanner.jsx";
 import { useEffect, useState } from "react";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
@@ -416,7 +415,6 @@ function HealthBody({ probes }) {
 export default function Home() {
   const [items, setItems] = useState(() => (store.get("home.boardVersion", 0) === LAYOUT_VERSION ? store.get("home.board", DEFAULT_ITEMS) : DEFAULT_ITEMS));
   const [palette, setPalette] = useState(false);
-  const [banner, setBanner] = useState(() => !store.get("home.bannerDismissed", false));
   const probes = useProbes();
   const save = (xs) => { setItems(xs); store.set("home.board", xs); store.set("home.boardVersion", LAYOUT_VERSION); };
   const content = {
@@ -448,12 +446,6 @@ export default function Home() {
   return (
     <ContentLayout header={
       <SpaceBetween size="m">
-        <NanoVideoBanner cloud="aws" />
-        {banner && (
-          <Alert type="info" dismissible onDismiss={() => { setBanner(false); store.set("home.bannerDismissed", true); }} header={vy("Welcome to the Vyomi AWS console")}>
-            Everything here runs against your local Vyomi simulator, using the same native APIs your SDKs and CLI call. Features Vyomi doesn't simulate are marked.
-          </Alert>
-        )}
         <Header variant="h1" actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button onClick={() => save(DEFAULT_ITEMS)}>Reset to default layout</Button>
