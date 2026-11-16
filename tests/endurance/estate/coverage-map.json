@@ -1,6 +1,6 @@
 {
  "aws.vpc.dhcp-option-sets": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -17,7 +17,7 @@
   ]
  },
  "aws.vpc.elastic-ips": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -33,7 +33,7 @@
   ]
  },
  "aws.vpc.internet-gateways": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -49,7 +49,7 @@
   ]
  },
  "aws.vpc.managed-prefix-lists": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -65,7 +65,7 @@
   ]
  },
  "aws.vpc.nat-gateways": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -81,7 +81,7 @@
   ]
  },
  "aws.vpc.network-acls": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -98,7 +98,7 @@
   ]
  },
  "aws.vpc.route-tables": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -119,7 +119,7 @@
   ]
  },
  "aws.vpc.security-groups": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -139,7 +139,7 @@
   ]
  },
  "aws.vpc.subnets": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -156,7 +156,7 @@
   ]
  },
  "aws.vpc.vpcs": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -171,8 +171,88 @@
    "ui"
   ]
  },
+ "dynamodb.table.crud": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_dynamodb_table.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "dynamodb.table.indexes": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_dynamodb_table.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "dynamodb.table.pitr": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_dynamodb_table.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "dynamodb.table.tags": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_dynamodb_table.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "dynamodb.table.ttl": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_dynamodb_table.orders"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
  "ec2.elastic-ips": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -188,7 +268,7 @@
   ]
  },
  "ec2.iam-instance-profiles": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -203,8 +283,72 @@
    "ui"
   ]
  },
+ "ec2.instances.details": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_instance.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.instances.lifecycle": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_instance.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.key-pairs": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_key_pair.ops"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.launch-templates": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_launch_template.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
  "ec2.security-groups": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -220,8 +364,73 @@
    "ui"
   ]
  },
+ "ec2.snapshots": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_ebs_snapshot.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ec2.volumes": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_ebs_volume.data",
+   "aws_volume_attachment.data"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ecr.lifecycle": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_ecr_lifecycle_policy.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "ecr.repositories": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_ecr_repository.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
  "iam.policy.crud": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -237,7 +446,7 @@
   ]
  },
  "iam.role.crud": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -253,7 +462,7 @@
   ]
  },
  "iam.role.permissions": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -269,7 +478,7 @@
   ]
  },
  "iam.role.tags": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -285,7 +494,7 @@
   ]
  },
  "iam.role.trust-policy": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -301,7 +510,7 @@
   ]
  },
  "iam.user.access-keys": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -317,7 +526,7 @@
   ]
  },
  "iam.user.crud": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -333,7 +542,7 @@
   ]
  },
  "iam.user.groups": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -350,7 +559,7 @@
   ]
  },
  "iam.user.tags": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -366,7 +575,7 @@
   ]
  },
  "kms.key.aliases": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -382,7 +591,7 @@
   ]
  },
  "kms.key.crud": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -398,7 +607,7 @@
   ]
  },
  "kms.key.rotation": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -414,7 +623,7 @@
   ]
  },
  "kms.key.tags": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -429,8 +638,216 @@
    "ui"
   ]
  },
+ "rds.instance.crud": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_db_instance.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "rds.instance.tags": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_db_instance.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "rds.parameter-groups": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_db_parameter_group.pg"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "rds.snapshot.crud": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_db_snapshot.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "rds.subnet-groups": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_db_subnet_group.main"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.cors": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket_cors_configuration.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.crud": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.encryption": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket_server_side_encryption_configuration.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.lifecycle": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket_lifecycle_configuration.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.ownership": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket_ownership_controls.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.public-access-block": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket_public_access_block.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.bucket.versioning": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_bucket_versioning.assets"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "s3.object.crud": {
+  "module": "aws/modules/stage2-compute-data",
+  "proof": {
+   "tf": "stage2-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py (57 resources)"
+  },
+  "stage": "2-compute-data",
+  "tf": [
+   "aws_s3_object.readme"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
  "secretsmanager.secret.crud": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -446,7 +863,7 @@
   ]
  },
  "secretsmanager.secret.deletion": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -462,7 +879,7 @@
   ]
  },
  "secretsmanager.secret.encryption": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -479,7 +896,7 @@
   ]
  },
  "secretsmanager.secret.tags": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
@@ -495,7 +912,7 @@
   ]
  },
  "secretsmanager.secret.versions": {
-  "module": "aws/stage1-network-identity",
+  "module": "aws/modules/stage1-network-identity",
   "proof": {
    "tf": "stage1-report 2026-11-16: apply, no-diff replan, destroy, rebuild, destroy all PASS on real server.py"
   },
