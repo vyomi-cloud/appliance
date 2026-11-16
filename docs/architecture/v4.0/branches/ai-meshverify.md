@@ -2,6 +2,8 @@
 
 Owner: AI session, lane `meshverify`. Base: `v4/ai-integration` 8d4c642fd. Branch `v4/ai-meshverify`. Scripts + raw results: `tools/mesh_verify/` (`results/*.json`).
 
+> **Superseded for the default chat model (2026-11-16):** the Mesh default is now Qwen3-4B-Instruct-2507 (Apache-2.0); the Qwen2.5-3B numbers below are the pre-swap baseline. See `ai-qwen3swap.md`.
+
 ## WHERE THIS RAN (read first)
 **NOT on a Codespace.** Creating the Codespace was attempted and refused by GitHub:
 `gh codespace create -R vyomi-cloud/appliance -b v4/ai-integration -m standardLinux32gb` -> `HTTP 402: Usage not allowed: vyomi-admin, you are out of monthly free usage or have exceeded your budget for Codespaces.`

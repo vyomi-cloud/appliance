@@ -16,7 +16,7 @@ def start(real_embed=True):
     from core.aws_wire_router import AwsWireRouter
     llm.set_backend(None)
     llm._state["endpoint"] = GATEWAY
-    llm._state["model"] = os.environ.get("MV_MODEL", "qwen2.5-3b")
+    llm._state["model"] = os.environ.get("MV_MODEL", "qwen3-4b")
     if not real_embed:
         llm._state["embed_fn"] = lambda texts: [llm.hash_embed(t) for t in texts]
     router = AwsWireRouter()

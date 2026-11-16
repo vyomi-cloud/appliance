@@ -104,8 +104,9 @@ s3.put_object(Bucket="train-data", Key="notlast.jsonl", Body=jl([{"messages": [{
 s3.put_object(Bucket="train-data", Key="few.jsonl", Body=jl(sample_data.rows(3)))
 
 # ================= validation (no trainer needed) =================
-check("base id forms resolve to the pool", all(tc.chat_base(x) == "qwen2.5-3b" for x in ("qwen2.5-3b", "vyomi.qwen2.5-3b", "ollama.qwen2.5:3b-instruct-q4_K_M")) and tc.chat_base("amazon.nova-micro-v1:0") is None
-      and tc.chat_base("all-minilm-l6-v2") is None)
+check("base id forms resolve to the pool", all(tc.chat_base(x) == "qwen3-4b" for x in ("qwen3-4b", "vyomi.qwen3-4b", "ollama.qwen3:4b-instruct-2507-q4_K_M")) and tc.chat_base("amazon.nova-micro-v1:0") is None
+      and tc.chat_base("all-minilm-l6-v2") is None
+      and tc.chat_base("qwen2.5-3b") is None and tc.chat_base("deepseek-r1-8b") is None)   # licence traps: non-commercial base and the Llama-derived distill are never trainable
 check("bedrock: chat base too large for 16 GB -> ValidationException naming the trainable list", code(lambda: mk("big8b", base="llama3.1-8b")) == "ValidationException")
 check("bedrock: head-style rows on a chat base -> ValidationException", code(lambda: mk("badrows", data="s3://train-data/bad.jsonl")) == "ValidationException")
 check("bedrock: >2000 rows -> ValidationException", code(lambda: mk("bigrows", data="s3://train-data/big.jsonl")) == "ValidationException")

@@ -26,8 +26,8 @@ MODEL_DIR="${MODEL_DIR:-/models}"; CHAT_FILE="${CHAT_FILE:-chat.gguf}"; EMBED_FI
 THREADS="${THREADS:-4}"; CHAT_CTX="${CHAT_CTX:-4096}"; LLAMA_BIN="${LLAMA_BIN:-llama-server}"
 TTL_S="${TTL_S:-19800}"; [ "$TTL_S" -gt 19800 ] && TTL_S=19800            # hard cap 5h30m (job cap is 6h)
 LLAMA_LOG="${LLAMA_LOG:-${RUNNER_TEMP:-/tmp}/llama.log}"
-CHAT_ALIAS="${CHAT_ALIAS:-qwen2.5-3b}"
-CHAT_URL_SRC="${CHAT_URL_SRC:-https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf}"
+CHAT_ALIAS="${CHAT_ALIAS:-qwen3-4b}"
+CHAT_URL_SRC="${CHAT_URL_SRC:-https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf}"
 EMBED_URL_SRC="${EMBED_URL_SRC:-https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf}"
 mkdir -p "$MODEL_DIR"
 T0=$(date +%s)

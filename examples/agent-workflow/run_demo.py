@@ -6,7 +6,7 @@
 
 Needs from the repo root:  PYTHONPATH=<repo root>  and  pip install -r requirements.txt boto3 google-genai openai
 and an OpenAI-compatible local model server (default Ollama on 127.0.0.1:11434) with the chat model + an embedding model pulled:
-    ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+    ollama pull qwen3:4b-instruct-2507-q4_K_M && ollama pull nomic-embed-text
 (this is the same core.wire_ingress the offline appliance serves; tests/conformance/test_ai_sdk_tools.py does the same with a fake model.)
 """
 import argparse
@@ -70,7 +70,7 @@ def start_server(llm_endpoint, chat_model, embed_model, port=0, embed_fn=None):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--llm", default=os.environ.get("VYOMI_LLM_ENDPOINT", "http://127.0.0.1:11434"), help="OpenAI-compatible model server (Ollama / llama-server)")
-    ap.add_argument("--model", default=os.environ.get("VYOMI_LLM_MODEL", "qwen2.5:3b"))
+    ap.add_argument("--model", default=os.environ.get("VYOMI_LLM_MODEL", "qwen3:4b-instruct-2507-q4_K_M"))
     ap.add_argument("--embed-model", default="nomic-embed-text")
     ap.add_argument("--port", type=int, default=0, help="0 = pick a free port")
     ap.add_argument("--run", action="store_true", help="run the drivers then exit")

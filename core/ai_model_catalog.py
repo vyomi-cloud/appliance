@@ -19,7 +19,8 @@ import sys
 
 # id, display name, vendor (provider), vertex publisher, kind, size class, role, best-for blurb, ollama tag
 _ROWS = [
-    ("qwen2.5-3b", "Qwen2.5 3B", "Alibaba", "qwen", "chat", "Small (3B)", "Fast chat", "Quick turns, cheap routing and classification steps", "qwen2.5:3b"),
+    ("qwen3-4b", "Qwen3 4B Instruct 2507", "Alibaba", "qwen", "chat", "Small (4B)", "Fast chat", "Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)", "qwen3:4b-instruct-2507-q4_K_M"),
+    ("qwen2.5-3b", "Qwen2.5 3B (non-commercial)", "Alibaba", "qwen", "chat", "Small (3B)", "Legacy (non-commercial licence)", "Kept for non-commercial research only (Qwen Research Licence); never the default or served on a paid tier", "qwen2.5:3b"),
     ("nomic-embed-text", "Nomic Embed Text", "Nomic AI", "nomic-ai", "embed", "Embedding", "Embeddings", "Vector search and retrieval (RAG) pipelines", "nomic-embed-text"),
     ("qwen2.5-7b", "Qwen2.5 7B", "Alibaba", "qwen", "chat", "Medium (7B)", "General", "General question answering and summaries", "qwen2.5:7b"),
     ("qwen2.5-coder-7b", "Qwen2.5 Coder 7B", "Alibaba", "qwen", "chat", "Medium (7B)", "Code", "Code generation, review and refactoring agents", "qwen2.5-coder:7b"),
@@ -180,7 +181,8 @@ _LICENSE_DATA = {'all-minilm-l6-v2': {'attribution': 'all-MiniLM-L6-v2: Apache L
                   'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
                   'requiredNotice': '',
                   'upstream': 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct'},
- 'qwen2.5-3b': {'attribution': 'Qwen2.5 3B: Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024). Copyright holder: Alibaba Cloud.',
+ 'qwen2.5-3b': {'attribution': 'Qwen2.5 3B (non-commercial): Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024). Copyright holder: '
+                               'Alibaba Cloud.',
                 'aupUrl': '',
                 'builtWithLlama': False,
                 'commercialUse': False,
@@ -224,6 +226,17 @@ _LICENSE_DATA = {'all-minilm-l6-v2': {'attribution': 'all-MiniLM-L6-v2: Apache L
                'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
                'requiredNotice': '',
                'upstream': 'https://huggingface.co/Qwen/Qwen3-30B-A3B'},
+ 'qwen3-4b': {'attribution': 'Qwen3 4B Instruct 2507: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+              'aupUrl': '',
+              'builtWithLlama': False,
+              'commercialUse': True,
+              'copyright': 'Alibaba Cloud (Qwen team)',
+              'license': 'Apache License 2.0',
+              'licenseFlag': '',
+              'licenseId': 'Apache-2.0',
+              'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+              'requiredNotice': '',
+              'upstream': 'https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507'},
  'qwen3-8b': {'attribution': 'Qwen3 8B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
               'aupUrl': '',
               'builtWithLlama': False,
@@ -280,7 +293,7 @@ def paid_tier() -> bool:
 
 
 def commercial(mid) -> bool:
-    """False for a model whose licence forbids commercial use (qwen2.5-3b: Qwen Research Licence)."""
+    """False for a model whose licence forbids commercial use (qwen2.5-3b: Qwen Research Licence; the default chat model is qwen3-4b, Apache-2.0)."""
     return bool(BY_ID.get(mid, {}).get("commercialUse", True))
 
 
@@ -329,8 +342,8 @@ def served_special():
 def all_models():
     return MODELS + served_special()
 WEB_EMBED = "all-minilm-l6-v2"
-LOCAL_ID = IDS[0] if WEB else "qwen2.5-3b"   # the model that runs without a mesh (web LLM on Nano, small model on the appliance)
-DEFAULT_CHAT, DEFAULT_EMBED = (IDS[0], WEB_EMBED) if WEB else ("qwen2.5-3b", "nomic-embed-text")
+LOCAL_ID = IDS[0] if WEB else "qwen3-4b"   # the model that runs without a mesh (web LLM on Nano, small model on the appliance)
+DEFAULT_CHAT, DEFAULT_EMBED = (IDS[0], WEB_EMBED) if WEB else ("qwen3-4b", "nomic-embed-text")
 NEEDS_MESH = "Needs Mesh (Pro/Max)"
 
 # Hidden compatibility map: cloud API id (or fnmatch pattern) -> catalogue id. Exact match first, then the longest pattern.
@@ -339,17 +352,17 @@ ALIASES = {
     "aws": {
         "meta.llama*": "llama3.1-8b", "mistral.*": "mistral-7b", "mistral.mistral-large*": "qwen2.5-7b", "google.gemma*": "gemma2-9b",
         "deepseek.r1*": "deepseek-r1-8b", "qwen.qwen3-30b*": "qwen3-30b", "qwen.qwen3*": "qwen3-8b",
-        "amazon.nova-micro*": "qwen2.5-3b", "amazon.nova-lite*": "qwen2.5-3b", "amazon.nova-pro*": "qwen2.5-7b",
+        "amazon.nova-micro*": "qwen3-4b", "amazon.nova-lite*": "qwen3-4b", "amazon.nova-pro*": "qwen2.5-7b",
         "anthropic.claude*": "qwen2.5-7b", "amazon.titan-embed*": "nomic-embed-text", "cohere.embed*": "nomic-embed-text",
     },
     "gcp": {
-        "gemini-*-flash*": "qwen2.5-3b", "gemini-*-pro*": "qwen2.5-7b", "gemma-2*": "gemma2-9b", "gemma*": "gemma2-9b",
+        "gemini-*-flash*": "qwen3-4b", "gemini-*-pro*": "qwen2.5-7b", "gemma-2*": "gemma2-9b", "gemma*": "gemma2-9b",
         "codestral*": "qwen2.5-coder-7b", "gemini-*-code*": "qwen2.5-coder-7b", "deepseek-r1*": "deepseek-r1-8b",
         "qwen3-235b*": "qwen3-30b", "mistral-*": "mistral-7b", "llama-3*": "llama3.1-8b",
         "text-embedding-*": "nomic-embed-text", "gemini-embedding*": "nomic-embed-text",
     },
     "azure": {
-        "gpt-4o-mini*": "qwen2.5-3b", "gpt-4o*": "qwen2.5-7b", "gpt-4*": "qwen2.5-7b", "gpt-35*": "qwen2.5-3b",
+        "gpt-4o-mini*": "qwen3-4b", "gpt-4o*": "qwen2.5-7b", "gpt-4*": "qwen2.5-7b", "gpt-35*": "qwen3-4b",
         "o1*": "deepseek-r1-8b", "o3*": "qwen3-8b", "DeepSeek-R1*": "deepseek-r1-8b", "Mistral*": "mistral-7b",
         "Meta-Llama*": "llama3.1-8b", "Phi-*": "gemma2-9b", "gpt-oss*": "qwen3-30b", "text-embedding-*": "nomic-embed-text",
     },
@@ -431,6 +444,8 @@ def availability(mid):
         return {"state": "available", "label": "Web LLM (in browser)", "available": True}
     if mid == LOCAL_ID:
         return {"state": "available", "label": "Available", "available": True}
+    if not commercial(mid):     # non-commercial research model: catalogued and flagged, never served by any runner or tier
+        return {"state": "not_served", "label": "Not served (non-commercial licence)", "available": False}
     return {"state": "needs_mesh", "label": NEEDS_MESH, "available": False}
 
 

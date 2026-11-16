@@ -154,12 +154,12 @@ fake.close()
 # ── per-request model selection
 fake = FakeLLM()
 reset(endpoint=fake.url)
-os.environ["VYOMI_LLM_MODEL_MAP"] = json.dumps({"anthropic.*": "qwen2.5-3b", "gpt-4o": "llama3.2-1b"})
+os.environ["VYOMI_LLM_MODEL_MAP"] = json.dumps({"anthropic.*": "qwen3-4b", "gpt-4o": "llama3.2-1b"})
 llm.chat(U, model="anthropic.claude-3-haiku")
 llm.chat(U, model="gpt-4o")
 llm.chat(U, model="unmapped")
 check("per-request model: map by exact id and prefix*, default otherwise",
-      [r["model"] for r in fake.requests] == ["qwen2.5-3b", "llama3.2-1b", llm.DEFAULT_MODEL], [r["model"] for r in fake.requests])
+      [r["model"] for r in fake.requests] == ["qwen3-4b", "llama3.2-1b", llm.DEFAULT_MODEL], [r["model"] for r in fake.requests])
 fake.close()
 
 # ── real upstream streaming: first event arrives while the server is still generating

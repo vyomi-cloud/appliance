@@ -25,7 +25,7 @@ export const defaultDesign = () => ({
   index: { store: "pgvector" },
   retrieve: { searchType: "HYBRID", topK: 12, hybridWeight: 0.6, filterKey: "", filterValue: "" },
   rerank: { enabled: true, topN: 4 },
-  generate: { model: "vyomi.qwen2.5-3b", citations: true, groundingThreshold: 0.25, guardrailId: "facilities-guardrail" },
+  generate: { model: "vyomi.qwen3-4b", citations: true, groundingThreshold: 0.25, guardrailId: "facilities-guardrail" },
 });
 
 export const PRESETS = {

@@ -179,7 +179,7 @@ rough ESTIMATES for 2 vCPU AVX2, llama.cpp, Q4_K_M, short context - NOT measured
 
 | Role | Model (GGUF) | Size | Est. gen speed | Est. prompt eval | Use |
 |---|---|---|---|---|---|
-| Default tool-calling agent | Qwen2.5-3B-Instruct Q4_K_M | ~2.0 GB | 4-7 tok/s | 25-60 tok/s | best small-model tool-call behaviour under llama.cpp `--jinja` in my experience; recommended default (unverified on this stack) |
+| Default tool-calling agent (SUPERSEDED 2026-11-16: now Qwen3-4B-Instruct-2507 Q4_K_M, Apache-2.0, see branches/ai-qwen3swap.md; row below is the original Qwen2.5-3B estimate, non-commercial licence) | Qwen2.5-3B-Instruct Q4_K_M | ~2.0 GB | 4-7 tok/s | 25-60 tok/s | best small-model tool-call behaviour under llama.cpp `--jinja` in my experience; recommended default (unverified on this stack) |
 | Fast / smoke tests | Qwen2.5-1.5B-Instruct Q4_K_M or Llama-3.2-1B-Instruct Q4_K_M | ~1.0 / 0.8 GB | 10-18 tok/s | 60-120 tok/s | CI-style runs; tool calls flakier |
 | Higher fidelity (opt-in) | Qwen2.5-7B-Instruct Q4_K_M (or Llama-3.1-8B Q4_K_M) | ~4.7 GB | 1.5-3 tok/s | 8-20 tok/s | slow; a 6-step agent loop with 500-token prompts would take minutes |
 | Embeddings | nomic-embed-text-v1.5 (768-d, 274 MB) or bge-small-en-v1.5 (384-d, ~130 MB) | small | 100s of short docs/min | n/a | replaces the hash fallback; keep dimension padding to the cloud's declared dims |

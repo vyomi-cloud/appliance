@@ -104,7 +104,7 @@
  * 404 / no Mesh -> clearly labelled sample data and the test-chat box is hidden. Development and accuracy checks only; no benchmark claims. */
 (function () {
   var MOCK = [
-    ["qwen2.5-3b", "Qwen2.5 3B", "Fast chat", "qwen2.5:3b"], ["nomic-embed-text", "Nomic Embed Text", "Embeddings", "nomic-embed-text"],
+    ["qwen3-4b", "Qwen3 4B Instruct 2507", "Fast chat", "qwen3:4b-instruct-2507-q4_K_M"], ["nomic-embed-text", "Nomic Embed Text", "Embeddings", "nomic-embed-text"],
     ["qwen2.5-7b", "Qwen2.5 7B", "General", "qwen2.5:7b"], ["qwen2.5-coder-7b", "Qwen2.5 Coder 7B", "Code", "qwen2.5-coder:7b"],
     ["llama3.1-8b", "Llama 3.1 8B", "Tool use / agents", "llama3.1:8b"], ["gemma2-9b", "Gemma 2 9B", "Second family", "gemma2:9b"],
     ["qwen3-8b", "Qwen3 8B", "Newer general", "qwen3:8b"], ["deepseek-r1-8b", "DeepSeek R1 8B", "Reasoning", "deepseek-r1:8b"],

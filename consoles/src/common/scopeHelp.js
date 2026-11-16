@@ -11,9 +11,9 @@ import { match } from "./router.js";
 // Shared fragments (kept in one place so the three clouds say the same thing about training).
 const HEAD_REAL = "Fine-tuning on a trainable base really trains a small head on frozen embeddings: all-MiniLM-L6-v2 (Nano), nomic-embed-text (Mesh) or any vyomi.head.* id. Task types: classifier, router, reranker. It is not a language model and cannot generate text; every answer carries vyomiTrained: true.";
 const HEAD_CAPS = "Training data is JSONL in the simulated object store. Caps on every cloud: 2000 rows, 5 MB, 20 labels, at least 10 rows and 2 labels, 1 to 50 epochs. Over a cap is rejected with the cloud's validation error and no job is created. 20 percent of rows are held out and compared with a baseline (majority class, or zero-shot cosine for rerankers).";
-const LORA_REAL = "On Mesh, a base from the open-model pool (smollm2-135m-instruct, smollm2-360m-instruct, qwen2.5-0.5b, qwen2.5-1.5b, qwen2.5-3b) runs a real LoRA job (PEFT on CPU) and writes an f16 GGUF adapter to the object store. A tuned chat model is a small open model plus an adapter, not a vendor model.";
+const LORA_REAL = "On Mesh, a base from the open-model pool (smollm2-135m-instruct, smollm2-360m-instruct, qwen2.5-0.5b, qwen2.5-1.5b, qwen3-4b) runs a real LoRA job (PEFT on CPU) and writes an f16 GGUF adapter to the object store. A tuned chat model is a small open model plus an adapter, not a vendor model.";
 const LORA_CAPS = "Chat rows are {messages} or {prompt, completion}: 2000 rows, 5 MB, at least 10 rows, sequence length 32 to 1024, rank 1 to 64, 1 to 10 epochs. 7B and larger bases are rejected as too large for 16 GB CPU. Tool-calling training data is not supported.";
-const LORA_NOT_MEASURED = "Measured only for SmolLM2-135M. Training 1.5B/3B, Codespace timing and 2000-row runs were not measured.";
+const LORA_NOT_MEASURED = "Measured only for SmolLM2-135M. Training Qwen3-4B (the commercial base) or any 1.5B+ model, Codespace timing and 2000-row runs were not measured.";
 const NANO_TRAIN = "Heads train inside the tab (typed-array JS in a Web Worker, embedding about 12 ms per text). Keep the tab open while a job runs; jobs started from the SDK/CLI through the relay worker fail fast with a clear message instead.";
 const NANO_LORA = "No chat training in a browser tab. Train the LoRA on Mesh or your own machine, then import the GGUF adapter; Nano serves it with wllama on a SmolLM2 135M or 360M base.";
 const VENDOR_META = "Vendor base models (Nova, Titan, Gemini, GPT and similar) keep the metadata-only behaviour on purpose: the job completes without training and says so.";
@@ -28,7 +28,7 @@ def("aws.bedrock.overview", ["/bedrock"], {
   real: ["Model listing, Converse, InvokeModel and token counting go through the real Bedrock wire shapes.", "Standard ids (anthropic.claude-*, amazon.titan-*, amazon.nova-*, meta.llama3-*, cohere.*) are listed as aliases and answered by the local open model. Each model reports vyomiBackedBy and says so."],
   limits: ["Images (Converse, Claude InvokeModel) need the Mesh vision model and are rejected without it; documents (PDF, DOCX, XLSX, CSV, HTML, Markdown, text) are parsed and read as text. Reasoning (thinking / reasoning_config) needs the Mesh reasoning model and is rejected without it.", "Not in scope: Automated Reasoning (explained on its page). Data Automation is built on the small vision model; see its page for limits. Flows, Guardrails, Prompt Management, Evaluations, Settings, Model access and Prompt optimization are built; see each page for its limits.", "No real model quality is implied by an alias."],
   nano: ["Chat is answered by WebLLM and needs WebGPU; small models only."],
-  mesh: ["Chat is answered by llama.cpp with Qwen2.5-3B Q4 (about 2 GB RAM). Tool selection with a 3B model is the open quality risk.", "Optional role models, listed only while running: SmolVLM-500M for images (Apache-2.0) and DeepSeek-R1-Distill-Qwen-1.5B for reasoning (MIT). The 8 GB Codespace has about 2.8 GB for AI, so starting a role model stops the default chat model unless the budget is raised."],
+  mesh: ["Chat is answered by llama.cpp with Qwen3-4B-Instruct-2507 Q4 (Apache-2.0, about 2.4 GB on disk). Tool selection with a 4B model is the open quality risk.", "Optional role models, listed only while running: SmolVLM-500M for images (Apache-2.0) and DeepSeek-R1-Distill-Qwen-1.5B for reasoning (MIT). The 8 GB Codespace has about 2.8 GB for AI, so starting a role model stops the default chat model unless the budget is raised."],
 });
 def("aws.bedrock.quickstart", ["/bedrock/quickstart"], {
   title: "Quickstart: scope and limits",
@@ -52,7 +52,7 @@ def("aws.bedrock.playground", ["/bedrock/playground"], {
   real: ["Answers come from the local open model behind the alias (response header x-vyomi-local-model)."],
   limits: ["Chat and configuration panel are simplified compared with AWS.", "Without a running local model the call fails; there is no fallback to a canned answer."],
   nano: ["WebLLM, WebGPU required."],
-  mesh: ["llama.cpp with the AI pack (Qwen2.5-3B Q4)."],
+  mesh: ["llama.cpp with the AI pack (Qwen3-4B-Instruct-2507 Q4)."],
 });
 def("aws.bedrock.quotas", ["/bedrock/quotas"], {
   title: "Quotas: scope and limits",
@@ -212,7 +212,7 @@ def("gcp.vertex.overview", ["/vertex-ai"], {
   real: ["Prompts go through generateContent on the local model seam. Publisher models come from /v1/publishers/-/models. Deployments are Agent Engine reasoningEngines."],
   limits: ["Lower Overview cards are approximate. There is no 'Enable billing' banner: account state is not simulated.", "Declared not in scope (each page says why and what to use instead): Claude models, Ray, Training clusters. Gateways, MCP Servers, Policies, Security and Provisioned Throughput are real pages (see their own scope panels)."],
   nano: ["Chat is answered by WebLLM (WebGPU)."],
-  mesh: ["Chat is answered by llama.cpp (Qwen2.5-3B Q4)."],
+  mesh: ["Chat is answered by llama.cpp (Qwen3-4B-Instruct-2507 Q4)."],
 });
 def("gcp.vertex.studio", ["/vertex-ai/studio", "/vertex-ai/studio/prompt"], {
   title: "Studio: scope and limits",

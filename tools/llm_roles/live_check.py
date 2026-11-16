@@ -37,10 +37,10 @@ def footprint(pid):
 
 
 img = base64.b64encode(open(sys.argv[1], "rb").read()).decode()
-st, d, t = call("/model/vyomi.qwen2.5-3b/converse", {"messages": [{"role": "user", "content": [{"text": "Read all the text in this image."}, {"image": {"format": "png", "source": {"bytes": img}}}]}],
+st, d, t = call("/model/vyomi.qwen3-4b/converse", {"messages": [{"role": "user", "content": [{"text": "Read all the text in this image."}, {"image": {"format": "png", "source": {"bytes": img}}}]}],
                                                        "inferenceConfig": {"maxTokens": 120, "temperature": 0}})
 print("VISION Converse", st, f"{t}s", json.dumps(d["output"]["message"]["content"])[:300], d["usage"])
-st, d, t = call("/model/vyomi.qwen2.5-3b/converse", {"messages": [{"role": "user", "content": [{"text": "What is 17*23? Show the work briefly."}]}],
+st, d, t = call("/model/vyomi.qwen3-4b/converse", {"messages": [{"role": "user", "content": [{"text": "What is 17*23? Show the work briefly."}]}],
                                                        "additionalModelRequestFields": {"thinking": {"type": "enabled", "budget_tokens": 1024}}, "inferenceConfig": {"maxTokens": 700, "temperature": 0.6}})
 c = d["output"]["message"]["content"]
 print("REASONING Converse", st, f"{t}s", "reasoningContent" in c[0], "tokens", d["usage"]["outputTokens"], "tok/s", round(d["usage"]["outputTokens"] / t, 1))

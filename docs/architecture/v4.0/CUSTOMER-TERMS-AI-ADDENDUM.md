@@ -24,7 +24,7 @@ Each model remains under its own licence, listed on the Notices and licences pag
 ## A5. Qwen and other Apache-2.0 / MIT models
 - Apache-2.0 models (for example Qwen2.5 0.5B/1.5B/7B, Qwen3, Mistral 7B, SmolLM2, nomic-embed-text): if you redistribute the weights or a derivative, you keep the licence text, the NOTICE file and state your changes.
 - MIT models (DeepSeek R1): keep the notice "MIT License, Copyright (c) 2023 DeepSeek" and the licence text.
-- Qwen2.5-3B is under the Qwen Research Licence: non-commercial research or evaluation use only. It is flagged in the catalogue and is not offered in paid tiers. If you use it, you represent that your use is non-commercial; commercial use needs a licence from Alibaba Cloud. Derivatives (LoRA, fine-tunes) inherit the restriction.
+- Qwen3-4B-Instruct-2507 (the default chat model since 2026-11-16) is Apache-2.0. Qwen2.5-3B is under the Qwen Research Licence: non-commercial research or evaluation use only. It is flagged in the catalogue, is on no runner, is never a default and is not offered in paid tiers. If you use it, you represent that your use is non-commercial; commercial use needs a licence from Alibaba Cloud. Derivatives (LoRA, fine-tunes) inherit the restriction.
 
 ## A6. No warranty on model output
 Model output may be inaccurate, offensive or infringing. Models are provided as is, without warranty of any kind. You are responsible for reviewing output before relying on it and for your use of it, including in decisions that affect people. Do not use models for uses prohibited by the policies above. *Counsel: output ownership, indemnity limits.*

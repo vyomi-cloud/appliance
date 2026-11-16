@@ -8,6 +8,8 @@ Sources of the model list: `core/ai_model_catalog.py` (Mesh pool of 10, Nano web
 
 ## 1. Headline: one model is NOT cleared for paid use
 
+> **RESOLVED 2026-11-16 (branch `v4/ai-qwen3swap`, engineering draft, not legal advice):** the Mesh default chat model, the "fast" runner, the in-Codespace AI pack and the `amazon.nova-micro/lite`, `gemini-*-flash`, `gpt-4o-mini`, `gpt-35` aliases now point at **Qwen3-4B-Instruct-2507, Apache-2.0** (HF model card metadata `apache-2.0`; LICENSE file = Apache License 2.0, Copyright 2024 Alibaba Cloud), served from the Q4_K_M GGUF `unsloth/Qwen3-4B-Instruct-2507-GGUF`. `qwen2.5-3b` stays in the catalogue flagged non-commercial, is on no runner, is never a default and is refused on a paid tier. The default no longer depends on `VYOMI_PAID_TIER`. The section below is kept as the original finding. See `branches/ai-qwen3swap.md`.
+
 **Qwen2.5-3B-Instruct (`qwen2.5-3b`) is under the "Qwen RESEARCH LICENSE AGREEMENT" (Release Date: September 19, 2024), non-commercial only.**
 It is the Mesh default chat model (`DEFAULT_CHAT`, `LOCAL_ID`), the "fast" runner model, the in-Codespace AI pack model, the target of the `amazon.nova-micro*` and `amazon.nova-lite*` aliases, and the default LoRA training target in the Mesh docs.
 

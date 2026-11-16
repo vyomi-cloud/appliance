@@ -113,7 +113,7 @@ try {
   const uiRows = await page.locator("table tbody tr").count();
   ok(!missing.length, "(1) console model catalog shows every API model's name, id and provider", missing.length ? "missing " + missing.slice(0, 5).join(",") : `${models.length} models x 3 fields`);
   ok(uiRows === models.length, "(1) catalog row count == API count", `ui=${uiRows} api=${models.length}`);
-  const mod0 = models.find((m) => m.modelId === "vyomi.qwen2.5-3b") || models[0];
+  const mod0 = models.find((m) => m.modelId === "vyomi.qwen3-4b") || models[0];
   const rowTxt = (await page.locator("tr", { hasText: mod0.modelId }).first().innerText()).replace(/\s+/g, " ");
   ok(/Available/.test(rowTxt) === !!mod0.vyomiAvailability?.available && (!mod0.responseStreamingSupported || /Yes/.test(rowTxt)), "(1) availability + streaming columns match the API for " + mod0.modelId, rowTxt.slice(0, 120));
 

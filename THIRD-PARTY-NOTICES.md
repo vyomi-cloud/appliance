@@ -12,7 +12,8 @@ Vyomi's own code is under the [Vyomi Appliance License](LICENSE); third-party co
 
 | Model (catalogue id) | Licence | Copyright holder | Upstream | Commercial use | Where |
 |---|---|---|---|---|---|
-| Qwen2.5 3B (`qwen2.5-3b`) | Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024) (`LicenseRef-Qwen-Research`) | Alibaba Cloud | https://huggingface.co/Qwen/Qwen2.5-3B-Instruct | **NO: Non-commercial research licence: not for paid use** | Mesh default chat model, fast runner, in-Codespace AI pack, nova-micro/lite aliases |
+| Qwen3 4B Instruct 2507 (`qwen3-4b`) | Apache License 2.0 (`Apache-2.0`) | Alibaba Cloud (Qwen team) | https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507 | yes | Mesh default chat model, fast runner, in-Codespace AI pack, nova-micro/lite, gemini flash, gpt-4o-mini and gpt-35 aliases |
+| Qwen2.5 3B (non-commercial) (`qwen2.5-3b`) | Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024) (`LicenseRef-Qwen-Research`) | Alibaba Cloud | https://huggingface.co/Qwen/Qwen2.5-3B-Instruct | **NO: Non-commercial research licence: not for paid use** | Catalogue only (unhosted: on no runner, never a default, refused on a paid tier). Replaced as the Mesh default by qwen3-4b |
 | Nomic Embed Text v1.5 (`nomic-embed-text`) | Apache License 2.0 (`Apache-2.0`) | Nomic AI | https://huggingface.co/nomic-ai/nomic-embed-text-v1.5 | yes | Mesh embedder |
 | Qwen2.5 7B (`qwen2.5-7b`) | Apache License 2.0 (`Apache-2.0`) | Alibaba Cloud (Qwen team) | https://huggingface.co/Qwen/Qwen2.5-7B-Instruct | yes | Mesh |
 | Qwen2.5 Coder 7B (`qwen2.5-coder-7b`) | Apache License 2.0 (`Apache-2.0`) | Alibaba Cloud (Qwen team) | https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct | yes | Mesh |
@@ -59,7 +60,7 @@ Vyomi's own code is under the [Vyomi Appliance License](LICENSE); third-party co
 
 - Qwen is licensed under the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) Alibaba Cloud. All Rights Reserved.
 - **Non-commercial research licence: not for paid use**
-- Models: Qwen2.5 3B
+- Models: Qwen2.5 3B (non-commercial)
 
 Apache-2.0 and MIT models: the licence text and any upstream NOTICE are kept; the copyright holder and source link are in the table above. DeepSeek R1 models are MIT ("Copyright (c) 2023 DeepSeek") and derived from Qwen (Apache-2.0).
 
@@ -111,7 +112,7 @@ Apache-2.0 and MIT models: the licence text and any upstream NOTICE are kept; th
 | Docker registry (distribution) | 2.8.3 | Apache License 2.0 (`Apache-2.0`) | The CNCF Distribution authors | https://github.com/distribution/distribution | from knowledge, confirm |  |
 | MySQL 8.0 (mysql:8.0) | 8.0 | GNU General Public License v2.0 (`GPL-2.0-only`) | Oracle and/or its affiliates | https://github.com/mysql/mysql-server | from knowledge, confirm | Unmodified upstream image pulled by the user's Docker; separate process. |
 | PostgreSQL + pgvector (vyomi/postgres:16-alpine-pgvector) | 16 | PostgreSQL License (`PostgreSQL`) | PostgreSQL Global Development Group; Regents of the University of California; pgvector contributors | https://www.postgresql.org/ | from knowledge, confirm | Rebuilt image: keep notices. |
-| redis (redis:7-alpine) | 7 | BSD 3-Clause License (`BSD-3-Clause`) | Redis Ltd. and contributors | https://github.com/redis/redis | from knowledge, confirm | BSD-3-Clause applies to 7.2 and earlier; Redis 7.4+ changed licence (RSALv2/SSPLv1; AGPLv3 from 8.0). The floating tag 7-alpine may resolve to a newer one: pin to 7.2.x or use Valkey. Counsel to confirm. |
+| redis (redis:7.2.5-alpine) | 7.2.5 | BSD 3-Clause License (`BSD-3-Clause`) | Redis Ltd. and contributors | https://github.com/redis/redis | from knowledge, confirm | BSD-3-Clause applies to 7.2 and earlier; Redis 7.4+ changed licence (RSALv2/SSPLv1; AGPLv3 from 8.0). The image is now PINNED to the 7.2.5 patch tag (core/backend_provisioner.py default; VYOMI_REDIS_IMAGE can override) so it can never float to a 7.4+/8.x build under the non-BSD licences. Keep it on 7.2.x or move to Valkey. Counsel to confirm. |
 | FRRouting (planned hybrid-edge) |  | GNU General Public License v2.0 (`GPL-2.0-only`) | FRRouting contributors | https://github.com/FRRouting/frr | from knowledge, confirm | PLANNED, not in compose yet. GPL-2.0-or-later; shipping the image would oblige a source offer and licence text. |
 
 ### Python dependencies

@@ -1,6 +1,6 @@
 """Remote LLM mode for the mesh (SPIKE - OFF unless ``VYOMI_MESH_REMOTE_LLM=1``).
 
-The mesh (Codespace, 2 cores / 8 GB) normally runs the AI pack (llama.cpp Qwen2.5-3B + bge-small, ~2.8 GB AI bucket).
+The mesh (Codespace, 2 cores / 8 GB) normally runs the AI pack (llama.cpp Qwen3-4B-Instruct-2507 + bge-small, ~2.8 GB AI bucket).
 In remote mode the LLM runs on a GitHub-Actions runner in the USER's account that dials OUT to the relay hub; the mesh
 reaches it with plain outbound HTTP through the relay's ``/llm`` plane (wasm/relay/runner-llm-hub.mjs). The mesh never
 accepts anything from the internet for this.

@@ -16,7 +16,7 @@ Bedrock Converse outputConfig.textFormat) and per-request model selection go thr
 token-by-token from the backend when it can (set ``STREAM_OK`` so the HTTP layer receives ``stream`` generators).
 
 Honest limit: one small local model answers for every model id/deployment (see core/llm_core.HONEST_LIMIT); tool calls from a
-1-3B model are validated and retried by the seam but are weaker than the real models. Images, guardrails, prompt caching and
+1-4B model are validated and retried by the seam but are weaker than the real models. Images, guardrails, prompt caching and
 fine-tuned/provisioned throughput are not modelled; they are rejected with the cloud's validation error rather than ignored.
 """
 from __future__ import annotations
@@ -98,7 +98,7 @@ BEDROCK_ALIASES = [
     ("cohere.embed-multilingual-v3", "Cohere", "Embed Multilingual", _T, _E, False),
 ]
 # standard ids the catalogue's hidden alias map does not cover (Titan Text, Cohere Command): resolved here, to the small local model
-_EXTRA_ALIASES = {"amazon.titan-text": "qwen2.5-3b", "cohere.command": "qwen2.5-7b"}
+_EXTRA_ALIASES = {"amazon.titan-text": "qwen3-4b", "cohere.command": "qwen2.5-7b"}
 _ALIAS_BY_ID = {a[0]: a for a in BEDROCK_ALIASES}
 _INF_PROFILE_PREFIX = ("us", "eu", "apac")
 
@@ -1257,7 +1257,7 @@ def _backed_by(mid):
     m = _resolve_model(mid)
     cid = m[6] if m else CAT.DEFAULT_CHAT
     return {"catalogModelId": cid, "localModel": llm.resolve_model(mid), "availability": CAT.availability(cid),
-            "note": "Vyomi alias: this standard Bedrock id is answered by the local open model above (Mesh: llama.cpp Qwen2.5 via the "
+            "note": "Vyomi alias: this standard Bedrock id is answered by the local open model above (Mesh: llama.cpp Qwen3-4B-Instruct-2507 via the "
                     "core/llm_core seam; Nano: WebLLM), not by the original vendor model. Behaviour and quality are those of the local model."}
 
 

@@ -1,7 +1,7 @@
 {
  "bomFormat": "CycloneDX",
  "specVersion": "1.5",
- "serialNumber": "urn:uuid:641c197b-37f1-5699-9eb6-4f32978c4190",
+ "serialNumber": "urn:uuid:81eee44e-c3b5-5392-ae1f-24b74d6a8ad5",
  "version": 1,
  "metadata": {
   "component": {
@@ -19,8 +19,39 @@
  "components": [
   {
    "type": "machine-learning-model",
+   "bom-ref": "model:qwen3-4b",
+   "name": "Qwen3 4B Instruct 2507",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen3-4b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
    "bom-ref": "model:qwen2.5-3b",
-   "name": "Qwen2.5 3B",
+   "name": "Qwen2.5 3B (non-commercial)",
    "supplier": {
     "name": "Alibaba Cloud"
    },
@@ -2379,8 +2410,8 @@
   },
   {
    "type": "container",
-   "bom-ref": "component:image:redis (redis:7-alpine)",
-   "name": "redis (redis:7-alpine)",
+   "bom-ref": "component:image:redis (redis:7.2.5-alpine)",
+   "name": "redis (redis:7.2.5-alpine)",
    "supplier": {
     "name": "Redis Ltd. and contributors"
    },
@@ -2403,7 +2434,7 @@
      "value": "image"
     }
    ],
-   "version": "7"
+   "version": "7.2.5"
   },
   {
    "type": "container",
