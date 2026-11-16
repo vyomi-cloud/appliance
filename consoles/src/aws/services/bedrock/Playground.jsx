@@ -17,10 +17,13 @@ import Textarea from "@cloudscape-design/components/textarea";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import * as api from "./api.js";
+import * as tuneApi from "./inferTune/api.js";
+import { ServingBar } from "./inferTune/ImportedModels.jsx";
 import { modelOption, ModelPicker } from "./Common.jsx";
 
 export default function Playground() {
   const models = useAsync(() => api.listModels(), []);
+  const imported = useAsync(() => tuneApi.listImportedModels().catch(() => []), []);
   const [model, setModel] = useState(null);
   const [system, setSystem] = useState("");
   const [prompt, setPrompt] = useState("Say hello in five words.");
@@ -29,7 +32,10 @@ export default function Playground() {
   const [turns, setTurns] = useState([]);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const opts = (models.data || []).filter((m) => m.outputModalities?.includes("TEXT")).map(modelOption);
+  const found = (models.data || []).filter((m) => m.outputModalities?.includes("TEXT")).map(modelOption);
+  const mine = (imported.data || []).map((m) => ({ label: m.modelName, value: m.modelArn, description: m.modelArn, tags: ["Imported", "Your LoRA adapter"] }));
+  const opts = mine.length ? [{ label: "Imported models (your LoRA adapters)", options: mine }, { label: "Foundation models", options: found }] : found;
+  const isImported = !!model && String(model.value).includes(":imported-model/");
   const run = async () => {
     setBusy(true); setError(null);
     try {
@@ -56,6 +62,7 @@ export default function Playground() {
                     <div data-testid="converse-output" style={{ whiteSpace: "pre-wrap" }}>{t.out.output.message.content.map((c) => c.text).join("")}</div>
                     <Box variant="small" color="text-body-secondary">{t.out.usage.inputTokens} input tokens, {t.out.usage.outputTokens} output tokens, {t.out.metrics.latencyMs} ms, stop: {t.out.stopReason}</Box>
                   </SpaceBetween>))}
+                {isImported && <ServingBar />}
                 {error && <Alert type="error" header={error.code === "ModelNotReadyException" ? "The local model is not available" : error.code}>{error.message}</Alert>}
                 <FormField label="Prompt"><Textarea value={prompt} rows={3} onChange={({ detail }) => setPrompt(detail.value)} ariaLabel="Prompt" placeholder="Write a prompt" /></FormField>
                 <SpaceBetween direction="horizontal" size="xs"><Button variant="primary" loading={busy} disabled={!prompt} onClick={run}>Run</Button><Button onClick={() => { setTurns([]); setError(null); }}>Clear</Button></SpaceBetween>

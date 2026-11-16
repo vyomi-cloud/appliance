@@ -136,5 +136,18 @@
    "tests/conformance/test_bedrock_build.py",
    "tests/conformance/test_bedrock_evals.py"
   ]
+ },
+ "bedrock.imported-models": {
+  "title": "Custom model import (imported models, import jobs, InvokeModel / Converse on the imported ARN)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi extension: real Bedrock imports Hugging Face weights, here s3DataSource.s3Uri is a prefix holding a LoRA adapter GGUF (adapter.gguf, up to 50 MB) and adapter_meta.json trained on Mesh or your machine. The import job validates the GGUF header, rank, hidden size and base and fails with the reason (failureMessage). The model is a SmolLM2 135M or 360M base plus your adapter, so it is a small open model, not a vendor model. Serving needs the Nano console tab (llama.cpp WASM, the base GGUF is downloaded from Hugging Face on first use, one imported model resident at a time, answers are returned whole); Mesh and offline accept and store imports but cannot serve them yet and answer ModelNotReadyException."
+  ],
+  "tests": [
+   "tests/conformance/test_model_import.py"
+  ]
  }
 }

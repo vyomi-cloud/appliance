@@ -46,3 +46,11 @@ export const listEndpoints = () => B("GET", "/marketplace-model/endpoints", { qu
 export const registerEndpoint = (endpointArn, modelSourceIdentifier) => B("POST", `/marketplace-model/endpoints/${enc(endpointArn)}/registration`, { body: { modelSourceIdentifier } });
 export const deregisterEndpoint = (endpointArn) => B("DELETE", `/marketplace-model/endpoints/${enc(endpointArn)}/registration`);
 export const deleteEndpoint = (arn) => B("DELETE", `/marketplace-model/endpoints/${enc(arn)}`);
+
+// Custom model import (Vyomi extension: s3Uri is a prefix holding adapter.gguf + adapter_meta.json; core/import_core.py)
+export const listImportedModels = () => B("GET", "/imported-models", { query: { maxResults: "1000" } }).then((r) => r.modelSummaries || []);
+export const getImportedModel = (id) => B("GET", `/imported-models/${enc(id)}`);
+export const deleteImportedModel = (id) => B("DELETE", `/imported-models/${enc(id)}`);
+export const listImportJobs = () => B("GET", "/model-import-jobs", { query: { maxResults: "1000" } }).then((r) => r.modelImportJobSummaries || []);
+export const getImportJob = (id) => B("GET", `/model-import-jobs/${enc(id)}`);
+export const createImportJob = (jobName, importedModelName, s3Uri) => B("POST", "/model-import-jobs", { body: { jobName, importedModelName, roleArn: roleArn(), modelDataSource: { s3DataSource: { s3Uri } } } });

@@ -41,6 +41,7 @@ const txt = hasRes ? await page.getByTestId("pf-result").innerText() : await pag
 check("run returns outputs + trace, or an honest model-unavailable error (no local model in headless Nano)", hasRes ? /answer/.test(txt) && /chat/.test(txt) : /Flow failed/.test(txt), txt.slice(-300));
 await shot("5-azure-promptflow");
 await page.goto(`${BASE}/nano/v4/azure/#/foundry/evaluations`);
+await page.waitForTimeout(3000);   // let the deployment list load so the dialog preselects a model
 await page.getByRole("button", { name: "New evaluation" }).click();
 check("Evaluations is a real page", (await page.getByTestId("not-in-scope").count()) === 0);
 await page.getByLabel("Evaluation name").fill("capitals");

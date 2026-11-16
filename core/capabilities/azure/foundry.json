@@ -1,0 +1,81 @@
+{
+  "$doc": "Vyomi capability registry \u2014 Microsoft Foundry hub pages (Agents, Content filters, Evaluations, Prompt flow, Fine-tuning, Custom models). Proven by tests/conformance/test_capabilities.py.",
+  "azure.foundry.agents": {
+    "title": "Foundry Agents (Assistants API: agents, threads, runs, code interpreter, file search, vector stores)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Agents are Assistants API assistants over a model deployment (the small local model, so quality is toy-grade). Runs execute synchronously inside the create call. Tools: function calling (submit_tool_outputs), code_interpreter (real Python in a restricted sandbox, not a VM: input files from tool_resources, stdout in run steps, written files saved with file_path annotations, no image output) and file_search (real retrieval over vector stores: files are parsed, chunked and embedded with the local embedding model and ranked by exact cosine; answers carry file_citation annotations). Not available: Bing grounding, Azure AI Search, OpenAPI, Logic Apps, Azure Functions and MCP tools, expiry policies, a chunking_strategy other than the default, and file_search ranking options. State is process-local."
+    ],
+    "tests": [
+      "tests/conformance/test_ai_agent_lanes.py"
+    ]
+  },
+  "azure.foundry.content-filters": {
+    "title": "Content filters (raiPolicies enforced on deployments)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "A custom content filter is enforced on every deployment that names it, through the Bedrock Guardrails content engine (keyword and local-embedding scoring), so detection is toy-grade rather than Microsoft's classifiers. Hate, Sexual, Violence and Jailbreak map to the engine; SelfHarm is not modelled, and Microsoft's built-in default policies never block."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_content_filters.py"
+    ]
+  },
+  "azure.foundry.evaluations": {
+    "title": "Evaluations (Azure OpenAI Evals API)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The Azure OpenAI Evals API (openai SDK client.evals: evals, runs, output_items) runs for real with string_check, text_similarity, label_model and score_model graders. Model graders are judged by the small local model, so scores are indicative and will not match Azure's. Python graders, the logs and stored_completions sources, and gleu and meteor are rejected; run state is process-local."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_foundry_evals_flows.py"
+    ]
+  },
+  "azure.foundry.promptflow": {
+    "title": "Prompt flow (flow.dag.yaml)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "A flow.dag.yaml with inputs, outputs, llm and prompt nodes is converted to the Bedrock Flows runner and run on the local model (Vyomi extension at /openai/vyomi/promptflow). Python tool nodes and other node types of the Prompt flow SDK are rejected, flow state is in memory, and there is no compute session or managed online endpoint."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_foundry_evals_flows.py"
+    ]
+  },
+  "azure.foundry.finetuning": {
+    "title": "Fine-tuning (Azure OpenAI fine_tuning/jobs)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "On the trainable bases (the embedding model or vyomi.head.*) a job really trains a small classifier, router or reranker head, capped at 2000 rows, 5 MB and 20 labels; it is not a language model. On every other base model a job completes with a fine-tuned model record only: nothing is trained."
+    ],
+    "tests": [
+      "tests/conformance/test_training_jobs.py"
+    ]
+  },
+  "azure.foundry.custom-models": {
+    "title": "Custom models (import a LoRA adapter, Vyomi extension)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "Azure has no API that registers a custom LoRA adapter, so POST /openai/vyomi/custom-models is a Vyomi extension. The model is a SmolLM2 135M or 360M base plus your GGUF adapter (up to 50 MB), deployed through a normal ARM deployment (format Vyomi) and called with chat/completions. Serving needs the Nano console tab (llama.cpp WASM, base downloaded from Hugging Face on first use); Mesh and offline store the import but cannot serve it yet."
+    ],
+    "tests": [
+      "tests/conformance/test_model_import.py"
+    ]
+  }
+}

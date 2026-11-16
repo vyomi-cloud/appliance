@@ -12,6 +12,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, InfoBar, Loading } from "../../kit/common.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget, setInactive, isNotFound } from "../../kit/recent.js";
 import * as api from "./api.js";
 
@@ -25,6 +26,9 @@ const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).
 const SAMPLE_INDEX = { fields: [{ name: "id", type: "Edm.String", key: true }, { name: "title", type: "Edm.String", searchable: true }, { name: "category", type: "Edm.String", filterable: true, facetable: true }] };
 const json = (v) => JSON.stringify(v, null, 2);
 const Pre = ({ children, ...p }) => <pre {...p} style={{ background: "var(--colorNeutralBackground3, #f5f5f5)", padding: 12, fontSize: 12, overflow: "auto", maxHeight: 360, margin: 0 }}>{children}</pre>;
+
+/** Dev Simplified badge per panel (registry: core/capabilities/azure/aisearch.json). */
+const CAP = { indexes: ["azure.aisearch.query", "Indexes and queries"], indexers: ["azure.aisearch.indexers", "Indexers"], datasources: ["azure.aisearch.indexers", "Data sources"], skillsets: ["azure.aisearch.indexers", "Skillsets"] };
 
 export default function SearchServiceBlade({ params }) {
   const { rg, name } = params;
@@ -49,6 +53,8 @@ export default function SearchServiceBlade({ params }) {
       skillsets: () => <Skillsets a={a} />,
       keys: () => <Keys a={a} />,
     }[panel]?.() || <InfoBar>Unknown panel.</InfoBar>;
+    const cap = CAP[panel];
+    if (cap) body = <CapabilityContainer id={cap[0]} title={cap[1]}>{body}</CapabilityContainer>;
   }
   return (
     <ResourceBlade title={panel === "overview" ? name : `${name} | ${LABEL[panel] || panel}`} subtitle="Search service" glyph={<Glyph id="cognitiveservices" />} closeHref="#/aisearch"

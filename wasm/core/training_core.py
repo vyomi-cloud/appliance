@@ -131,6 +131,22 @@ def split_uri(uri):
     return m.group(1), m.group(2)
 
 
+def _gcs_get(st, bucket, key):
+    """Object bytes from the simulated GCS store through its own JSON-API dispatcher (the GCS core keeps objects in its own layout, so the S3 reader cannot see them)."""
+    try:
+        try:
+            from core import gcp_storage_core as g
+        except ImportError:
+            import gcp_storage_core as g  # type: ignore
+        from urllib.parse import quote
+        if not st.bucket_exists(bucket):
+            return None
+        r = g.dispatch(st, "GET", "/storage/v1/b/%s/o/%s" % (bucket, quote(key, safe="")), {"alt": "media"}, {}, b"")
+        return r.body if r.status == 200 else None
+    except Exception:  # noqa: BLE001
+        return store_get(bucket, key, st)
+
+
 def read_uri(uri) -> bytes:
     b, k = split_uri(uri)
     data = None
@@ -142,7 +158,7 @@ def read_uri(uri) -> bytes:
         except Exception:  # noqa: BLE001
             data = None
     if data is None and uri.startswith("gs://") and _ST["gcs"] is not None:
-        data = store_get(b, k, _ST["gcs"])
+        data = _gcs_get(_ST["gcs"], b, k)
     if data is None:
         data = store_get(b, k)
     if data is None:
