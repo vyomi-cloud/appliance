@@ -458,8 +458,8 @@ def _sg_rule_xml(v: dict) -> str:
             f"<securityGroupRuleId>{_xml_escape(v['id'])}</securityGroupRuleId><groupId>{_xml_escape(v['group_id'])}</groupId>"
             f"<groupOwnerId>{OWNER_ID}</groupOwnerId><isEgress>{str(v['egress']).lower()}</isEgress><ipProtocol>{_xml_escape(v['protocol'])}</ipProtocol>"
             f"<fromPort>{v['from_port']}</fromPort><toPort>{v['to_port']}</toPort>{tgt}"
-            f"<description>{_xml_escape(v['description'])}</description>{_tags_xml(v['tags'])}"
-            "</item>")
+            + (f"<description>{_xml_escape(v['description'])}</description>" if v["description"] else "")   # EC2 omits an unset description (F14)
+            + f"{_tags_xml(v['tags'])}</item>")
 
 
 def _describe_security_group_rules(store, params):

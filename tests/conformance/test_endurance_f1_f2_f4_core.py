@@ -89,6 +89,9 @@ def _f8():
     _check("F8 DescribeSecurityGroupRules by id", ids[0] in d and "<isEgress>false</isEgress>" in d and "<description>https</description>" in d)
     d = body(call(Action="DescribeSecurityGroupRules", **{"Filter.1.Name": "group-id", "Filter.1.Value.1": sg}))
     _check("F8 group-id filter includes the default egress rule too", d.count("<securityGroupRuleId>") == 2 and "<isEgress>true</isEgress>" in d)
+    d0 = body(call(Action="AuthorizeSecurityGroupEgress", GroupId=sg, **{"IpPermissions.1.IpProtocol": "udp", "IpPermissions.1.FromPort": "53",
+         "IpPermissions.1.ToPort": "53", "IpPermissions.1.IpRanges.1.CidrIp": "10.0.0.0/8"}))
+    _check("F14 a rule without a description has NO <description> element (provider would see '' vs null forever)", "<description>" not in d0)
     call(Action="ModifySecurityGroupRules", GroupId=sg, **{"SecurityGroupRule.1.SecurityGroupRuleId": ids[0],
          "SecurityGroupRule.1.SecurityGroupRule.Description": "changed"})
     _check("F8 modify description", "<description>changed</description>" in body(call(Action="DescribeSecurityGroupRules", **{"SecurityGroupRuleId.1": ids[0]})))
