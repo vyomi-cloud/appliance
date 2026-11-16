@@ -74,6 +74,31 @@ def _f6_f7():
     _check("F7 describe by name filter", pl in out)
 
 
+def _f8():
+    s = types.SimpleNamespace()
+    call = lambda **p: v.dispatch(s, p)  # noqa: E731
+    body = lambda r: r.body.decode() if isinstance(r.body, bytes) else r.body  # noqa: E731
+    vpc = re.search(r"<vpcId>(vpc-\w+)</vpcId>", body(call(Action="CreateVpc", CidrBlock="10.7.0.0/16"))).group(1)
+    sg = re.search(r"<groupId>(sg-\w+)</groupId>", body(call(Action="CreateSecurityGroup", VpcId=vpc, GroupName="g", GroupDescription="d"))).group(1)
+    out = body(call(Action="AuthorizeSecurityGroupIngress", GroupId=sg, **{
+        "IpPermissions.1.IpProtocol": "tcp", "IpPermissions.1.FromPort": "443", "IpPermissions.1.ToPort": "443",
+        "IpPermissions.1.IpRanges.1.CidrIp": "0.0.0.0/0", "IpPermissions.1.IpRanges.1.Description": "https"}))
+    ids = re.findall(r"<securityGroupRuleId>(sgr-\w+)</securityGroupRuleId>", out)
+    _check("F8 authorize returns the created rule with an sgr id", len(ids) == 1 and "<cidrIpv4>0.0.0.0/0</cidrIpv4>" in out and "<fromPort>443</fromPort>" in out)
+    d = body(call(Action="DescribeSecurityGroupRules", **{"SecurityGroupRuleId.1": ids[0]}))
+    _check("F8 DescribeSecurityGroupRules by id", ids[0] in d and "<isEgress>false</isEgress>" in d and "<description>https</description>" in d)
+    d = body(call(Action="DescribeSecurityGroupRules", **{"Filter.1.Name": "group-id", "Filter.1.Value.1": sg}))
+    _check("F8 group-id filter includes the default egress rule too", d.count("<securityGroupRuleId>") == 2 and "<isEgress>true</isEgress>" in d)
+    call(Action="ModifySecurityGroupRules", GroupId=sg, **{"SecurityGroupRule.1.SecurityGroupRuleId": ids[0],
+         "SecurityGroupRule.1.SecurityGroupRule.Description": "changed"})
+    _check("F8 modify description", "<description>changed</description>" in body(call(Action="DescribeSecurityGroupRules", **{"SecurityGroupRuleId.1": ids[0]})))
+    r = call(Action="AuthorizeSecurityGroupIngress", GroupId=sg, **{"IpPermissions.1.IpProtocol": "tcp", "IpPermissions.1.FromPort": "443",
+         "IpPermissions.1.ToPort": "443", "IpPermissions.1.IpRanges.1.CidrIp": "0.0.0.0/0"})
+    _check("F8 duplicate rule is rejected with InvalidPermission.Duplicate", r.status >= 400 and "InvalidPermission.Duplicate" in body(r))
+    call(Action="RevokeSecurityGroupIngress", GroupId=sg, **{"SecurityGroupRuleId.1": ids[0]})
+    _check("F8 revoke by rule id", ids[0] not in body(call(Action="DescribeSecurityGroupRules", **{"Filter.1.Name": "group-id", "Filter.1.Value.1": sg})))
+
+
 if __name__ == "__main__":
-    _f1(); _f4(); _f6_f7()
-    print("Endurance F1/F4/F6/F7 regressions: ALL GREEN")
+    _f1(); _f4(); _f6_f7(); _f8()
+    print("Endurance F1/F4/F6/F7/F8 regressions: ALL GREEN")

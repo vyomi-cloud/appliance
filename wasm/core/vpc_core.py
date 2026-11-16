@@ -401,9 +401,122 @@ def _authorize(store, params, direction):
     for p in perms:
         p.setdefault("rule_id", _rid("sgr", 8))
         p.setdefault("description", "")
-    sg["ingress" if direction == "ingress" else "egress"].extend(perms)
+    key = "ingress" if direction == "ingress" else "egress"
+    dup = [p for p in perms for r in sg[key] if r["protocol"] == p["protocol"] and r.get("from_port") == p.get("from_port")
+           and r.get("to_port") == p.get("to_port") and (set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", [])))]
+    if dup:
+        raise VpcError("InvalidPermission.Duplicate", "The specified rule already exists.")
+    for p in perms:   # per-rule tags from TagSpecifications (security-group-rule)
+        p["rule_tags"] = _parse_tag_specifications(params).get("security-group-rule", {})
+    sg[key].extend(perms)
+    created = [v for v in _sg_rule_views(sg, direction=key) if v["perm"] in perms]
     action = "AuthorizeSecurityGroupIngress" if direction == "ingress" else "AuthorizeSecurityGroupEgress"
-    return _envelope(action, "<return>true</return>")
+    return _envelope(action, f"<return>true</return><securityGroupRuleSet>{''.join(_sg_rule_xml(v) for v in created)}</securityGroupRuleSet>")
+
+
+# ── security group RULES (the modern per-rule API: sgr-* ids) ───────────────
+# The model stores one permission per rule_id with a list of cidrs/sgs. The modern EC2 API (and the Terraform aws provider's
+# aws_vpc_security_group_*_rule) addresses ONE target per rule, so the first target keeps the permission's rule_id and any
+# further target gets a stable derived id. (endurance F8)
+def _sg_target_rule_id(rule_id: str, idx: int) -> str:
+    if idx == 0:
+        return rule_id
+    import hashlib
+    return "sgr-" + hashlib.sha1(f"{rule_id}:{idx}".encode()).hexdigest()[:17]
+
+
+def _sg_rule_views(sg: dict, only_ids=None, direction=None) -> list:
+    out = []
+    for d in ("ingress", "egress"):
+        if direction and d != direction:
+            continue
+        for p in sg.get(d, []):
+            rid = p.get("rule_id") or ""
+            targets = [("cidr", c) for c in p.get("cidrs", [])] + [("sg", g) for g in p.get("sgs", [])]
+            for i, (kind, val) in enumerate(targets):
+                v = {"id": _sg_target_rule_id(rid, i), "group_id": sg["id"], "egress": d == "egress", "protocol": p["protocol"],
+                     "from_port": -1 if p.get("from_port") is None else p["from_port"],
+                     "to_port": -1 if p.get("to_port") is None else p["to_port"],
+                     "kind": kind, "value": val, "description": p.get("description", ""), "perm": p, "idx": i, "tags": p.get("rule_tags", {})}
+                if only_ids is None or v["id"] in only_ids:
+                    out.append(v)
+    return out
+
+
+def _sg_rule_xml(v: dict) -> str:
+    tgt = (f"<referencedGroupInfo><groupId>{_xml_escape(v['value'])}</groupId><userId>{OWNER_ID}</userId></referencedGroupInfo>"
+           if v["kind"] == "sg" else
+           (f"<cidrIpv6>{_xml_escape(v['value'])}</cidrIpv6>" if ":" in v["value"] else f"<cidrIpv4>{_xml_escape(v['value'])}</cidrIpv4>"))
+    return ("<item>"
+            f"<securityGroupRuleId>{_xml_escape(v['id'])}</securityGroupRuleId><groupId>{_xml_escape(v['group_id'])}</groupId>"
+            f"<groupOwnerId>{OWNER_ID}</groupOwnerId><isEgress>{str(v['egress']).lower()}</isEgress><ipProtocol>{_xml_escape(v['protocol'])}</ipProtocol>"
+            f"<fromPort>{v['from_port']}</fromPort><toPort>{v['to_port']}</toPort>{tgt}"
+            f"<description>{_xml_escape(v['description'])}</description>{_tags_xml(v['tags'])}"
+            "</item>")
+
+
+def _describe_security_group_rules(store, params):
+    m = _model(store)
+    ids = [v for k, v in params.items() if k.startswith("SecurityGroupRuleId.")]
+    rows = []
+    for sg in m["sgs"].values():
+        rows.extend(_sg_rule_views(sg))
+    if ids:
+        have = {r["id"] for r in rows}
+        missing = [i for i in ids if i not in have]
+        if missing:
+            raise VpcError("InvalidSecurityGroupRuleId.NotFound", f"The security group rule ID '{missing[0]}' does not exist")
+        rows = [r for r in rows if r["id"] in ids]
+    for name, vals in _filters(params).items():
+        if name == "group-id":
+            rows = [r for r in rows if r["group_id"] in vals]
+        elif name == "security-group-rule-id":
+            rows = [r for r in rows if r["id"] in vals]
+        elif name == "tag" or name.startswith("tag:") or name in ("tag-key", "tag-value"):
+            rows = [r for r in rows if _tag_filter_ok(r["tags"], name, vals)]
+        elif name == "owner-id":
+            rows = [r for r in rows if OWNER_ID in vals]
+        else:
+            raise VpcError("InvalidParameterValue", f"The filter '{name}' is invalid")
+    return _envelope("DescribeSecurityGroupRules", f"<securityGroupRuleSet>{''.join(_sg_rule_xml(r) for r in rows)}</securityGroupRuleSet>")
+
+
+def _modify_security_group_rules(store, params):
+    m = _model(store)
+    sg = _find_sg(m, params.get("GroupId"))
+    idxs = sorted({k.split(".")[1] for k in params if k.startswith("SecurityGroupRule.") and len(k.split(".")) >= 3}, key=int)
+    for i in idxs:
+        rid = str(params.get(f"SecurityGroupRule.{i}.SecurityGroupRuleId", ""))
+        hit = _sg_rule_views(sg, {rid})
+        if not hit:
+            raise VpcError("InvalidSecurityGroupRuleId.NotFound", f"The security group rule ID '{rid}' does not exist")
+        v = hit[0]; p = v["perm"]
+        pre = f"SecurityGroupRule.{i}.SecurityGroupRule."
+        if pre + "Description" in params:
+            p["description"] = str(params[pre + "Description"])
+        if pre + "IpProtocol" in params:
+            p["protocol"] = str(params[pre + "IpProtocol"])
+        if pre + "FromPort" in params:
+            p["from_port"] = None if int(params[pre + "FromPort"]) == -1 else int(params[pre + "FromPort"])
+        if pre + "ToPort" in params:
+            p["to_port"] = None if int(params[pre + "ToPort"]) == -1 else int(params[pre + "ToPort"])
+        for key, kind in (("CidrIpv4", "cidr"), ("CidrIpv6", "cidr"), ("ReferencedGroupId", "sg")):
+            if pre + key in params:
+                lst = p["cidrs"] if kind == "cidr" else p["sgs"]
+                lst[lst.index(v["value"])] = str(params[pre + key])
+    return _envelope("ModifySecurityGroupRules", "<return>true</return>")
+
+
+def _update_sg_rule_descriptions(store, params, direction):
+    m = _model(store)
+    sg = _find_sg(m, params.get("GroupId"))
+    for p in _parse_ip_permissions(params):
+        for r in sg[direction]:
+            if r["protocol"] == p["protocol"] and r.get("from_port") == p.get("from_port") and r.get("to_port") == p.get("to_port") \
+                    and (set(r.get("cidrs", [])) & set(p.get("cidrs", [])) or set(r.get("sgs", [])) & set(p.get("sgs", []))):
+                r["description"] = p.get("description", "")
+    return _envelope("UpdateSecurityGroupRuleDescriptions" + ("Ingress" if direction == "ingress" else "Egress"), "<return>true</return>")
+
 
 
 def _igw_xml(igw: dict) -> str:
@@ -3532,7 +3645,10 @@ def _revoke(store, params, direction):
     key = "ingress" if direction == "ingress" else "egress"
     rule_ids = [v for k, v in params.items() if k.startswith("SecurityGroupRuleId.")]
     if rule_ids:
-        sg[key] = [r for r in sg[key] if r.get("rule_id") not in rule_ids]
+        for v in _sg_rule_views(sg, set(rule_ids), direction=key):   # remove just the addressed target of a permission
+            p = v["perm"]
+            (p["cidrs"] if v["kind"] == "cidr" else p["sgs"]).remove(v["value"])
+        sg[key] = [r for r in sg[key] if r.get("cidrs") or r.get("sgs")]
     else:
         perms = _parse_ip_permissions(params)
         if not perms and params.get("IpProtocol"):
@@ -4431,6 +4547,10 @@ _OPS = {
     "CreateSecurityGroup": _create_security_group,
     "AuthorizeSecurityGroupIngress": lambda s, p: _authorize(s, p, "ingress"),
     "AuthorizeSecurityGroupEgress": lambda s, p: _authorize(s, p, "egress"),
+    "DescribeSecurityGroupRules": _describe_security_group_rules,
+    "ModifySecurityGroupRules": _modify_security_group_rules,
+    "UpdateSecurityGroupRuleDescriptionsIngress": lambda s, p: _update_sg_rule_descriptions(s, p, "ingress"),
+    "UpdateSecurityGroupRuleDescriptionsEgress": lambda s, p: _update_sg_rule_descriptions(s, p, "egress"),
     "RevokeSecurityGroupIngress": lambda s, p: _revoke(s, p, "ingress"),
     "RevokeSecurityGroupEgress": lambda s, p: _revoke(s, p, "egress"),
     "DescribeSecurityGroups": _describe_security_groups,

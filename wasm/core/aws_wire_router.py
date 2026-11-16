@@ -572,6 +572,8 @@ _QUERY_ACTION = {
     "AuthorizeSecurityGroupIngress": "vpc", "AuthorizeSecurityGroupEgress": "vpc",
     "RevokeSecurityGroupIngress": "vpc", "RevokeSecurityGroupEgress": "vpc",
     "DescribeSecurityGroups": "vpc", "DeleteSecurityGroup": "vpc",
+    "DescribeSecurityGroupRules": "vpc", "ModifySecurityGroupRules": "vpc",
+    "UpdateSecurityGroupRuleDescriptionsIngress": "vpc", "UpdateSecurityGroupRuleDescriptionsEgress": "vpc",
     "CreateInternetGateway": "vpc", "DescribeInternetGateways": "vpc", "AttachInternetGateway": "vpc",
     "DetachInternetGateway": "vpc", "DeleteInternetGateway": "vpc",
     "CreateRoute": "vpc", "DeleteRoute": "vpc",
