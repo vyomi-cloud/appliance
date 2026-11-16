@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import math
+import os
 import re
 import sqlite3
 import zipfile
@@ -127,10 +128,47 @@ def hybrid(texts, vecs, query, qvec, allowed=None, k=10, weight_lex=0.5):
     return sorted(fused.items(), key=lambda x: -x[1])[:k]
 
 
+_RR = {"backend": "embedding+lexical"}
+
+
+def rerank_backend() -> str:
+    """Which reranker answered the last call: 'cross-encoder (<endpoint>)' or 'embedding+lexical'."""
+    return _RR["backend"]
+
+
+def _cross_encoder(query: str, texts, endpoint: str):
+    """OPTIONAL true cross-encoder: any Jina/Cohere/llama.cpp-style ``POST <endpoint>`` with {model, query, documents} ->
+    {results:[{index, relevance_score}]} (e.g. ``llama-server --reranking`` with a bge-reranker GGUF on the Mesh). Not shipped; the operator sets
+    ``VYOMI_RERANK_ENDPOINT``. -> [(index, score 0..1)] or None when unreachable."""
+    import json as _json
+    import urllib.request as _u
+    try:
+        req = _u.Request(endpoint, data=_json.dumps({"model": os.environ.get("VYOMI_RERANK_MODEL", "reranker"), "query": query, "documents": list(texts),
+                                                     "top_n": len(texts)}).encode(), headers={"content-type": "application/json"})
+        with _u.urlopen(req, timeout=30) as r:
+            res = _json.loads(r.read())["results"]
+        out = []
+        for x in res:
+            sc = float(x.get("relevance_score", x.get("score", 0.0)))
+            out.append((int(x["index"]), round(sc if 0.0 <= sc <= 1.0 else 1.0 / (1.0 + math.exp(-sc)), 6)))
+        return out
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def rerank(query: str, texts, top_n: int | None = None):
-    """-> [(index, relevance 0..1)] best-first. Embedding similarity (0.7) + query-term coverage (0.3)."""
+    """-> [(index, relevance 0..1)] best-first. A real cross-encoder when ``VYOMI_RERANK_ENDPOINT`` answers; otherwise embedding
+    similarity (0.7) + query-term coverage (0.3) over the shared embedding seam (labelled by ``rerank_backend()``)."""
     if not texts:
         return []
+    ep = os.environ.get("VYOMI_RERANK_ENDPOINT")
+    if ep:
+        ce = _cross_encoder(query, texts, ep)
+        if ce is not None:
+            _RR["backend"] = f"cross-encoder ({ep})"
+            ce.sort(key=lambda x: -x[1])
+            return ce[:top_n] if top_n else ce
+    _RR["backend"] = "embedding+lexical" + (" (cross-encoder endpoint unreachable)" if ep else "")
     vs = llm.embed([query] + list(texts))["vectors"]
     qt = set(tokens(query))
     out = []

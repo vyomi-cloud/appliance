@@ -1,6 +1,6 @@
 /* Azure AI Search service blade: Overview, Keys, Indexes (+ search explorer and document upload), Indexers, Data sources, Activity log.
- * Every action is a real ARM call into core/azure_search_core.py (the same engine the Search SDKs use). Not built here: semantic ranker
- * configuration, skillsets editor, vector profiles, scaling and networking panels (the engine declares them not modelled). */
+ * Every action is a real ARM call into core/azure_search_core.py (the same engine the Search SDKs use). Skillsets are a JSON panel.
+ * Not built here: vector profile designer, scaling and networking panels (the engine declares them not modelled). */
 import { useEffect, useState } from "react";
 import { Button, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Textarea, ToolbarButton } from "@fluentui/react-components";
 import { Add20Regular, ArrowClockwise20Regular, Delete20Regular, Play20Regular } from "@fluentui/react-icons";
@@ -18,7 +18,7 @@ import * as api from "./api.js";
 export const MENU = [
   { id: "overview", label: "Overview" },
   { id: "activitylog", label: "Activity log" },
-  { group: "Search management", items: [{ id: "indexes", label: "Indexes" }, { id: "indexers", label: "Indexers" }, { id: "datasources", label: "Data sources" }] },
+  { group: "Search management", items: [{ id: "indexes", label: "Indexes" }, { id: "indexers", label: "Indexers" }, { id: "datasources", label: "Data sources" }, { id: "skillsets", label: "Skillsets" }] },
   { group: "Settings", items: [{ id: "keys", label: "Keys" }] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
@@ -46,6 +46,7 @@ export default function SearchServiceBlade({ params }) {
       indexes: () => <Indexes a={a} />,
       indexers: () => <Indexers a={a} />,
       datasources: () => <DataSources a={a} />,
+      skillsets: () => <Skillsets a={a} />,
       keys: () => <Keys a={a} />,
     }[panel]?.() || <InfoBar>Unknown panel.</InfoBar>;
   }
@@ -163,11 +164,13 @@ function Explorer({ a, index, onChange }) {
   const notify = useNotify();
   const [q, setQ] = useState("*");
   const [filter, setFilter] = useState("");
+  const [qtype, setQtype] = useState("simple");
+  const [semConf, setSemConf] = useState("");
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [docs, setDocs] = useState('[{ "@search.action": "mergeOrUpload", "id": "1", "title": "Hello Vyomi", "category": "demo" }]');
   const count = useAsync(() => api.indexCount(a.resourceGroup, a.name, index), [index]);
-  const run = async () => { setErr(null); try { setRes(await api.searchDocs(a.resourceGroup, a.name, index, { search: q || "*", filter: filter || undefined, top: 20, count: true })); } catch (e) { setErr(e); } };
+  const run = async () => { setErr(null); try { setRes(await api.searchDocs(a.resourceGroup, a.name, index, { search: q || "*", filter: filter || undefined, top: 20, count: true, ...(qtype === "semantic" ? { queryType: "semantic", semanticConfiguration: semConf || undefined, captions: "extractive|highlight-true", answers: "extractive|count-1" } : {}) })); } catch (e) { setErr(e); } };
   useEffect(() => { setRes(null); setErr(null); }, [index]);
   const upload = async () => {
     setErr(null);
@@ -180,6 +183,8 @@ function Explorer({ a, index, onChange }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
         <Input style={{ minWidth: 260 }} value={q} onChange={(_, d) => setQ(d.value)} aria-label="Query string" placeholder="Query string" />
         <Input value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Filter" placeholder="$filter, for example category eq 'demo'" style={{ minWidth: 260 }} />
+        <select aria-label="Query type" value={qtype} onChange={(e) => setQtype(e.target.value)} style={{ minHeight: 32 }}><option value="simple">Simple (BM25)</option><option value="semantic">Semantic ranker</option></select>
+        {qtype === "semantic" && <Input value={semConf} onChange={(_, d) => setSemConf(d.value)} aria-label="Semantic configuration" placeholder="Semantic configuration (blank = index default)" style={{ minWidth: 240 }} />}
         <Button appearance="primary" icon={<Play20Regular />} onClick={run}>Search</Button>
       </div>
       <ErrorBar error={err} title="Request failed" />
@@ -195,18 +200,26 @@ function DataSources({ a }) {
   const notify = useNotify();
   const { data, loading, error, reload } = useAsync(() => api.datasources.list(a.resourceGroup, a.name), [a.id]);
   const [add, setAdd] = useState(false);
-  const init = json({ type: "azureblob", credentials: { connectionString: "DefaultEndpointsProtocol=https;AccountName=<account>;AccountKey=<key>;" }, container: { name: "<container>" } });
+  const [kind, setKind] = useState("azureblob");
+  const INIT = {
+    azureblob: { type: "azureblob", credentials: { connectionString: "DefaultEndpointsProtocol=https;AccountName=<account>;AccountKey=<key>;" }, container: { name: "<container>" } },
+    cosmosdb: { type: "cosmosdb", credentials: { connectionString: "AccountEndpoint=https://<account>.documents.azure.com;AccountKey=<key>;Database=<database>" }, container: { name: "<container>" },
+      dataChangeDetectionPolicy: { "@odata.type": "#Microsoft.Azure.Search.HighWaterMarkChangeDetectionPolicy", highWaterMarkColumnName: "_ts" } },
+    azuresql: { type: "azuresql", credentials: { connectionString: "Server=tcp:<server>.database.windows.net,1433;Database=<database>;User ID=<user>;Password=<password>;" }, container: { name: "<table or view>" } },
+  };
+  const open = (k) => { setKind(k); setAdd(true); };
+  const init = json(INIT[kind]);
   return (
     <>
       <div className="vy-panel-title">Data sources</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Data source commands"><ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add data source</ToolbarButton><ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton></div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Data source commands"><ToolbarButton icon={<Add20Regular />} onClick={() => open("azureblob")}>Add data source</ToolbarButton><ToolbarButton onClick={() => open("cosmosdb")}>Add Cosmos DB source</ToolbarButton><ToolbarButton onClick={() => open("azuresql")}>Add SQL source</ToolbarButton><ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton></div>
       {loading && !data ? <Loading /> : <ErrorBar error={error} />}
       <Table size="small" aria-label="Data sources"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Type</TableHeaderCell><TableHeaderCell>Container</TableHeaderCell><TableHeaderCell style={{ width: 60 }} /></TableRow></TableHeader>
         <TableBody>{(data || []).map((d) => (
           <TableRow key={d.name}><TableCell>{d.name}</TableCell><TableCell>{d.type}</TableCell><TableCell>{d.container?.name}</TableCell>
             <TableCell><Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Delete ${d.name}`} onClick={async () => { try { await api.datasources.remove(a.resourceGroup, a.name, d.name); notify.success(`Deleted '${d.name}'.`, "Delete succeeded"); } catch (e) { notify.error(e, "Delete failed"); } reload(); }} /></TableCell></TableRow>))}
           {!loading && !(data || []).length && <TableRow><TableCell colSpan={4}>No data sources.</TableCell></TableRow>}</TableBody></Table>
-      <InfoBar>Vyomi indexers read Azure Blob Storage data sources. Cosmos DB and SQL data sources are stored, and their indexers report the failure.</InfoBar>
+      <InfoBar>Vyomi indexers read Azure Blob Storage, Cosmos DB (NoSQL) and Azure SQL data sources from the simulated stores. The connection string only names the account or server; Database is required for Cosmos DB.</InfoBar>
       <JsonDialog open={add} title="Add data source" nameLabel="Data source name" init={init} saveLabel="Create"
         onClose={() => setAdd(false)} onSave={async (n, body) => { await api.datasources.put(a.resourceGroup, a.name, n, { ...body, name: n }); notify.success(`Created data source '${n}'.`, "Create succeeded"); reload(); }} />
     </>
@@ -225,15 +238,40 @@ function Indexers({ a }) {
       <div className="vy-panel-title">Indexers</div>
       <div className="vy-cmdbar" role="toolbar" aria-label="Indexer commands"><ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add indexer</ToolbarButton><ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton></div>
       {loading && !data ? <Loading /> : <ErrorBar error={error} />}
-      <Table size="small" aria-label="Indexers"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Data source</TableHeaderCell><TableHeaderCell>Target index</TableHeaderCell><TableHeaderCell style={{ width: 130 }} /></TableRow></TableHeader>
+      <Table size="small" aria-label="Indexers"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Data source</TableHeaderCell><TableHeaderCell>Target index</TableHeaderCell><TableHeaderCell>Skillset</TableHeaderCell><TableHeaderCell style={{ width: 170 }} /></TableRow></TableHeader>
         <TableBody>{(data || []).map((d) => (
-          <TableRow key={d.name}><TableCell>{d.name}</TableCell><TableCell>{d.dataSourceName}</TableCell><TableCell>{d.targetIndexName}</TableCell>
+          <TableRow key={d.name}><TableCell>{d.name}</TableCell><TableCell>{d.dataSourceName}</TableCell><TableCell>{d.targetIndexName}</TableCell><TableCell>{d.skillsetName || "-"}</TableCell>
             <TableCell><Button size="small" appearance="subtle" icon={<Play20Regular />} aria-label={`Run ${d.name}`} onClick={() => run(d.name)} />
+              <Button size="small" appearance="subtle" aria-label={`Status ${d.name}`} onClick={async () => { try { setStatus({ name: d.name, ...(await api.indexerStatus(a.resourceGroup, a.name, d.name)) }); } catch (e) { notify.error(e, "Status failed"); } }}>Status</Button>
               <Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Delete ${d.name}`} onClick={async () => { try { await api.indexers.remove(a.resourceGroup, a.name, d.name); notify.success(`Deleted '${d.name}'.`, "Delete succeeded"); } catch (e) { notify.error(e, "Delete failed"); } reload(); }} /></TableCell></TableRow>))}
-          {!loading && !(data || []).length && <TableRow><TableCell colSpan={4}>No indexers.</TableCell></TableRow>}</TableBody></Table>
+          {!loading && !(data || []).length && <TableRow><TableCell colSpan={5}>No indexers.</TableCell></TableRow>}</TableBody></Table>
       {status && <section style={{ marginTop: 16 }} data-testid="indexer-status"><h3>Execution status: {status.name}</h3><Pre>{json({ status: status.status, lastResult: status.lastResult })}</Pre></section>}
       <JsonDialog open={add} title="Add indexer" nameLabel="Indexer name" init={init} saveLabel="Create"
         onClose={() => setAdd(false)} onSave={async (n, body) => { await api.indexers.put(a.resourceGroup, a.name, n, { ...body, name: n }); notify.success(`Created indexer '${n}'.`, "Create succeeded"); reload(); }} />
+    </>
+  );
+}
+
+function Skillsets({ a }) {
+  const notify = useNotify();
+  const { data, loading, error, reload } = useAsync(() => api.skillsets.list(a.resourceGroup, a.name), [a.id]);
+  const [add, setAdd] = useState(false);
+  const init = json({ skills: [
+    { "@odata.type": "#Microsoft.Skills.Text.SplitSkill", name: "split", textSplitMode: "pages", maximumPageLength: 1000, pageOverlapLength: 100, context: "/document",
+      inputs: [{ name: "text", source: "/document/content" }], outputs: [{ name: "textItems", targetName: "pages" }] }] });
+  return (
+    <>
+      <div className="vy-panel-title">Skillsets</div>
+      <div className="vy-cmdbar" role="toolbar" aria-label="Skillset commands"><ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add skillset</ToolbarButton><ToolbarButton icon={<ArrowClockwise20Regular />} onClick={reload}>Refresh</ToolbarButton></div>
+      {loading && !data ? <Loading /> : <ErrorBar error={error} />}
+      <Table size="small" aria-label="Skillsets"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>Skills</TableHeaderCell><TableHeaderCell style={{ width: 60 }} /></TableRow></TableHeader>
+        <TableBody>{(data || []).map((d) => (
+          <TableRow key={d.name}><TableCell>{d.name}</TableCell><TableCell>{(d.skills || []).map((x) => String(x["@odata.type"]).replace("#Microsoft.Skills.", "")).join(", ")}</TableCell>
+            <TableCell><Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Delete ${d.name}`} onClick={async () => { try { await api.skillsets.remove(a.resourceGroup, a.name, d.name); notify.success(`Deleted '${d.name}'.`, "Delete succeeded"); } catch (e) { notify.error(e, "Delete failed"); } reload(); }} /></TableCell></TableRow>))}
+          {!loading && !(data || []).length && <TableRow><TableCell colSpan={3}>No skillsets.</TableCell></TableRow>}</TableBody></Table>
+      <InfoBar>Skillsets run SplitSkill, MergeSkill and AzureOpenAIEmbeddingSkill (the local embedding model) with index projections. Any other skill type fails the indexer naming the skill.</InfoBar>
+      <JsonDialog open={add} title="Add skillset" nameLabel="Skillset name" init={init} saveLabel="Create"
+        onClose={() => setAdd(false)} onSave={async (n, body) => { await api.skillsets.put(a.resourceGroup, a.name, n, { ...body, name: n }); notify.success(`Created skillset '${n}'.`, "Create succeeded"); reload(); }} />
     </>
   );
 }

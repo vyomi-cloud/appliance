@@ -121,9 +121,9 @@ def("aws.bedrock.marketplace-deployments", ["/bedrock/marketplace-deployments"],
 def("aws.bedrock.knowledge-bases", ["/bedrock/knowledge-bases", "/bedrock/knowledge-bases/:id"], {
   title: "Knowledge bases: scope and limits",
   intro: "Bedrock Agent knowledge bases over the simulated S3, with ingestion, Retrieve and RetrieveAndGenerate.",
-  real: ["Ingestion chunks documents (fixed size, semantic or hierarchical, or none), reads .metadata.json sidecars and mirrors chunks into the configured OpenSearch index, so opensearch-py searches the same data.", "Retrieve is hybrid by default (SQLite FTS5 BM25 plus vector cosine, fused by reciprocal rank) with metadata filters and a rerank step, and returns citations."],
+  real: ["Ingestion chunks documents (fixed size, semantic or hierarchical, or none), reads .metadata.json sidecars and mirrors chunks into the configured OpenSearch index, so opensearch-py searches the same data.", "Retrieve is hybrid by default (SQLite FTS5 BM25 plus vector cosine, fused by reciprocal rank); overrideSearchType SEMANTIC is vector only with cosine scores. The full metadata filter set is validated like Bedrock (one operator per filter, andAll/orAll of 2-5), implicitFilterConfiguration derives a filter with the local model, and reranking works on Retrieve and the Rerank API."],
   metadata: ["OpenSearch domains and Serverless collections are metadata records; there is no cluster process."],
-  limits: ["Exact vector scan, fine to about 10k chunks; no HNSW.", "Rerank is embedding similarity plus term coverage, not a cross-encoder. Chunking is a splitter, not model-driven semantic chunking.", "PDF needs the optional pypdf; .docx and text work natively.", "RetrieveAndGenerate needs the local LLM to be running.", "OpenSearch has no aggregations, highlighting, scroll or search pipelines."],
+  limits: ["Exact vector scan, fine to about 10k chunks; no HNSW.", "Rerank is embedding similarity plus term coverage (the trace says so), not a cross-encoder, unless the Mesh operator points VYOMI_RERANK_ENDPOINT at a reranker server such as llama-server --reranking with a bge-reranker GGUF; none is shipped and Nano always uses the blend. Implicit filters come from the small local model. Chunking is a splitter, not model-driven semantic chunking.", "PDF needs the optional pypdf; .docx and text work natively.", "RetrieveAndGenerate needs the local LLM to be running.", "OpenSearch has no aggregations, highlighting, scroll or search pipelines."],
   nano: ["Embeddings are all-MiniLM-L6-v2 (384-d, about 23 MB downloaded on first use). If the download is blocked a labelled hash embedding is used and ranking is keyword grade. Vectors are 384-d, so a KB is not portable to the appliance (768-d); re-ingest after moving."],
   mesh: ["Embeddings are nomic-embed-text through llama.cpp."],
 });
@@ -253,14 +253,14 @@ def("gcp.vertex.memory-bank", ["/vertex-ai/memory-bank"], {
 def("gcp.vertex.rag-engine", ["/vertex-ai/rag-engine"], {
   title: "RAG Engine: scope and limits",
   intro: "RAG corpora and files with chunking, and retrieveContexts.",
-  real: ["Chunking and SQLite FTS5 BM25 from the shared knowledge core; the REST shapes follow ragCorpora, ragFiles and retrieveContexts."],
-  limits: ["Files arrive as text through ragFiles:upload; Cloud Storage import and multipart upload are not simulated. Retrieval is lexical, not a vector database."],
+  real: ["Files arrive by upload (text, base64, or the multipart bodies the SDK sends) or by import from the simulated Cloud Storage (gs:// object or prefix). Chunks are embedded with the local embedding model and retrieved by cosine kNN, or hybrid with BM25 (hybridSearch.alpha), with distance / similarity thresholds and an optional rerank. File and chunk counts are live."],
+  limits: ["Exact scan, no HNSW or external vector database. The reranker is an embedding + lexical blend, not Google's rank service. No Drive, Slack, Jira or SharePoint import, and no metadata filters. Text-layer PDFs and Office files are parsed in pure Python (no OCR or layout parsing)."],
 });
 def("gcp.vertex.search", ["/vertex-ai/search", "/vertex-ai/app-builder"], {
   title: "Search and App Builder: scope and limits",
   intro: "Vertex AI Search data stores, documents and apps over the discoveryengine REST shapes.",
-  real: ["Inline documents are indexed with SQLite FTS5 BM25 and returned ranked with snippets."],
-  limits: ["No generative summary, semantic reranking, connectors or website crawling. Import is inline documents only."],
+  real: ["Documents come in inline or from the simulated Cloud Storage (content, custom or document schema). Search ranks by hybrid BM25 plus embedding similarity and returns snippets; ticking Generate summary asks the local chat model for a cited summary."],
+  limits: ["The summary is written by the small local model, not Gemini, and says so; with no model running the response lists summarySkippedReasons. No semantic ranker, filters, facets, connectors, website crawling or BigQuery import."],
 });
 def("gcp.vertex.agent-retrieval", ["/vertex-ai/agent-retrieval"], {
   title: "Agent Retrieval: scope and limits",
@@ -329,13 +329,13 @@ def("azure.foundry.search", ["/foundry/search"], {
   title: "AI Search: scope and limits",
   intro: "ARM list of Microsoft.Search/searchServices, backed by the azure_search_core engine.",
   real: ["Names open the AI Search blade: create a service, indexes (JSON definition), a search explorer with document upload, indexers (run + status), data sources and admin/query keys. All are real ARM calls into the azure_search_core engine."],
-  limits: ["Blob data sources are read by indexers; Cosmos and SQL ones are stored and their indexer reports the failure. Semantic ranker setup, skillset editor, vector profiles, scaling and networking panels are not built (the engine does not model them)."],
+  limits: ["Blob, Cosmos DB and Azure SQL data sources are read by indexers (Cosmos and SQL from the simulated stores). The semantic ranker is an approximation (embedding similarity + term coverage), not Microsoft's. Vector profile designer, scaling and networking panels are not built."],
 });
 def("azure.aisearch", ["/aisearch", "/aisearch/:rg/:name", "/aisearch/:rg/:name/:panel"], {
   title: "AI Search: scope and limits",
   intro: "Microsoft.Search/searchServices over core/azure_search_core.py (pure Python, runs on Nano and the Mesh).",
-  real: ["Create, delete and list services; admin and query keys; indexes, documents (index, merge, delete) and queries with filters, facets and counts; data sources; indexers with run and status."],
-  limits: ["Ranking is TF-IDF, not BM25 with the full Lucene analyzers. Semantic ranker, vector (HNSW) and hybrid retrieval, and AI enrichment skillsets are not modelled."],
+  real: ["Create, delete and list services; admin and query keys; indexes, documents (index, merge, delete) and queries with filters, facets and counts; BM25 keyword, vector, hybrid (RRF) and semantic queries; data sources for Blob, Cosmos DB and Azure SQL; indexers with run, status, field mappings and incremental high-water-mark runs; skillsets (split, merge, embedding) with index projections."],
+  limits: ["Vectors are scanned exactly (no HNSW). The semantic ranker is an approximation, so reranker scores and order differ from Azure. Skills other than split, merge and embedding fail the indexer by name (no OCR, entity or image skills); no knowledge store, scoring profiles or Lucene parser."],
 });
 def("azure.foundry.agents", ["/foundry/agents"], {
   title: "Agents: scope and limits",

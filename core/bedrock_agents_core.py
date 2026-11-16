@@ -382,6 +382,13 @@ def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
     -> (results, trace) ; hybrid_weight (Vyomi extension) 0 = vector only, otherwise lexical+vector RRF."""
     import time as _t
     vs = vs or {}
+    mode_in = vs.get("overrideSearchType")
+    if mode_in is not None and str(mode_in).upper() not in ("HYBRID", "SEMANTIC"):
+        raise _bad(f"overrideSearchType must be HYBRID or SEMANTIC (got {mode_in})")
+    _validate_filter(flt)
+    rr_cfg = _validate_rerank_cfg(vs.get("rerankingConfiguration"), "numberOfRerankedResults")
+    if vs.get("implicitFilterConfiguration") is not None:
+        flt = _implicit_filter(vs["implicitFilterConfiguration"], text, flt)
     chunks = kb["chunks"]
     stages = {}
     if not chunks:
@@ -413,16 +420,17 @@ def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
     stages["search"] = (_t.time() - t0) * 1000
     fused = kc.hybrid(texts, [c["vec"] for c in chunks], text, qv, allowed, max(len(chunks), 1), weight_lex=lw)
     rank = {i: (n + 1, sc) for n, (i, sc) in enumerate(fused)}
-    rr = (vs.get("rerankingConfiguration") or {}).get("bedrockRerankingConfiguration") or {}
-    top = fused[:max(k * 3, k)] if rr or vs.get("rerankingConfiguration") else fused[:k]
+    top = fused[:max(k * 3, k)] if rr_cfg else fused[:k]
     rrs = {}
     t0 = _t.time()
-    if vs.get("rerankingConfiguration"):
-        n_out = int(rr.get("numberOfRerankedResults", k))
-        for n, (j, sc) in enumerate(kc.rerank(text, [texts[i] for i, _ in top], n_out)):
+    if rr_cfg:
+        n_out = int(rr_cfg.get("numberOfRerankedResults", k))
+        for n, (j, sc) in enumerate(kc.rerank(text, [_rerank_text(chunks[i]["text"], chunks[i]["metadata"], rr_cfg.get("metadataConfiguration")) for i, _ in top], n_out)):
             rrs[top[j][0]] = (n + 1, sc)
         final = [(i, rrs[i][1]) for i in sorted(rrs, key=lambda x: rrs[x][0])][:k]
         stages["rerank"] = (_t.time() - t0) * 1000
+    elif mode == "SEMANTIC":
+        final = [(i, max(vsc[i], 0.0)) for i, _ in fused[:k]]       # pure vector search: the score is the cosine similarity
     else:
         final = top[:k]
     res, seen_parent = [], set()
@@ -446,7 +454,7 @@ def _retrieve_trace(kb, text, k, flt=None, vs=None, hybrid_weight=None):
                      "returned": any(f[0] == i for f in final),
                      "filtered_out_reason": why.get(i) or (None if i in rank and any(f[0] == i for f in final) else
                                                            ("below top-k after fusion" if i in rank else "not ranked"))})
-    return res, {"candidates": cand, "searchType": mode, "hybridWeight": lw, "reranked": bool(vs.get("rerankingConfiguration")),
+    return res, {"candidates": cand, "searchType": mode, "hybridWeight": lw, "reranked": bool(rr_cfg), "rerankBackend": kc.rerank_backend() if rr_cfg else None,
                  "latencyMs": {k_: round(v, 3) for k_, v in stages.items()}}
 
 
@@ -455,15 +463,29 @@ def _retrieve(kb, text, k, flt=None, vs=None):
 
 
 def _rerank_op(p):
-    """bedrock-agent-runtime Rerank: queries[0].textQuery.text, sources[].inlineDocumentSource.textDocument.text."""
+    """bedrock-agent-runtime Rerank: queries[0].textQuery.text, sources[].inlineDocumentSource.textDocument.text -> relevance scored results."""
     qs = p.get("queries") or []
     srcs = p.get("sources") or []
-    if not qs or not srcs:
-        raise _bad("queries and sources are required")
-    q = (qs[0].get("textQuery") or {}).get("text", "")
-    docs = [((s.get("inlineDocumentSource") or {}).get("textDocument") or {}).get("text", "") for s in srcs]
-    n = int(((p.get("rerankingConfiguration") or {}).get("bedrockRerankingConfiguration") or {}).get("numberOfResults", len(docs)))
-    out = [{"index": i, "relevanceScore": sc} for i, sc in kc.rerank(q, docs, n)]
+    if not isinstance(qs, list) or len(qs) != 1:
+        raise _bad("queries must contain exactly one query.")
+    if qs[0].get("type") != "TEXT" or not (qs[0].get("textQuery") or {}).get("text"):
+        raise _bad("queries[0] must be of type TEXT with textQuery.text.")
+    if not isinstance(srcs, list) or not 1 <= len(srcs) <= 1000:
+        raise _bad("sources must contain between 1 and 1000 documents.")
+    docs = []
+    for i, sr in enumerate(srcs):
+        if sr.get("type") != "INLINE":
+            raise _bad(f"sources[{i}].type must be INLINE.")
+        src = sr.get("inlineDocumentSource") or {}
+        if src.get("type") != "TEXT" or not isinstance((src.get("textDocument") or {}).get("text"), str):
+            raise _bad(f"sources[{i}].inlineDocumentSource must be a TEXT document with textDocument.text (JSON documents are not supported).")
+        docs.append(src["textDocument"]["text"])
+    b = _validate_rerank_cfg(p.get("rerankingConfiguration"), "numberOfResults")
+    if b is None:
+        raise _bad("rerankingConfiguration is required.")
+    n = min(int(b.get("numberOfResults", len(docs))), len(docs))
+    q = qs[0]["textQuery"]["text"]
+    out = [{"index": i, "relevanceScore": sc, "document": {"type": "TEXT", "textDocument": {"text": docs[i]}}} for i, sc in kc.rerank(q, docs, n)]
     return _j(200, {"results": out})
 
 
@@ -520,42 +542,149 @@ def _project2d(rows, vecs):
         r["projection2d"] = [round(sum(c[j] * comps[k][j] for j in range(d)), 6) for k in range(2)]
 
 
+_FILTER_OPS = ("equals", "notEquals", "greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals", "in", "notIn",
+               "startsWith", "stringContains", "listContains")
+_RERANK_MODELS = ("amazon.rerank-v1:0", "cohere.rerank-v3-5:0")
+
+
+def _validate_filter(f, depth=0):
+    """RetrievalFilter union rules: exactly one member; andAll/orAll hold 2..5 filters; typed values per operator."""
+    if f is None:
+        return
+    if not isinstance(f, dict) or len(f) != 1:
+        raise _bad("A retrieval filter must contain exactly one operator (equals, notEquals, greaterThan, greaterThanOrEquals, lessThan, "
+                   "lessThanOrEquals, in, notIn, startsWith, stringContains, listContains, andAll or orAll).")
+    (op, arg), = f.items()
+    if op in ("andAll", "orAll"):
+        if depth >= 2:
+            raise _bad("Filters can be nested at most two levels deep.")
+        if not isinstance(arg, list) or not 2 <= len(arg) <= 5:
+            raise _bad(f"{op} needs between 2 and 5 filters.")
+        for x in arg:
+            _validate_filter(x, depth + 1)
+        return
+    if op not in _FILTER_OPS:
+        raise _bad(f"Unknown retrieval filter operator '{op}'.")
+    if not isinstance(arg, dict) or not isinstance(arg.get("key"), str) or not 1 <= len(arg["key"]) <= 200 or "value" not in arg:
+        raise _bad(f"{op} needs a 'key' (1-200 characters) and a 'value'.")
+    v = arg["value"]
+    if op in ("in", "notIn"):
+        if not isinstance(v, list) or not v or any(isinstance(x, (dict, list)) for x in v):
+            raise _bad(f"{op} needs a non-empty list of strings or numbers.")
+    elif op in ("startsWith", "stringContains", "listContains"):
+        if not isinstance(v, str):
+            raise _bad(f"{op} needs a string value.")
+    elif op in ("greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals"):
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise _bad(f"{op} needs a numeric value.")
+    elif isinstance(v, (dict,)) or (isinstance(v, list) and any(isinstance(x, (dict, list)) for x in v)):
+        raise _bad(f"{op} needs a string, number, boolean or list of strings.")
+
+
+def _same_kind(a, b):
+    if isinstance(a, bool) or isinstance(b, bool):
+        return isinstance(a, bool) and isinstance(b, bool)
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return True
+    return type(a) is type(b)
+
+
 def _match_filter(f, meta):
     if "andAll" in f:
         return all(_match_filter(x, meta) for x in f["andAll"])
     if "orAll" in f:
         return any(_match_filter(x, meta) for x in f["orAll"])
-    for op in ("equals", "notEquals", "greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals", "in", "notIn",
-               "startsWith", "stringContains", "listContains"):
+    for op in _FILTER_OPS:
         if op in f:
             key, val = f[op].get("key"), f[op].get("value")
             have = meta.get(key)
-            try:
-                if op == "equals":
-                    return have == val
-                if op == "notEquals":
-                    return have != val
-                if op == "greaterThan":
-                    return have is not None and have > val
-                if op == "greaterThanOrEquals":
-                    return have is not None and have >= val
-                if op == "lessThan":
-                    return have is not None and have < val
-                if op == "lessThanOrEquals":
-                    return have is not None and have <= val
-                if op == "in":
-                    return have in (val or [])
-                if op == "notIn":
-                    return have not in (val or [])
-                if op == "startsWith":
-                    return isinstance(have, str) and have.startswith(val)
-                if op == "stringContains":
-                    return isinstance(have, str) and val in have or isinstance(have, list) and val in have
-                if op == "listContains":
-                    return isinstance(have, list) and val in have
-            except TypeError:
+            if op == "notEquals":
+                return have is None or not (_same_kind(have, val) and have == val)
+            if op == "notIn":
+                return have is None or not any(_same_kind(have, x) and have == x for x in val)
+            if have is None:
                 return False
+            if op == "equals":
+                return _same_kind(have, val) and have == val if not isinstance(have, list) else have == val
+            if op == "in":
+                return any(_same_kind(have, x) and have == x for x in val)
+            if op in ("greaterThan", "greaterThanOrEquals", "lessThan", "lessThanOrEquals"):
+                if isinstance(have, bool) or not isinstance(have, (int, float)):
+                    return False
+                return {"greaterThan": have > val, "greaterThanOrEquals": have >= val, "lessThan": have < val, "lessThanOrEquals": have <= val}[op]
+            if op == "startsWith":
+                return isinstance(have, str) and have.startswith(val)
+            if op == "stringContains":      # a string containing the value, or a list of strings with a member containing it
+                return (isinstance(have, str) and val in have) or (isinstance(have, list) and any(isinstance(x, str) and val in x for x in have))
+            if op == "listContains":
+                return isinstance(have, list) and val in have
     raise _bad("Unsupported retrieval filter")
+
+
+def _implicit_filter(cfg, query, explicit):
+    """implicitFilterConfiguration: the local chat model derives a metadata filter from the query (Bedrock uses a foundation model)."""
+    attrs = (cfg or {}).get("metadataAttributes")
+    if not isinstance(attrs, list) or not attrs or not (cfg or {}).get("modelArn"):
+        raise _bad("implicitFilterConfiguration needs metadataAttributes and modelArn.")
+    for a in attrs:
+        if not a.get("key") or a.get("type") not in ("STRING", "NUMBER", "BOOLEAN", "STRING_LIST"):
+            raise _bad("Each metadataAttribute needs a key and a type of STRING, NUMBER, BOOLEAN or STRING_LIST.")
+    desc = "\n".join(f"- {a['key']} ({a['type']}): {a.get('description', '')}" for a in attrs)
+    sysm = ("Derive a metadata filter from the user question. Reply with ONLY JSON: either {} when no attribute is implied, or one filter object like "
+            '{"equals":{"key":"dept","value":"hvac"}}, or {"andAll":[f1,f2]} / {"orAll":[f1,f2]} (2 to 5 members). Operators: equals, notEquals, '
+            "greaterThan, greaterThanOrEquals, lessThan, lessThanOrEquals, in, notIn, startsWith, stringContains, listContains. Allowed attributes:\n" + desc)
+    r = llm.chat([{"role": "user", "content": query}], system=sysm, max_tokens=200, temperature=0.0)
+    try:
+        f, _parsed = llm.extract_json(r["text"])
+    except Exception:  # noqa: BLE001
+        f = None
+    keys = {a["key"] for a in attrs}
+
+    def ok(x):
+        if not isinstance(x, dict) or len(x) != 1:
+            return False
+        (op, arg), = x.items()
+        return all(ok(y) for y in arg) if op in ("andAll", "orAll") and isinstance(arg, list) else (op in _FILTER_OPS and isinstance(arg, dict) and arg.get("key") in keys)
+    if not f or not ok(f):
+        return explicit
+    try:
+        _validate_filter(f)
+    except _Err:
+        return explicit
+    return {"andAll": [explicit, f]} if explicit else f
+
+
+def _validate_rerank_cfg(rc, count_key):
+    """rerankingConfiguration (Retrieve) / Rerank API config -> the bedrockRerankingConfiguration dict (+ type/model checks), or None."""
+    if not rc:
+        return None
+    if rc.get("type") != "BEDROCK_RERANKING_MODEL":
+        raise _bad("rerankingConfiguration.type must be BEDROCK_RERANKING_MODEL.")
+    b = rc.get("bedrockRerankingConfiguration") or {}
+    arn = (b.get("modelConfiguration") or {}).get("modelArn") or ""
+    if not re.match(r"^arn:aws(?:-[a-z-]+)?:bedrock:[a-z0-9-]+::foundation-model/(%s)$" % "|".join(re.escape(m) for m in _RERANK_MODELS), arn):
+        raise _bad("modelConfiguration.modelArn must be the ARN of a reranking model (%s)." % ", ".join(_RERANK_MODELS))
+    n = b.get(count_key)
+    if n is not None and (isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= 1000):
+        raise _bad(f"{count_key} must be an integer between 1 and 1000.")
+    mc = b.get("metadataConfiguration")
+    if mc is not None and mc.get("selectionMode") not in ("SELECTIVE", "ALL"):
+        raise _bad("metadataConfiguration.selectionMode must be SELECTIVE or ALL.")
+    return b
+
+
+def _rerank_text(text, meta, mc):
+    """Document text handed to the reranker: the chunk, plus the metadata attributes selected by metadataConfiguration."""
+    if not mc or not meta:
+        return text
+    if mc.get("selectionMode") == "ALL":
+        keys = [k for k in meta if not k.startswith("x-amz-")]
+    else:
+        sel = mc.get("selectiveModeConfiguration") or {}
+        inc = [x.get("fieldName") for x in sel.get("fieldsToInclude") or []]
+        exc = {x.get("fieldName") for x in sel.get("fieldsToExclude") or []}
+        keys = [k for k in meta if k in inc] if inc else [k for k in meta if k not in exc and not k.startswith("x-amz-")]
+    return text + "".join(f"\n{k}: {meta[k]}" for k in keys)
 
 
 def _rag_answer(st, results, question, model_hint=None):

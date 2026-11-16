@@ -839,6 +839,11 @@ class AwsWireRouter:
             self.az_arm.blob_store = self.az_blob
         self.az_sb = s.get("az_sb") or InMemoryMessagingStore()   # Service Bus topics (fan-out)
         self.az_arm = s.get("az_arm") or AzureArm()   # Azure Resource Manager — the console's ARM store
+        # AI Search indexers (blob / Cosmos DB / Azure SQL) read these data planes; re-attached here because the line above can
+        # build a fresh ARM when the shared state carries none, which would otherwise drop the wiring made earlier.
+        for _attr, _store in (("cosmos_store", self.az_cosmos), ("sql_store", self.rds), ("blob_store", self.az_blob)):
+            if getattr(self.az_arm, _attr, None) is None:
+                setattr(self.az_arm, _attr, _store)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
@@ -2119,7 +2124,7 @@ class AwsWireRouter:
 
         if svc == "gcp-agentplatform":
             from core import gcp_agentplatform_core
-            return gcp_agentplatform_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            return gcp_agentplatform_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), gcs=self.gcs)
 
         if svc == "gcp-agentengine":
             from core import gcp_agentengine_core
