@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-16T04:11:37+00:00
+
+Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `spec-commit` Azure cognitiveservices: Add Cognitive Services context to client names (#48243) ([link](https://github.com/Azure/azure-rest-api-specs/commit/3ca134952a69fbe31834f205f6f10633c9d70e3e))
+- · `spec-commit` Azure cognitiveservices: Pin Cognitive Services C# management API version (#48244) ([link](https://github.com/Azure/azure-rest-api-specs/commit/c154037bfc3914756eb7bd96c0e855dc0b076b56))
+
+Sources that failed this run (2): maven/software.amazon.awssdk:s3: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-16T03:11:41+00:00
 
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3010,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **1 change(s), 0 actionable.**
 - · `spec-commit` Azure compute: [Compute] Clarify Auto zone placement and Any-only disk alignment documentation (#47457) ([link](https://github.com/Azure/azure-rest-api-specs/commit/05ff20f36d7d4de3a774e5c6b37e1e58a66eaadf))
-
-Sources that failed this run (1): maven/com.google.cloud:google-cloud-pubsub: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-02T23:28:10+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.

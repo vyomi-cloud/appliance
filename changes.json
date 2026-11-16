@@ -1,6 +1,28 @@
 {
- "at": "2026-11-16T03:11:41+00:00",
+ "at": "2026-11-16T04:11:37+00:00",
  "baseline": false,
- "changes": [],
- "errors": []
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:c154037bfc",
+   "title": "Azure cognitiveservices: Pin Cognitive Services C# management API version (#48244)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/c154037bfc3914756eb7bd96c0e855dc0b076b56",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:3ca134952a",
+   "title": "Azure cognitiveservices: Add Cognitive Services context to client names (#48243)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/3ca134952a69fbe31834f205f6f10633c9d70e3e",
+   "actionable": false
+  }
+ ],
+ "errors": [
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
+ ]
 }
