@@ -31,6 +31,7 @@
     "#vy-md .md-tab span{position:absolute;left:0;right:0;top:0;height:22px;display:flex;align-items:center;justify-content:center;gap:7px;letter-spacing:.02em}" +
     "#vy-md .md-tab i{display:inline-block;width:7px;height:7px;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .2s}" +
     "#vy-md.open .md-tab i{transform:translateY(1px) rotate(225deg)}" +
+    "#vy-md.wait .md-tab{cursor:progress;opacity:.55}#vy-md.wait .md-tab i{width:9px;height:9px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;transform:none;animation:vymdspin .8s linear infinite}@keyframes vymdspin{to{transform:rotate(360deg)}}#vy-md.wait .md-panel{display:none}" +
     "#vy-md .md-tab:hover{color:var(--md-accent)}#vy-md .md-tab:focus-visible{outline:2px solid var(--md-accent);outline-offset:2px}" +
     "#vy-md .md-line{pointer-events:none;position:absolute;left:0;right:0;top:0;border-top:1px solid var(--md-line)}" +
     "#vy-md .md-tab .t-edge{fill:none;stroke:var(--md-line)}#vy-md .md-tab .t-fill{fill:var(--md-bg)}" +
@@ -45,11 +46,16 @@
 
   function header() { return document.querySelector(HEADER[CLOUD] || "header"); }
   var box, open = LS("g") === "1";
+  // The Nano backend (Pyodide) boots on the page's main thread for several seconds after load, during which no click is handled anywhere.
+  // Until it finishes ("vyomi-nano-ready") the tab shows a spinner and ignores clicks, instead of looking clickable but dead.
+  var ready = !!window.__vyNanoReady;
+  addEventListener("vyomi-nano-ready", function () { ready = true; if (box) box.classList.remove("wait"); });
+  setTimeout(function () { ready = true; if (box) box.classList.remove("wait"); }, 45000);
 
   function build() {
     var st = document.createElement("style"); st.textContent = CSS; document.head.appendChild(st);
     var w = WELCOME[CLOUD] || WELCOME.aws;
-    box = document.createElement("div"); box.id = "vy-md"; box.className = "c-" + CLOUD + (open ? " open" : "");
+    box = document.createElement("div"); box.id = "vy-md"; box.className = "c-" + CLOUD + (open ? " open" : "") + (ready ? "" : " wait");
     box.innerHTML =
       '<div class="md-panel" role="region" aria-label="Vyomi Mesh"><div class="md-clip"><div class="md-body">' +
         '<div class="md-welcome"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4M8 4.7v.3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>' +
@@ -64,6 +70,7 @@
     var row = box.querySelector(".vy-nano-video");
     if (typeof window.vyVideoBanner === "function") row.appendChild(window.vyVideoBanner(CLOUD));
     box.querySelector(".md-tab").onclick = function () {
+      if (!ready) return;
       open = !open; box.classList.toggle("open", open); this.setAttribute("aria-expanded", open); LS("s", open ? "1" : "0");
     };
     place();
