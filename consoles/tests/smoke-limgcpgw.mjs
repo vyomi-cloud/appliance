@@ -106,7 +106,15 @@ await dlg().getByLabel("Tool (server___tool)").fill("fake___echo");
 await dlg().getByRole("button", { name: "Evaluate" }).click();
 await page.getByTestId("policy-decision").waitFor({ timeout: 30000 });
 const dec = await page.getByTestId("policy-decision").innerText();
-check("Policy Test returns a real engine decision (Nano has no cedarpy: honest fail-closed DENY, not a fake ALLOW)", /DENY/.test(dec) && /unavailable|fail/i.test(dec), dec);
+check("Policy Test returns a real Cedar decision (cedar-wasm on Nano, same as cedarpy): the permitted tool is ALLOW via explicit-permit", /ALLOW/.test(dec) && /explicit-permit/.test(dec), dec);
+await dlg().getByLabel("Tool (server___tool)").fill("fake___other");
+await dlg().getByRole("button", { name: "Evaluate" }).click();
+await page.waitForFunction(() => /DENY/.test(document.querySelector('[data-testid="policy-decision"]')?.innerText || ""), null, { timeout: 30000 });
+const dec2 = await page.getByTestId("policy-decision").innerText();
+check("Policy Test: a tool no policy permits is DENY (default deny), proving the evaluator decides both ways", /DENY/.test(dec2) && /no policy permits/.test(dec2) && !/unavailable/i.test(dec2), dec2);
+// the Cedar WebAssembly evaluator itself is loaded in this Chromium context (nano-boot.js installCedar), not merely reachable from Node
+const cedarLoaded = await page.evaluate(() => typeof globalThis.__vyomi_cedar_eval);
+console.log("INFO __vyomi_cedar_eval in page context:", cedarLoaded);
 await shot("policy-test");
 await dlg().getByRole("button", { name: "Close" }).click();
 await page.getByRole("button", { name: /Actions for Echo only/ }).click();
@@ -118,11 +126,12 @@ check("Policy attached (list shows the gateway)", /hub/.test(await body()));
 await go("#/vertex-ai/gateways", "Gateways");
 await page.getByRole("link", { name: "Hub" }).first().click();
 await page.getByRole("tab", { name: "Tools" }).click();
-check("ENFORCE (fail closed on Nano) also hides every tool from the catalog", /No tool is listed/.test(await body()));
-await page.getByLabel("Tool", { exact: true }).fill("fake___echo");
+check("ENFORCE: the tool the Cedar policy permits stays in the catalog", !/No tool is listed/.test(await body()));
+await page.getByLabel("Tool", { exact: true }).click(); await page.getByRole("option", { name: "fake___echo" }).click();
+await page.getByLabel("Arguments (JSON)").fill('{"text":"permitted"}');
 await page.getByRole("button", { name: "Call tool" }).click();
 await page.getByTestId("call-result").waitFor({ timeout: 60000 });
-check("ENFORCE gateway on Nano denies the call (fail closed)", /Denied by policy/.test(await page.getByTestId("call-result").innerText()), await page.getByTestId("call-result").innerText());
+check("ENFORCE gateway on Nano allows the permitted call (Cedar explicit-permit) and returns the MCP answer", /echo:permitted/.test(await page.getByTestId("call-result").innerText()), await page.getByTestId("call-result").innerText());
 await shot("gateway-denied");
 
 // ── Security (Model Armor)
