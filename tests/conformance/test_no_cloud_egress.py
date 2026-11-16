@@ -32,6 +32,9 @@ ALLOWED = {("gateway_common.py", "urllib.request"),   # shared gateway backend f
            ("azure_alerts_core.py", "urllib.request"),  # action-group webhook receiver → the user's own URL (http/https enforced at PUT)
            ("kms_core.py", "urllib.request"),          # custom key store XKS proxy health check → the user's own XKS endpoint
            ("sns_core.py", "urllib.request"),          # mobile-push platform endpoint delivery → the user's own configured endpoint
+           ("agentcore_gateway_targets.py", "urllib.request"),  # AgentCore Gateway openApi/mcpServer targets + OAuth credential providers -> the user's own upstream/token URL; offline only
+           ("agentcore_runtime_host.py", "urllib.request"),    # AgentCore Runtime host /ping readiness probe -> its own 127.0.0.1 per-session process; offline only
+           ("agentcore_runtime_host.py", "socket"),            # free-port pick for that loopback process; offline only
            ("llm_core.py", "urllib.request")}          # local-LLM seam → the user's own model server (VYOMI_LLM_ENDPOINT); offline only
 
 

@@ -202,6 +202,9 @@ async function bootBackend() {
   // sqlite3 is a separate Pyodide package (vendored by wasm/fetch_pyodide.py): the SQL data
   // planes (Azure SQL query editor, RDS Data API) need it — the relay worker loads it too.
   try { await py.loadPackage("sqlite3"); } catch (e) { console.warn("[nano] sqlite3 load skipped:", e); }
+  // Knowledge Bases parse PDFs with pure-Python pypdf (BSD-3), which is NOT in the Pyodide 0.26 package set: unpack the vendored wheel
+  // (wasm/pylib/, ~0.4 MB, same-origin, no PyPI call). Without it a .pdf fails ingestion with an explicit reason (DOCX/XLSX/PPTX need nothing).
+  try { py.unpackArchive(await (await fetch(BASE + "/pylib/pypdf-7.1.0-py3-none-any.whl")).arrayBuffer(), "wheel"); } catch (e) { console.warn("[nano] pypdf unavailable (PDF knowledge-base documents will fail):", e); }
   // Kubernetes posture for Defender for Cloud: the regolibrary (Kubescape) Rego controls compiled to
   // WebAssembly with OPA (wasm/kubescape/). kubescape_core calls globalThis.__vyomi_kubescape_eval
   // synchronously; if this fails to load, Defender reports the scanner as unavailable (never fakes).
