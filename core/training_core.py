@@ -39,6 +39,20 @@ try:
     from core import llm_core as llm
 except ImportError:  # Pyodide flat layout
     import llm_core as llm  # type: ignore
+try:
+    from core import ai_model_catalog as _CAT
+except ImportError:  # Pyodide flat layout
+    import ai_model_catalog as _CAT  # type: ignore
+
+
+def _derived_name(name, base):
+    return _CAT.derived_name(name, base)
+
+
+def _license_of(base):
+    """Licence/attribution of the base model a tuned model derives from (Vyomi extension; empty for bases outside the catalogue)."""
+    return _CAT.license_of(base)
+
 
 MAX_ROWS, MAX_BYTES, MAX_LABELS, MIN_ROWS = 2000, 5 * 1024 * 1024, 20, 10
 TRAINABLE_EMBEDDERS = ("all-minilm-l6-v2", "nomic-embed-text")
@@ -46,7 +60,7 @@ HEAD_PREFIX = "vyomi.head."
 MODELS_BUCKET = "vyomi-models"
 ACTIVE = ("Queued", "Embedding", "Training", "Evaluating")
 _PUBLIC = ("engine", "taskType", "status", "progress", "epoch", "epochs", "metrics", "heldOut", "rows", "artifact", "startedAt", "endedAt", "note",
-           "steps", "adapterId", "baseModel")
+           "steps", "adapterId", "baseModel", "vyomiLicense", "displayName")
 
 
 class TrainError(Exception):
@@ -754,6 +768,7 @@ def trainer_mode():
 def start_chat(job_id, model_id, data, hyper, out_uri, base_id, name):
     cb = chat_base(base_id)
     spec = CHAT_BASES[cb]
+    name = _derived_name(name, cb)      # Llama naming rule: a tuned Llama derivative carries "Llama" at the start of its name
     if _ST["bridge"]:
         raise TrainError("Chat-model LoRA training runs on the Mesh / offline appliance, not in the Nano tab: train there and import the GGUF adapter (see ai-nano-training-scope.md section 10).")
     if not spec["fits"]:
@@ -770,7 +785,7 @@ def start_chat(job_id, model_id, data, hyper, out_uri, base_id, name):
         for m in rows:
             f.write(json.dumps({"messages": m}) + "\n")
     j = {"id": job_id, "model_id": model_id, "engine": "lora-peft", "taskType": "chat-lora", "status": "Queued", "progress": 0.0, "epoch": 0, "epochs": hp["epochs"],
-         "metrics": [], "steps": [], "heldOut": None, "rows": len(rows), "startedAt": _now(), "baseModel": cb, "adapterId": model_id, "_cancel": False, "_out": out_uri,
+         "metrics": [], "steps": [], "heldOut": None, "rows": len(rows), "startedAt": _now(), "baseModel": cb, "adapterId": model_id, "vyomiLicense": _license_of(cb), "displayName": name, "_cancel": False, "_out": out_uri,
          "_hp": hp, "_base": base_id, "_cb": cb, "_name": name, "_s3": _ST["s3"], "_work": work, "_mode": (mode, how), "_proc": None,
          "note": (f"LoRA adapter (rank {hp['rank']}) on the open model {cb} ({spec['hf']}), trained by PEFT on CPU. It is not a vendor model; quality = the held-out check below.")}
     _JOBS[job_id] = j
@@ -870,7 +885,7 @@ def _kill(j):
 
 def _publish_chat(j, blob, done):
     mid, st = j["model_id"], j.get("_s3")
-    meta = {"modelId": mid, "jobId": j["id"], "task": "chat-lora", "kind": "chat-lora", "name": j.get("_name"), "base": j["_base"], "baseModelId": j["_cb"],
+    meta = {"modelId": mid, "jobId": j["id"], "task": "chat-lora", "kind": "chat-lora", "name": j.get("_name"), "base": j["_base"], "baseModelId": j["_cb"], "vyomiLicense": _license_of(j["_cb"]),
             "hf": CHAT_BASES[j["_cb"]]["hf"], "rank": done["rank"], "alpha": done["alpha"], "rows": done["rows"], "steps": done["steps"], "heldOut": done["heldOut"],
             "adapterBytes": len(blob), "meanStepS": done["meanStepS"], "peakRssMB": done["peakRssMB"], "createdAt": _now(), "format": "gguf-lora-f16", "engine": "lora-peft"}
     if not store_put(MODELS_BUCKET, f"models/{mid}/adapter.gguf", blob, "application/octet-stream", st=st):

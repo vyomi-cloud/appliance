@@ -23,6 +23,7 @@ import TopBar from "./pages/TopBar.jsx";
 import { applyAwsTheme } from "./kit/theme.js";
 import ServicesMenu from "./pages/ServicesMenu.jsx";
 import { NotSimulated } from "./kit/common.jsx";
+import NoticesPage from "../common/NoticesPage.jsx";
 
 const REGIONS = [
   ["us-east-1", "US East (N. Virginia)"], ["us-east-2", "US East (Ohio)"], ["us-west-2", "US West (Oregon)"],
@@ -140,6 +141,7 @@ export default function App() {
   let content, nav, crumbs = [], help;
   if (!svcId) { content = <Home />; }
   else if (svcId === "services") { content = <AllServices />; }
+  else if (svcId === "notices") { content = <NoticesPage />; }
   else if (!svc) { content = <NotSimulated feature={`The service "${svcId}"`} />; }
   else if (!svc.load) {
     content = <NotSimulated feature={`The v4 ${svc.title} console`} note={<a href={classicHref(svc.classic)}>Open {svc.title} in the classic Vyomi console</a>} />;
@@ -183,11 +185,12 @@ export default function App() {
         content={<Suspense fallback={<Spinner />}>{content}</Suspense>}
       />
       <HelpOverlay open={toolsOpen} onOpen={() => setToolsOpen(true)} onClose={() => setToolsOpen(false)}>
-        <HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{help?.body}{svc && <BackendsSection cloud="aws" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0972d3" />}{!help?.body && <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}</HelpPanel>
+        <HelpPanel header={<h2>{help?.title || svc?.title || "Vyomi"}</h2>}>{help?.body}{svc && <BackendsSection cloud="aws" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0972d3" />}{!help?.body && <p>Vyomi simulates this console against local backends. Everything you do here is real in the simulator and visible to your SDKs and CLI.</p>}<p><a href="#/notices" data-testid="help-notices-link">Notices and licences</a></p></HelpPanel>
       </HelpOverlay>
       {!isNano() && <footer id="vyomi-footer" style={{ position: "fixed", bottom: 0, left: 0, right: 0, height: 32, zIndex: 1001, display: "flex", alignItems: "center", gap: 20, padding: "0 16px", background: "#0f141a", color: "#d1d5db", fontSize: 12, fontFamily: '"Open Sans", "Helvetica Neue", Roboto, Arial, sans-serif' }}>
         <a href="#/" style={{ color: "inherit", textDecoration: "none" }}>Console Home</a>
         <a href={classicHref("")} style={{ color: "inherit", textDecoration: "none" }}>Classic console</a>
+        <a href="#/notices" style={{ color: "inherit", textDecoration: "none" }} data-testid="footer-notices-link">Notices and licences</a>
         <a href="https://github.com/vyomi-cloud/appliance/issues" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>Feedback</a>
         <span style={{ marginLeft: "auto" }}>Vyomi — local cloud simulator · not affiliated with Amazon Web Services</span>
       </footer>}

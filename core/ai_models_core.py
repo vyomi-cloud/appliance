@@ -1250,7 +1250,7 @@ def _summary(m):
     return {"modelArn": f"arn:aws:bedrock:us-east-1::foundation-model/{m[0]}", "modelId": m[0], "modelName": m[2],
             "providerName": m[1], "inputModalities": m[3], "outputModalities": m[4], "responseStreamingSupported": m[5],
             "customizationsSupported": [], "inferenceTypesSupported": ["ON_DEMAND"], "modelLifecycle": {"status": "ACTIVE"},
-            "vyomiAvailability": CAT.availability(m[6])}
+            "vyomiAvailability": CAT.availability(m[6]), "vyomiLicense": CAT.license_of(m[6])}
 
 
 def _backed_by(mid):

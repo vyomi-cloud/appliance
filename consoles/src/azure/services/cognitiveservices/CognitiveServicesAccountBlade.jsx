@@ -32,6 +32,7 @@ import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { restJson } from "../../../common/wire.js";
 import { availText } from "../../../common/aiModels.js";
+import LicenceChip from "../../../common/LicenceChip.jsx";
 import { PrivateEndpointConnectionsPanel } from "../../kit/PrivateEndpoints.jsx";
 
 export const MENU = [
@@ -380,6 +381,7 @@ function CreateDeploymentDialog({ open, onClose, onCreate, av = {} }) {
                   {MODEL_NAMES.map((n) => <option key={n} value={n}>{n} - {availText(av[n], n)}</option>)}
                 </Select>
               </Field>
+              <LicenceChip id={modelName} />
               <Field label="Model version" required>
                 <Select value={modelVersion} onChange={(_, d) => setModelVersion(d.value)} aria-label="Model version">
                   {versionsFor(modelName).map((v) => <option key={v} value={v}>{v}</option>)}

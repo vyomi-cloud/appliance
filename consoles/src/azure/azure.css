@@ -163,7 +163,7 @@ body:has(#nano-foot) .vy-wizard-foot { bottom: 34px; }   /* Nano: the fixed rela
 .vy-fdy-hero h2 { margin: 6px 0 10px; font-size: 26px; font-weight: 600; }
 .vy-fdy-hero p { font-size: 13px; line-height: 20px; color: var(--colorNeutralForeground2); }
 .vy-fdy-eyebrow { font-size: 12px; color: var(--colorNeutralForeground3); }
-.vy-fdy-models { display: grid; grid-template-columns: repeat(3, 130px); gap: 10px; align-content: center; }
+.vy-fdy-models { display: grid; grid-template-columns: repeat(3, 160px); gap: 10px; align-content: center; }
 .vy-fdy-models div { display: flex; flex-direction: column; padding: 10px 12px; background: var(--colorNeutralBackground1); border-radius: 4px; box-shadow: var(--shadow4); }
 .vy-fdy-models span { font-size: 11px; color: var(--colorNeutralForeground3); }
 .vy-fdy-sechead { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }

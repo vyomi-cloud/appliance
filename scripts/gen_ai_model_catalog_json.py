@@ -13,9 +13,9 @@ from core import ai_model_catalog as C  # noqa: E402
 def doc():
     return {"_comment": "GENERATED from core/ai_model_catalog.py by scripts/gen_ai_model_catalog_json.py - do not edit.",
             "default_chat": C.DEFAULT_CHAT, "default_embed": C.DEFAULT_EMBED, "local_id": C.LOCAL_ID, "needs_mesh": C.NEEDS_MESH,
-            "models": [{k: m[k] for k in ("id", "name", "vendor", "publisher", "kind", "size", "role", "blurb", "tag", "pooled")} for m in C.MODELS],
+            "models": [{k: m[k] for k in ("id", "name", "vendor", "publisher", "kind", "size", "role", "blurb", "tag", "pooled") + C.LICENSE_FIELDS} for m in C.MODELS],
             # role models (Mesh only): in the JSON for the pickers but shown ONLY while the cloud's own list API reports them served (aiModels.markServed)
-            "special": [] if C.WEB else [{k: m[k] for k in ("id", "name", "vendor", "publisher", "kind", "size", "role", "blurb", "tag", "pooled", "licence", "caps", "serve")} for m in C.SPECIAL]}
+            "special": [] if C.WEB else [{k: m[k] for k in ("id", "name", "vendor", "publisher", "kind", "size", "role", "blurb", "tag", "pooled", "licence", "caps", "serve") + C.LICENSE_FIELDS} for m in C.SPECIAL]}
 
 
 if __name__ == "__main__":

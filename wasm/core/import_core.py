@@ -211,7 +211,8 @@ def register(model_id, name, adapter: bytes, meta_raw: bytes, source=None, st=No
     if not tc.store_put(tc.MODELS_BUCKET, _key(model_id, ADAPTER_FILE), adapter, "application/octet-stream", st=st):
         # no object store bound (unit use): keep it in memory only
         pass
-    rec = {"modelId": model_id, "name": name or model_id, "createdAt": _now(), "source": source, "engine": "wllama", "kind": "chat-lora",
+    name = tc._derived_name(name, v["base"])        # Llama naming rule (no Llama base is importable today; the rule is applied for when one is)
+    rec = {"modelId": model_id, "name": name or model_id, "vyomiLicense": tc._license_of(v["base"]) or {"license": BASES[v["base"]]["license"]}, "createdAt": _now(), "source": source, "engine": "wllama", "kind": "chat-lora",
            "baseModelUrl": BASES[v["base"]]["quants"][v["baseQuant"]]["url"], **v, **(extra or {})}
     tc.store_put(tc.MODELS_BUCKET, _key(model_id, "meta.json"), json.dumps(rec).encode(), st=st)
     _REG[model_id] = rec

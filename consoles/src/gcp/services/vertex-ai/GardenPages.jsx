@@ -13,6 +13,7 @@ import { Link } from "../../link.jsx";
 import Crumbs from "./Crumbs.jsx";
 import { availText, byId } from "../../../common/aiModels.js";
 import * as api from "./api.js";
+import LicenceChip from "../../../common/LicenceChip.jsx";
 
 const pubOf = (m) => m.name.split("/")[1];
 const idOf = (m) => api.shortId(m.name);
@@ -34,6 +35,7 @@ function ModelCard({ m, list }) {
         <Stack direction="row" spacing={0.5} sx={{ mt: 0.5, flexWrap: "wrap" }} useFlexGap>
           {serverless(m) && <Chip size="small" label="Serverless" sx={{ borderRadius: 0.5, bgcolor: "#e8f0fe", color: "#1a73e8" }} />}
           {selfDeployed(m) && <Chip size="small" label="Self-deployed" sx={{ borderRadius: 0.5, bgcolor: "#e8f0fe", color: "#1a73e8" }} />}
+          <Box sx={{ width: "100%" }}><LicenceChip m={m} id={idOf(m)} /></Box>
           <Chip size="small" data-testid="garden-availability" label={m.vyomiAvailability?.label || availText(null, idOf(m))} color={m.vyomiAvailability?.available ? "success" : "default"} variant="outlined" />
         </Stack>
       </Box>
@@ -143,6 +145,7 @@ export function ModelDetail({ params }) {
             </Box>
             <Box sx={{ width: 240 }}>
               <Typography fontWeight={500}>Model ID</Typography><Typography variant="body2" paragraph sx={{ wordBreak: "break-all" }}>{m.name}</Typography>
+              <Typography fontWeight={500}>Licence</Typography><Box sx={{ mb: 2 }} data-testid="garden-licence"><LicenceChip m={m} id={params.id} /></Box>
               <Typography fontWeight={500}>Version name</Typography><Typography variant="body2" paragraph>{params.publisher}/{params.id}</Typography>
               <Typography fontWeight={500} sx={{ mb: 1 }}>Tags</Typography><Typography variant="caption" color="text.secondary">Task</Typography>
               <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}><Chip label={taskOf(m) === "Text embeddings" ? "Embedding" : "Generation"} /></Stack>

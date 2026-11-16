@@ -26,6 +26,7 @@ import { scopeFor } from "../common/scopeHelp.js";
 import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
 import Home from "./pages/Home.jsx";
 import AllServices from "./pages/AllServices.jsx";
+import NoticesPage from "../common/NoticesPage.jsx";
 import ServiceNotSimulated from "./pages/ServiceNotSimulated.jsx";
 import { listStorageAccounts } from "./services/storage/api.js";
 
@@ -76,6 +77,7 @@ export default function App() {
   let content, crumbs = [];
   if (!svcId || svcId === "home") content = <Home />;
   else if (svcId === "allservices") { content = <AllServices />; crumbs = [{ text: "All services", href: "#/allservices" }]; }
+  else if (svcId === "notices") { content = <div className="vy-page"><NoticesPage /></div>; crumbs = [{ text: "Notices and licences", href: "#/notices" }]; }
   else if (svcId === "allresources") {
     content = <div className="vy-page"><h1 style={{ fontSize: 24, fontWeight: 600 }}>All resources</h1><NotSimulated feature="All resources (the cross-type resource list)" note={<>Browse a type instead, for example <a href="#/storage">Storage accounts</a>.</>} /></div>;
     crumbs = [{ text: "All resources", href: "#/allresources" }];
@@ -126,6 +128,7 @@ export default function App() {
                   <MenuItem disabled>Subscription: {sub.displayName || sub.id}</MenuItem>
                   <MenuItem onClick={() => setDrawer("settings")}>Switch directory or subscription</MenuItem>
                   <MenuDivider />
+                  <MenuItem onClick={() => { location.hash = "/notices"; }}>Notices and licences</MenuItem>
                   <MenuItem onClick={() => { location.href = classicHref(); }}>Open the classic Vyomi console</MenuItem>
                 </MenuList>
               </MenuPopover>
@@ -180,6 +183,7 @@ export default function App() {
                   {svc && <BackendsSection cloud="azure" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0f6cbd" />}
                   <p>Vyomi simulates this portal against local backends. Storage accounts are created over native Azure Resource Manager (ARM) and blobs over the native Blob REST API — the same endpoints your azure-* SDKs and the az CLI use, so both always see the same state.</p>
                   <p>Services without a Vyomi v4 page open in the <a href={classicHref()}>classic Vyomi console</a>.</p>
+                  <p><a href="#/notices" data-testid="help-notices-link">Notices and licences</a></p>
                   <NotSimulated feature="Support requests, service health and the documentation search" />
                 </div>
               )}

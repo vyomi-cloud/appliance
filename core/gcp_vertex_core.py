@@ -849,7 +849,7 @@ def _pm(pub, mid, oss, stage, title, desc, acts):
             "launchStage": stage, "versionState": "VERSION_STATE_STABLE", "supportedActions": actions,
             "publisherModelTemplate": f"projects/{{project}}/locations/{{location}}/publishers/{pub}/models/{mid}@default",
             "displayName": title, "description": desc, "servedByVyomi": bool({"generate", "embed"} & set(acts)),
-            "vyomiAvailability": CAT.availability(mid)}
+            "vyomiAvailability": CAT.availability(mid), "vyomiLicense": CAT.license_of(mid)}
 
 
 def _model_garden(method, pub, mid, query):

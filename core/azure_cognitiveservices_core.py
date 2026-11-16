@@ -711,7 +711,7 @@ def _account_ops(state, rec, rest, method, payload, query):
 
 
 def _model_item(m, kind="OpenAI"):
-    return {"kind": kind, "skuName": "S0", "isDefaultVersion": True, "maxCapacity": m[3], "vyomiAvailability": CAT.availability(m[1]),
+    return {"kind": kind, "skuName": "S0", "isDefaultVersion": True, "maxCapacity": m[3], "vyomiAvailability": CAT.availability(m[1]), "vyomiLicense": CAT.license_of(m[1]),
             "model": {"format": m[0], "name": m[1], "version": m[2], "lifecycleStatus": "GenerallyAvailable",
                       "capabilities": {c: "true" for c in m[4]},
                       "skus": [{"name": s, "usageName": f"OpenAI.{s}.{m[1]}", "capacity": {"maximum": m[3], "default": min(m[3], 30)}}

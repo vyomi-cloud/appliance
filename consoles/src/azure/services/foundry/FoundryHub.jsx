@@ -3,6 +3,7 @@
  * collapsible All models agents & tools / Single-capability / Earlier-generation / Help groups), Overview with Overview+Dashboard
  * tabs. Every list page shows what the ARM wire really holds for that kind. */
 import { AI_CHAT } from "../../../common/aiModels.js";
+import LicenceChip from "../../../common/LicenceChip.jsx";
 import { useState } from "react";
 import { Button, Link, Tab, TabList } from "@fluentui/react-components";
 import { ArrowClockwise20Regular } from "@fluentui/react-icons";
@@ -58,7 +59,7 @@ const CAP = { agents: "azure.foundry.agents", filters: "azure.foundry.content-fi
 const OUT = {
   ml: { reason: "Azure Machine Learning workspaces need managed compute clusters, registries and pipeline services that cannot run in a browser tab or a small Codespace.", instead: "Fine-tuning (heads and imported LoRA adapters) for training jobs, and AI Search plus Azure OpenAI for retrieval and generation." },
 };
-const MODELS = AI_CHAT.slice(0, 9).map((m) => [m.name, m.vendor]);  // only the models this simulator actually serves
+const MODELS = AI_CHAT.slice(0, 9).map((m) => [m.name, m.vendor, m.id]);  // only the models this simulator actually serves
 
 function Overview({ total }) {
   const [tab, setTab] = useState("overview");
@@ -77,7 +78,7 @@ function Overview({ total }) {
               <Button appearance="primary" onClick={() => navigate("cognitiveservices", "create")}>Create a Foundry resource</Button>{" "}
               <Button onClick={() => navigate("foundry", "all")}>View all resources</Button>
             </div>
-            <div className="vy-fdy-models">{MODELS.map(([n, v]) => <div key={n}><b>{n}</b><span>{v}</span></div>)}</div>
+            <div className="vy-fdy-models">{MODELS.map(([n, v, id]) => <div key={n}><b>{n}</b><span>{v}</span><LicenceChip id={id} /></div>)}</div>
           </section>
           <div className="vy-fdy-sechead"><h2>Discover Foundry capabilities</h2><Link href="#/foundry/foundry">Explore more on Foundry portal</Link></div>
           <div className="vy-fdy-cards">

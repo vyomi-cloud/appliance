@@ -67,6 +67,247 @@ ROLE_OF = {m["id"]: m["serve"] for m in SPECIAL}
 for _m in SPECIAL:
     BY_ID[_m["id"]] = _m
 
+# Licence + attribution per model (ENGINEERING DRAFT, not legal advice; docs/architecture/v4.0/AI-LICENCE-AUDIT.md). The block between the
+# markers is GENERATED from tools/notices/notices.json by tools/notices/gen_notices.py: edit the JSON, not this block.
+# BEGIN GENERATED LICENCES
+_LICENSE_DATA = {'all-minilm-l6-v2': {'attribution': 'all-MiniLM-L6-v2: Apache License 2.0. Copyright holder: Sentence Transformers.',
+                      'aupUrl': '',
+                      'builtWithLlama': False,
+                      'commercialUse': True,
+                      'copyright': 'Sentence Transformers',
+                      'license': 'Apache License 2.0',
+                      'licenseFlag': '',
+                      'licenseId': 'Apache-2.0',
+                      'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                      'requiredNotice': '',
+                      'upstream': 'https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2'},
+ 'deepseek-r1-1.5b': {'attribution': 'DeepSeek R1 Distill Qwen 1.5B (reasoning): MIT License. Copyright (c) 2023 DeepSeek',
+                      'aupUrl': '',
+                      'builtWithLlama': False,
+                      'commercialUse': True,
+                      'copyright': 'Copyright (c) 2023 DeepSeek',
+                      'license': 'MIT License',
+                      'licenseFlag': '',
+                      'licenseId': 'MIT',
+                      'licenseUrl': 'https://opensource.org/license/mit',
+                      'requiredNotice': 'MIT License, Copyright (c) 2023 DeepSeek',
+                      'upstream': 'https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B'},
+ 'deepseek-r1-8b': {'attribution': 'DeepSeek R1 8B: MIT License. Copyright (c) 2023 DeepSeek',
+                    'aupUrl': '',
+                    'builtWithLlama': False,
+                    'commercialUse': True,
+                    'copyright': 'Copyright (c) 2023 DeepSeek',
+                    'license': 'MIT License',
+                    'licenseFlag': '',
+                    'licenseId': 'MIT',
+                    'licenseUrl': 'https://opensource.org/license/mit',
+                    'requiredNotice': 'MIT License, Copyright (c) 2023 DeepSeek',
+                    'upstream': 'https://ollama.com/library/deepseek-r1:8b'},
+ 'gemma2-9b': {'attribution': 'Gemma 2 9B: Gemma Terms of Use. Copyright holder: Google LLC.',
+               'aupUrl': 'https://ai.google.dev/gemma/prohibited_use_policy',
+               'builtWithLlama': False,
+               'commercialUse': True,
+               'copyright': 'Google LLC',
+               'license': 'Gemma Terms of Use',
+               'licenseFlag': '',
+               'licenseId': 'LicenseRef-Gemma-Terms',
+               'licenseUrl': 'https://ai.google.dev/gemma/terms',
+               'requiredNotice': 'Gemma is provided under and subject to the Gemma Terms of Use found at ai.google.dev/gemma/terms',
+               'upstream': 'https://ollama.com/library/gemma2:9b'},
+ 'llama3.1-8b': {'attribution': 'Built with Llama. Llama 3.1 8B, Llama 3.1 Community License.',
+                 'aupUrl': 'https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/USE_POLICY.md',
+                 'builtWithLlama': True,
+                 'commercialUse': True,
+                 'copyright': 'Meta Platforms, Inc.',
+                 'license': 'Llama 3.1 Community License',
+                 'licenseFlag': '',
+                 'licenseId': 'LicenseRef-Llama-3.1-Community',
+                 'licenseUrl': 'https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE',
+                 'requiredNotice': 'Llama 3.1 is licensed under the Llama 3.1 Community License, Copyright (c) Meta Platforms, Inc. All Rights '
+                                   'Reserved.',
+                 'upstream': 'https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct'},
+ 'llama3.2-1b': {'attribution': 'Built with Llama. Llama 3.2 1B, Llama 3.2 Community License.',
+                 'aupUrl': 'https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/USE_POLICY.md',
+                 'builtWithLlama': True,
+                 'commercialUse': True,
+                 'copyright': 'Meta Platforms, Inc.',
+                 'license': 'Llama 3.2 Community License',
+                 'licenseFlag': '',
+                 'licenseId': 'LicenseRef-Llama-3.2-Community',
+                 'licenseUrl': 'https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/LICENSE',
+                 'requiredNotice': 'Llama 3.2 is licensed under the Llama 3.2 Community License, Copyright (c) Meta Platforms, Inc. All Rights '
+                                   'Reserved.',
+                 'upstream': 'https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct'},
+ 'mistral-7b': {'attribution': 'Mistral 7B: Apache License 2.0. Copyright holder: Mistral AI.',
+                'aupUrl': '',
+                'builtWithLlama': False,
+                'commercialUse': True,
+                'copyright': 'Mistral AI',
+                'license': 'Apache License 2.0',
+                'licenseFlag': '',
+                'licenseId': 'Apache-2.0',
+                'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                'requiredNotice': '',
+                'upstream': 'https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3'},
+ 'nomic-embed-text': {'attribution': 'Nomic Embed Text v1.5: Apache License 2.0. Copyright holder: Nomic AI.',
+                      'aupUrl': '',
+                      'builtWithLlama': False,
+                      'commercialUse': True,
+                      'copyright': 'Nomic AI',
+                      'license': 'Apache License 2.0',
+                      'licenseFlag': '',
+                      'licenseId': 'Apache-2.0',
+                      'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                      'requiredNotice': '',
+                      'upstream': 'https://huggingface.co/nomic-ai/nomic-embed-text-v1.5'},
+ 'qwen2.5-0.5b': {'attribution': 'Qwen2.5 0.5B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+                  'aupUrl': '',
+                  'builtWithLlama': False,
+                  'commercialUse': True,
+                  'copyright': 'Alibaba Cloud (Qwen team)',
+                  'license': 'Apache License 2.0',
+                  'licenseFlag': '',
+                  'licenseId': 'Apache-2.0',
+                  'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                  'requiredNotice': '',
+                  'upstream': 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct'},
+ 'qwen2.5-1.5b': {'attribution': 'Qwen2.5 1.5B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+                  'aupUrl': '',
+                  'builtWithLlama': False,
+                  'commercialUse': True,
+                  'copyright': 'Alibaba Cloud (Qwen team)',
+                  'license': 'Apache License 2.0',
+                  'licenseFlag': '',
+                  'licenseId': 'Apache-2.0',
+                  'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                  'requiredNotice': '',
+                  'upstream': 'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct'},
+ 'qwen2.5-3b': {'attribution': 'Qwen2.5 3B: Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024). Copyright holder: Alibaba Cloud.',
+                'aupUrl': '',
+                'builtWithLlama': False,
+                'commercialUse': False,
+                'copyright': 'Alibaba Cloud',
+                'license': 'Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024)',
+                'licenseFlag': 'Non-commercial research licence: not for paid use',
+                'licenseId': 'LicenseRef-Qwen-Research',
+                'licenseUrl': 'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/raw/main/LICENSE',
+                'requiredNotice': 'Qwen is licensed under the Qwen RESEARCH LICENSE AGREEMENT, Copyright (c) Alibaba Cloud. All Rights Reserved.',
+                'upstream': 'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct'},
+ 'qwen2.5-7b': {'attribution': 'Qwen2.5 7B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+                'aupUrl': '',
+                'builtWithLlama': False,
+                'commercialUse': True,
+                'copyright': 'Alibaba Cloud (Qwen team)',
+                'license': 'Apache License 2.0',
+                'licenseFlag': '',
+                'licenseId': 'Apache-2.0',
+                'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                'requiredNotice': '',
+                'upstream': 'https://huggingface.co/Qwen/Qwen2.5-7B-Instruct'},
+ 'qwen2.5-coder-7b': {'attribution': 'Qwen2.5 Coder 7B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+                      'aupUrl': '',
+                      'builtWithLlama': False,
+                      'commercialUse': True,
+                      'copyright': 'Alibaba Cloud (Qwen team)',
+                      'license': 'Apache License 2.0',
+                      'licenseFlag': '',
+                      'licenseId': 'Apache-2.0',
+                      'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                      'requiredNotice': '',
+                      'upstream': 'https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct'},
+ 'qwen3-30b': {'attribution': 'Qwen3 30B (MoE): Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+               'aupUrl': '',
+               'builtWithLlama': False,
+               'commercialUse': True,
+               'copyright': 'Alibaba Cloud (Qwen team)',
+               'license': 'Apache License 2.0',
+               'licenseFlag': '',
+               'licenseId': 'Apache-2.0',
+               'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+               'requiredNotice': '',
+               'upstream': 'https://huggingface.co/Qwen/Qwen3-30B-A3B'},
+ 'qwen3-8b': {'attribution': 'Qwen3 8B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).',
+              'aupUrl': '',
+              'builtWithLlama': False,
+              'commercialUse': True,
+              'copyright': 'Alibaba Cloud (Qwen team)',
+              'license': 'Apache License 2.0',
+              'licenseFlag': '',
+              'licenseId': 'Apache-2.0',
+              'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+              'requiredNotice': '',
+              'upstream': 'https://huggingface.co/Qwen/Qwen3-8B'},
+ 'smollm2-135m-instruct': {'attribution': 'SmolLM2 135M Instruct: Apache License 2.0. Copyright holder: Hugging Face.',
+                           'aupUrl': '',
+                           'builtWithLlama': False,
+                           'commercialUse': True,
+                           'copyright': 'Hugging Face',
+                           'license': 'Apache License 2.0',
+                           'licenseFlag': '',
+                           'licenseId': 'Apache-2.0',
+                           'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                           'requiredNotice': '',
+                           'upstream': 'https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct'},
+ 'smollm2-360m': {'attribution': 'SmolLM2 360M: Apache License 2.0. Copyright holder: Hugging Face.',
+                  'aupUrl': '',
+                  'builtWithLlama': False,
+                  'commercialUse': True,
+                  'copyright': 'Hugging Face',
+                  'license': 'Apache License 2.0',
+                  'licenseFlag': '',
+                  'licenseId': 'Apache-2.0',
+                  'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                  'requiredNotice': '',
+                  'upstream': 'https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct'},
+ 'smolvlm-500m': {'attribution': 'SmolVLM 500M (vision): Apache License 2.0. Copyright holder: Hugging Face.',
+                  'aupUrl': '',
+                  'builtWithLlama': False,
+                  'commercialUse': True,
+                  'copyright': 'Hugging Face',
+                  'license': 'Apache License 2.0',
+                  'licenseFlag': '',
+                  'licenseId': 'Apache-2.0',
+                  'licenseUrl': 'https://www.apache.org/licenses/LICENSE-2.0',
+                  'requiredNotice': '',
+                  'upstream': 'https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct'}}
+# END GENERATED LICENCES
+for _m in list(MODELS) + SPECIAL:
+    _m.update(_LICENSE_DATA.get(_m["id"], {}))
+LICENSE_FIELDS = ("license", "licenseId", "licenseUrl", "attribution", "requiredNotice", "commercialUse", "builtWithLlama", "licenseFlag", "aupUrl", "copyright", "upstream")
+
+
+def paid_tier() -> bool:
+    """True when this process serves a paid tier (VYOMI_PAID_TIER=1): models flagged non-commercial are then never selected."""
+    return os.environ.get("VYOMI_PAID_TIER", "").strip().lower() in ("1", "true", "yes")
+
+
+def commercial(mid) -> bool:
+    """False for a model whose licence forbids commercial use (qwen2.5-3b: Qwen Research Licence)."""
+    return bool(BY_ID.get(mid, {}).get("commercialUse", True))
+
+
+def default_chat(paid=None):
+    """The default chat model. For a paid tier the first commercially usable chat model in catalogue order when the plain default is flagged non-commercial."""
+    paid = paid_tier() if paid is None else paid
+    d = DEFAULT_CHAT
+    if paid and not commercial(d):
+        return next((m["id"] for m in MODELS if m["kind"] == "chat" and commercial(m["id"])), d)
+    return d
+
+
+def license_of(mid):
+    """The licence/attribution fields of a catalogue model ({} if unknown). Additive vyomi extension for API responses."""
+    m = BY_ID.get(mid) or {}
+    return {k: m[k] for k in LICENSE_FIELDS if k in m}
+
+
+def derived_name(name, base_id):
+    """Llama naming rule (Llama Community Licence 1.b.i): a model created from Llama Materials carries "Llama" at the start of its name."""
+    b = BY_ID.get(str(base_id or "").replace("vyomi.", ""))
+    if b and b.get("builtWithLlama") and name and not str(name).lower().startswith("llama"):
+        return "Llama-" + str(name)
+    return name
+
 
 def special_served(mid) -> bool:
     """True when this role model is served right now (its llama-server role answers /health). Never on Nano."""
@@ -132,7 +373,15 @@ _SPECIAL_BYNAME = {k: m for m in SPECIAL_IDS for k in _generated(m)}
 
 
 def resolve(cloud, api_id):
-    """Cloud API model id / deployment name -> catalogue id, or None (the cloud then answers with its own not-found error)."""
+    """Cloud API model id / deployment name -> catalogue id, or None (the cloud then answers with its own not-found error).
+    On a paid tier (VYOMI_PAID_TIER=1) a model flagged non-commercial is replaced by the first commercially usable chat model."""
+    mid = _resolve(cloud, api_id)
+    if mid and paid_tier() and BY_ID.get(mid, {}).get("kind") == "chat" and not commercial(mid):
+        return default_chat(True)
+    return mid
+
+
+def _resolve(cloud, api_id):
     if not api_id:
         return None
     api_id = str(api_id)

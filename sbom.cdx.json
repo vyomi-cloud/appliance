@@ -1,0 +1,7216 @@
+{
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.5",
+ "serialNumber": "urn:uuid:641c197b-37f1-5699-9eb6-4f32978c4190",
+ "version": 1,
+ "metadata": {
+  "component": {
+   "type": "application",
+   "name": "vyomi-appliance",
+   "bom-ref": "vyomi-appliance"
+  },
+  "properties": [
+   {
+    "name": "vyomi:status",
+    "value": "engineering draft generated from tools/notices/notices.json; not legal advice"
+   }
+  ]
+ },
+ "components": [
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen2.5-3b",
+   "name": "Qwen2.5 3B",
+   "supplier": {
+    "name": "Alibaba Cloud"
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Qwen RESEARCH LICENSE AGREEMENT (Release Date: September 19, 2024)",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct/raw/main/LICENSE"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen2.5-3b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "false"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:nomic-embed-text",
+   "name": "Nomic Embed Text v1.5",
+   "supplier": {
+    "name": "Nomic AI"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/nomic-ai/nomic-embed-text-v1.5"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "nomic-embed-text"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen2.5-7b",
+   "name": "Qwen2.5 7B",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen2.5-7B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen2.5-7b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen2.5-coder-7b",
+   "name": "Qwen2.5 Coder 7B",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen2.5-coder-7b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:llama3.1-8b",
+   "name": "Llama 3.1 8B",
+   "supplier": {
+    "name": "Meta Platforms, Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Llama 3.1 Community License",
+      "url": "https://github.com/meta-llama/llama-models/blob/main/models/llama3_1/LICENSE"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "llama3.1-8b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:gemma2-9b",
+   "name": "Gemma 2 9B",
+   "supplier": {
+    "name": "Google LLC"
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Gemma Terms of Use",
+      "url": "https://ai.google.dev/gemma/terms"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://ollama.com/library/gemma2:9b"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "gemma2-9b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen3-8b",
+   "name": "Qwen3 8B",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen3-8B"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen3-8b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:deepseek-r1-8b",
+   "name": "DeepSeek R1 8B",
+   "supplier": {
+    "name": "Copyright (c) 2023 DeepSeek"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://ollama.com/library/deepseek-r1:8b"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "deepseek-r1-8b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:mistral-7b",
+   "name": "Mistral 7B",
+   "supplier": {
+    "name": "Mistral AI"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "mistral-7b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen3-30b",
+   "name": "Qwen3 30B (MoE)",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen3-30B-A3B"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen3-30b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:smollm2-360m",
+   "name": "SmolLM2 360M",
+   "supplier": {
+    "name": "Hugging Face"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "smollm2-360m"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen2.5-0.5b",
+   "name": "Qwen2.5 0.5B",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen2.5-0.5b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:llama3.2-1b",
+   "name": "Llama 3.2 1B",
+   "supplier": {
+    "name": "Meta Platforms, Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Llama 3.2 Community License",
+      "url": "https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/LICENSE"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "llama3.2-1b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:qwen2.5-1.5b",
+   "name": "Qwen2.5 1.5B",
+   "supplier": {
+    "name": "Alibaba Cloud (Qwen team)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "qwen2.5-1.5b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:all-minilm-l6-v2",
+   "name": "all-MiniLM-L6-v2",
+   "supplier": {
+    "name": "Sentence Transformers"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "all-minilm-l6-v2"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:smolvlm-500m",
+   "name": "SmolVLM 500M (vision)",
+   "supplier": {
+    "name": "Hugging Face"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/HuggingFaceTB/SmolVLM-500M-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "smolvlm-500m"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:deepseek-r1-1.5b",
+   "name": "DeepSeek R1 Distill Qwen 1.5B (reasoning)",
+   "supplier": {
+    "name": "Copyright (c) 2023 DeepSeek"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "deepseek-r1-1.5b"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "machine-learning-model",
+   "bom-ref": "model:smollm2-135m-instruct",
+   "name": "SmolLM2 135M Instruct",
+   "supplier": {
+    "name": "Hugging Face"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:catalogId",
+     "value": "smollm2-135m-instruct"
+    },
+    {
+     "name": "vyomi:commercialUse",
+     "value": "true"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:fastapi",
+   "name": "fastapi",
+   "supplier": {
+    "name": "Sebastian Ramirez"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fastapi/fastapi"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=0.110.0"
+    }
+   ],
+   "purl": "pkg:pypi/fastapi"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:uvicorn",
+   "name": "uvicorn",
+   "supplier": {
+    "name": "Encode OSS Ltd."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/encode/uvicorn"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=0.29.0"
+    }
+   ],
+   "purl": "pkg:pypi/uvicorn"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:python-multipart",
+   "name": "python-multipart",
+   "supplier": {
+    "name": "Andrew Dunham, Marcelo Trylesinski"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/Kludex/python-multipart"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=0.0.9"
+    }
+   ],
+   "purl": "pkg:pypi/python-multipart"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:psycopg2-binary",
+   "name": "psycopg2-binary",
+   "supplier": {
+    "name": "Federico Di Gregorio and contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "LGPL-3.0-only"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/psycopg/psycopg2"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=2.9.9"
+    }
+   ],
+   "purl": "pkg:pypi/psycopg2-binary"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:PyMySQL",
+   "name": "PyMySQL",
+   "supplier": {
+    "name": "PyMySQL contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/PyMySQL/PyMySQL"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=1.1.0"
+    }
+   ],
+   "purl": "pkg:pypi/pymysql"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:google-cloud-pubsub",
+   "name": "google-cloud-pubsub",
+   "supplier": {
+    "name": "Google LLC"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/googleapis/python-pubsub"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=2.21.0"
+    }
+   ],
+   "purl": "pkg:pypi/google-cloud-pubsub"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:google-cloud-firestore",
+   "name": "google-cloud-firestore",
+   "supplier": {
+    "name": "Google LLC"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/googleapis/python-firestore"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=2.16.0"
+    }
+   ],
+   "purl": "pkg:pypi/google-cloud-firestore"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:hvac",
+   "name": "hvac",
+   "supplier": {
+    "name": "hvac contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/hvac/hvac"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=2.1.0"
+    }
+   ],
+   "purl": "pkg:pypi/hvac"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:nats-py",
+   "name": "nats-py",
+   "supplier": {
+    "name": "The NATS Authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/nats-io/nats.py"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=2.7.0"
+    }
+   ],
+   "purl": "pkg:pypi/nats-py"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:boto3",
+   "name": "boto3",
+   "supplier": {
+    "name": "Amazon.com, Inc. or its affiliates"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/boto/boto3"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=1.34.0"
+    }
+   ],
+   "purl": "pkg:pypi/boto3"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:azure-storage-blob",
+   "name": "azure-storage-blob",
+   "supplier": {
+    "name": "Microsoft Corporation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/Azure/azure-sdk-for-python"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=12.19.0"
+    }
+   ],
+   "purl": "pkg:pypi/azure-storage-blob"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:azure-storage-queue",
+   "name": "azure-storage-queue",
+   "supplier": {
+    "name": "Microsoft Corporation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/Azure/azure-sdk-for-python"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=12.9.0"
+    }
+   ],
+   "purl": "pkg:pypi/azure-storage-queue"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:cedarpy",
+   "name": "cedarpy",
+   "supplier": {
+    "name": "k9 Security"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/k9securityio/cedar-py"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=4.8.0"
+    }
+   ],
+   "purl": "pkg:pypi/cedarpy"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:httpx",
+   "name": "httpx",
+   "supplier": {
+    "name": "Encode OSS Ltd."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/encode/httpx"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=0.27.0"
+    }
+   ],
+   "purl": "pkg:pypi/httpx"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:docker",
+   "name": "docker",
+   "supplier": {
+    "name": "Docker, Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/docker/docker-py"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=7.0.0"
+    }
+   ],
+   "purl": "pkg:pypi/docker"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:pyarrow",
+   "name": "pyarrow",
+   "supplier": {
+    "name": "The Apache Software Foundation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/apache/arrow"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=22.0.0"
+    }
+   ],
+   "purl": "pkg:pypi/pyarrow"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:cryptography",
+   "name": "cryptography",
+   "supplier": {
+    "name": "The cryptography developers"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pyca/cryptography"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=42.0.0"
+    }
+   ],
+   "purl": "pkg:pypi/cryptography"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:moto",
+   "name": "moto",
+   "supplier": {
+    "name": "Steve Pulec and moto contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/getmoto/moto"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=5.1.0"
+    }
+   ],
+   "purl": "pkg:pypi/moto"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:PyJWT",
+   "name": "PyJWT",
+   "supplier": {
+    "name": "Jose Padilla"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/jpadilla/pyjwt"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    },
+    {
+     "name": "vyomi:versionSpec",
+     "value": ">=2.8.0"
+    }
+   ],
+   "purl": "pkg:pypi/pyjwt"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:torch",
+   "name": "torch",
+   "supplier": {
+    "name": "PyTorch contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pytorch/pytorch"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "2.15.0",
+   "purl": "pkg:pypi/torch@2.15.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:transformers",
+   "name": "transformers",
+   "supplier": {
+    "name": "The HuggingFace Team"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/huggingface/transformers"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "5.23.0",
+   "purl": "pkg:pypi/transformers@5.23.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:peft",
+   "name": "peft",
+   "supplier": {
+    "name": "The HuggingFace Team"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/huggingface/peft"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "0.21.3",
+   "purl": "pkg:pypi/peft@0.21.3"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:gguf",
+   "name": "gguf",
+   "supplier": {
+    "name": "ggml authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/ggml-org/llama.cpp"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "0.19.0",
+   "purl": "pkg:pypi/gguf@0.19.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:safetensors",
+   "name": "safetensors",
+   "supplier": {
+    "name": "The HuggingFace Team"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/huggingface/safetensors"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "0.8.0",
+   "purl": "pkg:pypi/safetensors@0.8.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:sentencepiece",
+   "name": "sentencepiece",
+   "supplier": {
+    "name": "Google Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/google/sentencepiece"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "0.2.3",
+   "purl": "pkg:pypi/sentencepiece@0.2.3"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:numpy",
+   "name": "numpy",
+   "supplier": {
+    "name": "NumPy Developers"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/numpy/numpy"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "2.5.4",
+   "purl": "pkg:pypi/numpy@2.5.4"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:python:huggingface_hub",
+   "name": "huggingface_hub",
+   "supplier": {
+    "name": "The HuggingFace Team"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/huggingface/huggingface_hub"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "python"
+    }
+   ],
+   "version": "2.4.0",
+   "purl": "pkg:pypi/huggingface_hub@2.4.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:pypdf",
+   "name": "pypdf",
+   "supplier": {
+    "name": "pypdf contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/py-pdf/pypdf"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/pylib/pypdf-7.1.0-py3-none-any.whl"
+    }
+   ],
+   "version": "7.1.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:cedar-wasm (@cedar-policy/cedar-wasm)",
+   "name": "cedar-wasm (@cedar-policy/cedar-wasm)",
+   "supplier": {
+    "name": "Amazon.com, Inc. or its affiliates (Cedar)"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/cedar-policy/cedar"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/cedar"
+    }
+   ],
+   "version": "4.14.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:parquet-wasm + Apache Arrow JS",
+   "name": "parquet-wasm + Apache Arrow JS",
+   "supplier": {
+    "name": "Kyle Barron; The Apache Software Foundation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    },
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/kylebarron/parquet-wasm"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/parquet"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:Kubescape regolibrary + OPA wasm",
+   "name": "Kubescape regolibrary + OPA wasm",
+   "supplier": {
+    "name": "The Kubescape Authors; The OPA Authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    },
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    },
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/kubescape/regolibrary"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/kubescape"
+    }
+   ],
+   "version": "CLI 4.0.16; opa-wasm 1.10.0; OPA 1.21.1"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:v86 (x86 emulator)",
+   "name": "v86 (x86 emulator)",
+   "supplier": {
+    "name": "Copyright (c) 2012, The v86 contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/copy/v86"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/vm/engine"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:SeaBIOS and VGABIOS (v86 BIOS images)",
+   "name": "SeaBIOS and VGABIOS (v86 BIOS images)",
+   "supplier": {
+    "name": "The SeaBIOS and Bochs VGABIOS authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "LGPL-3.0-only"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://www.seabios.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/vm/bios"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:Alpine Linux guest image (kernel, busybox, dropbear, python3, git and others)",
+   "name": "Alpine Linux guest image (kernel, busybox, dropbear, python3, git and others)",
+   "supplier": {
+    "name": "The respective package authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "GPL-2.0-only"
+     }
+    },
+    {
+     "license": {
+      "id": "MIT"
+     }
+    },
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://alpinelinux.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/vm/image"
+    }
+   ],
+   "version": "Alpine 3.21 (i386)"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:xterm.js",
+   "name": "xterm.js",
+   "supplier": {
+    "name": "The xterm.js authors; Microsoft Corporation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/xtermjs/xterm.js"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/vm/xterm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:lit-core",
+   "name": "lit-core",
+   "supplier": {
+    "name": "Google LLC"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/lit/lit"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/console-next/vendor"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:runtime:Pyodide",
+   "name": "Pyodide",
+   "supplier": {
+    "name": "Pyodide contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MPL-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/pyodide/pyodide"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "runtime"
+    }
+   ],
+   "version": "0.26.2"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:runtime:WebLLM (@mlc-ai/web-llm)",
+   "name": "WebLLM (@mlc-ai/web-llm)",
+   "supplier": {
+    "name": "MLC contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mlc-ai/web-llm"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "runtime"
+    }
+   ],
+   "version": "0.2.79"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:runtime:wllama (@wllama/wllama)",
+   "name": "wllama (@wllama/wllama)",
+   "supplier": {
+    "name": "Xuan Son Nguyen"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/ngxson/wllama"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "runtime"
+    }
+   ],
+   "version": "3.13.0"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:runtime:transformers.js (@xenova/transformers)",
+   "name": "transformers.js (@xenova/transformers)",
+   "supplier": {
+    "name": "Xenova / Hugging Face"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/huggingface/transformers.js"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "runtime"
+    }
+   ],
+   "version": "2.17.2"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:runtime:PGlite (@electric-sql/pglite)",
+   "name": "PGlite (@electric-sql/pglite)",
+   "supplier": {
+    "name": "ElectricSQL; PostgreSQL Global Development Group"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    },
+    {
+     "license": {
+      "id": "PostgreSQL"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/electric-sql/pglite"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "runtime"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:runtime:ONNX Runtime Web",
+   "name": "ONNX Runtime Web",
+   "supplier": {
+    "name": "Microsoft Corporation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/microsoft/onnxruntime"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "runtime"
+    }
+   ]
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Python (python:3.12/3.13/3.14-slim base images)",
+   "name": "Python (python:3.12/3.13/3.14-slim base images)",
+   "supplier": {
+    "name": "Python Software Foundation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Python-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://www.python.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "3.12 to 3.14"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Debian and Alpine base images (debian:trixie-slim, alpine:3.20)",
+   "name": "Debian and Alpine base images (debian:trixie-slim, alpine:3.20)",
+   "supplier": {
+    "name": "The respective package authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Mixed (each OS package keeps its own licence; see /usr/share/doc/*/copyright inside the image)",
+      "url": "https://www.debian.org/legal/licenses/"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://www.debian.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "trixie-slim; 3.20"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:llama.cpp (ghcr.io/ggml-org/llama.cpp:server)",
+   "name": "llama.cpp (ghcr.io/ggml-org/llama.cpp:server)",
+   "supplier": {
+    "name": "The ggml authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/ggml-org/llama.cpp"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "server"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:MinIO (vyomi/minio, built from source)",
+   "name": "MinIO (vyomi/minio, built from source)",
+   "supplier": {
+    "name": "MinIO, Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "AGPL-3.0-only"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/minio/minio"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "RELEASE.2025-09-07T16-13-09Z"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:HashiCorp Vault (hashicorp/vault:1.15)",
+   "name": "HashiCorp Vault (hashicorp/vault:1.15)",
+   "supplier": {
+    "name": "HashiCorp, Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MPL-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/hashicorp/vault"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "1.15"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:amazon/dynamodb-local",
+   "name": "amazon/dynamodb-local",
+   "supplier": {
+    "name": "Amazon.com, Inc. or its affiliates"
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Amazon DynamoDB Local terms (proprietary, not an open-source licence)",
+      "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/DynamoDBLocal.html"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://hub.docker.com/r/amazon/dynamodb-local"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "latest"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Google Cloud SDK emulators image",
+   "name": "Google Cloud SDK emulators image",
+   "supplier": {
+    "name": "Google LLC"
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Google Cloud SDK terms (Apache-2.0 for the SDK code; emulator image terms apply)",
+      "url": "https://cloud.google.com/terms/"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://cloud.google.com/sdk"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "emulators"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:fake-gcs-server",
+   "name": "fake-gcs-server",
+   "supplier": {
+    "name": "Francisco Souza"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/fsouza/fake-gcs-server"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "latest"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Azurite",
+   "name": "Azurite",
+   "supplier": {
+    "name": "Microsoft Corporation"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/Azure/Azurite"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "latest"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:ElasticMQ",
+   "name": "ElasticMQ",
+   "supplier": {
+    "name": "SoftwareMill"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/softwaremill/elasticmq"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "latest"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Valkey",
+   "name": "Valkey",
+   "supplier": {
+    "name": "Valkey contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/valkey-io/valkey"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "8.0.1"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:VictoriaMetrics",
+   "name": "VictoriaMetrics",
+   "supplier": {
+    "name": "VictoriaMetrics, Inc."
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/VictoriaMetrics/VictoriaMetrics"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "v1.104.0"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Caddy",
+   "name": "Caddy",
+   "supplier": {
+    "name": "Matthew Holt and the Caddy authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/caddyserver/caddy"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "2.8.4"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:NATS server",
+   "name": "NATS server",
+   "supplier": {
+    "name": "The NATS Authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/nats-io/nats-server"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "2"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:Docker registry (distribution)",
+   "name": "Docker registry (distribution)",
+   "supplier": {
+    "name": "The CNCF Distribution authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/distribution/distribution"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "2.8.3"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:MySQL 8.0 (mysql:8.0)",
+   "name": "MySQL 8.0 (mysql:8.0)",
+   "supplier": {
+    "name": "Oracle and/or its affiliates"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "GPL-2.0-only"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/mysql/mysql-server"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "8.0"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:PostgreSQL + pgvector (vyomi/postgres:16-alpine-pgvector)",
+   "name": "PostgreSQL + pgvector (vyomi/postgres:16-alpine-pgvector)",
+   "supplier": {
+    "name": "PostgreSQL Global Development Group; Regents of the University of California; pgvector contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "PostgreSQL"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://www.postgresql.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "16"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:redis (redis:7-alpine)",
+   "name": "redis (redis:7-alpine)",
+   "supplier": {
+    "name": "Redis Ltd. and contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/redis/redis"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ],
+   "version": "7"
+  },
+  {
+   "type": "container",
+   "bom-ref": "component:image:FRRouting (planned hybrid-edge)",
+   "name": "FRRouting (planned hybrid-edge)",
+   "supplier": {
+    "name": "FRRouting contributors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "GPL-2.0-only"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://github.com/FRRouting/frr"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "image"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/code-frame@7.29.7",
+   "name": "@babel/code-frame",
+   "version": "7.29.7",
+   "purl": "pkg:npm/%40babel/code-frame@7.29.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/generator@7.29.12",
+   "name": "@babel/generator",
+   "version": "7.29.12",
+   "purl": "pkg:npm/%40babel/generator@7.29.12",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/helper-globals@7.29.7",
+   "name": "@babel/helper-globals",
+   "version": "7.29.7",
+   "purl": "pkg:npm/%40babel/helper-globals@7.29.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/helper-module-imports@7.29.7",
+   "name": "@babel/helper-module-imports",
+   "version": "7.29.7",
+   "purl": "pkg:npm/%40babel/helper-module-imports@7.29.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/helper-string-parser@7.29.11",
+   "name": "@babel/helper-string-parser",
+   "version": "7.29.11",
+   "purl": "pkg:npm/%40babel/helper-string-parser@7.29.11",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/helper-validator-identifier@7.29.7",
+   "name": "@babel/helper-validator-identifier",
+   "version": "7.29.7",
+   "purl": "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/parser@7.29.12",
+   "name": "@babel/parser",
+   "version": "7.29.12",
+   "purl": "pkg:npm/%40babel/parser@7.29.12",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/runtime@7.29.10",
+   "name": "@babel/runtime",
+   "version": "7.29.10",
+   "purl": "pkg:npm/%40babel/runtime@7.29.10",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/template@7.29.7",
+   "name": "@babel/template",
+   "version": "7.29.7",
+   "purl": "pkg:npm/%40babel/template@7.29.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/traverse@7.29.12",
+   "name": "@babel/traverse",
+   "version": "7.29.12",
+   "purl": "pkg:npm/%40babel/traverse@7.29.12",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@babel/types@7.29.11",
+   "name": "@babel/types",
+   "version": "7.29.11",
+   "purl": "pkg:npm/%40babel/types@7.29.11",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/board-components@3.0.89",
+   "name": "@cloudscape-design/board-components",
+   "version": "3.0.89",
+   "purl": "pkg:npm/%40cloudscape-design/board-components@3.0.89",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/collection-hooks@1.0.110",
+   "name": "@cloudscape-design/collection-hooks",
+   "version": "1.0.110",
+   "purl": "pkg:npm/%40cloudscape-design/collection-hooks@1.0.110",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/component-toolkit@1.0.0-beta.192",
+   "name": "@cloudscape-design/component-toolkit",
+   "version": "1.0.0-beta.192",
+   "purl": "pkg:npm/%40cloudscape-design/component-toolkit@1.0.0-beta.192",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/components@3.0.900",
+   "name": "@cloudscape-design/components",
+   "version": "3.0.900",
+   "purl": "pkg:npm/%40cloudscape-design/components@3.0.900",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/design-tokens@3.0.117",
+   "name": "@cloudscape-design/design-tokens",
+   "version": "3.0.117",
+   "purl": "pkg:npm/%40cloudscape-design/design-tokens@3.0.117",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/global-styles@1.0.40",
+   "name": "@cloudscape-design/global-styles",
+   "version": "1.0.40",
+   "purl": "pkg:npm/%40cloudscape-design/global-styles@1.0.40",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/test-utils-core@1.0.95",
+   "name": "@cloudscape-design/test-utils-core",
+   "version": "1.0.95",
+   "purl": "pkg:npm/%40cloudscape-design/test-utils-core@1.0.95",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@cloudscape-design/theming-runtime@1.0.137",
+   "name": "@cloudscape-design/theming-runtime",
+   "version": "1.0.137",
+   "purl": "pkg:npm/%40cloudscape-design/theming-runtime@1.0.137",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@dnd-kit/accessibility@3.1.1",
+   "name": "@dnd-kit/accessibility",
+   "version": "3.1.1",
+   "purl": "pkg:npm/%40dnd-kit/accessibility@3.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@dnd-kit/core@6.3.1",
+   "name": "@dnd-kit/core",
+   "version": "6.3.1",
+   "purl": "pkg:npm/%40dnd-kit/core@6.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@dnd-kit/sortable@7.0.2",
+   "name": "@dnd-kit/sortable",
+   "version": "7.0.2",
+   "purl": "pkg:npm/%40dnd-kit/sortable@7.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@dnd-kit/utilities@3.2.2",
+   "name": "@dnd-kit/utilities",
+   "version": "3.2.2",
+   "purl": "pkg:npm/%40dnd-kit/utilities@3.2.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/babel-plugin@11.13.5",
+   "name": "@emotion/babel-plugin",
+   "version": "11.13.5",
+   "purl": "pkg:npm/%40emotion/babel-plugin@11.13.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/cache@11.14.0",
+   "name": "@emotion/cache",
+   "version": "11.14.0",
+   "purl": "pkg:npm/%40emotion/cache@11.14.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/hash@0.9.2",
+   "name": "@emotion/hash",
+   "version": "0.9.2",
+   "purl": "pkg:npm/%40emotion/hash@0.9.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/is-prop-valid@1.4.0",
+   "name": "@emotion/is-prop-valid",
+   "version": "1.4.0",
+   "purl": "pkg:npm/%40emotion/is-prop-valid@1.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/memoize@0.9.0",
+   "name": "@emotion/memoize",
+   "version": "0.9.0",
+   "purl": "pkg:npm/%40emotion/memoize@0.9.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/react@11.13.3",
+   "name": "@emotion/react",
+   "version": "11.13.3",
+   "purl": "pkg:npm/%40emotion/react@11.13.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/serialize@1.3.3",
+   "name": "@emotion/serialize",
+   "version": "1.3.3",
+   "purl": "pkg:npm/%40emotion/serialize@1.3.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/sheet@1.4.0",
+   "name": "@emotion/sheet",
+   "version": "1.4.0",
+   "purl": "pkg:npm/%40emotion/sheet@1.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/styled@11.13.0",
+   "name": "@emotion/styled",
+   "version": "11.13.0",
+   "purl": "pkg:npm/%40emotion/styled@11.13.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/unitless@0.10.0",
+   "name": "@emotion/unitless",
+   "version": "0.10.0",
+   "purl": "pkg:npm/%40emotion/unitless@0.10.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/use-insertion-effect-with-fallbacks@1.2.0",
+   "name": "@emotion/use-insertion-effect-with-fallbacks",
+   "version": "1.2.0",
+   "purl": "pkg:npm/%40emotion/use-insertion-effect-with-fallbacks@1.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/utils@1.4.2",
+   "name": "@emotion/utils",
+   "version": "1.4.2",
+   "purl": "pkg:npm/%40emotion/utils@1.4.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@emotion/weak-memoize@0.4.0",
+   "name": "@emotion/weak-memoize",
+   "version": "0.4.0",
+   "purl": "pkg:npm/%40emotion/weak-memoize@0.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@floating-ui/core@1.8.0",
+   "name": "@floating-ui/core",
+   "version": "1.8.0",
+   "purl": "pkg:npm/%40floating-ui/core@1.8.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@floating-ui/devtools@0.2.3",
+   "name": "@floating-ui/devtools",
+   "version": "0.2.3",
+   "purl": "pkg:npm/%40floating-ui/devtools@0.2.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@floating-ui/dom@1.8.0",
+   "name": "@floating-ui/dom",
+   "version": "1.8.0",
+   "purl": "pkg:npm/%40floating-ui/dom@1.8.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@floating-ui/utils@0.2.12",
+   "name": "@floating-ui/utils",
+   "version": "0.2.12",
+   "purl": "pkg:npm/%40floating-ui/utils@0.2.12",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/keyboard-keys@9.0.9",
+   "name": "@fluentui/keyboard-keys",
+   "version": "9.0.9",
+   "purl": "pkg:npm/%40fluentui/keyboard-keys@9.0.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/priority-overflow@9.4.3",
+   "name": "@fluentui/priority-overflow",
+   "version": "9.4.3",
+   "purl": "pkg:npm/%40fluentui/priority-overflow@9.4.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-accordion@9.12.5",
+   "name": "@fluentui/react-accordion",
+   "version": "9.12.5",
+   "purl": "pkg:npm/%40fluentui/react-accordion@9.12.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-alert@9.0.0-beta.124",
+   "name": "@fluentui/react-alert",
+   "version": "9.0.0-beta.124",
+   "purl": "pkg:npm/%40fluentui/react-alert@9.0.0-beta.124",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-aria@9.17.16",
+   "name": "@fluentui/react-aria",
+   "version": "9.17.16",
+   "purl": "pkg:npm/%40fluentui/react-aria@9.17.16",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-avatar@9.11.9",
+   "name": "@fluentui/react-avatar",
+   "version": "9.11.9",
+   "purl": "pkg:npm/%40fluentui/react-avatar@9.11.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-badge@9.5.7",
+   "name": "@fluentui/react-badge",
+   "version": "9.5.7",
+   "purl": "pkg:npm/%40fluentui/react-badge@9.5.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-breadcrumb@9.4.8",
+   "name": "@fluentui/react-breadcrumb",
+   "version": "9.4.8",
+   "purl": "pkg:npm/%40fluentui/react-breadcrumb@9.4.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-button@9.11.3",
+   "name": "@fluentui/react-button",
+   "version": "9.11.3",
+   "purl": "pkg:npm/%40fluentui/react-button@9.11.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-card@9.7.4",
+   "name": "@fluentui/react-card",
+   "version": "9.7.4",
+   "purl": "pkg:npm/%40fluentui/react-card@9.7.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-carousel@9.9.16",
+   "name": "@fluentui/react-carousel",
+   "version": "9.9.16",
+   "purl": "pkg:npm/%40fluentui/react-carousel@9.9.16",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-checkbox@9.6.6",
+   "name": "@fluentui/react-checkbox",
+   "version": "9.6.6",
+   "purl": "pkg:npm/%40fluentui/react-checkbox@9.6.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-combobox@9.17.8",
+   "name": "@fluentui/react-combobox",
+   "version": "9.17.8",
+   "purl": "pkg:npm/%40fluentui/react-combobox@9.17.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-components@9.56.0",
+   "name": "@fluentui/react-components",
+   "version": "9.56.0",
+   "purl": "pkg:npm/%40fluentui/react-components@9.56.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-context-selector@9.2.21",
+   "name": "@fluentui/react-context-selector",
+   "version": "9.2.21",
+   "purl": "pkg:npm/%40fluentui/react-context-selector@9.2.21",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-dialog@9.18.6",
+   "name": "@fluentui/react-dialog",
+   "version": "9.18.6",
+   "purl": "pkg:npm/%40fluentui/react-dialog@9.18.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-divider@9.7.6",
+   "name": "@fluentui/react-divider",
+   "version": "9.7.6",
+   "purl": "pkg:npm/%40fluentui/react-divider@9.7.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-drawer@9.13.5",
+   "name": "@fluentui/react-drawer",
+   "version": "9.13.5",
+   "purl": "pkg:npm/%40fluentui/react-drawer@9.13.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-field@9.5.6",
+   "name": "@fluentui/react-field",
+   "version": "9.5.6",
+   "purl": "pkg:npm/%40fluentui/react-field@9.5.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-icons@2.0.344",
+   "name": "@fluentui/react-icons",
+   "version": "2.0.344",
+   "purl": "pkg:npm/%40fluentui/react-icons@2.0.344",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-image@9.4.6",
+   "name": "@fluentui/react-image",
+   "version": "9.4.6",
+   "purl": "pkg:npm/%40fluentui/react-image@9.4.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-infobutton@9.0.0-beta.102",
+   "name": "@fluentui/react-infobutton",
+   "version": "9.0.0-beta.102",
+   "purl": "pkg:npm/%40fluentui/react-infobutton@9.0.0-beta.102",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-infolabel@9.4.28",
+   "name": "@fluentui/react-infolabel",
+   "version": "9.4.28",
+   "purl": "pkg:npm/%40fluentui/react-infolabel@9.4.28",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-input@9.8.8",
+   "name": "@fluentui/react-input",
+   "version": "9.8.8",
+   "purl": "pkg:npm/%40fluentui/react-input@9.8.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-jsx-runtime@9.4.7",
+   "name": "@fluentui/react-jsx-runtime",
+   "version": "9.4.7",
+   "purl": "pkg:npm/%40fluentui/react-jsx-runtime@9.4.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-label@9.4.6",
+   "name": "@fluentui/react-label",
+   "version": "9.4.6",
+   "purl": "pkg:npm/%40fluentui/react-label@9.4.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-link@9.8.6",
+   "name": "@fluentui/react-link",
+   "version": "9.8.6",
+   "purl": "pkg:npm/%40fluentui/react-link@9.8.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-menu@9.25.8",
+   "name": "@fluentui/react-menu",
+   "version": "9.25.8",
+   "purl": "pkg:npm/%40fluentui/react-menu@9.25.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-message-bar@9.7.9",
+   "name": "@fluentui/react-message-bar",
+   "version": "9.7.9",
+   "purl": "pkg:npm/%40fluentui/react-message-bar@9.7.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-motion@9.16.5",
+   "name": "@fluentui/react-motion",
+   "version": "9.16.5",
+   "purl": "pkg:npm/%40fluentui/react-motion@9.16.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-motion-components-preview@0.15.10",
+   "name": "@fluentui/react-motion-components-preview",
+   "version": "0.15.10",
+   "purl": "pkg:npm/%40fluentui/react-motion-components-preview@0.15.10",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-overflow@9.9.5",
+   "name": "@fluentui/react-overflow",
+   "version": "9.9.5",
+   "purl": "pkg:npm/%40fluentui/react-overflow@9.9.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-persona@9.7.11",
+   "name": "@fluentui/react-persona",
+   "version": "9.7.11",
+   "purl": "pkg:npm/%40fluentui/react-persona@9.7.11",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-popover@9.14.10",
+   "name": "@fluentui/react-popover",
+   "version": "9.14.10",
+   "purl": "pkg:npm/%40fluentui/react-popover@9.14.10",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-portal@9.8.17",
+   "name": "@fluentui/react-portal",
+   "version": "9.8.17",
+   "purl": "pkg:npm/%40fluentui/react-portal@9.8.17",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-positioning@9.23.4",
+   "name": "@fluentui/react-positioning",
+   "version": "9.23.4",
+   "purl": "pkg:npm/%40fluentui/react-positioning@9.23.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-progress@9.5.7",
+   "name": "@fluentui/react-progress",
+   "version": "9.5.7",
+   "purl": "pkg:npm/%40fluentui/react-progress@9.5.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-provider@9.22.23",
+   "name": "@fluentui/react-provider",
+   "version": "9.22.23",
+   "purl": "pkg:npm/%40fluentui/react-provider@9.22.23",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-radio@9.6.7",
+   "name": "@fluentui/react-radio",
+   "version": "9.6.7",
+   "purl": "pkg:npm/%40fluentui/react-radio@9.6.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-rating@9.4.7",
+   "name": "@fluentui/react-rating",
+   "version": "9.4.7",
+   "purl": "pkg:npm/%40fluentui/react-rating@9.4.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-search@9.4.8",
+   "name": "@fluentui/react-search",
+   "version": "9.4.8",
+   "purl": "pkg:npm/%40fluentui/react-search@9.4.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-select@9.5.7",
+   "name": "@fluentui/react-select",
+   "version": "9.5.7",
+   "purl": "pkg:npm/%40fluentui/react-select@9.5.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-shared-contexts@9.26.4",
+   "name": "@fluentui/react-shared-contexts",
+   "version": "9.26.4",
+   "purl": "pkg:npm/%40fluentui/react-shared-contexts@9.26.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-skeleton@9.7.7",
+   "name": "@fluentui/react-skeleton",
+   "version": "9.7.7",
+   "purl": "pkg:npm/%40fluentui/react-skeleton@9.7.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-slider@9.6.8",
+   "name": "@fluentui/react-slider",
+   "version": "9.6.8",
+   "purl": "pkg:npm/%40fluentui/react-slider@9.6.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-spinbutton@9.6.8",
+   "name": "@fluentui/react-spinbutton",
+   "version": "9.6.8",
+   "purl": "pkg:npm/%40fluentui/react-spinbutton@9.6.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-spinner@9.8.7",
+   "name": "@fluentui/react-spinner",
+   "version": "9.8.7",
+   "purl": "pkg:npm/%40fluentui/react-spinner@9.8.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-swatch-picker@9.6.3",
+   "name": "@fluentui/react-swatch-picker",
+   "version": "9.6.3",
+   "purl": "pkg:npm/%40fluentui/react-swatch-picker@9.6.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-switch@9.7.7",
+   "name": "@fluentui/react-switch",
+   "version": "9.7.7",
+   "purl": "pkg:npm/%40fluentui/react-switch@9.7.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-table@9.19.23",
+   "name": "@fluentui/react-table",
+   "version": "9.19.23",
+   "purl": "pkg:npm/%40fluentui/react-table@9.19.23",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-tabs@9.12.6",
+   "name": "@fluentui/react-tabs",
+   "version": "9.12.6",
+   "purl": "pkg:npm/%40fluentui/react-tabs@9.12.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-tabster@9.26.19",
+   "name": "@fluentui/react-tabster",
+   "version": "9.26.19",
+   "purl": "pkg:npm/%40fluentui/react-tabster@9.26.19",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-tag-picker@9.10.6",
+   "name": "@fluentui/react-tag-picker",
+   "version": "9.10.6",
+   "purl": "pkg:npm/%40fluentui/react-tag-picker@9.10.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-tags@9.9.8",
+   "name": "@fluentui/react-tags",
+   "version": "9.9.8",
+   "purl": "pkg:npm/%40fluentui/react-tags@9.9.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-teaching-popover@9.7.9",
+   "name": "@fluentui/react-teaching-popover",
+   "version": "9.7.9",
+   "purl": "pkg:npm/%40fluentui/react-teaching-popover@9.7.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-text@9.6.21",
+   "name": "@fluentui/react-text",
+   "version": "9.6.21",
+   "purl": "pkg:npm/%40fluentui/react-text@9.6.21",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-textarea@9.7.8",
+   "name": "@fluentui/react-textarea",
+   "version": "9.7.8",
+   "purl": "pkg:npm/%40fluentui/react-textarea@9.7.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-theme@9.2.2",
+   "name": "@fluentui/react-theme",
+   "version": "9.2.2",
+   "purl": "pkg:npm/%40fluentui/react-theme@9.2.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-toast@9.8.5",
+   "name": "@fluentui/react-toast",
+   "version": "9.8.5",
+   "purl": "pkg:npm/%40fluentui/react-toast@9.8.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-toolbar@9.8.7",
+   "name": "@fluentui/react-toolbar",
+   "version": "9.8.7",
+   "purl": "pkg:npm/%40fluentui/react-toolbar@9.8.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-tooltip@9.10.8",
+   "name": "@fluentui/react-tooltip",
+   "version": "9.10.8",
+   "purl": "pkg:npm/%40fluentui/react-tooltip@9.10.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-tree@9.16.10",
+   "name": "@fluentui/react-tree",
+   "version": "9.16.10",
+   "purl": "pkg:npm/%40fluentui/react-tree@9.16.10",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-utilities@9.27.0",
+   "name": "@fluentui/react-utilities",
+   "version": "9.27.0",
+   "purl": "pkg:npm/%40fluentui/react-utilities@9.27.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/react-virtualizer@9.0.0-alpha.87",
+   "name": "@fluentui/react-virtualizer",
+   "version": "9.0.0-alpha.87",
+   "purl": "pkg:npm/%40fluentui/react-virtualizer@9.0.0-alpha.87",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@fluentui/tokens@1.0.0-alpha.24",
+   "name": "@fluentui/tokens",
+   "version": "1.0.0-alpha.24",
+   "purl": "pkg:npm/%40fluentui/tokens@1.0.0-alpha.24",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@formatjs/ecma402-abstract@2.3.6",
+   "name": "@formatjs/ecma402-abstract",
+   "version": "2.3.6",
+   "purl": "pkg:npm/%40formatjs/ecma402-abstract@2.3.6",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@formatjs/fast-memoize@2.2.7",
+   "name": "@formatjs/fast-memoize",
+   "version": "2.2.7",
+   "purl": "pkg:npm/%40formatjs/fast-memoize@2.2.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@formatjs/icu-messageformat-parser@2.11.4",
+   "name": "@formatjs/icu-messageformat-parser",
+   "version": "2.11.4",
+   "purl": "pkg:npm/%40formatjs/icu-messageformat-parser@2.11.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@formatjs/icu-skeleton-parser@1.8.16",
+   "name": "@formatjs/icu-skeleton-parser",
+   "version": "1.8.16",
+   "purl": "pkg:npm/%40formatjs/icu-skeleton-parser@1.8.16",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@formatjs/intl-localematcher@0.6.2",
+   "name": "@formatjs/intl-localematcher",
+   "version": "0.6.2",
+   "purl": "pkg:npm/%40formatjs/intl-localematcher@0.6.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@griffel/core@1.21.4",
+   "name": "@griffel/core",
+   "version": "1.21.4",
+   "purl": "pkg:npm/%40griffel/core@1.21.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@griffel/react@1.7.8",
+   "name": "@griffel/react",
+   "version": "1.7.8",
+   "purl": "pkg:npm/%40griffel/react@1.7.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@griffel/style-types@1.4.3",
+   "name": "@griffel/style-types",
+   "version": "1.4.3",
+   "purl": "pkg:npm/%40griffel/style-types@1.4.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@jridgewell/gen-mapping@0.3.13",
+   "name": "@jridgewell/gen-mapping",
+   "version": "0.3.13",
+   "purl": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@jridgewell/resolve-uri@3.1.2",
+   "name": "@jridgewell/resolve-uri",
+   "version": "3.1.2",
+   "purl": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@jridgewell/sourcemap-codec@1.6.0",
+   "name": "@jridgewell/sourcemap-codec",
+   "version": "1.6.0",
+   "purl": "pkg:npm/%40jridgewell/sourcemap-codec@1.6.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@jridgewell/trace-mapping@0.3.31",
+   "name": "@jridgewell/trace-mapping",
+   "version": "0.3.31",
+   "purl": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@juggle/resize-observer@3.4.0",
+   "name": "@juggle/resize-observer",
+   "version": "3.4.0",
+   "purl": "pkg:npm/%40juggle/resize-observer@3.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@material/material-color-utilities@0.3.0",
+   "name": "@material/material-color-utilities",
+   "version": "0.3.0",
+   "purl": "pkg:npm/%40material/material-color-utilities@0.3.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/core-downloads-tracker@5.18.0",
+   "name": "@mui/core-downloads-tracker",
+   "version": "5.18.0",
+   "purl": "pkg:npm/%40mui/core-downloads-tracker@5.18.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/icons-material@5.18.0",
+   "name": "@mui/icons-material",
+   "version": "5.18.0",
+   "purl": "pkg:npm/%40mui/icons-material@5.18.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/material@5.18.0",
+   "name": "@mui/material",
+   "version": "5.18.0",
+   "purl": "pkg:npm/%40mui/material@5.18.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/private-theming@5.17.1",
+   "name": "@mui/private-theming",
+   "version": "5.17.1",
+   "purl": "pkg:npm/%40mui/private-theming@5.17.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/styled-engine@5.18.0",
+   "name": "@mui/styled-engine",
+   "version": "5.18.0",
+   "purl": "pkg:npm/%40mui/styled-engine@5.18.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/system@5.18.0",
+   "name": "@mui/system",
+   "version": "5.18.0",
+   "purl": "pkg:npm/%40mui/system@5.18.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/types@7.2.24",
+   "name": "@mui/types",
+   "version": "7.2.24",
+   "purl": "pkg:npm/%40mui/types@7.2.24",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@mui/utils@5.17.1",
+   "name": "@mui/utils",
+   "version": "5.17.1",
+   "purl": "pkg:npm/%40mui/utils@5.17.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@popperjs/core@2.11.8",
+   "name": "@popperjs/core",
+   "version": "2.11.8",
+   "purl": "pkg:npm/%40popperjs/core@2.11.8",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@swc/helpers@0.5.23",
+   "name": "@swc/helpers",
+   "version": "0.5.23",
+   "purl": "pkg:npm/%40swc/helpers@0.5.23",
+   "licenses": [
+    {
+     "license": {
+      "id": "Apache-2.0"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/d3-color@3.1.3",
+   "name": "@types/d3-color",
+   "version": "3.1.3",
+   "purl": "pkg:npm/%40types/d3-color@3.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/d3-drag@3.0.7",
+   "name": "@types/d3-drag",
+   "version": "3.0.7",
+   "purl": "pkg:npm/%40types/d3-drag@3.0.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/d3-interpolate@3.0.4",
+   "name": "@types/d3-interpolate",
+   "version": "3.0.4",
+   "purl": "pkg:npm/%40types/d3-interpolate@3.0.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/d3-selection@3.0.12",
+   "name": "@types/d3-selection",
+   "version": "3.0.12",
+   "purl": "pkg:npm/%40types/d3-selection@3.0.12",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/d3-transition@3.0.9",
+   "name": "@types/d3-transition",
+   "version": "3.0.9",
+   "purl": "pkg:npm/%40types/d3-transition@3.0.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/d3-zoom@3.0.9",
+   "name": "@types/d3-zoom",
+   "version": "3.0.9",
+   "purl": "pkg:npm/%40types/d3-zoom@3.0.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/parse-json@4.0.2",
+   "name": "@types/parse-json",
+   "version": "4.0.2",
+   "purl": "pkg:npm/%40types/parse-json@4.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/prop-types@15.7.15",
+   "name": "@types/prop-types",
+   "version": "15.7.15",
+   "purl": "pkg:npm/%40types/prop-types@15.7.15",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/react@18.3.31",
+   "name": "@types/react",
+   "version": "18.3.31",
+   "purl": "pkg:npm/%40types/react@18.3.31",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/react-dom@18.3.7",
+   "name": "@types/react-dom",
+   "version": "18.3.7",
+   "purl": "pkg:npm/%40types/react-dom@18.3.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@types/react-transition-group@4.4.12",
+   "name": "@types/react-transition-group",
+   "version": "4.4.12",
+   "purl": "pkg:npm/%40types/react-transition-group@4.4.12",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@xyflow/react@12.3.5",
+   "name": "@xyflow/react",
+   "version": "12.3.5",
+   "purl": "pkg:npm/%40xyflow/react@12.3.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:@xyflow/system@0.0.46",
+   "name": "@xyflow/system",
+   "version": "0.0.46",
+   "purl": "pkg:npm/%40xyflow/system@0.0.46",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ace-builds@1.45.2",
+   "name": "ace-builds",
+   "version": "1.45.2",
+   "purl": "pkg:npm/ace-builds@1.45.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:babel-plugin-macros@3.1.0",
+   "name": "babel-plugin-macros",
+   "version": "3.1.0",
+   "purl": "pkg:npm/babel-plugin-macros@3.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:balanced-match@1.0.2",
+   "name": "balanced-match",
+   "version": "1.0.2",
+   "purl": "pkg:npm/balanced-match@1.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:callsites@3.1.0",
+   "name": "callsites",
+   "version": "3.1.0",
+   "purl": "pkg:npm/callsites@3.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:classcat@5.0.5",
+   "name": "classcat",
+   "version": "5.0.5",
+   "purl": "pkg:npm/classcat@5.0.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:clsx@1.2.1",
+   "name": "clsx",
+   "version": "1.2.1",
+   "purl": "pkg:npm/clsx@1.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:clsx@2.1.1",
+   "name": "clsx",
+   "version": "2.1.1",
+   "purl": "pkg:npm/clsx@2.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:clsx@2.1.1",
+   "name": "clsx",
+   "version": "2.1.1",
+   "purl": "pkg:npm/clsx@2.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:clsx@2.1.1",
+   "name": "clsx",
+   "version": "2.1.1",
+   "purl": "pkg:npm/clsx@2.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:convert-source-map@1.9.0",
+   "name": "convert-source-map",
+   "version": "1.9.0",
+   "purl": "pkg:npm/convert-source-map@1.9.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:cosmiconfig@7.1.0",
+   "name": "cosmiconfig",
+   "version": "7.1.0",
+   "purl": "pkg:npm/cosmiconfig@7.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:css-selector-tokenizer@0.8.0",
+   "name": "css-selector-tokenizer",
+   "version": "0.8.0",
+   "purl": "pkg:npm/css-selector-tokenizer@0.8.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:css.escape@1.5.1",
+   "name": "css.escape",
+   "version": "1.5.1",
+   "purl": "pkg:npm/css.escape@1.5.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:cssesc@3.0.0",
+   "name": "cssesc",
+   "version": "3.0.0",
+   "purl": "pkg:npm/cssesc@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:csstype@3.2.3",
+   "name": "csstype",
+   "version": "3.2.3",
+   "purl": "pkg:npm/csstype@3.2.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-color@3.1.1",
+   "name": "d3-color",
+   "version": "3.1.1",
+   "purl": "pkg:npm/d3-color@3.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-dispatch@3.0.2",
+   "name": "d3-dispatch",
+   "version": "3.0.2",
+   "purl": "pkg:npm/d3-dispatch@3.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-drag@3.0.1",
+   "name": "d3-drag",
+   "version": "3.0.1",
+   "purl": "pkg:npm/d3-drag@3.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-ease@3.0.2",
+   "name": "d3-ease",
+   "version": "3.0.2",
+   "purl": "pkg:npm/d3-ease@3.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-interpolate@3.0.2",
+   "name": "d3-interpolate",
+   "version": "3.0.2",
+   "purl": "pkg:npm/d3-interpolate@3.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-path@1.0.9",
+   "name": "d3-path",
+   "version": "1.0.9",
+   "purl": "pkg:npm/d3-path@1.0.9",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-selection@3.0.1",
+   "name": "d3-selection",
+   "version": "3.0.1",
+   "purl": "pkg:npm/d3-selection@3.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-shape@1.3.7",
+   "name": "d3-shape",
+   "version": "1.3.7",
+   "purl": "pkg:npm/d3-shape@1.3.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-timer@3.0.2",
+   "name": "d3-timer",
+   "version": "3.0.2",
+   "purl": "pkg:npm/d3-timer@3.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-transition@3.0.2",
+   "name": "d3-transition",
+   "version": "3.0.2",
+   "purl": "pkg:npm/d3-transition@3.0.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:d3-zoom@3.0.1",
+   "name": "d3-zoom",
+   "version": "3.0.1",
+   "purl": "pkg:npm/d3-zoom@3.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:date-fns@2.30.0",
+   "name": "date-fns",
+   "version": "2.30.0",
+   "purl": "pkg:npm/date-fns@2.30.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:debug@4.4.3",
+   "name": "debug",
+   "version": "4.4.3",
+   "purl": "pkg:npm/debug@4.4.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:decimal.js@10.6.0",
+   "name": "decimal.js",
+   "version": "10.6.0",
+   "purl": "pkg:npm/decimal.js@10.6.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:dom-helpers@5.2.1",
+   "name": "dom-helpers",
+   "version": "5.2.1",
+   "purl": "pkg:npm/dom-helpers@5.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:embla-carousel@8.6.0",
+   "name": "embla-carousel",
+   "version": "8.6.0",
+   "purl": "pkg:npm/embla-carousel@8.6.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:embla-carousel-autoplay@8.6.0",
+   "name": "embla-carousel-autoplay",
+   "version": "8.6.0",
+   "purl": "pkg:npm/embla-carousel-autoplay@8.6.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:embla-carousel-fade@8.6.0",
+   "name": "embla-carousel-fade",
+   "version": "8.6.0",
+   "purl": "pkg:npm/embla-carousel-fade@8.6.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:error-ex@1.3.4",
+   "name": "error-ex",
+   "version": "1.3.4",
+   "purl": "pkg:npm/error-ex@1.3.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:es-errors@1.3.0",
+   "name": "es-errors",
+   "version": "1.3.0",
+   "purl": "pkg:npm/es-errors@1.3.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:escape-string-regexp@4.0.0",
+   "name": "escape-string-regexp",
+   "version": "4.0.0",
+   "purl": "pkg:npm/escape-string-regexp@4.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:fastparse@1.1.2",
+   "name": "fastparse",
+   "version": "1.1.2",
+   "purl": "pkg:npm/fastparse@1.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:find-root@1.1.0",
+   "name": "find-root",
+   "version": "1.1.0",
+   "purl": "pkg:npm/find-root@1.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:function-bind@1.1.2",
+   "name": "function-bind",
+   "version": "1.1.2",
+   "purl": "pkg:npm/function-bind@1.1.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:hasown@2.0.4",
+   "name": "hasown",
+   "version": "2.0.4",
+   "purl": "pkg:npm/hasown@2.0.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:hoist-non-react-statics@3.3.2",
+   "name": "hoist-non-react-statics",
+   "version": "3.3.2",
+   "purl": "pkg:npm/hoist-non-react-statics@3.3.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:import-fresh@3.3.1",
+   "name": "import-fresh",
+   "version": "3.3.1",
+   "purl": "pkg:npm/import-fresh@3.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:intl-messageformat@10.7.18",
+   "name": "intl-messageformat",
+   "version": "10.7.18",
+   "purl": "pkg:npm/intl-messageformat@10.7.18",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-any-array@0.1.1",
+   "name": "is-any-array",
+   "version": "0.1.1",
+   "purl": "pkg:npm/is-any-array@0.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-any-array@3.0.0",
+   "name": "is-any-array",
+   "version": "3.0.0",
+   "purl": "pkg:npm/is-any-array@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-any-array@3.0.0",
+   "name": "is-any-array",
+   "version": "3.0.0",
+   "purl": "pkg:npm/is-any-array@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-any-array@3.0.0",
+   "name": "is-any-array",
+   "version": "3.0.0",
+   "purl": "pkg:npm/is-any-array@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-any-array@3.0.0",
+   "name": "is-any-array",
+   "version": "3.0.0",
+   "purl": "pkg:npm/is-any-array@3.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-arrayish@0.2.1",
+   "name": "is-arrayish",
+   "version": "0.2.1",
+   "purl": "pkg:npm/is-arrayish@0.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:is-core-module@2.17.0",
+   "name": "is-core-module",
+   "version": "2.17.0",
+   "purl": "pkg:npm/is-core-module@2.17.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:js-tokens@4.0.0",
+   "name": "js-tokens",
+   "version": "4.0.0",
+   "purl": "pkg:npm/js-tokens@4.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:jsesc@3.1.0",
+   "name": "jsesc",
+   "version": "3.1.0",
+   "purl": "pkg:npm/jsesc@3.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:json-parse-even-better-errors@2.3.1",
+   "name": "json-parse-even-better-errors",
+   "version": "2.3.1",
+   "purl": "pkg:npm/json-parse-even-better-errors@2.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:keyborg@3.498.0",
+   "name": "keyborg",
+   "version": "3.498.0",
+   "purl": "pkg:npm/keyborg@3.498.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:lines-and-columns@1.2.4",
+   "name": "lines-and-columns",
+   "version": "1.2.4",
+   "purl": "pkg:npm/lines-and-columns@1.2.4",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:loose-envify@1.4.0",
+   "name": "loose-envify",
+   "version": "1.4.0",
+   "purl": "pkg:npm/loose-envify@1.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ml-array-max@2.0.0",
+   "name": "ml-array-max",
+   "version": "2.0.0",
+   "purl": "pkg:npm/ml-array-max@2.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ml-array-min@2.0.0",
+   "name": "ml-array-min",
+   "version": "2.0.0",
+   "purl": "pkg:npm/ml-array-min@2.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ml-array-rescale@2.0.0",
+   "name": "ml-array-rescale",
+   "version": "2.0.0",
+   "purl": "pkg:npm/ml-array-rescale@2.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ml-levenberg-marquardt@2.1.1",
+   "name": "ml-levenberg-marquardt",
+   "version": "2.1.1",
+   "purl": "pkg:npm/ml-levenberg-marquardt@2.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ml-matrix@6.15.1",
+   "name": "ml-matrix",
+   "version": "6.15.1",
+   "purl": "pkg:npm/ml-matrix@6.15.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:mnth@2.0.0",
+   "name": "mnth",
+   "version": "2.0.0",
+   "purl": "pkg:npm/mnth@2.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:ms@2.1.3",
+   "name": "ms",
+   "version": "2.1.3",
+   "purl": "pkg:npm/ms@2.1.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:object-assign@4.1.1",
+   "name": "object-assign",
+   "version": "4.1.1",
+   "purl": "pkg:npm/object-assign@4.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:parent-module@1.0.1",
+   "name": "parent-module",
+   "version": "1.0.1",
+   "purl": "pkg:npm/parent-module@1.0.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:parse-json@5.2.0",
+   "name": "parse-json",
+   "version": "5.2.0",
+   "purl": "pkg:npm/parse-json@5.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:path-parse@1.0.7",
+   "name": "path-parse",
+   "version": "1.0.7",
+   "purl": "pkg:npm/path-parse@1.0.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:path-type@4.0.0",
+   "name": "path-type",
+   "version": "4.0.0",
+   "purl": "pkg:npm/path-type@4.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:picocolors@1.1.1",
+   "name": "picocolors",
+   "version": "1.1.1",
+   "purl": "pkg:npm/picocolors@1.1.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:prop-types@15.8.1",
+   "name": "prop-types",
+   "version": "15.8.1",
+   "purl": "pkg:npm/prop-types@15.8.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react@18.3.1",
+   "name": "react",
+   "version": "18.3.1",
+   "purl": "pkg:npm/react@18.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-dom@18.3.1",
+   "name": "react-dom",
+   "version": "18.3.1",
+   "purl": "pkg:npm/react-dom@18.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-is@16.13.1",
+   "name": "react-is",
+   "version": "16.13.1",
+   "purl": "pkg:npm/react-is@16.13.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-is@16.13.1",
+   "name": "react-is",
+   "version": "16.13.1",
+   "purl": "pkg:npm/react-is@16.13.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-is@18.3.1",
+   "name": "react-is",
+   "version": "18.3.1",
+   "purl": "pkg:npm/react-is@18.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-is@19.3.1",
+   "name": "react-is",
+   "version": "19.3.1",
+   "purl": "pkg:npm/react-is@19.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-is@19.3.1",
+   "name": "react-is",
+   "version": "19.3.1",
+   "purl": "pkg:npm/react-is@19.3.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-keyed-flatten-children@2.2.1",
+   "name": "react-keyed-flatten-children",
+   "version": "2.2.1",
+   "purl": "pkg:npm/react-keyed-flatten-children@2.2.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:react-transition-group@4.4.5",
+   "name": "react-transition-group",
+   "version": "4.4.5",
+   "purl": "pkg:npm/react-transition-group@4.4.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:resolve@1.22.13",
+   "name": "resolve",
+   "version": "1.22.13",
+   "purl": "pkg:npm/resolve@1.22.13",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:resolve-from@4.0.0",
+   "name": "resolve-from",
+   "version": "4.0.0",
+   "purl": "pkg:npm/resolve-from@4.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:rtl-css-js@1.16.1",
+   "name": "rtl-css-js",
+   "version": "1.16.1",
+   "purl": "pkg:npm/rtl-css-js@1.16.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:scheduler@0.23.2",
+   "name": "scheduler",
+   "version": "0.23.2",
+   "purl": "pkg:npm/scheduler@0.23.2",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:scheduler@0.28.0",
+   "name": "scheduler",
+   "version": "0.28.0",
+   "purl": "pkg:npm/scheduler@0.28.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:source-map@0.5.7",
+   "name": "source-map",
+   "version": "0.5.7",
+   "purl": "pkg:npm/source-map@0.5.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:stylis@4.2.0",
+   "name": "stylis",
+   "version": "4.2.0",
+   "purl": "pkg:npm/stylis@4.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:stylis@4.2.0",
+   "name": "stylis",
+   "version": "4.2.0",
+   "purl": "pkg:npm/stylis@4.2.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:stylis@4.4.0",
+   "name": "stylis",
+   "version": "4.4.0",
+   "purl": "pkg:npm/stylis@4.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:supports-preserve-symlinks-flag@1.0.0",
+   "name": "supports-preserve-symlinks-flag",
+   "version": "1.0.0",
+   "purl": "pkg:npm/supports-preserve-symlinks-flag@1.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:tabster@8.8.1",
+   "name": "tabster",
+   "version": "8.8.1",
+   "purl": "pkg:npm/tabster@8.8.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:tslib@2.8.1",
+   "name": "tslib",
+   "version": "2.8.1",
+   "purl": "pkg:npm/tslib@2.8.1",
+   "licenses": [
+    {
+     "license": {
+      "id": "0BSD"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:umap-js@1.4.0",
+   "name": "umap-js",
+   "version": "1.4.0",
+   "purl": "pkg:npm/umap-js@1.4.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:use-sync-external-store@1.7.0",
+   "name": "use-sync-external-store",
+   "version": "1.7.0",
+   "purl": "pkg:npm/use-sync-external-store@1.7.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:weekstart@1.1.0",
+   "name": "weekstart",
+   "version": "1.1.0",
+   "purl": "pkg:npm/weekstart@1.1.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:weekstart@2.0.0",
+   "name": "weekstart",
+   "version": "2.0.0",
+   "purl": "pkg:npm/weekstart@2.0.0",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:yaml@1.10.3",
+   "name": "yaml",
+   "version": "1.10.3",
+   "purl": "pkg:npm/yaml@1.10.3",
+   "licenses": [
+    {
+     "license": {
+      "id": "ISC"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  },
+  {
+   "type": "library",
+   "bom-ref": "npm:zustand@4.5.7",
+   "name": "zustand",
+   "version": "4.5.7",
+   "purl": "pkg:npm/zustand@4.5.7",
+   "licenses": [
+    {
+     "license": {
+      "id": "MIT"
+     }
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "npm"
+    }
+   ]
+  }
+ ]
+}

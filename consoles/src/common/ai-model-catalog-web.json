@@ -15,7 +15,18 @@
    "role": "Fast chat",
    "blurb": "Runs in your browser, nothing to install",
    "tag": "SmolLM2-360M-Instruct-q4f16_1-MLC",
-   "pooled": false
+   "pooled": false,
+   "license": "Apache License 2.0",
+   "licenseId": "Apache-2.0",
+   "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+   "attribution": "SmolLM2 360M: Apache License 2.0. Copyright holder: Hugging Face.",
+   "requiredNotice": "",
+   "commercialUse": true,
+   "builtWithLlama": false,
+   "licenseFlag": "",
+   "aupUrl": "",
+   "copyright": "Hugging Face",
+   "upstream": "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct"
   },
   {
    "id": "qwen2.5-0.5b",
@@ -27,7 +38,18 @@
    "role": "General",
    "blurb": "Small general assistant in your browser",
    "tag": "Qwen2.5-0.5B-Instruct-q4f16_1-MLC",
-   "pooled": false
+   "pooled": false,
+   "license": "Apache License 2.0",
+   "licenseId": "Apache-2.0",
+   "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+   "attribution": "Qwen2.5 0.5B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).",
+   "requiredNotice": "",
+   "commercialUse": true,
+   "builtWithLlama": false,
+   "licenseFlag": "",
+   "aupUrl": "",
+   "copyright": "Alibaba Cloud (Qwen team)",
+   "upstream": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct"
   },
   {
    "id": "llama3.2-1b",
@@ -39,7 +61,18 @@
    "role": "Tool use / agents",
    "blurb": "Compact instruction model in your browser",
    "tag": "Llama-3.2-1B-Instruct-q4f16_1-MLC",
-   "pooled": false
+   "pooled": false,
+   "license": "Llama 3.2 Community License",
+   "licenseId": "LicenseRef-Llama-3.2-Community",
+   "licenseUrl": "https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/LICENSE",
+   "attribution": "Built with Llama. Llama 3.2 1B, Llama 3.2 Community License.",
+   "requiredNotice": "Llama 3.2 is licensed under the Llama 3.2 Community License, Copyright (c) Meta Platforms, Inc. All Rights Reserved.",
+   "commercialUse": true,
+   "builtWithLlama": true,
+   "licenseFlag": "",
+   "aupUrl": "https://github.com/meta-llama/llama-models/blob/main/models/llama3_2/USE_POLICY.md",
+   "copyright": "Meta Platforms, Inc.",
+   "upstream": "https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct"
   },
   {
    "id": "qwen2.5-1.5b",
@@ -51,7 +84,18 @@
    "role": "Better answers",
    "blurb": "Largest web LLM; needs a WebGPU laptop",
    "tag": "Qwen2.5-1.5B-Instruct-q4f16_1-MLC",
-   "pooled": false
+   "pooled": false,
+   "license": "Apache License 2.0",
+   "licenseId": "Apache-2.0",
+   "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+   "attribution": "Qwen2.5 1.5B: Apache License 2.0. Copyright holder: Alibaba Cloud (Qwen team).",
+   "requiredNotice": "",
+   "commercialUse": true,
+   "builtWithLlama": false,
+   "licenseFlag": "",
+   "aupUrl": "",
+   "copyright": "Alibaba Cloud (Qwen team)",
+   "upstream": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct"
   },
   {
    "id": "all-minilm-l6-v2",
@@ -63,7 +107,18 @@
    "role": "Embeddings",
    "blurb": "Vector search and retrieval (RAG) in your browser",
    "tag": "Xenova/all-MiniLM-L6-v2",
-   "pooled": false
+   "pooled": false,
+   "license": "Apache License 2.0",
+   "licenseId": "Apache-2.0",
+   "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+   "attribution": "all-MiniLM-L6-v2: Apache License 2.0. Copyright holder: Sentence Transformers.",
+   "requiredNotice": "",
+   "commercialUse": true,
+   "builtWithLlama": false,
+   "licenseFlag": "",
+   "aupUrl": "",
+   "copyright": "Sentence Transformers",
+   "upstream": "https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2"
   }
  ],
  "special": []
