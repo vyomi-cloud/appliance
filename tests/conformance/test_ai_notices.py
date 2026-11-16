@@ -28,6 +28,7 @@ def check(name, ok, detail=""):
 
 import gen_notices as G  # noqa: E402
 from core import ai_model_catalog as CAT  # noqa: E402
+from core import mesh_ai as MA  # noqa: E402
 
 D = G.load()
 NOTE = {m["id"]: m for m in D["models"]}
@@ -135,10 +136,26 @@ check("qwen2.5-3b stays in the Mesh catalogue", "qwen2.5-3b" in CAT.IDS)
 check("qwen2.5-3b is flagged commercialUse false with the visible non-commercial flag", q["commercialUse"] is False and q["licenseFlag"] == "Non-commercial research licence: not for paid use")
 check("every other catalogue model is commercial", all(m["commercialUse"] for m in CAT.MODELS + CAT.SPECIAL if m["id"] != "qwen2.5-3b"))
 os.environ.pop("VYOMI_PAID_TIER", None)
-check("free tier: default chat unchanged (qwen2.5-3b)", CAT.default_chat() == "qwen2.5-3b" and CAT.resolve("aws", "amazon.nova-micro-v1:0") == "qwen2.5-3b")
+# The default itself is commercially clean, with NO dependence on VYOMI_PAID_TIER (asserted both with and without it below).
+check("default chat is qwen3-4b (Apache-2.0) and commercial with no paid-tier env", CAT.default_chat() == "qwen3-4b" == CAT.DEFAULT_CHAT == CAT.LOCAL_ID and CAT.commercial(CAT.DEFAULT_CHAT) and CAT.BY_ID["qwen3-4b"]["licenseId"] == "Apache-2.0")
+check("every small-model alias (nova-micro/lite, gemini flash, gpt-4o-mini, gpt-35, titan-text) resolves to a commercial model with no paid-tier env",
+      all(CAT.commercial(CAT.resolve(c, a)) for c, a in (("aws", "amazon.nova-micro-v1:0"), ("aws", "amazon.nova-lite-v1:0"), ("gcp", "gemini-1.5-flash"), ("azure", "gpt-4o-mini"), ("azure", "gpt-35-turbo"))) and CAT.resolve("aws", "amazon.nova-micro-v1:0") == "qwen3-4b")
+import json as _json
+_mj = _json.load(open(os.path.join(ROOT, "docker", "mesh-runner-llm", "models.json")))
+check("runner catalogue: default_chat is commercial and the non-commercial model is on no runner", _mj["default_chat"] == "qwen3-4b" and not any("qwen2.5-3b" in r["models"] for r in _mj["runners"].values()))
+check("every default_chat / DEFAULT_CHAT in the Mesh code paths is commercial", all(CAT.commercial(x) for x in (CAT.default_chat(), CAT.default_chat(False), CAT.default_chat(True), MA.DEFAULT_CHAT, _mj["default_chat"])))
+check("the Mesh AI pack default is not flagged non-commercial and its admission refuses the non-commercial model on a paid tier",
+      MA.MODELS[MA.DEFAULT_CHAT].get("commercial", True) and MA.MODELS["qwen2.5-3b"]["commercial"] is False)
+_c = open(os.path.join(ROOT, "codespace", ".devcontainer", "mesh", "docker-compose.mesh.yml")).read()
+check("Codespace compose defaults to the Apache-2.0 Qwen3 GGUF, not Qwen2.5", "unsloth/Qwen3-4B-Instruct-2507-GGUF:Q4_K_M" in _c and ":-qwen3-4b" in _c and "Qwen2.5-3B" not in _c)
+import core.training_core as _tc
+check("training: no trainable chat base is non-commercial or Llama-derived; qwen3-4b is a base", "qwen3-4b" in _tc.CHAT_BASES and "qwen2.5-3b" not in _tc.CHAT_BASES and "deepseek-r1-8b" not in _tc.CHAT_BASES and all(CAT.commercial(k) for k in _tc.CHAT_BASES if k in CAT.BY_ID))
+import core.backend_provisioner as _bp
+_red = _bp._RECIPES["redis"].image
+check("redis image is pinned to a BSD-3-Clause 7.2.x tag (7.4+ is RSALv2/SSPLv1, 8.x AGPLv3)", __import__("re").match(r"^redis:7\.2\.\d+(-alpine)?$", _red) is not None, _red)
 os.environ["VYOMI_PAID_TIER"] = "1"
 try:
-    check("paid tier: default chat skips the non-commercial model", CAT.default_chat() != "qwen2.5-3b" and CAT.commercial(CAT.default_chat()), CAT.default_chat())
+    check("paid tier: default chat skips the non-commercial model", CAT.default_chat() != "qwen2.5-3b" and CAT.commercial(CAT.default_chat()) and CAT.default_chat() == "qwen3-4b", CAT.default_chat())
     bad = [(c, a) for c, ids in (("aws", ("amazon.nova-micro-v1:0", "amazon.nova-lite-v1:0", "vyomi.qwen2.5-3b", "qwen2.5-3b")), ("gcp", ("gemini-1.5-flash", "qwen2.5-3b")), ("azure", ("gpt-4o-mini", "gpt-35-turbo", "qwen2.5-3b"))) for a in ids if CAT.resolve(c, a) == "qwen2.5-3b"]
     check("paid tier: no cloud id (aliases or the model itself) resolves to qwen2.5-3b", not bad, bad)
     check("paid tier: embeddings and the other chat models still resolve", CAT.resolve("aws", "amazon.titan-embed-text-v2:0") == "nomic-embed-text" and CAT.resolve("aws", "vyomi.qwen2.5-7b") == "qwen2.5-7b")

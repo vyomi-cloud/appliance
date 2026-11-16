@@ -1,0 +1,12 @@
+{
+ "where": "Mac (Apple M1, 8 cores, 16 GB), NOT a Codespace; llama-server b12441 CPU only (-ngl 0 -t 4), shared machine (load average 10-12 on 8 cores during the A/B, so tokens/s are noisy)",
+ "model": "unsloth/Qwen3-4B-Instruct-2507-GGUF Q4_K_M, sha256 3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597, 2497281120 bytes",
+ "quiet_run_ctx8192": {"decode_tok_s": [17.0, 18.3, 17.6], "prefill_tok_s_short_prompt": [15.7, 64.3, 64.3], "prefill_tok_s_676_tokens": 50.7, "rss_mb_after_load_idle": 885, "rss_mb_steady": 3288, "note": "macOS RSS is unreliable (mmap + compression); see peak footprints below"},
+ "ab_same_session_ctx4096_loaded_machine": {
+   "qwen2.5-3b_q4_k_m": {"decode_tok_s": [17.6, 10.5, 7.2], "prefill_tok_s_697_tokens": 32.7},
+   "qwen3-4b-2507_q4_k_m": {"decode_tok_s": [8.2, 8.2, 6.6], "prefill_tok_s_676_tokens": 30.5}},
+ "peak_memory": {
+   "ctx8192_6616_token_prompt": {"peak_footprint_bytes": 3873831360, "max_rss_bytes": 4886806528, "llama_cpp_accounting_MiB": {"weights": 2680, "kv_f16": 1152, "compute": "90-180", "total": "4012-4112"}},
+   "ctx4096_3096_token_prompt": {"peak_footprint_bytes": 3270505536, "max_rss_bytes": 5361844224, "llama_cpp_accounting_MiB": {"weights": 2680, "kv_f16": 576, "compute": "86-172", "total": "3342-3428"}}},
+ "long_context_decode_tok_s": {"ctx8192_prompt6616": 2.3, "ctx4096_prompt3096": 2.2, "long_context_prefill_tok_s": [23.3, 28.8]}
+}

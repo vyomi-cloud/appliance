@@ -1,7 +1,7 @@
 """Runner pool for the mesh's remote LLM (SPIKE, with core/mesh_remote_llm.attach(pooled=True)).
 
 EAGER model pool: when the mesh starts, EVERY catalogue runner (docker/mesh-runner-llm/models.json) is dispatched at once,
-one GitHub-hosted runner each (Ollama runtime; a runner may serve several models, e.g. fast = 3B chat + embeddings). The pool lives
+one GitHub-hosted runner each (Ollama runtime; a runner may serve several models, e.g. fast = 4B chat + embeddings). The pool lives
 for a RUNNING-TIME window (Pro 30 h / Max 40 h; NOT wall-clock) regardless of how many runners run. pause() cancels every runner and
 FREEZES the clock; resume() restarts all of them (cold start) with only the remaining running time. The portal owns the persisted
 per-cycle ledger and passes the REMAINING seconds on start (session-token claim ``model_window_s``) - runner minutes are
@@ -50,7 +50,10 @@ class PoolError(Exception):
 
 def load_catalogue(path: Optional[str] = None) -> dict:
     with open(path or CATALOGUE_PATH) as f:
-        return json.load(f)
+        cat = json.load(f)
+    # catalogue-only models ("unhosted": the non-commercial qwen2.5-3b) are on no runner: the pool neither routes, resolves nor lists them
+    cat["models"] = {k: v for k, v in cat["models"].items() if not v.get("unhosted")}
+    return cat
 
 
 def window_s_for(tier: str) -> float:

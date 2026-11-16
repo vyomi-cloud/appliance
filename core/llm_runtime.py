@@ -101,7 +101,7 @@ ROLES = {
     "reasoning": {"name": "vyomi-llm-reasoning", "hf": os.environ.get("VYOMI_LLM_REASONING_HF", "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M"), "port": 18082,
                   "files_mb": 1117, "est_mb": 1800, "args": ["--jinja", "--reasoning-format", "deepseek"], "env": "VYOMI_LLM_REASONING_ENDPOINT", "licence": "MIT"},
 }
-CHAT_EST_MB = 2500          # Qwen2.5-3B Q4 + KV (estimate)
+CHAT_EST_MB = 3500          # Qwen3-4B-Instruct-2507 Q4_K_M at 4k context: llama.cpp accounts 3342-3428 MiB (model 2680 + KV 576 + compute 86-172); measured peak footprint 3119 MiB on a Mac (ai-qwen3swap.md)
 
 
 def total_ram_mb() -> int:

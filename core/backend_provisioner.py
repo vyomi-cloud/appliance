@@ -278,7 +278,7 @@ _RECIPES: dict[str, Recipe] = {
     # ─ Redis (app profile redis resources) ──────────────────────────────
     "redis": Recipe(
         name="redis",
-        image=os.environ.get("VYOMI_REDIS_IMAGE", "redis:7-alpine"),
+        image=os.environ.get("VYOMI_REDIS_IMAGE", "redis:7.2.5-alpine"),
         container_name=_host_from_env("CLOUDLEARN_REDIS_URL", default="vyomi-redis"),
         command=(
             ["redis-server", "--appendonly", "yes", "--requirepass",

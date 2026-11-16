@@ -102,9 +102,9 @@ def main():
     check("no role server -> role models are not listed", "vyomi.smolvlm-500m" not in ids and "vyomi.deepseek-r1-1.5b" not in ids, ids)
     code, msg = err(br.converse, modelId="vyomi.smolvlm-500m", messages=[{"role": "user", "content": [{"text": "hi"}]}])
     check("no role server -> the role model id is the cloud's validation error", code == "ValidationException", (code, msg))
-    code, msg = err(br.converse, modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"image": {"format": "png", "source": {"bytes": png}}}, {"text": "?"}]}])
+    code, msg = err(br.converse, modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"image": {"format": "png", "source": {"bytes": png}}}, {"text": "?"}]}])
     check("image with no vision model -> ValidationException naming vision", code == "ValidationException" and "vision" in msg, (code, msg))
-    code, msg = err(br.converse, modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "hi"}]}],
+    code, msg = err(br.converse, modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "hi"}]}],
                     additionalModelRequestFields={"thinking": {"type": "enabled", "budget_tokens": 2048}})
     check("thinking with no reasoning model -> ValidationException naming reasoning", code == "ValidationException" and "reasoning" in msg.lower(), (code, msg))
 
@@ -119,7 +119,7 @@ def main():
 
     # ───────── vision ─────────
     imsg = [{"role": "user", "content": [{"text": "what is this?"}, {"image": {"format": "png", "source": {"bytes": png}}}]}]
-    r = br.converse(modelId="vyomi.qwen2.5-3b", messages=imsg)
+    r = br.converse(modelId="vyomi.qwen3-4b", messages=imsg)
     check("Converse image block on a text model is answered by the VISION server", r["output"]["message"]["content"][0]["text"] == "vision-answer"
           and isinstance(seen["vision"][-1]["messages"][-1]["content"], list), r["output"])
     check("the image reached the vision server as an image_url data URL", seen["vision"][-1]["messages"][-1]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,"))
@@ -129,7 +129,7 @@ def main():
     out = json.loads(br.invoke_model(modelId="anthropic.claude-3-haiku-20240307-v1:0", body=json.dumps({"anthropic_version": "bedrock-2023-05-31", "max_tokens": 50, "messages": [
         {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": base64.b64encode(png).decode()}}, {"type": "text", "text": "?"}]}]}))["body"].read())
     check("InvokeModel Claude image block -> vision answer", out["content"][0]["text"] == "vision-answer", out)
-    ev = list(br.converse_stream(modelId="vyomi.qwen2.5-3b", messages=imsg)["stream"])
+    ev = list(br.converse_stream(modelId="vyomi.qwen3-4b", messages=imsg)["stream"])
     check("ConverseStream with an image streams from the vision server", any("contentBlockDelta" in e and "vision" in e["contentBlockDelta"]["delta"].get("text", "") or
                                                                        "contentBlockDelta" in e and e["contentBlockDelta"]["delta"].get("text") for e in ev))
     # Vertex + Azure
@@ -152,20 +152,20 @@ def main():
     check("Vertex thinkingConfig.includeThoughts -> thought part then answer", st == 200 and parts[0].get("thought") is True and parts[-1]["text"] == "391", (st, d))
 
     # ───────── reasoning ─────────
-    r = br.converse(modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}],
+    r = br.converse(modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}],
                     additionalModelRequestFields={"thinking": {"type": "enabled", "budget_tokens": 2048}})
     c = r["output"]["message"]["content"]
     check("Converse thinking -> reasoningContent block first, then the answer", "reasoningContent" in c[0] and c[0]["reasoningContent"]["reasoningText"]["text"].startswith("17*23") and c[1]["text"] == "391", c)
-    r = br.converse(modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}],
+    r = br.converse(modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}],
                     additionalModelRequestFields={"reasoning_config": {"type": "enabled", "budget_tokens": 1024}})
     check("Converse reasoning_config{type:enabled} accepted", "reasoningContent" in r["output"]["message"]["content"][0])
-    r = br.converse(modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "hi"}]}], additionalModelRequestFields={"thinking": {"type": "disabled"}})
+    r = br.converse(modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "hi"}]}], additionalModelRequestFields={"thinking": {"type": "disabled"}})
     check("thinking disabled -> plain answer", all("reasoningContent" not in b for b in r["output"]["message"]["content"]))
-    code, msg = err(br.converse, modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "hi"}]}], additionalModelRequestFields={"thinking": {"type": "enabled", "budget_tokens": 100}})
+    code, msg = err(br.converse, modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "hi"}]}], additionalModelRequestFields={"thinking": {"type": "enabled", "budget_tokens": 100}})
     check("budget_tokens < 1024 -> the real validation error", code == "ValidationException" and "1024" in msg, (code, msg))
     r = br.converse(modelId="vyomi.deepseek-r1-1.5b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}])
     check("the reasoning model id always returns reasoningContent", "reasoningContent" in r["output"]["message"]["content"][0], r["output"])
-    ev = list(br.converse_stream(modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}],
+    ev = list(br.converse_stream(modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "17*23?"}]}],
                                  additionalModelRequestFields={"thinking": {"type": "enabled", "budget_tokens": 1024}})["stream"])
     rt = "".join(e["contentBlockDelta"]["delta"]["reasoningContent"]["text"] for e in ev if "contentBlockDelta" in e and "reasoningContent" in e["contentBlockDelta"]["delta"])
     tx = "".join(e["contentBlockDelta"]["delta"].get("text", "") for e in ev if "contentBlockDelta" in e)
@@ -174,7 +174,7 @@ def main():
     out = json.loads(br.invoke_model(modelId="anthropic.claude-3-7-sonnet-20250219-v1:0", body=json.dumps({"anthropic_version": "bedrock-2023-05-31", "max_tokens": 4000,
           "thinking": {"type": "enabled", "budget_tokens": 1024}, "messages": [{"role": "user", "content": "17*23?"}]}))["body"].read())
     check("InvokeModel Claude thinking -> thinking block + text block", out["content"][0]["type"] == "thinking" and out["content"][0]["thinking"].startswith("17*23") and out["content"][1]["text"] == "391", out)
-    r = br.converse(modelId="vyomi.qwen2.5-3b", messages=[{"role": "user", "content": [{"text": "a"}]}, {"role": "assistant", "content": [{"reasoningContent": {"reasoningText": {"text": "old"}}}, {"text": "b"}]},
+    r = br.converse(modelId="vyomi.qwen3-4b", messages=[{"role": "user", "content": [{"text": "a"}]}, {"role": "assistant", "content": [{"reasoningContent": {"reasoningText": {"text": "old"}}}, {"text": "b"}]},
                                                           {"role": "user", "content": [{"text": "c"}]}])
     check("assistant reasoningContent from a previous turn is accepted and not re-fed to the model",
           "old" not in json.dumps(chat.requests[-1]) and r["output"]["message"]["content"][0]["text"] == "default-chat")
@@ -291,9 +291,13 @@ def main():
     from core import llm_runtime as R
     check("role plan: with a 2800 MB AI budget a role model stops the chat model", R.plan_role_start("vision", ["chat"], 2800)["stop"] == ["chat"])
     check("role budget: floor 2800 MB, 35 % of RAM above it, env override wins", R.default_budget_mb() == max(2800, int(R.total_ram_mb() * 0.35)) or os.environ.get("VYOMI_LLM_AI_BUDGET_MB"))
-    check("role plan: a 16 GB machine default budget keeps chat + vision + reasoning", R.plan_role_start("reasoning", ["chat", "vision"], int(16384 * 0.35))["stop"] == [])
-    check("role plan: a bigger budget keeps chat + one role", R.plan_role_start("vision", ["chat"], 4000)["stop"] == [])
-    check("role plan: the other role goes before chat", R.plan_role_start("reasoning", ["chat", "vision"], 4400)["stop"] == ["vision"])
+    # Qwen3-4B chat (3500 MB est.) is bigger than the old 3B (2500): on the 16 GB Mesh budget (5734 MB) chat + ONE role fit, never all three at once
+    p16 = R.plan_role_start("reasoning", ["chat", "vision"], int(16384 * 0.35))
+    check("role plan: a 16 GB machine default budget swaps vision out for reasoning and KEEPS the chat model", p16["stop"] == ["vision"] and p16["fits"] and p16["total_mb"] == R.CHAT_EST_MB + R.ROLES["reasoning"]["est_mb"], p16)
+    check("role plan: a 16 GB machine keeps chat + vision, and chat + reasoning, without stopping anything",
+          R.plan_role_start("vision", ["chat"], int(16384 * 0.35))["stop"] == [] and R.plan_role_start("reasoning", ["chat"], int(16384 * 0.35))["stop"] == [])
+    check("role plan: a bigger budget keeps chat + one role", R.plan_role_start("vision", ["chat"], 4500)["stop"] == [])
+    check("role plan: the other role goes before chat", R.plan_role_start("reasoning", ["chat", "vision"], 5400)["stop"] == ["vision"])
     calls = []
 
     def fake_docker(args):

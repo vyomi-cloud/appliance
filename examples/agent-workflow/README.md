@@ -26,7 +26,7 @@ crashing, which is what lets a small model recover.
 ```bash
 pip install -r requirements.txt boto3 google-genai openai      # from the repo root
 ollama serve &                                                  # any OpenAI-compatible local server works (llama.cpp: llama-server --jinja)
-ollama pull qwen2.5:3b && ollama pull nomic-embed-text
+ollama pull qwen3:4b-instruct-2507-q4_K_M && ollama pull nomic-embed-text
 cd examples/agent-workflow
 ./run_demo.sh --run --runs 3          # starts the wire server on a free port, runs 3 drivers x 3 scenarios x 3 runs, prints transcripts
 ./run_demo.sh                         # or: just serve, and print the endpoint to export
@@ -62,12 +62,12 @@ Nothing in the example changes. NOT verified here either: this sample was run on
 
 | Role | Model | Notes |
 |---|---|---|
-| **Default tool-calling agent** | **Qwen2.5-3B-Instruct Q4_K_M** (~2 GB) | what this sample is run with; est. 4-7 tok/s on 2 vCPU |
+| **Default tool-calling agent** | **Qwen3-4B-Instruct-2507 Q4_K_M** (~2.4 GB, Apache-2.0) | the Mesh default; the SAMPLE-RUN.md transcript below was recorded earlier with `qwen2.5:3b` (research-licence model), numbers there are not Qwen3 numbers |
 | Smoke tests | Qwen2.5-1.5B or Llama-3.2-1B Q4 | faster, tool calls flakier |
 | Higher fidelity (opt-in) | Qwen2.5-7B Q4 (~4.7 GB) | does not fit comfortably on 8 GB next to compute; minutes per agent loop |
 | Embeddings | nomic-embed-text v1.5 (274 MB) or bge-small-en-v1.5 (~130 MB) | replaces the labelled hash fallback |
 
-**The 8 GB / Qwen2.5-3B-Q4 decision:** the mesh host has 8 GB; the AI share of the capped budget has to leave room for the compute
+**The 8 GB / small-model-Q4 decision (written for Qwen2.5-3B; Qwen3-4B needs ~3.3 GB at 4k context, so the supported Mesh is now 4 vCPU / 16 GB):** the mesh host has 8 GB; the AI share of the capped budget has to leave room for the compute
 engines (the mesh docs budget ~5 GB for compute containers). A 3B model at Q4 is ~2 GB of weights plus KV cache at `-c 4096-8192`,
 so it fits with an embedding model loaded beside it, while a 7B Q4 does not. CPU speed, not RAM, is the constraint.
 

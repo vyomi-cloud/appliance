@@ -664,11 +664,17 @@ CHAT_BASES = {
     "smollm2-360m-instruct": {"hf": "HuggingFaceTB/SmolLM2-360M-Instruct", "dtype": "float32", "fits": True},
     "qwen2.5-0.5b": {"hf": "Qwen/Qwen2.5-0.5B-Instruct", "dtype": "float32", "fits": True},
     "qwen2.5-1.5b": {"hf": "Qwen/Qwen2.5-1.5B-Instruct", "dtype": "float32", "fits": True},
-    "qwen2.5-3b": {"hf": "Qwen/Qwen2.5-3B-Instruct", "dtype": "bfloat16", "fits": True},
+    # Qwen3-4B-Instruct-2507 (Apache-2.0) is the Mesh default chat model and so the commercially clean LoRA base. Converter check: llama.cpp b8996
+    # convert_hf_to_gguf.py registers Qwen3ForCausalLM (class Qwen3Model) and convert_lora_to_gguf.py is arch-generic, so a PEFT adapter on the
+    # q/k/v/o/gate/up/down projections converts. ``fits`` is an ESTIMATE (bf16 weights ~8 GB + LoRA state on a 16 GB host): a 4B CPU training run was NOT measured.
+    "qwen3-4b": {"hf": "Qwen/Qwen3-4B-Instruct-2507", "dtype": "bfloat16", "fits": True},
+    # Deliberately NOT trainable bases (a LoRA inherits the base licence): qwen2.5-3b = Qwen Research Licence (non-commercial, so no paid-tier training on it);
+    # deepseek-r1-8b = the Ollama ``deepseek-r1:8b`` tag is the Llama-3.1-derived distill (Llama community licence), not the MIT-clean base this table once
+    # pointed at. Both are metadata-only bases (the existing non-trainable behaviour) until a licence-clean build is chosen.
     "llama3.1-8b": {"hf": "meta-llama/Llama-3.1-8B-Instruct", "fits": False}, "qwen2.5-7b": {"hf": "Qwen/Qwen2.5-7B-Instruct", "fits": False},
     "qwen2.5-coder-7b": {"hf": "Qwen/Qwen2.5-Coder-7B-Instruct", "fits": False}, "mistral-7b": {"hf": "mistralai/Mistral-7B-Instruct-v0.3", "fits": False},
     "gemma2-9b": {"hf": "google/gemma-2-9b-it", "fits": False}, "qwen3-8b": {"hf": "Qwen/Qwen3-8B", "fits": False},
-    "deepseek-r1-8b": {"hf": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B", "fits": False}, "qwen3-30b": {"hf": "Qwen/Qwen3-30B-A3B", "fits": False},
+    "qwen3-30b": {"hf": "Qwen/Qwen3-30B-A3B", "fits": False},
 }
 CHAT_CAPS = {"epochs": (1, 10, 3), "batch": (1, 16, 4), "rank": (1, 64, 8), "seq": (32, 1024, 256)}
 _CHAT: dict[str, dict] = {}         # model id -> meta.json of a trained chat adapter (the object store is the source of truth)

@@ -38,7 +38,7 @@ def js(o):
 
 # ── catalogue vs the runner catalogue / generated console JSON
 cat = json.load(open(os.path.join(ROOT, "docker", "mesh-runner-llm", "models.json")))
-check("catalogue ids == mesh runner models.json ids (ten, same order)", list(cat["models"]) == CAT.IDS and len(CAT.IDS) == 10, list(cat["models"]))
+check("catalogue ids == mesh runner models.json ids (eleven: ten hosted + the unhosted non-commercial qwen2.5-3b, same order)", list(cat["models"]) == CAT.IDS and len(CAT.IDS) == 11, list(cat["models"]))
 check("hidden alias map == models.json aliases (all three clouds)", all(cat["aliases"][c] == CAT.ALIASES[c] for c in ("aws", "gcp", "azure")))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import gen_ai_model_catalog_json as G  # noqa: E402
@@ -78,9 +78,10 @@ check("providers are the real open-model vendors", {m["vendor"] for m in CAT.MOD
 
 # ── availability: no mesh -> only the local small model
 av = {m["modelId"].replace("vyomi.", ""): m["vyomiAvailability"] for m in js(am.bedrock_dispatch("GET", "/foundation-models", {}, {}, b""))["modelSummaries"] if "vyomiAvailability" in m}
-check("no mesh: only qwen2.5-3b available", [k for k, v in av.items() if v["available"]] == ["qwen2.5-3b"], av)
-check("no mesh: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k != "qwen2.5-3b") and sum(1 for k in av if k != "qwen2.5-3b") == 9)
-check("Azure availability matches", {x["model"]["name"]: x["vyomiAvailability"]["available"] for x in az_acct} == {i: i == "qwen2.5-3b" for i in CAT.IDS})
+check("no mesh: only qwen3-4b (the commercial default) available", [k for k, v in av.items() if v["available"]] == ["qwen3-4b"], av)
+check("no mesh: the other nine say 'Needs Mesh (Pro/Max)'", all(v["label"] == "Needs Mesh (Pro/Max)" for k, v in av.items() if k not in ("qwen3-4b", "qwen2.5-3b")) and sum(1 for k in av if k not in ("qwen3-4b", "qwen2.5-3b")) == 9)
+check("the non-commercial qwen2.5-3b is listed but 'Not served' (never available)", av["qwen2.5-3b"] == {"state": "not_served", "label": "Not served (non-commercial licence)", "available": False}, av["qwen2.5-3b"])
+check("Azure availability matches", {x["model"]["name"]: x["vyomiAvailability"]["available"] for x in az_acct} == {i: i == "qwen3-4b" for i in CAT.IDS})
 
 
 class FakePool:
