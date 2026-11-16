@@ -21,8 +21,8 @@ chk $? "create VM"
 rest --method put --url "$G/providers/Microsoft.Network/networkSecurityGroups/nsg?api-version=2023-11-01" --body '{"location":"eastus","properties":{}}' >/dev/null
 chk $? "create untagged NSG"
 out=$(rest --method get --url "$G/providers/Microsoft.Vyomi/insights?api-version=2024-01-01")
-[ "$(echo "$out" | jq_ 'str(d["inventory"]["resourceCount"])+"/"+str(d["tags"]["untagged"])+"/"+str(d["compute"]["virtualMachines"])')" = "2/1/1" ]
-chk $? "Insights: 2 resources, 1 untagged, 1 VM" "$out"
+[ "$(echo "$out" | jq_ 'str(d["inventory"]["resourceCount"])+"/"+str(d["tags"]["untagged"])+"/"+str(d["compute"]["virtualMachines"])')" = "3/2/1" ]   # VM + its OS disk (untagged ARM resource) + untagged NSG
+chk $? "Insights: 3 resources (VM, OS disk, NSG), 2 untagged, 1 VM" "$out"
 out=$(rest --method delete --url "$G?api-version=2021-04-01&forceDeletionTypes=Microsoft.Storage/storageAccounts"); echo "$out" | grep -q 'InvalidForceDeletionType'
 chk $? "unsupported forceDeletionTypes rejected" "$out"
 out=$(rest --method delete --url "$G?api-version=2021-04-01&forceDeletionTypes=Microsoft.Compute/virtualMachines,Microsoft.Compute/virtualMachineScaleSets")

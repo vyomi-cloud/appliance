@@ -86,6 +86,10 @@ const CORES = [
   "azure_files_core.py", "azure_search_sources_core.py", "azure_search_vector_core.py", "azure_search_core.py", "azure_storagemover_core.py", "azure_marketplace_core.py", "azure_billing_ext_core.py",
   "aws_wire_router.py",
   "nano_events.py", "nano_registry.py", "nano_persist.py",   // shared registry + store persistence (Fix #1/#2)
+  // AI agent stack: aws_wire_router imports these lazily (e.g. _gcp_service imports gcp_agentplatform_core on every GCP request);
+  // keep in step with relay-shared-worker.js CORES (tests/conformance/test_relay_cores_parity.py)
+  "agent_spec_core.py", "agentcore_command_core.py", "agentcore_eval_core.py", "agentcore_ext_core.py", "agentcore_gateway_targets.py", "agentcore_runtime_host.py",
+  "cedar_wasm_shim.py", "code_sandbox_core.py", "gcp_agentengine_core.py", "gcp_agentgov_core.py", "gcp_agentplatform_core.py", "identity_core.py", "otel_bridge.py", "xray_admin_core.py",
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS

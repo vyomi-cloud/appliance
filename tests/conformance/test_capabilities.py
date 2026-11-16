@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.error
@@ -212,7 +213,6 @@ def _run_files(files: list[str]) -> tuple[bool, str]:
             # Console smokes are Node/Playwright scripts, not Python: run them through the Nano smoke runner
             # (it owns its preview server + a fresh browser per smoke) on a private free port so a sweep never
             # collides with another server or leftover state.
-            import re
             import socket
             m = re.match(r"smoke-(.+)\.mjs$", Path(f).name)
             with socket.socket() as s:
@@ -236,8 +236,22 @@ def _run_files(files: list[str]) -> tuple[bool, str]:
             if r.returncode != 0 or "[FAIL]" in r.stdout:
                 bad.append(f)
             continue
-        r = subprocess.run([sys.executable, str(ROOT / f)], cwd=ROOT, capture_output=True, text=True,
-                           env={**os.environ, "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1"})
+        # A fresh state file per test file: the child must NOT share the parent sweep's persisted state (the parent
+        # router already created resources there; flows/evals/model-import/training-jobs failed on that pollution
+        # while passing alone).
+        import tempfile
+        env = {**os.environ, "PYTHONPATH": str(ROOT), "PYTHONDONTWRITEBYTECODE": "1",
+               "CLOUDLEARN_STATE_FILE": os.path.join(tempfile.mkdtemp(prefix="cap-state-"), "state.sqlite3")}
+        src = (ROOT / f).read_text()
+        if "__main__" not in src and re.search(r"^def test_", src, re.M):
+            # pytest-only file (no __main__ runner): plain `python file` would import it and run NOTHING (a vacuous
+            # pass). Run it under pytest and require at least one test to actually pass (an all-skipped file is not a hold).
+            r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(ROOT / f)], cwd=ROOT,
+                               capture_output=True, text=True, env=env)
+            if r.returncode != 0 or not re.search(r"\d+ passed", r.stdout):
+                bad.append(f)
+            continue
+        r = subprocess.run([sys.executable, str(ROOT / f)], cwd=ROOT, capture_output=True, text=True, env=env)
         if r.returncode != 0:
             bad.append(f)
     return not bad, ("failing: " + ", ".join(bad)) if bad else f"{len(files)} test file(s) pass"
