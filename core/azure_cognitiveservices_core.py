@@ -82,6 +82,15 @@ except ImportError:  # Pyodide flat layout
 _CHAT_CAPS = ("chatCompletion", "assistants", "jsonObjectResponse", "jsonSchemaResponse")
 MODELS = [(m["vendor"], m["id"], "1", 1000, ("embeddings",) if m["kind"] == "embed" else
            (_CHAT_CAPS + ("reasoning",) if m["id"] == "deepseek-r1-8b" else _CHAT_CAPS)) for m in CAT.MODELS]
+
+
+def _models():
+    """The ten pool models plus the role models (vision / reasoning, Mesh only) that are served right now."""
+    extra = [(m["vendor"], m["id"], "1", 1000, _CHAT_CAPS + (("vision",) if "vision" in m["caps"] else ()) + (("reasoning",) if "reasoning" in m["caps"] else ()))
+             for m in CAT.served_special()]
+    return MODELS + extra
+
+
 MODEL_KINDS = ("OpenAI", "AIServices")
 
 TIERS = {                       # commitment tiers by kind (list pricing, USD)
@@ -468,12 +477,12 @@ def _find_model(fmt, name, version):
             return ("Vyomi", str(name), str(version or "1"), 1000, _CHAT_CAPS)
     if nm.startswith("ft:"):        # a head fine-tuned through /openai/fine_tuning/jobs (core/training_core): deployable, answers via the head
         return ("OpenAI", str(name), str(version or "1"), 1000, _CHAT_CAPS)
-    for m in MODELS:
+    for m in _models():
         if m[1].lower() == nm:      # a listed model; the format is the vendor (a stale "OpenAI" default is tolerated)
             return m if (not version or m[2] == version) else (m[0], m[1], str(version), m[3], m[4])
     cid = CAT.resolve("azure", name) if name and not isinstance(name, (dict, list)) else None
     if cid:                         # hidden compat alias (gpt-4o, o1, ...): deployable, never listed; the model echoes the requested name
-        m = next(x for x in MODELS if x[1] == cid)
+        m = next(x for x in _models() if x[1] == cid)
         return (m[0], str(name), str(version or m[2]), m[3], m[4])
     return None
 
@@ -655,7 +664,7 @@ def _usages(acct):
             "limit": 0 if acct["sku"]["name"].startswith("F") else 0, "quotaPeriod": "P30D", "status": "Included"}]
     if acct["kind"] in MODEL_KINDS:
         out = []
-        for m in MODELS:
+        for m in _models():
             used = sum(d["sku"].get("capacity", 0) for d in acct["_deployments"].values() if d["properties"]["model"]["name"] == m[1])
             out.append({"name": {"value": f"OpenAI.Standard.{m[1]}", "localizedValue": f"Tokens Per Minute (thousands) - {m[1]}"},
                         "unit": "Count", "currentValue": used, "limit": min(QUOTA_LIMIT, m[3]), "status": "Included"})
@@ -681,7 +690,7 @@ def _account_ops(state, rec, rest, method, payload, query):
     if r0 == "models" and method == "GET":
         if rec["kind"] not in MODEL_KINDS:
             return _ok({"value": []})
-        return _ok({"value": [_model_item(m, rec["kind"]) for m in MODELS]})
+        return _ok({"value": [_model_item(m, rec["kind"]) for m in _models()]})
     if r0 == "openai":
         return _openai_ops(rec, rest, method, payload, state, query)
     if r0 == "deployments":
@@ -759,7 +768,7 @@ def _location_ops(state, sub, chain, method, payload):
     loc = chain[1]
     what = chain[2].lower() if len(chain) > 2 else ""
     if what == "models" and method == "GET":
-        return _ok({"value": [_model_item(m, k) for k in MODEL_KINDS for m in MODELS]})
+        return _ok({"value": [_model_item(m, k) for k in MODEL_KINDS for m in _models()]})
     if what == "usages" and method == "GET":
         return _ok({"value": [{"name": {"value": "OpenAI.Standard.gpt-4o", "localizedValue": "Tokens Per Minute (thousands) - gpt-4o"},
                                "unit": "Count", "currentValue": 0, "limit": 450, "status": "Included"}]})

@@ -125,5 +125,41 @@
    "tag": "qwen3:30b",
    "pooled": true
   }
+ ],
+ "special": [
+  {
+   "id": "smolvlm-500m",
+   "name": "SmolVLM 500M (vision)",
+   "vendor": "Hugging Face",
+   "publisher": "huggingface",
+   "kind": "chat",
+   "size": "Small (0.5B vision)",
+   "role": "Vision",
+   "blurb": "Reads images and scanned pages: OCR-style text, simple charts, short descriptions. Small model, expect mistakes on dense layouts",
+   "tag": "ggml-org/SmolVLM-500M-Instruct-GGUF:Q8_0",
+   "pooled": false,
+   "licence": "Apache-2.0",
+   "caps": [
+    "vision"
+   ],
+   "serve": "vision"
+  },
+  {
+   "id": "deepseek-r1-1.5b",
+   "name": "DeepSeek R1 Distill Qwen 1.5B (reasoning)",
+   "vendor": "DeepSeek",
+   "publisher": "deepseek-ai",
+   "kind": "chat",
+   "size": "Small (1.5B reasoning)",
+   "role": "Reasoning",
+   "blurb": "Shows its step-by-step reasoning before the answer. A distilled 1.5B model: fine for arithmetic and short logic, weak on long chains",
+   "tag": "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M",
+   "pooled": false,
+   "licence": "MIT",
+   "caps": [
+    "reasoning"
+   ],
+   "serve": "reasoning"
+  }
  ]
 }

@@ -855,7 +855,7 @@ def _pm(pub, mid, oss, stage, title, desc, acts):
 def _model_garden(method, pub, mid, query):
     if method != "GET":
         return _err(405, "INVALID_ARGUMENT", "Unsupported method.")
-    items = [_pm(*m) for m in PUBLISHER_MODELS]
+    items = [_pm(*m) for m in PUBLISHER_MODELS + [(m["publisher"], m["id"], "GOOGLE_OWNED_OSS" if m["vendor"] == "Google" else "THIRD_PARTY_OWNED_OSS", "GA", m["name"], m["blurb"], ["generate"]) for m in CAT.served_special()]]
     if mid:
         for it in items:
             if it["name"] == f"publishers/{pub}/models/{mid}":

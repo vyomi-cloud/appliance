@@ -4,7 +4,7 @@ import { getProject } from "../../project.js";
 
 export const LOCATION = "us-central1";
 // the ten mesh-llm models (core/ai_model_catalog.py, shared catalogue); the publisher segment is the model's own vendor
-import { AI_CHAT, AI_EMBED, byId } from "../../../common/aiModels.js";
+import { AI_CHAT, AI_EMBED, byId, markServed } from "../../../common/aiModels.js";
 export const GEMINI = AI_CHAT.map((m) => m.id);     // chat model ids (name kept for the Studio imports)
 export const EMBED = AI_EMBED.map((m) => m.id);
 const path = (model, op) => `/v1/projects/${encodeURIComponent(getProject())}/locations/${LOCATION}/publishers/${byId(model)?.publisher || "google"}/models/${model}:${op}`;
@@ -43,7 +43,7 @@ export const del = (name, v2) => restJson("DELETE", itemPath(name, v2));
 export const verb = (name, v, body = {}, v2) => restJson("POST", `${itemPath(name, v2)}:${v}`, { body });
 
 /** Live availability per catalogue id (Model Garden list), for the Studio pickers. */
-export const modelAvailability = async () => Object.fromEntries((await listModelGarden()).map((m) => [String(m.name).split("/").pop(), m.vyomiAvailability]));
+export const modelAvailability = async () => { const a = Object.fromEntries((await listModelGarden()).map((m) => [String(m.name).split("/").pop(), m.vyomiAvailability])); markServed(a); return a; };
 export const listModelGarden = async (filter) => (await restJson("GET", "/v1/publishers/-/models", { query: filter ? { filter } : undefined })).publisherModels || [];
 
 /** Counts for the dashboard. */

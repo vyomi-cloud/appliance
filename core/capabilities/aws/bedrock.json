@@ -7,7 +7,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Every model id is answered by one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Converse/Claude `document` blocks (PDF, DOCX, XLSX, PPTX, CSV, HTML, Markdown, text) are really parsed and the extracted text is sent to the model (legacy .doc/.xls and scanned PDFs are rejected; s3Location sources are not supported). `image` blocks are rejected with a ValidationException unless a vision-capable local model is configured (none is served by default). cachePoint / cache_control checkpoints are accepted and reported as cacheRead/WriteInputTokens from a real in-process prefix cache (SHA-256 of the prompt prefix, 5-minute TTL, 1024-token minimum; Converse, ConverseStream and Claude InvokeModel) - it is accounting, the compute saving comes only from llama.cpp's own prompt cache. Reasoning/thinking content is rejected because no served model emits it.",
+   "Every model id is answered by one small local model (llama.cpp on the mesh/appliance, WebLLM on Nano when the browser provides it): quality is toy-grade. No local model running -> ModelNotReadyException, never a canned answer. Converse/ConverseStream and Claude InvokeModel support function tool use and json_schema structured output (small-model reliability); InvokeModelWithResponseStream streams the model family's own events incrementally (Claude, Nova, Titan, Llama, Mistral). Converse/Claude `document` blocks (PDF, DOCX, XLSX, PPTX, CSV, HTML, Markdown, text) are really parsed and the extracted text is sent to the model (legacy .doc/.xls and scanned PDFs are rejected; s3Location sources are not supported). `image` blocks (Converse, ConverseStream, Claude InvokeModel; also Vertex inlineData and Azure image_url data URLs) are answered by a small open vision model (SmolVLM-500M behind llama.cpp, Apache-2.0) when the Mesh vision pack is running, and rejected with a ValidationException otherwise (Nano never serves one; remote image URLs are never fetched). It reads clean screenshots and scans, not dense layouts or handwriting, and the model is listed (IMAGE input) only while it is served. cachePoint / cache_control checkpoints are accepted and reported as cacheRead/WriteInputTokens from a real in-process prefix cache (SHA-256 of the prompt prefix, 5-minute TTL, 1024-token minimum; Converse, ConverseStream and Claude InvokeModel) - it is accounting, the compute saving comes only from llama.cpp's own prompt cache. Reasoning: on Mesh with the reasoning pack running (DeepSeek-R1-Distill-Qwen-1.5B, MIT), Converse/ConverseStream additionalModelRequestFields thinking{type:enabled,budget_tokens>=1024} or reasoning_config{type:enabled} and Claude InvokeModel `thinking` return real reasoningContent (reasoningText) / thinking blocks streamed before the answer, and assistant reasoningContent from earlier turns is accepted and dropped; budget_tokens is validated but advisory (a 1.5B distill can think past it and run out of maxTokens), there is no signature or redacted content, InvokeModelWithResponseStream of non-Claude families drops the thought, and without the pack a reasoning request is a ValidationException. The 1.5B distill is for arithmetic and short logic, not a stand-in for Claude or Nova reasoning.",
    "Nano: there is no model until the page registers one. The Bedrock overview offers 'Enable in-browser model (WebLLM)' (needs WebGPU; loads @mlc-ai/web-llm from a CDN and downloads a small model); without it every model call returns ModelNotReadyException. The in-browser model serves the console page that loaded it, not the external SDK relay endpoint."
   ],
   "tests": [
@@ -15,7 +15,8 @@
    "tests/conformance/test_ai_sdk_tools.py",
    "tests/conformance/test_llm_async_bridge.py",
    "tests/conformance/test_local_llm_seam.py",
-   "tests/conformance/test_bedrock_kb_runtime_caps.py"
+   "tests/conformance/test_bedrock_kb_runtime_caps.py",
+   "tests/conformance/test_bedrock_limmodels.py"
   ]
  },
  "bedrock.knowledge-bases": {
@@ -90,6 +91,20 @@
   "tests": [
    "tests/conformance/test_ai_agent_lanes.py",
    "tests/conformance/test_bedrock_guardrails_caps.py"
+  ]
+ },
+ "bedrock.data-automation": {
+  "title": "Data Automation (blueprints, projects, InvokeDataAutomationAsync / InvokeDataAutomation) - small open models",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Dev Simplified: real wire shapes (bedrock-data-automation + runtime) with blueprint/project/job records in the account bag and S3 in/out (job_metadata.json, standard_output/0/result.json, custom_output/0/result.json). Text-layer documents (PDF, DOCX, XLSX, PPTX, CSV, HTML, Markdown, TXT) are parsed without a model; images (png/jpeg/gif/webp) are read by a small open vision model (SmolVLM-500M via llama.cpp, Mesh only) for OCR text and a one-line summary; blueprint (custom) output is one JSON-schema-constrained model call per blueprint (typed values or null; with several blueprints a model call picks the class). Every result.json carries a `vyomi` block naming the engine and saying so.",
+   "Quality is that of a 0.5B vision / 3B chat model, not the managed service: no confidence scores, bounding boxes, layout elements, tables or per-page geometry; scanned PDFs have no OCR (no rasteriser) and fail with a ClientError; audio and video are rejected; images need Mesh (Nano has no vision model) and custom output on Nano is declared unsupported (WebLLM cannot run in a background job). Libraries, blueprint optimisation, CopyBlueprintStage, EventBridge notifications, KMS and PII settings are not executed (libraries/optimisation return a ValidationException)."
+  ],
+  "tests": [
+   "tests/conformance/test_bedrock_limmodels.py"
   ]
  }
 }

@@ -88,3 +88,68 @@ def remove(run=None, purge_models=False) -> None:
     _run(["rm", "-f", NAME], run)
     if purge_models:
         _run(["volume", "rm", VOLUME], run)
+
+
+# ───────────────────────── role models (vision / reasoning), Mesh only ─────────────────────────
+# One extra llama-server container per role, each with its own small GGUF. An 8 GB Codespace has only ~2.8 GB for the AI bucket, so roles are
+# started ON DEMAND and ``plan_role_start`` stops whatever would push the running set over the budget (the default chat model is stopped
+# last-resort, never silently: the plan is returned to the caller). File sizes are measured; ``est_mb`` is a planning ESTIMATE (file size + KV/overhead),
+# not a measurement - measure on the real Codespace (see docs/architecture/v4.0/branches/ai-limmodels.md).
+ROLES = {
+    "vision": {"name": "vyomi-llm-vision", "hf": os.environ.get("VYOMI_LLM_VISION_HF", "ggml-org/SmolVLM-500M-Instruct-GGUF:Q8_0"), "port": 18081,
+               "files_mb": 545, "est_mb": 900, "args": ["--jinja"], "env": "VYOMI_LLM_VISION_ENDPOINT", "licence": "Apache-2.0"},
+    "reasoning": {"name": "vyomi-llm-reasoning", "hf": os.environ.get("VYOMI_LLM_REASONING_HF", "bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M"), "port": 18082,
+                  "files_mb": 1117, "est_mb": 1500, "args": ["--jinja", "--reasoning-format", "deepseek"], "env": "VYOMI_LLM_REASONING_ENDPOINT", "licence": "MIT"},
+}
+CHAT_EST_MB = 2500          # Qwen2.5-3B Q4 + KV (estimate)
+AI_BUDGET_MB = int(os.environ.get("VYOMI_LLM_AI_BUDGET_MB", "2800"))
+
+
+def plan_role_start(role: str, running: list[str], budget_mb: int = AI_BUDGET_MB) -> dict:
+    """Which running AI containers must stop for ``role`` to fit: other roles first, then the default chat model. -> {"stop": [...], "fits": bool, "total_mb": n}."""
+    est = {"chat": CHAT_EST_MB, **{r: v["est_mb"] for r, v in ROLES.items()}}
+    keep = [r for r in running if r != role]
+    stop = []
+    while keep and sum(est[r] for r in keep) + est[role] > budget_mb:
+        victim = next((r for r in keep if r != "chat"), keep[0])      # other roles go before the chat model
+        keep.remove(victim)
+        stop.append(victim)
+    total = sum(est[r] for r in keep) + est[role]
+    return {"stop": stop, "fits": total <= budget_mb, "total_mb": total}
+
+
+def role_status(role: str, run=None) -> dict:
+    r = ROLES[role]
+    rc, out, _ = _run(["ps", "-a", "--filter", f"name=^{r['name']}$", "--format", "{{.State}}"], run)
+    return {"role": role, "installed": rc == 0 and bool(out.strip()), "running": rc == 0 and out.strip() == "running", "model": r["hf"],
+            "endpoint": f"http://{r['name']}:8080", "licence": r["licence"], "env": r["env"]}
+
+
+def role_start(role: str, run=None, disk=free_disk_gb, network: str | None = None) -> dict:
+    """Start the role's llama-server (``-hf`` pulls the GGUF, plus the mmproj for vision, into the shared models volume on first start)."""
+    r = ROLES[role]
+    st = role_status(role, run)
+    if st["running"]:
+        return st
+    if disk() < MIN_FREE_GB:
+        raise RuntimeError_(f"Refusing to start the {role} model: only {disk()} GB free disk (guard {MIN_FREE_GB} GB).")
+    running = [x for x in ROLES if role_status(x, run)["running"]] + (["chat"] if status(run, disk)["running"] else [])
+    plan = plan_role_start(role, running)
+    for victim in plan["stop"]:
+        _run(["stop", NAME if victim == "chat" else ROLES[victim]["name"]], run)
+    if st["installed"]:
+        rc, _, err = _run(["start", r["name"]], run)
+    else:
+        args = ["run", "-d", "--name", r["name"], "--restart", "unless-stopped", "-v", f"{VOLUME}:/root/.cache", "-p", f"127.0.0.1:{r['port']}:8080"]
+        if network:
+            args += ["--network", network]
+        args += [IMAGE, "-hf", r["hf"], "--host", "0.0.0.0", "--port", "8080", "-c", "4096", *r["args"]]
+        rc, _, err = _run(args, run)
+    if rc != 0:
+        raise RuntimeError_(f"docker could not start {r['name']}: {err}")
+    return dict(role_status(role, run), plan=plan)
+
+
+def role_stop(role: str, run=None) -> dict:
+    _run(["stop", ROLES[role]["name"]], run)
+    return role_status(role, run)

@@ -486,6 +486,9 @@ def guard_events(it, policy: dict, mode="sync", ctx=None, ident="", trace=False,
 
     for ev in it:
         ty = ev["type"]
+        if ty == "reasoning":      # the reasoning model's thought stream passes through untouched (Bedrock does not guard reasoningContent)
+            yield ev
+            continue
         if ty == "text":
             if asyn:
                 yield ev

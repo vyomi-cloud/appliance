@@ -21,7 +21,3 @@ const make = (title, description, feature, note, instead) => function OutOfScope
 export const AutomatedReasoning = make("Automated Reasoning", "Formal-logic checks that validate model responses against policies.", "Automated Reasoning",
   "It needs an SMT-solver pipeline that turns natural-language policies into formal rules; CreateGuardrail rejects automatedReasoningPolicyConfig for the same reason.",
   <span>Guardrails <Link href="#/bedrock/guardrails">content, topic, word, PII and contextual-grounding checks</Link>, which are simulated.</span>);
-
-export const DataAutomation = make("Data Automation", "Extract insights from documents, images, audio and video with blueprints and projects.", "Bedrock Data Automation",
-  "It runs managed multimodal extraction models. The simulator's local model is text-only, so projects and blueprints could only return invented results.",
-  <span>Knowledge bases (<Link href="#/bedrock/knowledge-bases">text ingestion and retrieval</Link>) or Textract-style pipelines you run yourself.</span>);

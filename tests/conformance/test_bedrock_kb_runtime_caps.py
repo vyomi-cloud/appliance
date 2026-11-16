@@ -325,8 +325,8 @@ def main():
     # reasoning stays rejected
     code, msg = err(br.converse, modelId=claude, messages=[{"role": "user", "content": [{"text": "hi"}]}], additionalModelRequestFields={"thinking": {"type": "enabled", "budget_tokens": 1024}})
     check("reasoning (thinking) request -> ValidationException", code == "ValidationException" and "reasoning" in msg.lower(), (code, msg))
-    code, msg = err(br.converse, modelId=claude, messages=[{"role": "assistant", "content": [{"reasoningContent": {"reasoningText": {"text": "x"}}}]}, {"role": "user", "content": [{"text": "hi"}]}])
-    check("reasoningContent block -> ValidationException", code == "ValidationException", (code, msg))
+    code, msg = err(br.converse, modelId=claude, messages=[{"role": "user", "content": [{"reasoningContent": {"reasoningText": {"text": "x"}}}]}])
+    check("reasoningContent block in a USER message -> ValidationException (assistant turns may carry it; it is dropped)", code == "ValidationException", (code, msg))
 
     # ───────────────────────── prompt caching ─────────────────────────
     big = ("Facilities operating manual. " + "The chiller plant must be inspected before every shift. " * 140)

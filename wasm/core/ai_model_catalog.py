@@ -48,6 +48,47 @@ MODELS = [dict(id=r[0], name=r[1], vendor=r[2], publisher=r[3], kind=r[4], size=
                pooled=r[0] == "qwen3-30b") for r in _ROWS]
 IDS = [m["id"] for m in MODELS]
 BY_ID = {m["id"]: m for m in MODELS}
+
+# Role models (Mesh only): a small open VISION model and a small open REASONING model, each served by its OWN llama-server
+# (core/llm_runtime roles; one role model beside the default chat model so an 8 GB Codespace never holds more). They are NOT part of the
+# ten-model pool and are listed ONLY where a server for the role answers (served_special()); anywhere else the id is the cloud's not-found
+# error. Nano never serves them (WebLLM has no multimodal/reasoning model registered).
+#   id, name, vendor, publisher, role, size class, role label, blurb, local GGUF repo, licence, capabilities
+SPECIAL = [
+    dict(id="smolvlm-500m", name="SmolVLM 500M (vision)", vendor="Hugging Face", publisher="huggingface", kind="chat", size="Small (0.5B vision)",
+         role="Vision", blurb="Reads images and scanned pages: OCR-style text, simple charts, short descriptions. Small model, expect mistakes on dense layouts",
+         tag="ggml-org/SmolVLM-500M-Instruct-GGUF:Q8_0", pooled=False, licence="Apache-2.0", caps=["vision"], serve="vision"),
+    dict(id="deepseek-r1-1.5b", name="DeepSeek R1 Distill Qwen 1.5B (reasoning)", vendor="DeepSeek", publisher="deepseek-ai", kind="chat", size="Small (1.5B reasoning)",
+         role="Reasoning", blurb="Shows its step-by-step reasoning before the answer. A distilled 1.5B model: fine for arithmetic and short logic, weak on long chains",
+         tag="bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M", pooled=False, licence="MIT", caps=["reasoning"], serve="reasoning"),
+]
+SPECIAL_IDS = [m["id"] for m in SPECIAL]
+ROLE_OF = {m["id"]: m["serve"] for m in SPECIAL}
+for _m in SPECIAL:
+    BY_ID[_m["id"]] = _m
+
+
+def special_served(mid) -> bool:
+    """True when this role model is served right now (its llama-server role answers /health). Never on Nano."""
+    if WEB or mid not in ROLE_OF:
+        return False
+    try:
+        try:
+            from core import llm_core as _llm
+        except ImportError:
+            import llm_core as _llm  # type: ignore
+        return _llm.role_available(ROLE_OF[mid])
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def served_special():
+    """The role models that are served now (empty when no vision/reasoning pack is running)."""
+    return [m for m in SPECIAL if special_served(m["id"])]
+
+
+def all_models():
+    return MODELS + served_special()
 WEB_EMBED = "all-minilm-l6-v2"
 LOCAL_ID = IDS[0] if WEB else "qwen2.5-3b"   # the model that runs without a mesh (web LLM on Nano, small model on the appliance)
 DEFAULT_CHAT, DEFAULT_EMBED = (IDS[0], WEB_EMBED) if WEB else ("qwen2.5-3b", "nomic-embed-text")
@@ -87,6 +128,7 @@ def _generated(mid):
 
 
 _BYNAME = {k: m for m in IDS for k in _generated(m)}
+_SPECIAL_BYNAME = {k: m for m in SPECIAL_IDS for k in _generated(m)}
 
 
 def resolve(cloud, api_id):
@@ -94,6 +136,8 @@ def resolve(cloud, api_id):
     if not api_id:
         return None
     api_id = str(api_id)
+    if api_id in _SPECIAL_BYNAME:        # role models resolve only while their server is up (otherwise the cloud's not-found error)
+        return _SPECIAL_BYNAME[api_id] if special_served(_SPECIAL_BYNAME[api_id]) else None
     if api_id in _BYNAME:
         return _BYNAME[api_id]
     al = ALIASES.get(cloud, {})
@@ -133,6 +177,9 @@ def availability(mid):
         return {"state": "starting", "label": "Starting", "available": False}
     if st in ("draining", "stopped"):
         return {"state": "stopped", "label": "Stopped", "available": False}
+    if mid in ROLE_OF:
+        ok = special_served(mid)
+        return {"state": "ready" if ok else "stopped", "label": "Ready (Mesh " + ROLE_OF[mid] + " pack)" if ok else "Not running", "available": ok}
     if WEB:
         return {"state": "available", "label": "Web LLM (in browser)", "available": True}
     if mid == LOCAL_ID:
@@ -142,4 +189,4 @@ def availability(mid):
 
 def listing(cloud):
     """The ten models as one cloud lists them, each with availability: [{id, cloud_id, name, vendor, ..., availability}]."""
-    return [dict(m, cloud_id=cloud_id(cloud, m["id"]), availability=availability(m["id"])) for m in MODELS]
+    return [dict(m, cloud_id=cloud_id(cloud, m["id"]), availability=availability(m["id"])) for m in all_models()]
