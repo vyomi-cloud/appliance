@@ -4,6 +4,33 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] — 2026-11-16
+
+Patch release. **Simulator fidelity fixes found by the new "vyomi-endurance" estate** — a full AWS reference estate (VPC, IAM, KMS, Secrets Manager, EC2, EBS, S3, RDS, DynamoDB, ECR; 57 resources) driven by Terraform/OpenTofu against the real appliance: apply, no-diff re-plan, destroy, rebuild, destroy all pass. From 4.0.1 releases are for Mesh only (no offline packages).
+
+### Highlights
+
+- **Terraform/OpenTofu now round-trips cleanly on AWS.** Providers read every resource back through Describe* calls; the simulator now returns what real AWS returns, so a second `plan` shows no diff and `destroy` completes.
+- **Describe filters work.** `Filter.N` / `<Thing>Id.N` are honoured generically across EC2/VPC Describe actions (previously ignored, so providers saw every object); RDS Describe now honours `Filters`.
+
+### Fixes — AWS
+
+- **[Nano + offline]** EC2/VPC: security-group rules (DescribeSecurityGroupRules / Modify / UpdateDescriptions), managed prefix list entries, NACL and tag filters, route-table association state, empty descriptions omitted, IAM user/role tags in responses
+- **[offline]** Runtime-launched (Docker) EC2 instances are usable by core operations (AttachVolume, DescribeInstanceAttribute, CreateTags…); DescribeVolumes lists volumes from both engines; instance tags, instance profile and user data read back; terminated instances release their subnet/security group
+- **[Nano + offline]** RDS: DescribeDBInstances filters, DbiResourceId, StorageEncrypted, KmsKeyId, TagList, AutoMinorVersionUpgrade; parameter-group ApplyMethod and Source filter; subnet/parameter group tags
+- **[Nano + offline]** DynamoDB: point-in-time-recovery timestamps are epoch numbers (Go/Java SDKs reject ISO strings); SSE defaults to KMS with a key ARN; on-demand GSIs report 0/0 throughput
+- **[Nano + offline]** S3: lifecycle configuration echoes x-amz-transition-default-minimum-object-size
+- **[Nano + offline]** EC2 launch templates return SecurityGroupId and tag specifications; DescribeTags honours filters
+
+### Fixes — GCP
+
+- **[Nano + offline]** Compute: reference-estate read-back fix (F4)
+
+### Known issues
+
+- `tests/conformance/test_substrate_matrix.py` fails on trunk before this release (object store: bytes survive a fresh backed store) — tracked as F17.
+- Slow SQS create (F2) and Azure resource-group create (F3) under the real Terraform providers are still being investigated.
+
 ## [3.0.47] — 2026-11-10
 
 Daily conformance release. **4 product fixes** (AWS 1, Azure 2, all clouds 1); 2 reach Nano and 4 reach the offline appliance; 3 test and harness improvements.
