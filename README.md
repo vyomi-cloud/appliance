@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-16 20:50 UTC · refreshes after every pipeline run_
+_Updated 2026-11-16 21:16 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-16 20:50 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
-- **Upstream watch:** 63 open changes from the real clouds to adopt
+- **Upstream watch:** 74 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -79,7 +79,7 @@ _Updated 2026-11-16 20:50 UTC · refreshes after every pipeline run_
 
 | Service | Real backend | Wired today | Console live | UI issues | Upstream | Release |
 |---|---|---|---|---|---|---|
-| EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 15 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 25 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
 | RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
@@ -87,10 +87,10 @@ _Updated 2026-11-16 20:50 UTC · refreshes after every pipeline run_
 | SQS | — | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+lambda) | before gate |
 | API Gateway | caddy · Lite | not audited | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+apigateway) | before gate |
-| VPC | — | not audited | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ⚠️ 15 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
+| VPC | — | not audited | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ⚠️ 25 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 13/14 · 🧩 13/14 | 0 · 0 | ✅ watched | before gate |
 | Secrets Manager | — | not audited | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ⚠️ 8 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+secretsmanager) | before gate |
-| KMS | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ✅ watched | before gate |
+| KMS | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 | CloudWatch Logs | logstore · in-process · + fluent-bit agent | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
 | Elastic Load Balancing | caddy · Lite | ⚪ no traffic forwarded (Caddy not wired) | 🧩 7/8 · 🧩 7/8 | 0 · 0 | ✅ watched | [v3.0.10](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.10) |
 | Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 9/10 · 🧩 9/10 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ssm) | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
@@ -114,7 +114,7 @@ _Updated 2026-11-16 20:50 UTC · refreshes after every pipeline run_
 | IAM & Admin | — | not audited | ✅ 9/9 · ✅ 9/9 | 0 · 0 | ✅ watched | before gate |
 | Eventarc | — | not audited | ✅ 12/12 · ✅ 12/12 | 0 · 0 | ✅ watched | before gate |
 | Secret Manager | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
-| Cloud KMS | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
+| Cloud KMS | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
 | Cloud Scheduler | in-process | 🟡 cron fires only on reads; HTTP targets not sent (#147-#149) | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.14](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.14) |
 | Kubernetes Engine | k3s · Max | ⚪ no Kubernetes API; kubectl can't connect (k3s not wired) | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.15](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.15) |
 | IAM Service Account Credentials | in-process | ✅ real RS256-signed tokens, JWTs and blobs | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | [v3.0.16](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.16) |
