@@ -12,7 +12,7 @@ ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
 sys.path.insert(0, ROOT)
 os.environ.pop("VYOMI_LLM_ENDPOINT", None)
 os.environ["VYOMI_LLM_DISABLE"] = "1"
-os.environ.setdefault("CLOUDLEARN_STATE_FILE", "/tmp/model-import-test.sqlite3")
+os.environ.setdefault("CLOUDLEARN_STATE_FILE", f"/tmp/model-import-test-{os.getpid()}.sqlite3")   # fresh state per run (a persisted file made re-runs fail with BucketAlreadyOwnedByYou)
 import anyio, boto3, uvicorn  # noqa: E402
 from botocore.config import Config  # noqa: E402
 from botocore.exceptions import ClientError  # noqa: E402
@@ -177,6 +177,23 @@ st, plain = rest("POST", V + "/models:upload", {"model": {"displayName": "plain-
 check("vertex: artifactUri without an adapter keeps the plain metadata-only upload", st == 200, plain)
 st, dl = rest("DELETE", f"{URL}/v1/{vm}")
 check("vertex: delete model removes the import", st == 200 and not any(m.get("source", "").startswith("gs://") and m.get("cloud") == "gcp" for m in ic.persisted_models()), dl)
+
+# gs:// artifacts uploaded through the REAL GCS JSON API (what the console's import dialog does): the engine must read the GCS store's own layout
+def gcs_req(method, path, data=None, ctype="application/json"):
+    req = urllib.request.Request(URL + path, method=method, data=data, headers={"content-type": ctype, "authorization": "Bearer x"})
+    try:
+        return urllib.request.urlopen(req).status
+    except urllib.error.HTTPError as e:
+        return e.code
+check("vertex+GCS: bucket + adapter + meta uploaded through the GCS JSON API", gcs_req("POST", "/storage/v1/b?project=vyomi-project", json.dumps({"name": "console-imports"}).encode()) == 200
+      and gcs_req("POST", "/upload/storage/v1/b/console-imports/o?uploadType=media&name=uploads/a-1/adapter.gguf", ADAPTER, "application/octet-stream") == 200
+      and gcs_req("POST", "/upload/storage/v1/b/console-imports/o?uploadType=media&name=uploads/a-1/adapter_meta.json", META, "application/json") == 200)
+st, upg = rest("POST", V + "/models:upload", {"model": {"displayName": "gcs-uploaded-vtx", "artifactUri": "gs://console-imports/uploads/a-1/", "labels": {"vyomi-import": "chat-lora"}}})
+gm = (upg.get("response") or {}).get("name")
+st, grec = rest("GET", f"{URL}/v1/{gm}") if gm else (0, {})
+check("vertex+GCS: models:upload reads the adapter from the real GCS store (not only the S3 fallback)", st == 200 and grec.get("labels", {}).get("vyomi-imported") == "true", upg)
+if gm:
+    rest("DELETE", f"{URL}/v1/{gm}")
 
 # ================= Azure (Vyomi extension + ARM deployment + chat) =================
 def multipart(fields):

@@ -18,10 +18,10 @@ import Crumbs from "./Crumbs.jsx";
 import * as api from "./api.js";
 
 const AP = { text: "Agent Platform", href: "#/vertex-ai" };
-const Page = ({ title, group, groupHref, children, actions }) => (
+const Page = ({ title, group, groupHref, children, actions, cap }) => (
   <Box>
     <Crumbs trail={[AP, { text: group, href: groupHref }, { text: title }]} />
-    <PageHeader title={title} actions={actions} />
+    <PageHeader title={title} actions={<>{cap && <CapabilityBadge id={cap} host="[data-vyomi-header]" />}{actions}</>} />
     {children}
   </Box>
 );
@@ -59,7 +59,7 @@ function ToolsDialog({ item, onClose, verb = "listTools" }) {
 
 export function McpServers() {
   return (
-    <Page title="MCP Servers" group="Agents" groupHref="#/vertex-ai/agent-garden">
+    <Page title="MCP Servers" cap="gcp.vertex-ai.mcp-servers" group="Agents" groupHref="#/vertex-ai/agent-garden">
       <Stack spacing={1.5}>
         <Alert severity="info" data-testid="gov-note">Register the MCP servers your agents may use (any streamable-HTTP MCP server). Attach one to a Gateway to expose its tools behind the gateway's auth and policy. {EXT} Calling a server needs network: direct on Mesh, through the allow-listed egress relay on Nano.</Alert>
         <ResourceList coll="mcpServers" title="MCP servers" singular="MCP server" regionScoped hideId cap="gcp.vertex-ai.agent-gateway"
@@ -78,7 +78,7 @@ export function McpServers() {
 /* ───────────────────────────── Gateways ───────────────────────────── */
 export function Gateways() {
   return (
-    <Page title="Gateways" group="Govern" groupHref="#/vertex-ai/agent-registry">
+    <Page title="Gateways" cap="gcp.vertex-ai.agent-gateway" group="Govern" groupHref="#/vertex-ai/agent-registry">
       <Stack spacing={1.5}>
         <Alert severity="info" data-testid="gov-note">A gateway is one MCP endpoint in front of your tool servers, with its own auth and an optional Cedar policy. It runs on the AgentCore gateway engine, so the same endpoint also shows in the AWS console of this account (prefixed gcp-). {EXT}</Alert>
         <ResourceList coll="agentGateways" title="Gateways" singular="gateway" regionScoped hideId cap="gcp.vertex-ai.agent-gateway"
@@ -210,7 +210,7 @@ function AttachPolicyDialog({ item, onClose }) {
 
 export function Policies() {
   return (
-    <Page title="Policies" group="Govern" groupHref="#/vertex-ai/agent-registry">
+    <Page title="Policies" cap="gcp.vertex-ai.agent-policies" group="Govern" groupHref="#/vertex-ai/agent-registry">
       <Stack spacing={1.5}>
         <Alert severity="info" data-testid="gov-note">A policy is a Cedar policy that decides which agents and users may call which gateway tools, evaluated by the real Cedar engine on every call. {EXT} Cedar runs on Mesh and the offline appliance; on Nano an ENFORCE gateway denies every call (fail closed).</Alert>
         <ResourceList coll="agentPolicies" title="Policies" singular="policy" regionScoped hideId cap="gcp.vertex-ai.agent-policies"
@@ -287,7 +287,7 @@ function Findings() {
 export function Security() {
   const rai = Object.fromEntries(RAI.map(([k]) => [k, { key: "rai_" + k, label: RAI.find((r) => r[0] === k)[1], type: "bool", default: k === "DANGEROUS" }]));
   return (
-    <Page title="Security" group="Govern" groupHref="#/vertex-ai/agent-registry">
+    <Page title="Security" cap="gcp.vertex-ai.model-armor" group="Govern" groupHref="#/vertex-ai/agent-registry">
       <Stack spacing={2}>
         <Alert severity="info" data-testid="gov-note">Model Armor templates screen prompts and responses (modelarmor.googleapis.com templates, sanitizeUserPrompt, sanitizeModelResponse). Detection runs on the Bedrock Guardrails engine - keyword and local-embedding scoring and regex PII - so it is toy-grade, not Google's models. Malicious-URI detection (Safe Browsing) and Cloud DLP templates are not simulated and report EXECUTION_SKIPPED.</Alert>
         <ResourceList coll="templates" title="Model Armor templates" singular="template" regionScoped hideId cap="gcp.vertex-ai.model-armor"
@@ -312,7 +312,7 @@ export function Security() {
 const TERMS = [["ONE_WEEK", "1 week"], ["ONE_MONTH", "1 month"], ["THREE_MONTHS", "3 months"], ["ONE_YEAR", "1 year"]];
 export function ProvisionedThroughput() {
   return (
-    <Page title="Provisioned Throughput" group="Models" groupHref="#/vertex-ai/model-garden">
+    <Page title="Provisioned Throughput" cap="gcp.vertex-ai.provisioned-throughput" group="Models" groupHref="#/vertex-ai/model-garden">
       <Stack spacing={1.5}>
         <Alert severity="warning" data-testid="pt-note"><b>Bookkeeping only.</b> An order records a model, generative model units and a commitment term. Nothing is reserved, enforced or billed: a local model has no shared serving capacity to commit. Use it to rehearse the purchase flow and to keep your own plan next to your resources. {EXT}</Alert>
         <ResourceList coll="provisionedThroughputs" title="Provisioned Throughput orders" singular="order" regionScoped hideId cap="gcp.vertex-ai.provisioned-throughput" createLabel="Purchase Provisioned Throughput"

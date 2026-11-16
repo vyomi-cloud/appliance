@@ -1,1 +1,0 @@
-{"name":"vyomi-rag-overlay","private":true,"description":"Small extra deps for RAG Studio (react/cloudscape resolve from ../node_modules via esbuild nodePaths). Install: npm install --no-package-lock --omit=peer","dependencies":{"@xyflow/react":"12.3.5","umap-js":"1.4.0"}}

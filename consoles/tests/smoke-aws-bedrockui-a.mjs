@@ -21,7 +21,7 @@ await shot("001-overview");
 await go("/quickstart"); await page.getByText("Choose your use case").waitFor({ timeout: 20000 });
 await page.getByText("Generate text").first().click(); await page.getByTestId("quickstart-code").waitFor();
 check("quickstart: tiles + sample code", /converse/.test(await page.getByTestId("quickstart-code").innerText())); await shot("004-quickstart");
-await go("/models"); await page.getByText("Model catalog").first().waitFor({ timeout: 30000 }); await page.waitForTimeout(1500);
+await go("/models"); await page.getByRole("heading", { name: /Model catalog/ }).first().waitFor({ timeout: 30000 }); await page.waitForTimeout(1500);
 check("catalog: lists models", /Qwen|Nova|Llama|vyomi|Claude/i.test(await txt())); await shot("005-model-catalog");
 await go("/api-keys"); await page.getByText("How it works").waitFor({ timeout: 20000 });
 await page.getByRole("tab", { name: "Long-term API keys" }).click(); await page.getByText("No long-term API keys").waitFor({ timeout: 20000 });

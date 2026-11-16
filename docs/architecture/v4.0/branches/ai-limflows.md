@@ -22,4 +22,4 @@ Branch from `v4/ai-integration`. Runs on both substrates (host and Nano/Pyodide)
 - Lex and InlineCode flow nodes are rejected. Loop semantics are Vyomi's reading of the documented node.
 - Canvas layout (positions) lives in the browser (localStorage); the definition itself is stored by the API.
 - Azure: Prompt flow state is in memory; python tool nodes, python graders, logs/stored_completions sources and gleu/meteor are rejected. Bring-your-own `precomputedInferenceSource` (Bedrock) is unsupported.
-- `@xyflow/react` is not in `consoles/package.json`; it resolves from `consoles/rag-overlay`.
+- `@xyflow/react` is now a normal dependency of `consoles/package.json` (see ai-limconsole.md); `rag-overlay` is gone.

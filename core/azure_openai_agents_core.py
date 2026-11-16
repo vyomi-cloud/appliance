@@ -1025,7 +1025,7 @@ def _eval_view(e):
     return {k: v for k, v in e.items() if not k.startswith("_")}
 
 
-def _run_view(r):
+def _eval_run_view(r):
     out = {k: v for k, v in r.items() if not k.startswith("_")}
     its = r["_items"]
     out["result_counts"] = {"total": len(r["_src"]), "errored": sum(1 for i in its if i["status"] == "error"), "failed": sum(1 for i in its if i["status"] == "fail"), "passed": sum(1 for i in its if i["status"] == "pass")}
@@ -1174,9 +1174,9 @@ def evals_dispatch(arm_find, method, path, query, p):
                 _EVRUNS[rid] = run
                 _ev_step(arm_find, run, _EV_BATCH)
                 _ev_drive(arm_find, run) if run["status"] == "in_progress" else None
-                return J(200, _run_view(run))
+                return J(200, _eval_run_view(run))
             if method == "GET":
-                return J(200, _page([_run_view(r) for r in _EVRUNS.values() if r["eval_id"] == e["id"]], query, "created_at"))
+                return J(200, _page([_eval_run_view(r) for r in _EVRUNS.values() if r["eval_id"] == e["id"]], query, "created_at"))
         m = re.match(r"^/evals/([^/]+)/runs/([^/]+)(?:/(output_items)(?:/([^/]+))?)?$", path)
         if m:
             r = _EVRUNS.get(m.group(2))
@@ -1193,11 +1193,11 @@ def evals_dispatch(arm_find, method, path, query, p):
                 return J(200, _page(its, query, "created_at"))
             if method == "GET":
                 _ev_step(arm_find, r, _EV_BATCH)
-                return J(200, _run_view(r))
+                return J(200, _eval_run_view(r))
             if method == "POST":       # cancel
                 if r["status"] == "in_progress":
                     r["status"] = "canceled"
-                return J(200, _run_view(r))
+                return J(200, _eval_run_view(r))
             if method == "DELETE":
                 del _EVRUNS[r["id"]]
                 return J(200, {"object": "eval.run.deleted", "deleted": True, "run_id": r["id"]})

@@ -86,9 +86,11 @@ real Vyomi backend through the service's native API. Read first:
   `<CapabilityContainer id=…>` — never hand-written disclaimers;
 - smoke tests and every core conformance test you touched pass.
 
+**Dependencies:** `@xyflow/react` 12.3.5, `umap-js` and `scheduler` are real dependencies in `consoles/package.json` (the old `rag-overlay/` is gone). Always install with `--omit=peer`: peer auto-install would otherwise bring a second React next to the pinned 18.3.1 (`scheduler` is listed explicitly because `--omit=peer` skips it and Fluent UI imports it). Check one React: `grep -o ReactCurrentDispatcher dist/<cloud>/main.js | wc -l` stays at the baseline 4 and there is a single `version:"18.3.1"` pair.
+
 ## Verify (all must pass before you push)
 ```
-cd consoles && npm ci && node build.mjs && cd ..
+cd consoles && npm ci --omit=peer && node build.mjs && cd ..   # or: npm install --omit=peer
 python3 consoles/dev_server.py -q &          # wait until curl -s localhost:8740/_wire/ answers
 node consoles/tests/ui-conformance.mjs <cloud> <service>   # fidelity ≥ 90 %, exit 0
 node consoles/tests/smoke-<cloud>.mjs                       # existing pilots of your cloud still pass

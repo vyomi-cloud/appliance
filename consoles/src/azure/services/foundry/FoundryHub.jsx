@@ -11,11 +11,13 @@ import { navigate } from "../../../common/router.js";
 import { locationLabel } from "../../kit/arm.js";
 import BrowseGrid from "../../kit/BrowseGrid.jsx";
 import { Glyph } from "../../kit/common.jsx";
+import { CapabilityContainer } from "../../kit/Capability.jsx";
 import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { FineTuningDetail, FineTuningList } from "./FineTuning.jsx";
 import { AgentsPage, ContentFiltersPage, NotInScope } from "./FoundryPages.jsx";
+import CustomModelsPage from "./CustomModels.jsx";
 import { EvaluationsPage, PromptFlowPage } from "./FoundryEvalFlow.jsx";
 import { CreateSearchService, link as searchLink } from "../aisearch/SearchServices.jsx";
 
@@ -28,6 +30,7 @@ const PAGES = {
   foundry: { label: "Microsoft Foundry", kinds: ["AIServices"], glyph: "cognitiveservices" },
   openai: { label: "Azure OpenAI", kinds: ["OpenAI"], glyph: "cognitiveservices" },
   finetuning: { label: "Fine-tuning", custom: true },
+  custommodels: { label: "Custom models", custom: true },
   search: { label: "AI Search", search: true, glyph: "cognitiveservices" },
   agents: { label: "Agents", custom: true },
   filters: { label: "Content filters", custom: true },
@@ -45,11 +48,13 @@ export const PAGE_LABEL = { ...Object.fromEntries(Object.entries(PAGES).map(([k,
 const MENU = [
   { id: "overview", label: "Overview" },
   { id: "all", label: "All resources" },
-  { group: "All models, agents & tools", items: ["foundry", "openai", "agents", "finetuning", "filters", "evaluations", "promptflow", "search", "ml"].map((id) => ({ id, label: PAGES[id].label })) },
+  { group: "All models, agents & tools", items: ["foundry", "openai", "agents", "finetuning", "custommodels", "filters", "evaluations", "promptflow", "search", "ml"].map((id) => ({ id, label: PAGES[id].label })) },
   { group: "Single-capability", items: ["speech", "language", "translator", "safety", "vision"].map((id) => ({ id, label: PAGES[id].label })) },
   { group: "Earlier-generation", items: [{ id: "anomaly", label: PAGES.anomaly.label }] },
   { group: "Help", items: [{ id: "docs", label: "Documentation" }] },
 ];
+/** Panels whose content carries a Dev Simplified badge (registry: core/capabilities/azure/foundry.json). */
+const CAP = { agents: "azure.foundry.agents", filters: "azure.foundry.content-filters", evaluations: "azure.foundry.evaluations", promptflow: "azure.foundry.promptflow", finetuning: "azure.foundry.finetuning", custommodels: "azure.foundry.custom-models" };
 const OUT = {
   ml: { reason: "Azure Machine Learning workspaces need managed compute clusters, registries and pipeline services that cannot run in a browser tab or a small Codespace.", instead: "Fine-tuning (heads and imported LoRA adapters) for training jobs, and AI Search plus Azure OpenAI for retrieval and generation." },
 };
@@ -133,6 +138,14 @@ export default function FoundryHub({ params = {} }) {
   const page = panel === "overview" ? null : panel === "all" ? { label: "All resources" } : PAGES[panel] || { label: panel };
   const chips = PAGES[panel]?.custom ? [] : page?.chips || (panel === "overview" ? [] : CHIPS);
   const title = page ? `Microsoft Foundry | ${page.label}` : "Microsoft Foundry";
+  const content = panel === "agents" ? <AgentsPage />
+    : panel === "custommodels" ? <CustomModelsPage />
+    : panel === "filters" ? <ContentFiltersPage />
+    : panel === "evaluations" ? <EvaluationsPage />
+    : panel === "promptflow" ? <PromptFlowPage />
+    : OUT[panel] ? <NotInScope title={PAGES[panel].label} {...OUT[panel]} />
+    : panel === "finetuning" ? (params.jobId ? <FineTuningDetail id={decodeURIComponent(params.jobId)} /> : <FineTuningList />)
+    : <ResourceList id={panel} />;
   return (
     <ResourceBlade
       title={title} subtitle={page ? `Default Directory | Vyomi simulator (${sub.displayName || sub.id})` : "Default Directory"}
@@ -141,13 +154,8 @@ export default function FoundryHub({ params = {} }) {
       {chips.length > 0 && <div className="vy-fdy-chips">{chips.map((c) => <button key={c} type="button">{c}</button>)}</div>}
       {panel === "overview" ? <Overview total={(data || []).length} />
         : panel === "docs" ? <div className="vy-page"><p>Foundry documentation lives on learn.microsoft.com.</p></div>
-        : panel === "agents" ? <AgentsPage />
-        : panel === "filters" ? <ContentFiltersPage />
-        : panel === "evaluations" ? <EvaluationsPage />
-        : panel === "promptflow" ? <PromptFlowPage />
-        : OUT[panel] ? <NotInScope title={PAGES[panel].label} {...OUT[panel]} />
-        : panel === "finetuning" ? (params.jobId ? <FineTuningDetail id={decodeURIComponent(params.jobId)} /> : <FineTuningList />)
-        : <ResourceList id={panel} />}
+        : CAP[panel] ? <div className="vy-page"><CapabilityContainer id={CAP[panel]} title={PAGES[panel].label}>{content}</CapabilityContainer></div>
+        : content}
     </ResourceBlade>
   );
 }

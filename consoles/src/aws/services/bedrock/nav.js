@@ -9,7 +9,7 @@ export const bedrockNav = [
   { type: "section", text: "Labs", defaultExpanded: true, items: [l("Quotas", "#/bedrock/quotas", NEW), l("Compare models", "#/bedrock/compare-models", NEW)] },
   { type: "section", text: "Test", defaultExpanded: true, items: [l("Playground", "#/bedrock/playground"), l("Tokenizer", "#/bedrock/tokenizer")] },
   { type: "section", text: "Infer", defaultExpanded: true, items: [l("Inference profiles", "#/bedrock/inference-profiles"), l("Batch inference", "#/bedrock/batch-inference"), l("Provisioned Throughput", "#/bedrock/provisioned-throughput")] },
-  { type: "section", text: "Tune", defaultExpanded: true, items: [l("Custom models", "#/bedrock/custom-models"), l("Prompt router models", "#/bedrock/prompt-routers"), l("Marketplace model deployments", "#/bedrock/marketplace-deployments")] },
+  { type: "section", text: "Tune", defaultExpanded: true, items: [l("Custom models", "#/bedrock/custom-models"), l("Imported models", "#/bedrock/imported-models"), l("Prompt router models", "#/bedrock/prompt-routers"), l("Marketplace model deployments", "#/bedrock/marketplace-deployments")] },
   { type: "section", text: "Build", defaultExpanded: true, items: [
     l("AgentCore", "#/bedrock/agentcore"), l("Knowledge Bases (KB)", "#/bedrock/knowledge-bases"), l("RAG Studio", "#/bedrock/knowledge-bases/studio"), l("Flows", "#/bedrock/flows"),
     l("Automated Reasoning", "#/bedrock/automated-reasoning"), l("Guardrails", "#/bedrock/guardrails"), l("Prompt Management", "#/bedrock/prompt-management"),

@@ -2,7 +2,7 @@
  * (Microsoft.CognitiveServices raiPolicies, enforced on deployments by core/ai_models_core.py over the guardrails engine).
  * NotInScope is the explicit, reasoned panel for the Foundry products Vyomi does not simulate (never a bare "Coming soon"). */
 import { useEffect, useState } from "react";
-import { Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link, Select, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Textarea } from "@fluentui/react-components";
+import { Button, Checkbox, Dialog, DialogActions, DialogBody, DialogContent, DialogSurface, DialogTitle, Field, Input, Link, Select, Tab, TabList, Table, TableBody, TableCell, TableHeader, TableHeaderCell, TableRow, Textarea } from "@fluentui/react-components";
 import { Add20Regular, ArrowClockwise20Regular, Delete20Regular } from "@fluentui/react-icons";
 import { restJson } from "../../../common/wire.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -10,6 +10,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { ErrorBar, InfoBar, Loading } from "../../kit/common.jsx";
 import { ARM, listDeployments, MODEL_KINDS, putDeployment } from "../cognitiveservices/api.js";
 import * as hub from "./api.js";
+import { RichMessage, RunSteps, ToolBadges, ToolToggles, VectorStoresPanel, buildToolsPayload, toolsApi } from "./AgentTools.jsx";
 
 const AV = "2024-05-01-preview";
 const e = encodeURIComponent;
@@ -50,28 +51,39 @@ export function AgentsPage() {
   const deps = useAsync(async () => (acct.name ? (await listDeployments(acct.rg, acct.name)).map((d) => d.name) : []), [acct.rg, acct.name]);
   const [adding, setAdding] = useState(false);
   const [f, setF] = useState({ name: "", model: "", instructions: "You are a helpful assistant." });
+  const [tv, setTv] = useState({ ci: false, fs: false, ciFiles: [], vs: "", newVs: "", fsFiles: [] });
+  const [tab, setTab] = useState("agents");
+  const stores = useAsync(() => toolsApi.stores().catch(() => []), [adding]);
+  const [creating, setCreating] = useState(false);
   const [err, setErr] = useState(null);
   const [open, setOpen] = useState(null);
   const create = async () => {
     setErr(null);
-    try { await agents.create({ name: f.name, model: f.model, instructions: f.instructions, tools: [] }); notify.success(`Agent '${f.name}' was created.`, "Create succeeded"); setAdding(false); list.reload(); }
-    catch (x) { setErr(x); }
+    setCreating(true);
+    try {
+      const extra = await buildToolsPayload(tv);
+      await agents.create({ name: f.name, model: f.model, instructions: f.instructions, tools: [], ...extra });
+      notify.success(`Agent '${f.name}' was created.`, "Create succeeded"); setAdding(false); setTv({ ci: false, fs: false, ciFiles: [], vs: "", newVs: "", fsFiles: [] }); list.reload();
+    } catch (x) { setErr(x); } finally { setCreating(false); }
   };
   if (acct.loading) return <Loading />;
   return (
     <div className="vy-page" data-testid="foundry-agents">
+      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} style={{ marginBottom: 8 }}><Tab value="agents">Agents</Tab><Tab value="stores">Vector stores</Tab></TabList>
+      {tab === "stores" ? <VectorStoresPanel /> : <>
       {acct.empty ? <NoAccount /> : acct.picker}
       <div className="vy-cmdbar" role="toolbar" aria-label="Agent commands">
         <Button appearance="primary" icon={<Add20Regular />} disabled={acct.empty} onClick={() => { setF({ ...f, model: (deps.data || [])[0] || "" }); setAdding(true); }}>New agent</Button>
         <Button appearance="subtle" icon={<ArrowClockwise20Regular />} onClick={list.reload}>Refresh</Button>
       </div>
       <ErrorBar error={list.error} />
-      <Table size="small" aria-label="Agents"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>ID</TableHeaderCell><TableHeaderCell>Model</TableHeaderCell><TableHeaderCell style={{ width: 60 }} /></TableRow></TableHeader>
+      <Table size="small" aria-label="Agents"><TableHeader><TableRow><TableHeaderCell>Name</TableHeaderCell><TableHeaderCell>ID</TableHeaderCell><TableHeaderCell>Model</TableHeaderCell><TableHeaderCell>Tools</TableHeaderCell><TableHeaderCell style={{ width: 60 }} /></TableRow></TableHeader>
         <TableBody>{(list.data || []).map((a) => (
-          <TableRow key={a.id}><TableCell><Link as="button" onClick={() => setOpen(a)}>{a.name || "(unnamed)"}</Link></TableCell><TableCell>{a.id}</TableCell><TableCell>{a.model}</TableCell>
+          <TableRow key={a.id}><TableCell><Link as="button" onClick={() => setOpen(a)}>{a.name || "(unnamed)"}</Link></TableCell><TableCell>{a.id}</TableCell><TableCell>{a.model}</TableCell><TableCell><ToolBadges agent={a} /></TableCell>
             <TableCell><Button size="small" appearance="subtle" icon={<Delete20Regular />} aria-label={`Delete ${a.name}`} onClick={async () => { try { await agents.remove(a.id); if (open?.id === a.id) setOpen(null); notify.success(`Deleted agent '${a.name}'.`, "Delete succeeded"); } catch (x) { notify.error(x, "Delete failed"); } list.reload(); }} /></TableCell></TableRow>))}
-          {!list.loading && !(list.data || []).length && <TableRow><TableCell colSpan={4}>No agents yet. An agent is an assistant (instructions + a model deployment) you can chat with, or call through the Assistants API of the openai SDK.</TableCell></TableRow>}</TableBody></Table>
+          {!list.loading && !(list.data || []).length && <TableRow><TableCell colSpan={5}>No agents yet. An agent is an assistant (instructions + a model deployment) you can chat with, or call through the Assistants API of the openai SDK.</TableCell></TableRow>}</TableBody></Table>
       {open && <AgentChat agent={open} />}
+      </>}
       <Dialog open={adding} onOpenChange={(_, d) => !d.open && setAdding(false)}>
         <DialogSurface aria-label="New agent"><DialogBody><DialogTitle>New agent</DialogTitle>
           <DialogContent><div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -79,8 +91,9 @@ export function AgentsPage() {
             <Field label="Deployment" required><Select value={f.model} onChange={(_, d) => setF({ ...f, model: d.value })} aria-label="Deployment">
               {(deps.data || []).length ? deps.data.map((n) => <option key={n} value={n}>{n}</option>) : <option value="">Deploy a model on the resource first</option>}</Select></Field>
             <Field label="Instructions"><Textarea rows={4} value={f.instructions} onChange={(_, d) => setF({ ...f, instructions: d.value })} aria-label="Instructions" /></Field>
+            <ToolToggles value={tv} onChange={setTv} stores={stores.data || []} />
             <ErrorBar error={err} title="Failed to create the agent" /></div></DialogContent>
-          <DialogActions><Button appearance="primary" disabled={!f.name || !f.model} onClick={create}>Create</Button><Button onClick={() => setAdding(false)}>Cancel</Button></DialogActions></DialogBody></DialogSurface>
+          <DialogActions><Button appearance="primary" disabled={!f.name || !f.model || creating || (tv.fs && !tv.vs && !(tv.fsFiles || []).length)} onClick={create}>{creating ? "Creating..." : "Create"}</Button><Button onClick={() => setAdding(false)}>Cancel</Button></DialogActions></DialogBody></DialogSurface>
       </Dialog>
     </div>
   );
@@ -90,10 +103,11 @@ export function AgentsPage() {
 function AgentChat({ agent }) {
   const [thread, setThread] = useState(null);
   const [log, setLog] = useState([]);
+  const [steps, setSteps] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  useEffect(() => { setThread(null); setLog([]); setErr(null); }, [agent.id]);
+  useEffect(() => { setThread(null); setLog([]); setSteps([]); setErr(null); }, [agent.id]);
   const send = async () => {
     setBusy(true); setErr(null);
     try {
@@ -102,7 +116,8 @@ function AgentChat({ agent }) {
       let run = await agents.post(`/threads/${t}/runs`, { assistant_id: agent.id });
       for (let i = 0; i < 60 && ["queued", "in_progress"].includes(run.status); i++) { await new Promise((r) => setTimeout(r, 700)); run = await agents.get(`/threads/${t}/runs/${run.id}`); }
       const msgs = (await agents.get(`/threads/${t}/messages`, { order: "asc" })).data || [];
-      setLog(msgs.map((m) => ({ role: m.role, text: (m.content || []).map((c) => c.text?.value || "").join("") })));
+      setLog(msgs);
+      setSteps(await toolsApi.steps(t, run.id).catch(() => []));
       if (run.status !== "completed") setErr({ message: `Run ${run.status}${run.last_error ? `: ${run.last_error.message}` : ""}` });
       setText("");
     } catch (x) { setErr(x); } finally { setBusy(false); }
@@ -111,7 +126,8 @@ function AgentChat({ agent }) {
     <section style={{ marginTop: 20, border: "1px solid var(--colorNeutralStroke2, #ddd)", padding: 16 }} data-testid="agent-chat">
       <h3 style={{ marginTop: 0 }}>Agent playground: {agent.name} <span style={{ fontWeight: 400, fontSize: 12 }}>({agent.model})</span></h3>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 8 }}>
-        {log.map((m, i) => <div key={i} style={{ background: m.role === "user" ? "var(--colorBrandBackground2, #eef)" : "var(--colorNeutralBackground3, #f5f5f5)", padding: 8 }}><b>{m.role}</b>: {m.text}</div>)}
+        {log.map((m, i) => <div key={m.id || i} style={{ background: m.role === "user" ? "var(--colorBrandBackground2, #eef)" : "var(--colorNeutralBackground3, #f5f5f5)", padding: 8 }}><b>{m.role}</b>: <RichMessage m={m} /></div>)}
+        <RunSteps steps={steps} />
       </div>
       <ErrorBar error={err} title="Run failed" />
       <div style={{ display: "flex", gap: 8 }}>

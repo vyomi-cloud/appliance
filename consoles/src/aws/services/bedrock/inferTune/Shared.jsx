@@ -23,7 +23,7 @@ export const Page = ({ title, description, children }) => (
 );
 
 /** "How it works": steps = [{title, body, action?}] in equal columns. */
-export const HowItWorks = ({ steps }) => (
+export const HowItWorks = ({ steps, children }) => (
   <Container header={<Header variant="h2">How it works</Header>}>
     <ColumnLayout columns={steps.length} variant="text-grid">
       {steps.map((s) => (
@@ -34,6 +34,7 @@ export const HowItWorks = ({ steps }) => (
         </SpaceBetween>
       ))}
     </ColumnLayout>
+    {children}
   </Container>
 );
 

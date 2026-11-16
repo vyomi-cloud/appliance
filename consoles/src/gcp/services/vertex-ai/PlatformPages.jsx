@@ -11,6 +11,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { useProject } from "../../project.js";
 import { PageHeader, Section, ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
+import { CapabilityBadge } from "../../kit/Capability.jsx";
 import FormDialog from "../../kit/FormDialog.jsx";
 import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
@@ -20,10 +21,10 @@ import Crumbs from "./Crumbs.jsx";
 import * as api from "./api.js";
 
 const AP = { text: "Agent Platform", href: "#/vertex-ai" };
-const Page = ({ title, group = "Agents", groupHref = "#/vertex-ai/agent-garden", children, actions }) => (
+const Page = ({ title, group = "Agents", groupHref = "#/vertex-ai/agent-garden", children, actions, cap }) => (
   <Box>
     <Crumbs trail={[AP, { text: group, href: groupHref }, { text: title }]} />
-    <PageHeader title={title} actions={actions} />
+    <PageHeader title={title} actions={<>{cap && <CapabilityBadge id={cap} host="[data-vyomi-header]" />}{actions}</>} />
     {children}
   </Box>
 );
@@ -62,7 +63,7 @@ export function Sessions() {
   const s = useAsync(() => (engine ? api.list("sessions", { parent: engine }) : Promise.resolve([])), [engine]);
   const ev = useAsync(() => (open ? api.list("events", { parent: open.name }).catch(() => []) : Promise.resolve([])), [open?.name]);
   return (
-    <Page title="Sessions" actions={null}>
+    <Page title="Sessions" actions={null} cap="gcp.vertex-ai.sessions">
       {bar(<>{picker}
         <Button variant="contained" startIcon={<AddIcon />} disabled={!engine} onClick={() => setCreating(true)}>Create session</Button>
         <Button startIcon={<RefreshIcon />} onClick={s.reload}>Refresh</Button></>)}
@@ -109,7 +110,7 @@ export function MemoryBank() {
     try { const r = await json("POST", `/v1beta1/${engine}/memories:retrieve`, { scope: { user_id: uid }, similaritySearchParams: { searchQuery: q, topK: 5 } }); setHits(r.retrievedMemories || []); } catch (e) { setErr(e); }
   };
   return (
-    <Page title="Memory Bank">
+    <Page title="Memory Bank" cap="gcp.vertex-ai.memory-bank">
       {bar(<>{picker}
         <Button variant="contained" startIcon={<AddIcon />} disabled={!engine} onClick={() => setCreating(true)}>Create memory</Button>
         <Button disabled={!engine} onClick={() => setGen(true)}>Generate from conversation</Button>
@@ -200,7 +201,7 @@ export function RagEngine() {
   const [sel, setSel] = useState(null);
   const [rev, setRev] = useState(0);
   return (
-    <Page title="RAG Engine">
+    <Page title="RAG Engine" cap="gcp.vertex-ai.rag-engine">
       <Stack spacing={2}>
         <ResourceList key={rev} coll="ragCorpora" title="RAG corpora" singular="RAG corpus" regionScoped hideId
           fields={[{ key: "displayName", label: "Corpus name" }, { key: "description", label: "Description" }]}
@@ -295,7 +296,7 @@ export function SearchApps({ initial = "stores" }) {
       </Stack>) },
   ];
   return (
-    <Page title={initial === "apps" ? "App Builder" : "Search"}>
+    <Page title={initial === "apps" ? "App Builder" : "Search"} cap={initial === "apps" ? "gcp.vertex-ai.app-builder" : "gcp.vertex-ai.search"}>
       <Tabbed key={initial} tabs={initial === "apps" ? [tabs[1], tabs[0]] : tabs} />
       <FormDialog open={creating === "store"} title="Create data store" fields={[{ key: "id", label: "Data store ID", helper: "Lowercase letters, digits, - and _" }, { key: "displayName", label: "Display name" }]}
         onClose={(ok) => { setCreating(null); if (ok) stores.reload(); }}
@@ -356,7 +357,7 @@ export function Evaluation() {
   const [del, setDel] = useState(null);
   const r = useAsync(() => api.list("evaluationRuns", { loc: "us-central1" }), [project]);
   return (
-    <Page title="Evaluation" group="Models" groupHref="#/vertex-ai/model-garden">
+    <Page title="Evaluation" cap="gcp.vertex-ai.evaluation" group="Models" groupHref="#/vertex-ai/model-garden">
       <Alert severity="info" sx={{ mb: 1.5 }}>Runs generate with the local model (or use responses you supply) and score with exact match, BLEU and ROUGE. There is no Gemini autorater.</Alert>
       {bar(<><Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreating(true)}>Create evaluation</Button><Button startIcon={<RefreshIcon />} onClick={r.reload}>Refresh</Button></>)}
       <ResourceTable resourceName="evaluation runs" items={r.data || []} rowKey={(x) => x.name} loading={r.loading} error={r.error} onRetry={r.reload} filterPlaceholder="Filter"
@@ -399,7 +400,7 @@ export function Metadata({ query }) {
       build={(v) => ({ body: { displayName: v.displayName || v.id, schemaTitle: v.schemaTitle }, idKey, id: v.id })}
       columns={[{ id: "schema", header: "Schema", cell: (i) => i.schemaTitle }, { id: "state", header: "State", cell: (i) => i.state || "—" }]} />);
   return (
-    <Page title="Metadata" group="Models" groupHref="#/vertex-ai/model-garden">
+    <Page title="Metadata" cap="gcp.vertex-ai.metadata" group="Models" groupHref="#/vertex-ai/model-garden">
       <Tabbed query={query} tabs={[
         { id: "artifacts", label: "Artifacts", render: mk("artifacts", "artifact", "artifactId", "system.Artifact") },
         { id: "executions", label: "Executions", render: mk("executions", "execution", "executionId", "system.ContainerExecution") },
@@ -414,7 +415,7 @@ export function Monitoring() {
   const eps = useAsync(() => api.list("endpoints", { loc: "-" }), [project]);
   const opts = (eps.data || []).map((e) => ({ value: e.name, label: `${e.displayName || api.shortId(e.name)} (${api.pname(e.name).location})` }));
   return (
-    <Page title="Monitoring" group="Models" groupHref="#/vertex-ai/model-garden">
+    <Page title="Monitoring" cap="gcp.vertex-ai.monitoring" group="Models" groupHref="#/vertex-ai/model-garden">
       {!eps.loading && !eps.data?.length && <Alert severity="info" sx={{ mb: 1.5 }}>A monitoring job watches an endpoint. Create an <Link href="#/vertex-ai/endpoints">endpoint</Link> first.</Alert>}
       <ResourceList key={opts.length} coll="modelDeploymentMonitoringJobs" title="Monitoring jobs" singular="monitoring job" regionScoped hideId
         fields={eps.data?.length ? [{ key: "displayName", label: "Name" }, { key: "endpoint", label: "Endpoint", options: opts, default: opts[0]?.value }, { key: "interval", label: "Monitor interval (hours)", default: "1" }] : null}
@@ -434,7 +435,7 @@ export function AgentRegistry() {
   const project = useP();
   const r = useAsync(async () => (await Promise.all(api.REGIONS.map((l) => api.list("reasoningEngines", { loc: l }).catch(() => [])))).flat(), [project]);
   return (
-    <Page title="Agent Registry" group="Govern" groupHref="#/vertex-ai/agent-registry">
+    <Page title="Agent Registry" cap="gcp.vertex-ai.agent-registry" group="Govern" groupHref="#/vertex-ai/agent-registry">
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>Every agent deployed in this project, across regions, with the model and tools its spec declares. Manage them under <Link href="#/vertex-ai/deployments">Deployments</Link>.</Typography>
       <ResourceTable resourceName="agents" items={r.data || []} rowKey={(x) => x.name} loading={r.loading} error={r.error} onRetry={r.reload} filterPlaceholder="Filter"
         columns={[{ id: "n", header: "Agent", sortValue: (x) => x.displayName, cell: (x) => x.displayName }, { id: "id", header: "ID", cell: (x) => api.shortId(x.name) },
@@ -456,7 +457,7 @@ export function Adk() {
   const notify = useNotify();
   const [creating, setCreating] = useState(false);
   return (
-    <Page title="Agent Development Kit">
+    <Page title="Agent Development Kit" cap="gcp.vertex-ai.adk">
       <Stack spacing={2}>
         <Section title="Build and deploy an agent" description="Agents here are declarative Vyomi agent specs (instructions, model, tools) run by the local model; the Google ADK Python framework and pickled classes are not executed.">
           <Stack spacing={1.5}>
@@ -501,7 +502,7 @@ export function Topology() {
   });
   const color = { agent: "#1a73e8", model: "#188038", tool: "#b06000" };
   return (
-    <Page title="Topology" group="Govern" groupHref="#/vertex-ai/agent-registry">
+    <Page title="Topology" cap="gcp.vertex-ai.topology" group="Govern" groupHref="#/vertex-ai/agent-registry">
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>The agents deployed in this project, the model each runs on, and the tools its spec lets it call. Drawn from the live reasoning engines.</Typography>
       <ErrorAlert error={r.error} />
       {!r.loading && !engines.length && <Alert severity="info">No agents deployed yet. Deploy one from <Link href="#/vertex-ai/adk">ADK</Link>.</Alert>}
