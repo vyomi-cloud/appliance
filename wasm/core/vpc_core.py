@@ -242,6 +242,8 @@ def _modify_vpc_attribute(store, params):
         v["enable_dns_hostnames"] = str(params["EnableDnsHostnames.Value"]).lower() == "true"
     if "EnableDnsSupport.Value" in params:
         v["enable_dns_support"] = str(params["EnableDnsSupport.Value"]).lower() == "true"
+    if "EnableNetworkAddressUsageMetrics.Value" in params:
+        v["enable_network_address_usage_metrics"] = str(params["EnableNetworkAddressUsageMetrics.Value"]).lower() == "true"
     return _envelope("ModifyVpcAttribute", "<return>true</return>")
 
 
@@ -252,10 +254,14 @@ def _describe_vpc_attribute(store, params):
     if v is None:
         raise VpcError("InvalidVpcID.NotFound", f"VPC {vpc_id} not found.")
     attr = str(params.get("Attribute", ""))
-    key = "enable_dns_hostnames" if attr == "enableDnsHostnames" else "enable_dns_support"
-    tag = "enableDnsHostnames" if attr == "enableDnsHostnames" else "enableDnsSupport"
+    # attribute -> (stored key, default). DNS support defaults true like AWS; the other two default false.
+    known = {"enableDnsHostnames": ("enable_dns_hostnames", False), "enableDnsSupport": ("enable_dns_support", True),
+             "enableNetworkAddressUsageMetrics": ("enable_network_address_usage_metrics", False)}
+    if attr not in known:
+        raise VpcError("InvalidParameterValue", f"Invalid value '{attr}' for attribute. Allowed: {', '.join(sorted(known))}.")
+    key, default = known[attr]
     return _envelope("DescribeVpcAttribute", f"<vpcId>{_xml_escape(vpc_id)}</vpcId>"
-                                             f"<{tag}><value>{str(v.get(key, False)).lower()}</value></{tag}>")
+                                             f"<{attr}><value>{str(v.get(key, default)).lower()}</value></{attr}>")
 
 
 def delete_vpc_cascade(store, vpc_id: str) -> bool:
@@ -675,6 +681,57 @@ def _create_network_acl(store, params):
                      f"<networkAcl>{_nacl_xml(m['nacls'][nacl_id])[len('<item>'):-len('</item>')]}</networkAcl>")
 
 
+def _tag_filter_ok(tags, name, vals):
+    """EC2 tag filters: tag:<Key> (value match), tag-key, tag-value. Wildcards * and ? are honoured like AWS."""
+    import fnmatch
+    tags = tags or {}
+    if name.startswith("tag:"):
+        return any(fnmatch.fnmatchcase(str(tags.get(name[4:], "\0")), v) for v in vals) and name[4:] in tags
+    if name == "tag-key":
+        return any(fnmatch.fnmatchcase(k, v) for k in tags for v in vals)
+    if name == "tag-value":
+        return any(fnmatch.fnmatchcase(str(t), v) for t in tags.values() for v in vals)
+    return None
+
+
+def _nacl_filter_ok(n, f):
+    for name, vals in f.items():
+        t = _tag_filter_ok(n.get("tags"), name, vals)
+        if t is not None:
+            if not t:
+                return False
+            continue
+        if name == "vpc-id":
+            ok = n["vpc_id"] in vals
+        elif name == "network-acl-id":
+            ok = n["id"] in vals
+        elif name == "default":
+            ok = str(bool(n.get("default"))).lower() in [str(v).lower() for v in vals]
+        elif name == "association.subnet-id":
+            ok = any(sid in vals for sid in n["subnets"])
+        elif name in ("association.association-id", "association.network-acl-association-id"):
+            ok = any(f"aclassoc-{sid}" in vals for sid in n["subnets"])
+        elif name == "association.network-acl-id":
+            ok = n["id"] in vals
+        elif name == "entry.cidr":
+            ok = any(e["cidr"] in vals for e in n["entries"])
+        elif name == "entry.egress":
+            ok = any(str(e["egress"]).lower() in [str(v).lower() for v in vals] for e in n["entries"])
+        elif name == "entry.rule-action":
+            ok = any(("allow" if e["allow"] else "deny") in vals for e in n["entries"])
+        elif name == "entry.rule-number":
+            ok = any(str(e["rule_number"]) in vals for e in n["entries"])
+        elif name == "entry.protocol":
+            ok = any(e["protocol"] in vals for e in n["entries"])
+        elif name == "owner-id":
+            ok = OWNER_ID in vals
+        else:
+            raise VpcError("InvalidParameterValue", f"The filter '{name}' is invalid")
+        if not ok:
+            return False
+    return True
+
+
 def _describe_network_acls(store, params):
     m = _model(store)
     ids = [v for k, v in params.items() if k.startswith("NetworkAclId.")]
@@ -684,6 +741,9 @@ def _describe_network_acls(store, params):
         if missing:
             raise VpcError("InvalidNetworkAclID.NotFound", f"The network ACL ID '{missing[0]}' does not exist")
         rows = [n for n in rows if n["id"] in ids]
+    f = _filters(params)
+    if f:
+        rows = [n for n in rows if _nacl_filter_ok(n, f)]
     return _envelope("DescribeNetworkAcls", f"<networkAclSet>{''.join(_nacl_xml(n) for n in rows)}</networkAclSet>")
 
 
@@ -991,7 +1051,66 @@ def _create_managed_prefix_list(store, params):
 
 def _describe_managed_prefix_lists(store, params):
     m = _model(store)
-    return _envelope("DescribeManagedPrefixLists", f"<prefixListSet>{''.join(_pl_xml(pl) for pl in m['prefix_lists'].values())}</prefixListSet>")
+    ids = [v for k, v in params.items() if k.startswith("PrefixListId.")]
+    rows = list(m["prefix_lists"].values())
+    if ids:
+        missing = [i for i in ids if i not in m["prefix_lists"]]
+        if missing:
+            raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{missing[0]}' does not exist.")
+        rows = [pl for pl in rows if pl["id"] in ids]
+    for name, vals in _filters(params).items():
+        t = None
+        if name.startswith("tag") :
+            rows = [pl for pl in rows if _tag_filter_ok(pl.get("tags"), name, vals)]
+        elif name == "prefix-list-id":
+            rows = [pl for pl in rows if pl["id"] in vals]
+        elif name == "prefix-list-name":
+            rows = [pl for pl in rows if pl["name"] in vals]
+        elif name == "owner-id":
+            rows = [pl for pl in rows if OWNER_ID in vals]
+        else:
+            raise VpcError("InvalidParameterValue", f"The filter '{name}' is invalid")
+    return _envelope("DescribeManagedPrefixLists", f"<prefixListSet>{''.join(_pl_xml(pl) for pl in rows)}</prefixListSet>")
+
+
+def _get_managed_prefix_list_entries(store, params):
+    m = _model(store)
+    pl = m["prefix_lists"].get(str(params.get("PrefixListId", "")))
+    if pl is None:
+        raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{params.get('PrefixListId', '')}' does not exist.")
+    want = int(params["TargetVersion"]) if params.get("TargetVersion") else pl["version"]
+    hist = pl.get("history", {})
+    entries = hist.get(str(want), pl["entries"]) if want != pl["version"] else pl["entries"]
+    items = "".join(f"<item><cidr>{_xml_escape(e['cidr'])}</cidr><description>{_xml_escape(e.get('description', ''))}</description></item>"
+                    for e in entries)
+    return _envelope("GetManagedPrefixListEntries", f"<entrySet>{items}</entrySet>")
+
+
+def _modify_managed_prefix_list(store, params):
+    m = _model(store)
+    pl_id = str(params.get("PrefixListId", ""))
+    pl = m["prefix_lists"].get(pl_id)
+    if pl is None:
+        raise VpcError("InvalidPrefixListID.NotFound", f"The prefix list ID '{pl_id}' does not exist.")
+    cur = params.get("CurrentVersion")
+    if cur and int(cur) != pl["version"]:
+        raise VpcError("IncorrectState", f"The prefix list '{pl_id}' is at version {pl['version']}, not {cur}.")
+    pl.setdefault("history", {})[str(pl["version"])] = [dict(e) for e in pl["entries"]]
+    if params.get("PrefixListName"):
+        pl["name"] = str(params["PrefixListName"])
+    if params.get("MaxEntries"):
+        pl["max_entries"] = int(params["MaxEntries"])
+    add = []
+    for i in sorted({k.split(".")[1] for k in params if k.startswith("AddEntry.") and len(k.split(".")) >= 3}, key=int):
+        add.append({"cidr": str(params.get(f"AddEntry.{i}.Cidr", "")), "description": str(params.get(f"AddEntry.{i}.Description", ""))})
+    rm = {str(v) for k, v in params.items() if k.startswith("RemoveEntry.") and k.endswith(".Cidr")}
+    entries = [e for e in pl["entries"] if e["cidr"] not in rm] + [e for e in add if e["cidr"]]
+    if len(entries) > pl["max_entries"]:
+        raise VpcError("PrefixListMaxEntriesExceeded", f"The prefix list '{pl_id}' would exceed its maximum of {pl['max_entries']} entries.")
+    if add or rm:
+        pl["entries"] = entries
+        pl["version"] += 1
+    return _envelope("ModifyManagedPrefixList", f"<prefixList>{_pl_xml(pl)[len('<item>'):-len('</item>')]}</prefixList>")
 
 
 def _delete_managed_prefix_list(store, params):
@@ -4349,6 +4468,8 @@ _OPS = {
     "CreateManagedPrefixList": _create_managed_prefix_list,
     "DescribeManagedPrefixLists": _describe_managed_prefix_lists,
     "DeleteManagedPrefixList": _delete_managed_prefix_list,
+    "GetManagedPrefixListEntries": _get_managed_prefix_list_entries,
+    "ModifyManagedPrefixList": _modify_managed_prefix_list,
     "CreateVpcPeeringConnection": _create_vpc_peering_connection,
     "DescribeVpcPeeringConnections": _describe_vpc_peering_connections,
     "AcceptVpcPeeringConnection": _accept_vpc_peering_connection,

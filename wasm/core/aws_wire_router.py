@@ -592,6 +592,7 @@ _QUERY_ACTION = {
     "CreateDhcpOptions": "vpc", "DescribeDhcpOptions": "vpc", "DeleteDhcpOptions": "vpc", "AssociateDhcpOptions": "vpc",
     "DescribeVpcDnsResolution": "vpc",
     "CreateManagedPrefixList": "vpc", "DescribeManagedPrefixLists": "vpc", "DeleteManagedPrefixList": "vpc",
+    "GetManagedPrefixListEntries": "vpc", "ModifyManagedPrefixList": "vpc",
     "CreateVpcPeeringConnection": "vpc", "DescribeVpcPeeringConnections": "vpc",
     "AcceptVpcPeeringConnection": "vpc", "DeleteVpcPeeringConnection": "vpc",
     "CreateRouteServer": "vpc", "DescribeRouteServers": "vpc", "DeleteRouteServer": "vpc",
