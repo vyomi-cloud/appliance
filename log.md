@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-16T06:11:40+00:00
+
+Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `spec-commit` Azure cognitiveservices: Remove Cognitive Services C# management API version pin (#48245) ([link](https://github.com/Azure/azure-rest-api-specs/commit/d3780866f6738daea6c17f37232edd63de1ff251))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-16T05:11:48+00:00
 
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,12 +3006,4 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **0 change(s), 0 actionable.**
-
-Sources that failed this run (1): maven/software.amazon.awssdk:s3: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-03T01:28:26+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
