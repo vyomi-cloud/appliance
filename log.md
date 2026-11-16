@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-16T05:11:48+00:00
+
+Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-16T04:11:37+00:00
 
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,15 +3006,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**2 change(s), 0 actionable.**
-- · `announcement` Amazon RDS for Oracle now supports M8i and R8i instances in additional AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-m8i-r8i-instances-new-regions/))
-- · `release` cli:azure: azure-cli-2.91.0 → azure-cli-2.92.0
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-03T00:28:16+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `spec-commit` Azure compute: [Compute] Clarify Auto zone placement and Any-only disk alignment documentation (#47457) ([link](https://github.com/Azure/azure-rest-api-specs/commit/05ff20f36d7d4de3a774e5c6b37e1e58a66eaadf))
