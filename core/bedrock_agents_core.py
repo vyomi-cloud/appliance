@@ -614,7 +614,7 @@ def _resolve_fm(arn_or_id):
 
 
 def _agent_view(a):
-    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups", "sessions", "memories", "snapshots")}
+    return {k: v for k, v in a.items() if k not in ("aliases", "kbs", "actionGroups", "sessions", "memories", "snapshots", "collaborators")}
 
 
 def _find_agent(st, aid):
@@ -647,9 +647,10 @@ def _create_agent(st, p):
          "agentStatus": "NOT_PREPARED", "foundationModel": fm or "", "instruction": p.get("instruction", ""), "description": p.get("description", ""),
          "idleSessionTTLInSeconds": ttl, "agentResourceRoleArn": p["agentResourceRoleArn"], "createdAt": now, "updatedAt": now,
          "aliases": {}, "kbs": {}, "actionGroups": {}, "_version": 0}
-    for f in ("guardrailConfiguration", "memoryConfiguration"):
+    for f in ("guardrailConfiguration", "memoryConfiguration", "promptOverrideConfiguration"):
         if p.get(f):
             a[f] = p[f]
+    a["agentCollaboration"] = p.get("agentCollaboration") or "DISABLED"
     st["agents"][aid] = a
     return _j(202, {"agent": _agent_view(a)})
 
@@ -682,7 +683,9 @@ def _create_alias(a, p):
         a.setdefault("snapshots", {})[ver] = {"instruction": a["instruction"], "foundationModel": a["foundationModel"],
                                               "kbs": [dict(k) for k in a["kbs"].values()],
                                               "actionGroups": json.loads(json.dumps(list(a["actionGroups"].values()))),
-                                              "guardrailConfiguration": a.get("guardrailConfiguration"), "memoryConfiguration": a.get("memoryConfiguration")}
+                                              "guardrailConfiguration": a.get("guardrailConfiguration"), "memoryConfiguration": a.get("memoryConfiguration"),
+                                              "promptOverrideConfiguration": a.get("promptOverrideConfiguration"), "agentCollaboration": a.get("agentCollaboration", "DISABLED"),
+                                              "collaborators": json.loads(json.dumps(list((a.get("collaborators") or {}).values()))), "idleSessionTTLInSeconds": a["idleSessionTTLInSeconds"]}
         rc = [{"agentVersion": ver}]
     alid = _rid()
     now = _iso()
@@ -711,11 +714,19 @@ def _safe(s):
     return re.sub(r"[^A-Za-z0-9_-]", "_", s)[:60]
 
 
-def _load_openapi(g):
+def _load_openapi(g, s3=None):
     sch = g.get("apiSchema") or {}
     txt = sch.get("payload")
     if txt is None:
-        raise _bad("apiSchema.s3 is not supported: pass the OpenAPI document inline as apiSchema.payload")
+        loc = sch.get("s3") or {}
+        if not loc.get("s3BucketName") or not loc.get("s3ObjectKey"):
+            raise _bad("apiSchema needs either payload or s3 {s3BucketName, s3ObjectKey}")
+        if s3 is None:
+            raise _bad("apiSchema.s3 cannot be read on this substrate")
+        r = _s3c().get_object(s3, loc["s3BucketName"], loc["s3ObjectKey"], {}, {})
+        if r.status != 200:
+            raise _bad(f"Unable to read the API schema s3://{loc['s3BucketName']}/{loc['s3ObjectKey']} (status {r.status}); check the bucket, key and that the object exists")
+        txt = r.body.decode("utf-8", "replace")
     try:
         doc = json.loads(txt)
     except (TypeError, ValueError):
@@ -752,13 +763,22 @@ def _jschema(spec, desc=""):
     return out
 
 
-def _group_tools(g):
+def _group_tools(g, s3=None):
     """-> list of {name, description, parameters (JSON schema), kind, group, meta, executor} for one ENABLED action group."""
     if g.get("actionGroupState", "ENABLED") != "ENABLED":
         return []
     ex = g.get("actionGroupExecutor") or {}
     out = []
     gname = g["actionGroupName"]
+    sig = g.get("parentActionGroupSignature")
+    if sig == "AMAZON.UserInput":
+        return [{"name": "AMAZON_UserInput__askuser", "description": "Ask the user a question when information needed to continue is missing; the question is returned to the user as the agent's reply.",
+                 "parameters": {"type": "object", "properties": {"question": {"type": "string", "description": "the question for the user"}}, "required": ["question"]},
+                 "kind": "userinput", "group": gname, "meta": {}, "executor": ex}]
+    if sig == "AMAZON.CodeInterpreter":
+        return [{"name": "AMAZON_CodeInterpreter__execute", "description": "Write and run Python code in a sandbox to compute, analyse data or build files; returns stdout, errors and any files written.",
+                 "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "Python source to run"}}, "required": ["code"]},
+                 "kind": "code", "group": gname, "meta": {}, "executor": ex}]
     for fn in ((g.get("functionSchema") or {}).get("functions") or []):
         props, req = {}, []
         for pn, ps in (fn.get("parameters") or {}).items():
@@ -767,9 +787,9 @@ def _group_tools(g):
                 req.append(pn)
         out.append({"name": f"{_safe(gname)}__{_safe(fn['name'])}", "description": fn.get("description") or fn["name"],
                     "parameters": {"type": "object", "properties": props, "required": req}, "kind": "function", "group": gname,
-                    "meta": {"function": fn["name"]}, "executor": ex})
+                    "meta": {"function": fn["name"], "confirm": fn.get("requireConfirmation") == "ENABLED"}, "executor": ex})
     if g.get("apiSchema"):
-        doc = _load_openapi(g)
+        doc = _load_openapi(g, s3)
         for path, item in doc["paths"].items():
             for verb, op in (item or {}).items():
                 if verb.lower() not in ("get", "post", "put", "delete", "patch") or not isinstance(op, dict):
@@ -789,7 +809,8 @@ def _group_tools(g):
                 oid = op.get("operationId") or f"{verb}_{path}"
                 out.append({"name": f"{_safe(gname)}__{_safe(oid)}", "description": op.get("description") or op.get("summary") or oid,
                             "parameters": {"type": "object", "properties": props, "required": req}, "kind": "api", "group": gname,
-                            "meta": {"apiPath": path, "httpMethod": verb.upper(), "inbody": inbody}, "executor": ex})
+                            "meta": {"apiPath": path, "httpMethod": verb.upper(), "inbody": inbody,
+                                    "confirm": str(op.get("x-requireConfirmation", "")).upper() == "ENABLED"}, "executor": ex})
     return out
 
 
@@ -853,11 +874,12 @@ def _run_lambda(lam, t, args, ctx):
     return res
 
 
-def _rc_inputs(t, args):
+def _rc_inputs(t, args, confirm=False):
     plain, body = _arg_params(t, args)
+    typ = "CONFIRM" if confirm else "RESULT"
     if t["kind"] == "function":
-        return {"functionInvocationInput": {"actionGroup": t["group"], "actionInvocationType": "RESULT", "function": t["meta"]["function"], "parameters": plain}}
-    d = {"actionGroup": t["group"], "actionInvocationType": "RESULT", "apiPath": t["meta"]["apiPath"], "httpMethod": t["meta"]["httpMethod"], "parameters": plain}
+        return {"functionInvocationInput": {"actionGroup": t["group"], "actionInvocationType": typ, "function": t["meta"]["function"], "parameters": plain}}
+    d = {"actionGroup": t["group"], "actionInvocationType": typ, "apiPath": t["meta"]["apiPath"], "httpMethod": t["meta"]["httpMethod"], "parameters": plain}
     if body:
         d["requestBody"] = {"content": {"application/json": body}}
     return {"apiInvocationInput": d}
@@ -900,6 +922,7 @@ def _summarise(transcript):
 def _memory_op(a, alias_id, method, query):
     if alias_id != "TSTALIASID" and alias_id not in a["aliases"]:
         raise _nf(f"Could not find resource: Alias {alias_id} of agent {a['agentId']}")
+    _sweep(a)
     q = query or {}
     mid = q.get("memoryId")
     if method == "GET":
@@ -922,6 +945,89 @@ def _memory_op(a, alias_id, method, query):
     return _j(202, {})
 
 
+# ── custom prompts / parser Lambdas ──
+_PROMPT_TYPES = ("PRE_PROCESSING", "ORCHESTRATION", "POST_PROCESSING", "KNOWLEDGE_BASE_RESPONSE_GENERATION", "MEMORY_SUMMARIZATION", "ROUTING_CLASSIFIER")
+_LAMBDA_ARN = re.compile(r"^arn:aws(-[a-z]+)*:lambda:[a-z0-9-]+:\d{12}:function:[A-Za-z0-9_-]+(:[A-Za-z0-9_$-]+)?$")
+
+
+def _check_prompt_override(po):
+    if po is None:
+        return
+    cfgs = po.get("promptConfigurations")
+    if not isinstance(cfgs, list) or not cfgs:
+        raise _bad("promptOverrideConfiguration.promptConfigurations must list at least one prompt configuration")
+    seen, parser = set(), False
+    for c in cfgs:
+        t = c.get("promptType")
+        if t not in _PROMPT_TYPES:
+            raise _bad(f"promptType must be one of {list(_PROMPT_TYPES)}")
+        if t in seen:
+            raise _bad(f"promptType {t} is configured twice")
+        seen.add(t)
+        if c.get("promptCreationMode") not in ("DEFAULT", "OVERRIDDEN"):
+            raise _bad(f"{t}: promptCreationMode must be DEFAULT or OVERRIDDEN")
+        if c.get("promptState") not in (None, "ENABLED", "DISABLED"):
+            raise _bad(f"{t}: promptState must be ENABLED or DISABLED")
+        if c["promptCreationMode"] == "OVERRIDDEN" and not str(c.get("basePromptTemplate") or "").strip():
+            raise _bad(f"{t}: basePromptTemplate is required when promptCreationMode is OVERRIDDEN")
+        if len(str(c.get("basePromptTemplate") or "")) > 100000:
+            raise _bad(f"{t}: basePromptTemplate must not exceed 100000 characters")
+        inf = c.get("inferenceConfiguration") or {}
+        for k, lo, hi in (("temperature", 0, 1), ("topP", 0, 1), ("topK", 0, 500), ("maximumLength", 0, 8192)):
+            if k in inf and not lo <= float(inf[k]) <= hi:
+                raise _bad(f"{t}: inferenceConfiguration.{k} must be between {lo} and {hi}")
+        if c.get("parserMode") not in (None, "DEFAULT", "OVERRIDDEN"):
+            raise _bad(f"{t}: parserMode must be DEFAULT or OVERRIDDEN")
+        parser = parser or c.get("parserMode") == "OVERRIDDEN"
+    ov = po.get("overrideLambda")
+    if ov is not None and not _LAMBDA_ARN.match(str(ov)):
+        raise _bad("promptOverrideConfiguration.overrideLambda must be a Lambda function ARN")
+    if parser and not ov:
+        raise _bad("promptOverrideConfiguration.overrideLambda is required when a prompt configuration sets parserMode OVERRIDDEN")
+    if ov and not parser:
+        raise _bad("overrideLambda was given but no prompt configuration sets parserMode OVERRIDDEN")
+
+
+def _pcfg(snap, ptype):
+    """-> the prompt configuration of `ptype` (or None)."""
+    for c in (snap.get("promptOverrideConfiguration") or {}).get("promptConfigurations") or []:
+        if c["promptType"] == ptype:
+            return c
+    return None
+
+
+def _render(tpl, vals):
+    return re.sub(r"\$([a-zA-Z_]+)\$", lambda m: str(vals.get(m.group(1), m.group(0))), tpl)
+
+
+def _parser_lambda(lam, snap, ptype, ctx, raw):
+    """Invoke the parser Lambda (overrideLambda) with the real OUTPUT_PARSER event -> the response document, or None."""
+    c = _pcfg(snap, ptype)
+    if not c or c.get("parserMode") != "OVERRIDDEN":
+        return None
+    arn = snap["promptOverrideConfiguration"]["overrideLambda"]
+    ev = {"messageVersion": "1.0", "agent": {"name": ctx["agent"]["agentName"], "id": ctx["agent"]["agentId"], "alias": ctx["alias"], "version": ctx["version"]},
+          "invokeModelRawResponse": raw, "promptType": ptype, "overrideType": "OUTPUT_PARSER"}
+    key = json.dumps(["parser", ctx["sid"], ctx["req"], ptype, raw], sort_keys=True, default=str)
+    if key in _REPLAY:
+        return _REPLAY[key]
+    if lam is None:
+        raise _bad("The parser Lambda cannot be invoked on this substrate")
+    try:
+        from core import lambda_core
+    except ImportError:
+        import lambda_core  # type: ignore
+    r = lambda_core._invoke(lam, _lambda_name(arn), json.dumps(ev).encode())
+    if r.status >= 400 or "x-amz-function-error" in {str(k).lower() for k in (r.headers or {})}:
+        raise _Err("DependencyFailedException", f"The parser Lambda for {ptype} failed: {(r.body or b'')[:300].decode('utf-8', 'replace')}", 424)
+    try:
+        doc = json.loads((r.body or b"{}").decode())
+    except ValueError:
+        raise _Err("DependencyFailedException", f"The parser Lambda for {ptype} did not return JSON", 424)
+    _REPLAY[key] = doc
+    return doc
+
+
 # ── guardrail / memory config validation (CreateAgent / UpdateAgent) ──
 def _check_agent_cfg(p):
     g = p.get("guardrailConfiguration")
@@ -933,6 +1039,10 @@ def _check_agent_cfg(p):
             gr.resolve_policy(g["guardrailIdentifier"], str(g["guardrailVersion"]))
         except gr.GErr as e:
             raise _Err(e.code, e.msg, e.status)
+    ac = p.get("agentCollaboration")
+    if ac is not None and ac not in ("DISABLED", "SUPERVISOR", "SUPERVISOR_ROUTER"):
+        raise _bad("1 validation error detected: Value at 'agentCollaboration' failed to satisfy constraint: Member must satisfy enum value set: [DISABLED, SUPERVISOR, SUPERVISOR_ROUTER]")
+    _check_prompt_override(p.get("promptOverrideConfiguration"))
     m = p.get("memoryConfiguration")
     if m is not None:
         types = m.get("enabledMemoryTypes")
@@ -942,9 +1052,19 @@ def _check_agent_cfg(p):
             raise _bad("memoryConfiguration.storageDays must be between 0 and 365")
 
 
-def _check_action_group(p, update=False):
+_SIGNATURES = ("AMAZON.UserInput", "AMAZON.CodeInterpreter")
+
+
+def _check_action_group(p, update=False, s3=None):
     if not update and not p.get("actionGroupName"):
         raise _bad("actionGroupName is required")
+    sig = p.get("parentActionGroupSignature")
+    if sig is not None:
+        if sig not in _SIGNATURES:
+            raise _bad(f"parentActionGroupSignature must be one of {list(_SIGNATURES)} (AMAZON.KnowledgeBaseLookup is not an action group in Vyomi: associate a knowledge base instead)")
+        if p.get("actionGroupExecutor") or p.get("apiSchema") or p.get("functionSchema"):
+            raise _bad("A built-in action group (parentActionGroupSignature) takes no executor, apiSchema or functionSchema")
+        return
     if p.get("apiSchema") and p.get("functionSchema"):
         raise _bad("Provide either apiSchema or functionSchema, not both")
     ex = p.get("actionGroupExecutor")
@@ -955,20 +1075,22 @@ def _check_action_group(p, update=False):
         elif not re.match(r"^arn:aws(-[a-z]+)*:lambda:[a-z0-9-]+:\d{12}:function:[A-Za-z0-9_-]+(:[A-Za-z0-9_$-]+)?$", str(ex.get("lambda") or "")):
             raise _bad("actionGroupExecutor.lambda must be a Lambda function ARN (or use customControl RETURN_CONTROL)")
     if p.get("apiSchema"):
-        _load_openapi(p)
+        _load_openapi(p, s3)
     fs = (p.get("functionSchema") or {}).get("functions")
     if p.get("functionSchema") is not None and (not isinstance(fs, list) or not fs):
         raise _bad("functionSchema.functions must list at least one function")
     for fn in fs or []:
         if not fn.get("name"):
             raise _bad("each function needs a name")
+        if fn.get("requireConfirmation") not in (None, "ENABLED", "DISABLED"):
+            raise _bad(f"function {fn['name']}: requireConfirmation must be ENABLED or DISABLED")
         for pn, ps in (fn.get("parameters") or {}).items():
             if ps.get("type") not in _TYPES:
                 raise _bad(f"parameter {pn} of {fn['name']}: type must be one of {sorted(_TYPES)}")
 
 
-def _action_group(a, p, gid=None):
-    _check_action_group(p)
+def _action_group(a, p, gid=None, s3=None):
+    _check_action_group(p, s3=s3)
     now = _iso()
     g = {"agentId": a["agentId"], "agentVersion": "DRAFT", "actionGroupId": gid or _rid(), "actionGroupName": p["actionGroupName"], "description": p.get("description", ""),
          "actionGroupState": p.get("actionGroupState", "ENABLED"), "actionGroupExecutor": p.get("actionGroupExecutor"),
@@ -996,11 +1118,14 @@ def _unavailable(e):
             "body": json.dumps({"message": f"{e} (the local model has not been started)"}).encode()}
 
 
-def _invoke_agent(st, s3, aid, alias_id, sid, p, lam=None):
+def _invoke_agent(st, s3, aid, alias_id, sid, p, lam=None, inline=None):
     try:
-        out = _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam)
+        out = _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam, inline=inline)
     except llm.NeedAsync:
         raise                                         # the request will be replayed: keep the memoised Lambda results
+    except llm.LlmUnavailable as e:                   # router / custom-prompt / summary model calls outside the orchestration loop
+        _REPLAY.clear()
+        return _unavailable(e)
     except BaseException:
         _REPLAY.clear()
         raise
@@ -1008,58 +1133,264 @@ def _invoke_agent(st, s3, aid, alias_id, sid, p, lam=None):
     return out
 
 
-def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
-    a = _find_agent(st, aid)
+# ── collaborators, sessions, code interpreter ──
+_MAX_DEPTH = 3
+_ALIAS_ARN = re.compile(r"^arn:aws(-[a-z]+)*:bedrock:[a-z0-9-]+:\d{12}:agent-alias/([0-9A-Za-z]{10})/([0-9A-Za-z]{10})$")
+
+
+def _collab_view(a, c):
+    return {"agentId": a["agentId"], "agentVersion": "DRAFT", "agentDescriptor": c["agentDescriptor"], "collaboratorId": c["collaboratorId"],
+            "collaboratorName": c["collaboratorName"], "collaborationInstruction": c["collaborationInstruction"],
+            "relayConversationHistory": c.get("relayConversationHistory", "DISABLED"), "createdAt": c["createdAt"], "lastUpdatedAt": c["lastUpdatedAt"]}
+
+
+def _reaches(st, aid, target, seen=None):
+    seen = seen or set()
+    if aid in seen:
+        return False
+    seen.add(aid)
+    a = st["agents"].get(aid)
+    for c in ((a or {}).get("collaborators") or {}).values():
+        m = _ALIAS_ARN.match(c["agentDescriptor"]["aliasArn"])
+        if m and (m.group(2) == target or _reaches(st, m.group(2), target, seen)):
+            return True
+    return False
+
+
+def _collab_check(st, a, p, cur=None):
+    if a.get("agentCollaboration", "DISABLED") not in ("SUPERVISOR", "SUPERVISOR_ROUTER"):
+        raise _bad("The agent must have agentCollaboration set to SUPERVISOR or SUPERVISOR_ROUTER before collaborators can be associated")
+    arn = (p.get("agentDescriptor") or {}).get("aliasArn")
+    m = _ALIAS_ARN.match(str(arn or ""))
+    if not m:
+        raise _bad("agentDescriptor.aliasArn must be an agent alias ARN (arn:aws:bedrock:<region>:<account>:agent-alias/<agentId>/<aliasId>)")
+    other = st["agents"].get(m.group(2))
+    if not other or (m.group(3) != "TSTALIASID" and m.group(3) not in other["aliases"]):
+        raise _nf(f"Could not find resource: agent alias {m.group(3)} of agent {m.group(2)}")
+    if other["agentId"] == a["agentId"] or _reaches(st, other["agentId"], a["agentId"]):
+        raise _bad("A collaborator cannot be the supervisor itself or an agent that (transitively) collaborates with it")
+    name = p.get("collaboratorName")
+    if not name or not re.match(r"^([0-9a-zA-Z][_-]?){1,100}$", name):
+        raise _bad("1 validation error detected: Value at 'collaboratorName' failed to satisfy constraint: Member must satisfy regular expression pattern: ^([0-9a-zA-Z][_-]?){1,100}$")
+    if not p.get("collaborationInstruction"):
+        raise _bad("collaborationInstruction is required")
+    if p.get("relayConversationHistory") not in (None, "TO_COLLABORATOR", "DISABLED"):
+        raise _bad("relayConversationHistory must be TO_COLLABORATOR or DISABLED")
+    if any(c["collaboratorName"] == name and c is not cur for c in (a.get("collaborators") or {}).values()):
+        raise _conflict(f"A collaborator named {name} is already associated with this agent")
+
+
+def _collaborators_op(st, a, method, segs, p):
+    cs = a.setdefault("collaborators", {})
+    if len(segs) == 5:
+        if method == "PUT":
+            _collab_check(st, a, p)
+            now = _iso()
+            c = {"collaboratorId": _rid(), "agentDescriptor": {"aliasArn": p["agentDescriptor"]["aliasArn"]}, "collaboratorName": p["collaboratorName"],
+                 "collaborationInstruction": p["collaborationInstruction"], "relayConversationHistory": p.get("relayConversationHistory", "DISABLED"),
+                 "createdAt": now, "lastUpdatedAt": now}
+            cs[c["collaboratorId"]] = c
+            a["agentStatus"] = "NOT_PREPARED"
+            return _j(200, {"agentCollaborator": _collab_view(a, c)})
+        if method == "POST":
+            return _j(200, {"agentCollaboratorSummaries": [_collab_view(a, c) for c in cs.values()]})
+        return None
+    c = cs.get(segs[5])
+    if not c:
+        raise _nf(f"Could not find resource: collaborator {segs[5]}")
+    if method == "GET":
+        return _j(200, {"agentCollaborator": _collab_view(a, c)})
+    if method == "PUT":
+        _collab_check(st, a, p, cur=c)
+        c.update(agentDescriptor={"aliasArn": p["agentDescriptor"]["aliasArn"]}, collaboratorName=p["collaboratorName"],
+                 collaborationInstruction=p["collaborationInstruction"], relayConversationHistory=p.get("relayConversationHistory", c.get("relayConversationHistory", "DISABLED")), lastUpdatedAt=_iso())
+        a["agentStatus"] = "NOT_PREPARED"
+        return _j(200, {"agentCollaborator": _collab_view(a, c)})
+    if method == "DELETE":
+        del cs[segs[5]]
+        a["agentStatus"] = "NOT_PREPARED"
+        return _j(204, None)
+    return None
+
+
+def _draft_snap(a):
+    return {"instruction": a["instruction"], "foundationModel": a["foundationModel"], "kbs": list(a["kbs"].values()),
+            "actionGroups": [dict(g) for g in a["actionGroups"].values()], "guardrailConfiguration": a.get("guardrailConfiguration"),
+            "memoryConfiguration": a.get("memoryConfiguration"), "promptOverrideConfiguration": a.get("promptOverrideConfiguration"),
+            "agentCollaboration": a.get("agentCollaboration", "DISABLED"), "collaborators": list((a.get("collaborators") or {}).values()),
+            "idleSessionTTLInSeconds": a["idleSessionTTLInSeconds"]}
+
+
+def _snap_for(a, alias_id):
+    if alias_id == "TSTALIASID":
+        return _draft_snap(a), "DRAFT"
+    al = a["aliases"].get(alias_id)
+    if not al:
+        return None, None
+    ver = str(al["routingConfiguration"][0]["agentVersion"])
+    return (a.get("snapshots") or {}).get(ver), ver
+
+
+def _summarise_with(snap, transcript):
+    c = _pcfg(snap, "MEMORY_SUMMARIZATION")
+    if c and c.get("promptState") == "DISABLED":
+        return None
+    if c and c.get("promptCreationMode") == "OVERRIDDEN":
+        inf = c.get("inferenceConfiguration") or {}
+        prompt = _render(c["basePromptTemplate"], {"conversation": transcript, "past_conversation_summary": "", "question": transcript})
+        r = llm.chat([{"role": "user", "content": prompt}], system="You write short factual conversation summaries.", max_tokens=int(inf.get("maximumLength") or 200),
+                     temperature=float(inf.get("temperature", 0.2)))
+        return r["text"].strip()
+    return _summarise(transcript)
+
+
+def _store_summary(a, snap, alias_id, sid, mid, sess, days):
+    tx = "\n".join(f"{m['role']}: {m['content']}" for m in sess["history"])
+    txt = _summarise_with(snap, tx)
+    if txt is None:
+        return
+    ent = {"sessionId": sid, "memoryId": mid, "sessionStartTime": _iso(sess.get("started", time.time())), "sessionExpiryTime": _iso(time.time() + days * 86400), "summaryText": txt}
+    lst = _memories(a, alias_id, mid)
+    lst[:] = [m for m in lst if m["sessionSummary"]["sessionId"] != sid] + [{"sessionSummary": ent, "_expires": time.time() + days * 86400}]
+    keep = int(((snap.get("memoryConfiguration") or {}).get("sessionSummaryConfiguration") or {}).get("maxRecentSessions", 20))
+    lst[:] = sorted(lst, key=lambda m: m["sessionSummary"]["sessionStartTime"])[-keep:]
+
+
+def _sweep(a):
+    """Idle-timeout expiry: a session untouched for idleSessionTTLInSeconds ends; with SESSION_SUMMARY memory its transcript is summarised first
+    (lazily, on the next request that touches the agent, since there is no background clock inside Nano's request/response model)."""
+    now = time.time()
+    for sid, sess in list((a.get("sessions") or {}).items()):
+        if not isinstance(sess, dict):
+            continue
+        ttl = int(sess.get("ttl") or a.get("idleSessionTTLInSeconds") or 600)
+        if now - float(sess.get("last", now)) <= ttl:
+            continue
+        mid, alias_id = sess.get("mid"), sess.get("alias")
+        if mid and alias_id and sess.get("history"):
+            snap, _v = _snap_for(a, alias_id)
+            mc = _mem_cfg(snap or {})
+            if mc:
+                _store_summary(a, snap, alias_id, sid, mid, sess, int(mc.get("storageDays", 30)))
+        a["sessions"].pop(sid, None)
+
+
+def _ci_files_in(sstate, s3, sess):
+    """sessionState.files with useCase CODE_INTERPRETER -> sess['ci_files'] {name: base64}."""
+    for f in sstate.get("files") or []:
+        if f.get("useCase", "CODE_INTERPRETER") != "CODE_INTERPRETER":
+            raise _bad(f"sessionState.files[{f.get('name')}]: useCase CHAT (multimodal chat attachments) is not supported; use CODE_INTERPRETER")
+        src = f.get("source") or {}
+        if src.get("sourceType") == "S3":
+            uri = (src.get("s3Location") or {}).get("uri", "")
+            m = re.match(r"^s3://([^/]+)/(.+)$", uri)
+            if not m:
+                raise _bad(f"sessionState.files[{f.get('name')}]: s3Location.uri must be s3://bucket/key")
+            r = _s3c().get_object(s3, m.group(1), m.group(2), {}, {})
+            if r.status != 200:
+                raise _bad(f"Unable to read {uri}")
+            raw = r.body
+        else:
+            d = (src.get("byteContent") or {}).get("data")
+            if d is None:
+                raise _bad(f"sessionState.files[{f.get('name')}]: byteContent.data is required")
+            raw = base64.b64decode(d) if isinstance(d, str) else bytes(d)
+        if len(raw) > (1 << 20):
+            raise _bad(f"sessionState.files[{f.get('name')}] exceeds the 1 MiB code interpreter file limit")
+        sess.setdefault("ci_files", {})[os.path.basename(f["name"])] = base64.b64encode(raw).decode()
+
+
+def _run_code(sess, code, ctx):
+    key = json.dumps(["code", ctx["sid"], ctx["req"], code], sort_keys=True)
+    if key in _REPLAY:
+        return _REPLAY[key]
+    try:
+        from core import code_sandbox_core as cs
+    except ImportError:
+        import code_sandbox_core as cs  # type: ignore
+    files = {n: base64.b64decode(v) for n, v in (sess.get("ci_files") or {}).items()}
+    res = cs.run(code, files=files, timeout=10.0)
+    for n, v in res["files"].items():
+        sess.setdefault("ci_files", {})[n] = base64.b64encode(v).decode()
+    _REPLAY[key] = res
+    return res
+
+
+def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam, inline=None, sink=None, chain=None):
+    if inline is not None:
+        a, snap, version = inline["agent"], inline["snap"], "DRAFT"
+    else:
+        a = _find_agent(st, aid)
     sstate = p.get("sessionState") or {}
     results = sstate.get("returnControlInvocationResults")
     text = (p.get("inputText") or "").strip()
     if not text and not results:
         raise _bad("inputText is required")
-    if alias_id == "TSTALIASID":     # the built-in test alias runs the DRAFT version
-        snap = {"instruction": a["instruction"], "foundationModel": a["foundationModel"], "kbs": list(a["kbs"].values()),
-                "actionGroups": [dict(g) for g in a["actionGroups"].values()], "guardrailConfiguration": a.get("guardrailConfiguration"),
-                "memoryConfiguration": a.get("memoryConfiguration")}
-        version = "DRAFT"
-        if a["agentStatus"] != "PREPARED":
-            raise _conflict("The agent is not in PREPARED state; call PrepareAgent first")
-    else:
-        al = a["aliases"].get(alias_id)
-        if not al:
-            raise _nf(f"Could not find resource: Alias {alias_id} of agent {aid}")
-        version = str(al["routingConfiguration"][0]["agentVersion"])
-        snap = (a.get("snapshots") or {}).get(version)
-        if not snap:
-            raise _nf("Agent version not found")
+    if inline is None:
+        if alias_id == "TSTALIASID":     # the built-in test alias runs the DRAFT version
+            snap, version = _draft_snap(a), "DRAFT"
+            if a["agentStatus"] != "PREPARED":
+                raise _conflict("The agent is not in PREPARED state; call PrepareAgent first")
+        else:
+            al = a["aliases"].get(alias_id)
+            if not al:
+                raise _nf(f"Could not find resource: Alias {alias_id} of agent {aid}")
+            version = str(al["routingConfiguration"][0]["agentVersion"])
+            snap = (a.get("snapshots") or {}).get(version)
+            if not snap:
+                raise _nf("Agent version not found")
     mid = p.get("memoryId")
     if mid is not None and not 1 <= len(mid) <= 100:
         raise _bad("memoryId must be between 1 and 100 characters")
+    if chain is None:
+        _sweep(a)
     sess = a.setdefault("sessions", {}).get(sid)
     if isinstance(sess, list):
         sess = {"history": sess}
     sess = json.loads(json.dumps(sess)) if sess else {}          # work on a copy: committed only when the request completes (replay-safe)
     sess.setdefault("history", [])
     sess.setdefault("started", time.time())
+    sess["alias"], sess["version"], sess["ttl"] = alias_id, version, int(snap.get("idleSessionTTLInSeconds") or a.get("idleSessionTTLInSeconds") or 600)
+    if mid:
+        sess["mid"] = mid
     if sstate.get("sessionAttributes"):
         sess["attrs"] = dict(sstate["sessionAttributes"])
+    _ci_files_in(sstate, s3, sess)
     ctx = {"agent": a, "alias": alias_id, "version": version, "sid": sid, "sess": sess, "text": text, "prompt_attrs": dict(sstate.get("promptSessionAttributes") or {}),
            "req": hashlib.md5(json.dumps(p, sort_keys=True, default=str).encode()).hexdigest()[:12]}
     trace_on = bool(p.get("enableTrace"))
     frames: list = []
+    tframes: list = []
     base = {"agentId": aid, "agentAliasId": alias_id, "agentVersion": version, "sessionId": sid}
+    me_arn = f"arn:aws:bedrock:{_REGION}:{_ACCT}:agent-alias/{aid}/{alias_id}"
+    if chain is not None:
+        base["callerChain"] = [{"agentAliasArn": x} for x in chain + [me_arn]]
+        base["collaboratorName"] = p.get("_collaboratorName", "")
 
     def tr(part, body):
         if trace_on:
-            frames.append(_evt("trace", dict(base, eventTime=_iso(), trace={part: body})))
+            f = _evt("trace", dict(base, eventTime=_iso(), trace={part: body}))
+            frames.append(f)
+            tframes.append(f)
 
     tools = []
     for g in snap.get("actionGroups") or []:
-        tools += _group_tools(g)
+        tools += _group_tools(g, s3)
+    collabs = list(snap.get("collaborators") or []) if snap.get("agentCollaboration") in ("SUPERVISOR", "SUPERVISOR_ROUTER") else []
+    for c in collabs:
+        tools.append({"name": "agentcollaborator__" + _safe(c["collaboratorName"]), "description": c["collaborationInstruction"],
+                      "parameters": {"type": "object", "properties": {"input": {"type": "string", "description": "the request to hand to the collaborator agent"}}, "required": ["input"]},
+                      "kind": "collab", "group": c["collaboratorName"], "meta": {"collab": c}, "executor": {}})
     reg = {t["name"]: t for t in tools}
     gcfg = snap.get("guardrailConfiguration")
     gr = _gr() if gcfg else None
     fm = snap["foundationModel"]
-    infer = {"maximumLength": 400, "stopSequences": [], "temperature": 0.4, "topK": 250, "topP": 1.0}
+    ocfg = _pcfg(snap, "ORCHESTRATION")
+    oinf = (ocfg or {}).get("inferenceConfiguration") or {}
+    infer = {"maximumLength": int(oinf.get("maximumLength", 400)), "stopSequences": list(oinf.get("stopSequences") or []), "temperature": float(oinf.get("temperature", 0.4)),
+             "topK": int(oinf.get("topK", 250)), "topP": float(oinf.get("topP", 1.0))}
     blocked_in = [False]
+    out_files: list = []
 
     def guard(txt, source):
         try:
@@ -1076,41 +1407,89 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
             hdr["x-amz-bedrock-agent-memory-id"] = mid
         return {"status": 200, "headers": hdr, "body": b"".join(frames)}
 
-    def finish(final, refs=None):
+    def infer_kw(cfg, default_tokens=400):
+        i = (cfg or {}).get("inferenceConfiguration") or {}
+        return {"max_tokens": int(i.get("maximumLength") or default_tokens), "temperature": float(i.get("temperature", 0.4)), "stop": list(i.get("stopSequences") or []) or None}
+
+    def finish(final, refs=None, skip_post=False):
         refs = refs or []
-        tr("postProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "POST_PROCESSING", "foundationModel": fm,
-                                                           "text": "Vyomi post-processing: deterministic finalisation of the orchestration answer (no model call)."}})
-        tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"text": final}, "rawResponse": {"content": final}}})
+        pc = _pcfg(snap, "POST_PROCESSING")
+        if pc and pc.get("promptState") == "ENABLED" and not skip_post:
+            tr("postProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "POST_PROCESSING", "foundationModel": fm,
+                                                               "text": json.dumps({"prompt": pc.get("basePromptTemplate")})}})
+            if pc.get("promptCreationMode") == "OVERRIDDEN":
+                prompt = _render(pc["basePromptTemplate"], {"latest_response": final, "responses": final, "question": ctx["text"], "bot_response": final})
+                rr = llm.chat([{"role": "user", "content": prompt}], system=snap["instruction"], **infer_kw(pc))
+                raw = rr["text"]
+            else:
+                raw = final
+            tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "rawResponse": {"content": raw}}})
+            doc = _parser_lambda(lam, snap, "POST_PROCESSING", ctx, raw)
+            pr = (doc or {}).get("postProcessingParsedResponse") or {}
+            final = pr.get("responseText", raw if pc.get("promptCreationMode") == "OVERRIDDEN" else final)
+            tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"text": final}}})
+        else:
+            tr("postProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "POST_PROCESSING", "foundationModel": fm,
+                                                               "text": "Vyomi post-processing: deterministic finalisation of the orchestration answer (no model call)."}})
+            tr("postProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"text": final}, "rawResponse": {"content": final}}})
         if gcfg and final and not blocked_in[0]:
             r = guard(final, "OUTPUT")
             final = r["text"] if r["action"] != "NONE" else final
+        if sink is not None:
+            sink["text"], sink["frames"] = final, tframes
         part = {"bytes": base64.b64encode(final.encode()).decode()}
         if refs:
             part["attribution"] = {"citations": [{"generatedResponsePart": {"textResponsePart": {"text": final, "span": {"start": 0, "end": len(final)}}},
                                                   "retrievedReferences": [{k: v for k, v in x.items() if k != "score"} for x in refs[:3]]}]}
         frames.append(_evt("chunk", part))
+        if out_files and sink is None:
+            import mimetypes
+            frames.append(_evt("files", {"files": [{"name": n, "type": mimetypes.guess_type(n)[0] or "application/octet-stream", "bytes": b64} for n, b64 in out_files]}))
         sess["history"] += [{"role": "user", "content": ctx["text"]}, {"role": "assistant", "content": final}]
         del sess["history"][:-20]
         sess["pending"] = None
+        sess["last"] = time.time()
         mc = _mem_cfg(snap)
         if p.get("endSession"):
             if mid and mc:
-                days = int(mc.get("storageDays", 30))
-                tx = "\n".join(f"{m['role']}: {m['content']}" for m in sess["history"])
-                ent = {"sessionId": sid, "memoryId": mid, "sessionStartTime": _iso(sess["started"]), "sessionExpiryTime": _iso(time.time() + days * 86400),
-                       "summaryText": _summarise(tx)}
-                lst = _memories(a, alias_id, mid)
-                lst[:] = [m for m in lst if m["sessionSummary"]["sessionId"] != sid] + [{"sessionSummary": ent, "_expires": time.time() + days * 86400}]
-                keep = int((mc.get("sessionSummaryConfiguration") or {}).get("maxRecentSessions", 20))
-                lst[:] = sorted(lst, key=lambda m: m["sessionSummary"]["sessionStartTime"])[-keep:]
+                _store_summary(a, snap, alias_id, sid, mid, sess, int(mc.get("storageDays", 30)))
             a["sessions"].pop(sid, None)
         else:
             a["sessions"][sid] = sess
         return commit()
 
+    def run_collab(cfg, inp, source):
+        """Hand `inp` to the collaborator agent (its own session, deterministic per supervisor session) -> text. Collaborator traces are relayed."""
+        m = _ALIAS_ARN.match(cfg["agentDescriptor"]["aliasArn"])
+        tid = _tid()
+        tr(source, {"invocationInput": {"traceId": tid, "invocationType": "AGENT_COLLABORATOR", "agentCollaboratorInvocationInput": {
+            "agentCollaboratorName": cfg["collaboratorName"], "agentCollaboratorAliasArn": cfg["agentDescriptor"]["aliasArn"], "input": {"type": "TEXT", "text": inp}}}})
+        key = json.dumps(["collab", sid, ctx["req"], cfg["collaboratorName"], inp], sort_keys=True)
+        if key in _REPLAY:
+            out, sub_frames = _REPLAY[key]
+        elif len(chain or []) + 1 >= _MAX_DEPTH:
+            out, sub_frames = "Collaboration depth limit exceeded: this collaborator cannot delegate further.", []
+        else:
+            body = {"inputText": inp, "enableTrace": trace_on, "_collaboratorName": cfg["collaboratorName"]}
+            if cfg.get("relayConversationHistory") == "TO_COLLABORATOR" and sess["history"]:
+                body["inputText"] = "Conversation so far:\n" + "\n".join(f"{x['role']}: {x['content']}" for x in sess["history"][-10:]) + "\n\nCurrent request: " + inp
+            sub = {}
+            try:
+                _invoke_agent_run(st, s3, m.group(2), m.group(3), f"{sid}--{cfg['collaboratorName']}", body, lam, sink=sub, chain=(chain or []) + [me_arn])
+                out, sub_frames = sub.get("text") or "The collaborator returned no answer.", sub.get("frames") or []
+            except _Err as e:
+                out, sub_frames = f"The collaborator {cfg['collaboratorName']} failed: {e.msg}", []
+            _REPLAY[key] = (out, sub_frames)
+        frames.extend(sub_frames)
+        tframes.extend(sub_frames)
+        tr(source, {"observation": {"traceId": tid, "type": "AGENT_COLLABORATOR", "agentCollaboratorInvocationOutput": {
+            "agentCollaboratorName": cfg["collaboratorName"], "agentCollaboratorAliasArn": cfg["agentDescriptor"]["aliasArn"],
+            "output": {"type": "TEXT", "text": out}}}})
+        return out
+
     refs, kbctx = [], ""
     pend = sess.get("pending")
-    if results:                                      # ── continuation of a RETURN_CONTROL turn
+    if results:                                      # ── continuation of a RETURN_CONTROL / requireConfirmation turn
         if not pend or pend.get("invocationId") != sstate.get("invocationId"):
             raise _bad("sessionState.invocationId does not match a pending RETURN_CONTROL invocation of this session")
         msgs = list(pend["msgs"])
@@ -1120,9 +1499,24 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
             res = next((r for r in results if t and _rc_match(t, r)), None)
             if res is None:
                 raise _bad(f"returnControlInvocationResults is missing a result for {call['name']}")
-            out = ("ERROR: " if (res.get("functionResult") or res.get("apiResult") or {}).get("responseState") == "FAILURE" else "") + _rc_text(res)
+            body_ = res.get("functionResult") or res.get("apiResult") or {}
+            if call.get("confirm"):
+                cs_ = body_.get("confirmationState")
+                if cs_ not in ("CONFIRM", "DENY"):
+                    raise _bad(f"{call['name']} requires confirmation: send confirmationState CONFIRM or DENY in the result")
+                if cs_ == "DENY":
+                    out = "The user DENIED this action, so it was NOT performed. Do not retry it; tell the user it was not carried out." + (" Reason: " + _rc_text(res) if _rc_text(res) else "")
+                else:
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": "(user confirmed)"}}})
+                    o2, sattrs, is_err = _run_lambda(lam, t, call["arguments"], ctx)
+                    if sattrs:
+                        sess["attrs"] = sattrs
+                    out = ("ERROR: " if is_err else "") + o2
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": out}}})
+            else:
+                out = ("ERROR: " if body_.get("responseState") == "FAILURE" else "") + _rc_text(res)
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": _rc_text(res)}}})
             msgs.append({"role": "tool", "tool_call_id": call["id"], "name": call["name"], "content": out})
-            tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "actionGroupInvocationOutput": {"text": _rc_text(res)}}})
         msgs += pend.get("done", [])
         refs = pend.get("refs") or []
         system = pend["system"]
@@ -1133,13 +1527,33 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
             r = guard(text, "INPUT")
             if r["blocked"]:
                 blocked_in[0] = True
-                return finish(r["text"])
+                return finish(r["text"], skip_post=True)
             text = ctx["text"] = r["text"] if r["action"] != "NONE" else text
         nkb = sum(1 for k in snap["kbs"] if k.get("knowledgeBaseState", "ENABLED") == "ENABLED")
-        tr("preProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "PRE_PROCESSING", "foundationModel": fm, "inferenceConfiguration": infer,
-                                                           "text": "Vyomi pre-processing: input checks only (no model call)."}})
-        tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"isValid": True, "rationale": (
-            f"Input accepted ({len(text)} chars); guardrail {'applied' if gcfg else 'not configured'}; {len(tools)} action tool(s) and {nkb} knowledge base(s) available.")}}})
+        pre = _pcfg(snap, "PRE_PROCESSING")
+        if pre and pre.get("promptState") == "DISABLED":
+            tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"isValid": True, "rationale": "Pre-processing is disabled (promptState DISABLED)."}}})
+        elif pre and pre.get("promptCreationMode") == "OVERRIDDEN":
+            tid0 = _tid()
+            prompt = _render(pre["basePromptTemplate"], {"question": text, "conversation_history": "\n".join(f"{x['role']}: {x['content']}" for x in sess["history"][-6:])})
+            tr("preProcessingTrace", {"modelInvocationInput": {"traceId": tid0, "type": "PRE_PROCESSING", "foundationModel": fm, "inferenceConfiguration": infer, "text": prompt}})
+            rr = llm.chat([{"role": "user", "content": prompt}], system=snap["instruction"], **infer_kw(pre, 200))
+            raw = rr["text"]
+            doc = _parser_lambda(lam, snap, "PRE_PROCESSING", ctx, raw)
+            if doc is not None:
+                pr = doc.get("preProcessingParsedResponse") or {}
+                valid, why = bool(pr.get("isValid", True)), pr.get("rationale", "")
+            else:
+                cat = re.search(r"<category>\s*([A-E])\s*</category>", raw)
+                valid, why = (cat.group(1) not in ("A", "B") if cat else True), (f"category {cat.group(1)}" if cat else "no category tag: treated as valid")
+            tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": tid0, "rawResponse": {"content": raw}, "parsedResponse": {"isValid": valid, "rationale": why}}})
+            if not valid:
+                return finish("Sorry, I am unable to assist you with this request.", skip_post=True)
+        else:
+            tr("preProcessingTrace", {"modelInvocationInput": {"traceId": _tid(), "type": "PRE_PROCESSING", "foundationModel": fm, "inferenceConfiguration": infer,
+                                                               "text": "Vyomi pre-processing: input checks only (no model call)."}})
+            tr("preProcessingTrace", {"modelInvocationOutput": {"traceId": _tid(), "parsedResponse": {"isValid": True, "rationale": (
+                f"Input accepted ({len(text)} chars); guardrail {'applied' if gcfg else 'not configured'}; {len(tools)} action tool(s) and {nkb} knowledge base(s) available.")}}})
         for k in snap["kbs"]:
             if k.get("knowledgeBaseState", "ENABLED") != "ENABLED" or k["knowledgeBaseId"] not in st["kbs"]:
                 continue
@@ -1150,28 +1564,94 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
                 {kk: vv for kk, vv in r2.items() if kk != "score"} for r2 in res]}}})
             refs += res
             kbctx += "\n".join(r2["content"]["text"] for r2 in res) + "\n"
-        system = snap["instruction"]
-        if kbctx.strip():
-            system += "\n\nUse these knowledge base passages when relevant:\n" + kbctx
+        mem_txt = ""
         if mid and _mem_cfg(snap):
             ms = sorted(_live_memories(a, alias_id, mid), key=lambda m: m["sessionSummary"]["sessionStartTime"])
             if ms:
-                system += "\n\nSummaries of this user's previous sessions:\n" + "\n".join("- " + m["sessionSummary"]["summaryText"] for m in ms)
-        if ctx["prompt_attrs"]:
-            system += "\n\nPrompt session attributes: " + json.dumps(ctx["prompt_attrs"])
+                mem_txt = "\n".join("- " + m["sessionSummary"]["summaryText"] for m in ms)
+        collab_txt = "\n".join(f"- {c['collaboratorName']}: {c['collaborationInstruction']}" for c in collabs)
+        if ocfg and ocfg.get("promptCreationMode") == "OVERRIDDEN":
+            system = _render(ocfg["basePromptTemplate"], {
+                "instruction": snap["instruction"], "knowledge_base_guideline": ("Use these knowledge base passages when relevant:\n" + kbctx) if kbctx.strip() else "",
+                "knowledge_base_additional_guideline": "", "memory_guideline": "Use the summaries of previous sessions when relevant." if mem_txt else "", "memory_content": mem_txt,
+                "prompt_session_attributes": json.dumps(ctx["prompt_attrs"]) if ctx["prompt_attrs"] else "", "agent_collaborators": collab_txt, "question": text,
+                "conversation_history": "\n".join(f"{x['role']}: {x['content']}" for x in sess["history"][-10:]),
+                "tools": json.dumps([{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools]),
+                "functions": json.dumps([{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools])})
+        else:
+            system = snap["instruction"]
+            if kbctx.strip():
+                system += "\n\nUse these knowledge base passages when relevant:\n" + kbctx
+            if mem_txt:
+                system += "\n\nSummaries of this user's previous sessions:\n" + mem_txt
+            if ctx["prompt_attrs"]:
+                system += "\n\nPrompt session attributes: " + json.dumps(ctx["prompt_attrs"])
+            if collab_txt:
+                system += "\n\nYou are a supervisor. Delegate to these collaborator agents (call the matching tool with the sub-request) and combine their answers:\n" + collab_txt
         msgs = list(sess["history"]) + [{"role": "user", "content": text}]
         step0 = 1
+        # ── SUPERVISOR_ROUTER: a classifier step may hand the whole request to ONE collaborator and relay its answer
+        if collabs and snap.get("agentCollaboration") == "SUPERVISOR_ROUTER":
+            rc_cfg = _pcfg(snap, "ROUTING_CLASSIFIER")
+            reach = "\n".join(f"- {c['collaboratorName']}: {c['collaborationInstruction']}" for c in collabs)
+            if rc_cfg and rc_cfg.get("promptCreationMode") == "OVERRIDDEN":
+                rsys = _render(rc_cfg["basePromptTemplate"], {"reachable_agents": reach, "knowledge_base_routing": "", "action_group_routing": "", "question": text, "instruction": snap["instruction"]})
+            else:
+                rsys = ("You route requests. If exactly ONE of these collaborator agents can fully handle the user's request, call its tool with the request. "
+                        "Otherwise answer with the single word SUPERVISOR.\n" + reach)
+            ctools = [{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools if t["kind"] == "collab"]
+            rid_ = _tid()
+            tr("routingClassifierTrace", {"modelInvocationInput": {"traceId": rid_, "type": "ROUTING_CLASSIFIER", "foundationModel": fm, "text": json.dumps({"system": rsys, "question": text})}})
+            rr = llm.chat(msgs, system=rsys, tools=ctools, tool_choice="auto", **infer_kw(rc_cfg, 200))
+            rcalls = rr.get("tool_calls") or []
+            tr("routingClassifierTrace", {"modelInvocationOutput": {"traceId": rid_, "rawResponse": {"content": rr["text"] or json.dumps({"tool_calls": rcalls})},
+                                                                   "metadata": {"usage": {"inputTokens": rr["input_tokens"], "outputTokens": rr["output_tokens"]}}}})
+            if rcalls and rcalls[0]["name"] in reg and reg[rcalls[0]["name"]]["kind"] == "collab":
+                t0 = reg[rcalls[0]["name"]]
+                inp = _arg_text((rcalls[0]["arguments"] or {}).get("input") or text)
+                out = run_collab(t0["meta"]["collab"], inp, "routingClassifierTrace")
+                return finish(out, refs)
     try:
         final = None
-        ltools = [{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools] or None
+        pco = ocfg if (ocfg and ocfg.get("parserMode") == "OVERRIDDEN") else None
+        ltools = None if pco else ([{"name": t["name"], "description": t["description"], "parameters": t["parameters"]} for t in tools] or None)
+        ikw = infer_kw(ocfg, 400)
         for step in range(step0, _MAX_STEPS + 1):
             tid = _tid(step)
             tr("orchestrationTrace", {"modelInvocationInput": {"traceId": tid, "type": "ORCHESTRATION", "foundationModel": fm, "inferenceConfiguration": infer,
                                                                "text": json.dumps({"system": system, "messages": msgs, "tools": [t["name"] for t in tools]})}})
-            r = llm.chat(msgs, system=system, max_tokens=400, temperature=0.4, tools=ltools, tool_choice="auto" if ltools else None)
+            r = llm.chat(msgs, system=system, tools=ltools, tool_choice="auto" if ltools else None, **ikw)
             calls = r.get("tool_calls") or []
             tr("orchestrationTrace", {"modelInvocationOutput": {"traceId": tid, "rawResponse": {"content": r["text"] or json.dumps({"tool_calls": calls})},
                                                                 "metadata": {"usage": {"inputTokens": r["input_tokens"], "outputTokens": r["output_tokens"]}}}})
+            if pco:                                      # custom ORCHESTRATION parser Lambda decides what the raw model text means
+                doc = _parser_lambda(lam, snap, "ORCHESTRATION", ctx, r["text"] or "")
+                op = (doc or {}).get("orchestrationParsedResponse") or {}
+                if (doc or {}).get("parsingErrorDetails") or op.get("parsingErrorDetails"):
+                    msgs += [{"role": "assistant", "content": r["text"] or ""}, {"role": "user", "content": str(((doc or {}).get("parsingErrorDetails") or op["parsingErrorDetails"]).get("repromptResponse", "Reformat your answer."))}]
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "REPROMPT", "repromptResponse": {"text": msgs[-1]["content"], "source": "PARSER"}}})
+                    continue
+                rd = op.get("responseDetails") or {}
+                it = rd.get("invocationType", "FINISH")
+                if it == "FINISH":
+                    final = (rd.get("agentFinalResponse") or {}).get("responseText", r["text"])
+                    tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": op.get("rationale", "")}})
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "FINISH", "finalResponse": {"text": final}}})
+                    break
+                if it == "ASK_USER":
+                    q = (rd.get("agentAskUser") or {}).get("responseText", r["text"])
+                    tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ASK_USER"}})
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ASK_USER", "finalResponse": {"text": q}}})
+                    return finish(q, refs, skip_post=True)
+                if it == "ACTION_GROUP":
+                    agi_ = rd.get("actionGroupInvocation") or {}
+                    tt = next((t for t in tools if t["group"] == agi_.get("actionGroupName") and (t["meta"].get("function") == agi_.get("functionName") or
+                                                                                              (agi_.get("apiName") and t["meta"].get("apiPath") == agi_.get("apiName")))), None)
+                    if tt is None:
+                        raise llm.LlmStructuredError(f"parser Lambda named an unknown action {agi_}")
+                    calls = [{"id": "call_" + _rid(8, string.ascii_lowercase + string.digits), "name": tt["name"], "arguments": dict(agi_.get("actionGroupInput") or agi_.get("parameters") or {})}]
+                else:
+                    raise llm.LlmStructuredError(f"parser Lambda returned unsupported invocationType {it}")
             if not calls:
                 final = r["text"]
                 tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "FINISH", "finalResponse": {"text": final}}})
@@ -1181,21 +1661,45 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
                 errs = ["unknown tool"] if not t else llm.validate(t["parameters"], c["arguments"])
                 if errs:
                     raise llm.LlmStructuredError(f"tool call {c['name']} is invalid: {'; '.join(errs[:3])}")
+            ask = next((c for c in calls if reg[c["name"]]["kind"] == "userinput"), None)
+            if ask is not None:                           # AMAZON.UserInput: the question goes back to the user as the answer; the next InvokeAgent carries the reply
+                q = _arg_text(ask["arguments"]["question"])
+                tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ASK_USER"}})
+                tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ASK_USER", "finalResponse": {"text": q}}})
+                return finish(q, refs, skip_post=True)
             msgs.append({"role": "assistant", "content": r["text"] or "", "tool_calls": calls})
             tr("orchestrationTrace", {"rationale": {"traceId": tid, "text": (r["text"] or "").strip() or
                                                     "Selected " + ", ".join(f"{c['name']}({json.dumps(c['arguments'])})" for c in calls) + " via schema-constrained tool-call output."}})
             rc, done = [], []
             for c in calls:
                 t = reg[c["name"]]
+                if t["kind"] == "code":
+                    code = _arg_text(c["arguments"]["code"])
+                    tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ACTION_GROUP_CODE_INTERPRETER",
+                                                                  "codeInterpreterInvocationInput": {"code": code, "files": sorted((sess.get("ci_files") or {}))}}})
+                    res_ = _run_code(sess, code, ctx)
+                    for n, v in res_["files"].items():
+                        out_files[:] = [x for x in out_files if x[0] != n] + [(n, base64.b64encode(v).decode())]
+                    tr("orchestrationTrace", {"observation": {"traceId": _tid(), "type": "ACTION_GROUP", "codeInterpreterInvocationOutput": {
+                        "executionOutput": res_["stdout"], **({"executionError": res_["error"]} if res_["error"] else {}), "executionTimeout": bool(res_["timeout"]),
+                        "files": sorted(res_["files"]), "metadata": {"engine": res_["engine"]}}}})
+                    done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"],
+                                 "content": (res_["stdout"] or "(no output)") + (("\nERROR: " + res_["error"]) if res_["error"] else "") + (("\nFiles written: " + ", ".join(sorted(res_["files"]))) if res_["files"] else "")})
+                    continue
+                if t["kind"] == "collab":
+                    out = run_collab(t["meta"]["collab"], _arg_text(c["arguments"].get("input", "")), "orchestrationTrace")
+                    done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"], "content": out})
+                    continue
                 plain, body = _arg_params(t, c["arguments"])
                 is_rc = t["executor"].get("customControl") == "RETURN_CONTROL"
+                is_cf = bool(t["meta"].get("confirm")) and not is_rc
                 agi = {"actionGroupName": t["group"], "parameters": plain, "executionType": "RETURN_CONTROL" if is_rc else "LAMBDA"}
                 agi.update({"function": t["meta"]["function"]} if t["kind"] == "function" else {"apiPath": t["meta"]["apiPath"], "verb": t["meta"]["httpMethod"]})
                 if body:
                     agi["requestBody"] = {"content": {"application/json": body}}
                 tr("orchestrationTrace", {"invocationInput": {"traceId": tid, "invocationType": "ACTION_GROUP", "actionGroupInvocationInput": agi}})
-                if is_rc:
-                    rc.append((c, t))
+                if is_rc or is_cf:
+                    rc.append((c, t, is_cf))
                     continue
                 if not t["executor"].get("lambda"):
                     raise _bad(f"Action group {t['group']} has no executor: set a Lambda ARN or customControl RETURN_CONTROL")
@@ -1206,10 +1710,14 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
                 done.append({"role": "tool", "tool_call_id": c["id"], "name": c["name"], "content": ("ERROR: " if is_err else "") + out})
             if rc:
                 invid = _rid(16, string.ascii_lowercase + string.digits)
+                if sink is not None:
+                    sink["text"], sink["frames"] = "The collaborator needs the caller to return control or confirm an action, which is not supported inside agent collaboration.", tframes
+                    return commit()
                 sess["pending"] = {"invocationId": invid, "msgs": msgs, "text": text, "system": system, "refs": refs, "step": step + 1,
-                                   "calls": [{"id": c["id"], "name": c["name"]} for c, _t in rc], "done": done}
+                                   "calls": [{"id": c["id"], "name": c["name"], "arguments": c["arguments"], "confirm": cf} for c, _t, cf in rc], "done": done}
+                sess["last"] = time.time()
                 a["sessions"][sid] = sess
-                frames.append(_evt("returnControl", {"invocationId": invid, "invocationInputs": [_rc_inputs(t, c["arguments"]) for c, t in rc]}))
+                frames.append(_evt("returnControl", {"invocationId": invid, "invocationInputs": [_rc_inputs(t, c["arguments"], cf) for c, t, cf in rc]}))
                 return commit()
             msgs += done
         if final is None:
@@ -1221,6 +1729,51 @@ def _invoke_agent_run(st, s3, aid, alias_id, sid, p, lam):
         return finish("Sorry, I am unable to assist you with this request.", refs)
     except llm.LlmUnavailable as e:
         return _unavailable(e)
+
+
+# ── InvokeInlineAgent ──
+def _inline_agent(st, s3, sid, p, lam):
+    if not p.get("foundationModel") or not _resolve_fm(p["foundationModel"]):
+        raise _bad(f"The provided foundation model {p.get('foundationModel')} is invalid or unsupported")
+    ins = p.get("instruction") or ""
+    if not 40 <= len(ins) <= 20000:
+        raise _bad("1 validation error detected: Value at 'instruction' failed to satisfy constraint: Member must have length between 40 and 20000")
+    if p.get("collaborators"):
+        raise _bad("Inline collaborators (nested inline agents) are not supported; reference deployed agents with collaboratorConfigurations[].agentAliasArn")
+    _check_agent_cfg({k: p[k] for k in ("guardrailConfiguration", "promptOverrideConfiguration", "agentCollaboration") if p.get(k) is not None})
+    ttl = int(p.get("idleSessionTTLInSeconds", 600))
+    if not 60 <= ttl <= 3600:
+        raise _bad("idleSessionTTLInSeconds must be between 60 and 3600")
+    groups = []
+    for g in p.get("actionGroups") or []:
+        _check_action_group(g, s3=s3)
+        groups.append({"actionGroupName": g["actionGroupName"], "actionGroupState": g.get("actionGroupState", "ENABLED"), "actionGroupExecutor": g.get("actionGroupExecutor"),
+                       "apiSchema": g.get("apiSchema"), "functionSchema": g.get("functionSchema"), "parentActionGroupSignature": g.get("parentActionGroupSignature"), "description": g.get("description", "")})
+    kbs = []
+    for k in p.get("knowledgeBases") or []:
+        if k.get("knowledgeBaseId") not in st["kbs"]:
+            raise _nf(f"Knowledge base with id {k.get('knowledgeBaseId')} does not exist")
+        kbs.append({"knowledgeBaseId": k["knowledgeBaseId"], "description": k.get("description", ""), "knowledgeBaseState": "ENABLED"})
+    collabs = []
+    for c in p.get("collaboratorConfigurations") or []:
+        arn = c.get("agentAliasArn")
+        m = _ALIAS_ARN.match(str(arn or ""))
+        other = st["agents"].get(m.group(2)) if m else None
+        if not m or not other or (m.group(3) != "TSTALIASID" and m.group(3) not in other["aliases"]):
+            raise _nf(f"Could not find resource: collaborator agent alias {arn}")
+        collabs.append({"collaboratorName": c["collaboratorName"], "collaborationInstruction": c["collaboratorInstruction"], "agentDescriptor": {"aliasArn": arn},
+                        "relayConversationHistory": c.get("relayConversationHistory", "DISABLED")})
+    if collabs and p.get("agentCollaboration", "DISABLED") == "DISABLED":
+        raise _bad("collaboratorConfigurations need agentCollaboration SUPERVISOR or SUPERVISOR_ROUTER")
+    ia = st.setdefault("inline", {}).setdefault(sid, {"agentId": "INLINE" + _rid(4), "agentName": "inline-agent", "sessions": {}, "memories": {}, "aliases": {}, "kbs": {}, "actionGroups": {},
+                                                    "agentStatus": "PREPARED", "agentVersion": "DRAFT", "idleSessionTTLInSeconds": ttl, "instruction": ins, "foundationModel": p["foundationModel"]})
+    ia["idleSessionTTLInSeconds"] = ttl
+    snap = {"instruction": ins, "foundationModel": p["foundationModel"], "kbs": kbs, "actionGroups": groups, "guardrailConfiguration": p.get("guardrailConfiguration"),
+            "memoryConfiguration": None, "promptOverrideConfiguration": p.get("promptOverrideConfiguration"), "agentCollaboration": p.get("agentCollaboration", "DISABLED"),
+            "collaborators": collabs, "idleSessionTTLInSeconds": ttl}
+    q = dict(p)
+    q["sessionState"] = p.get("inlineSessionState") or {}
+    return _invoke_agent(st, s3, ia["agentId"], "INLINE", sid, q, lam, inline={"agent": ia, "snap": snap})
 
 
 # ═══════════════════════════ dispatch: bedrock-agent / agent-runtime ═══════════════════════════
@@ -1246,6 +1799,8 @@ def dispatch(s3, method, path, query, headers, body, lam=None):
             return _rag_op(st, p)
         if low[0] == "knowledgebases" and len(low) == 3 and low[2] == "retrieve" and method == "POST":
             return _retrieve_op(st, segs[1], p)
+        if low[0] == "agents" and len(low) == 2 and method == "POST" and (p.get("inputText") is not None or p.get("foundationModel") is not None):
+            return _inline_agent(st, s3, segs[1], p, lam)           # InvokeInlineAgent: POST /agents/{sessionId}
         if low[0] == "agents" and len(low) == 7 and low[2] == "agentaliases" and low[4] == "sessions" and low[6] == "text" and method == "POST":
             return _invoke_agent(st, s3, segs[1], segs[3], segs[5], p, lam)
         # ── knowledge bases ──
@@ -1323,7 +1878,7 @@ def dispatch(s3, method, path, query, headers, body, lam=None):
                             raise _bad(f"The provided foundation model {p['foundationModel']} is invalid or unsupported")
                         _check_agent_cfg(p)
                         a.update(agentName=p["agentName"], agentResourceRoleArn=p["agentResourceRoleArn"], updatedAt=_iso(), agentStatus="NOT_PREPARED")
-                        for f in ("foundationModel", "instruction", "description", "idleSessionTTLInSeconds", "guardrailConfiguration", "memoryConfiguration"):
+                        for f in ("foundationModel", "instruction", "description", "idleSessionTTLInSeconds", "guardrailConfiguration", "memoryConfiguration", "promptOverrideConfiguration", "agentCollaboration"):
                             if f in p:
                                 a[f] = p[f]
                         return _j(202, {"agent": _agent_view(a)})
@@ -1372,9 +1927,13 @@ def dispatch(s3, method, path, query, headers, body, lam=None):
                             del a["kbs"][segs[5]]
                             a["agentStatus"] = "NOT_PREPARED"
                             return _j(204, None)
+                    elif low[4] == "agentcollaborators" and len(low) in (5, 6):
+                        r_ = _collaborators_op(st, a, method, segs, p)
+                        if r_ is not None:
+                            return r_
                     elif low[4] in ("actiongroups", "agentactiongroups"):   # the real SDK path is .../actiongroups/; the old spelling is kept
                         if len(low) == 5 and method == "PUT":
-                            g = _action_group(a, p)
+                            g = _action_group(a, p, s3=s3)
                             a["actionGroups"][g["actionGroupId"]] = g
                             a["agentStatus"] = "NOT_PREPARED"
                             return _j(200, {"agentActionGroup": g})
@@ -1385,7 +1944,7 @@ def dispatch(s3, method, path, query, headers, body, lam=None):
                             if method == "GET":
                                 return _j(200, {"agentActionGroup": g})
                             if method == "PUT":
-                                n = _action_group(a, p, g["actionGroupId"])
+                                n = _action_group(a, p, g["actionGroupId"], s3=s3)
                                 n["createdAt"] = g["createdAt"]
                                 a["actionGroups"][g["actionGroupId"]] = n
                                 a["agentStatus"] = "NOT_PREPARED"

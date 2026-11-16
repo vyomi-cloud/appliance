@@ -357,10 +357,10 @@ def main():
                     deltas.append(ev.data.delta.content[0].text.value)
         check("runs.stream thread.message.delta events", "".join(deltas) == "streamed text reply", deltas)
         try:
-            cl.beta.assistants.create(model="chat", tools=[{"type": "code_interpreter"}])
-            check("code_interpreter assistant tool rejected", False)
+            cl.beta.assistants.create(model="chat", tools=[{"type": "computer_use"}])
+            check("unsupported assistant tool type rejected", False)
         except openai.BadRequestError:
-            check("code_interpreter assistant tool rejected with 400", True)
+            check("unsupported assistant tool type rejected with 400", True)
         try:
             cl.beta.assistants.create(model="nope")
             check("assistant on missing deployment -> 404", False)

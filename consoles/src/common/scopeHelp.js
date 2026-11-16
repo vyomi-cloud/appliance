@@ -127,6 +127,14 @@ def("aws.bedrock.knowledge-bases", ["/bedrock/knowledge-bases", "/bedrock/knowle
   nano: ["Embeddings are all-MiniLM-L6-v2 (384-d, about 23 MB downloaded on first use). If the download is blocked a labelled hash embedding is used and ranking is keyword grade. Vectors are 384-d, so a KB is not portable to the appliance (768-d); re-ingest after moving."],
   mesh: ["Embeddings are nomic-embed-text through llama.cpp."],
 });
+def("aws.bedrock.agents", ["/bedrock/agents", "/bedrock/agents/:id"], {
+  title: "Agents: scope and limits",
+  intro: "Bedrock Agents (classic): build an agent, add action groups and knowledge bases, enable multi-agent collaboration, then test it with the trace.",
+  real: ["Action groups call your Lambda with the real Bedrock Agents event (function schema, OpenAPI inline or from S3), can return control to the caller, or ask for confirmation first (requireConfirmation: the Lambda runs only after you confirm). The built-in AMAZON.UserInput group asks the user back; AMAZON.CodeInterpreter runs the model's Python in a sandbox and returns its output and files.", "A SUPERVISOR agent delegates to collaborator agents (SUPERVISOR_ROUTER can route a whole request to one); the test panel shows the collaborator traces. Advanced prompts override the orchestration, pre/post-processing, routing and memory prompts and can use a parser Lambda. InvokeInlineAgent runs an agent defined in the request; SESSION_SUMMARY memory also summarises sessions that time out.", "The test panel streams the real InvokeAgent response and renders the trace (pre-processing, orchestration, collaborators, code interpreter, guardrails)."],
+  limits: ["The model is one small local model, so tool and collaborator choices are far less reliable than a production model. The code interpreter is a restricted sandbox, not a VM: no network, no image outputs, and on Nano only the Python standard library.", "Collaborators run one after another (no parallel calls), to depth 3. The knowledge-base response-generation prompt is stored but not applied. Non-text chat inputs (images) are rejected. Session summaries on timeout are produced on the next request that touches the agent, not by a background timer."],
+  nano: ["The model is WebLLM in the browser (WebGPU); without it InvokeAgent answers DependencyFailedException."],
+  mesh: ["llama.cpp answers; the code interpreter runs in a restricted subprocess."],
+});
 def("aws.bedrock.rag-studio", ["/bedrock/knowledge-bases/studio"], {
   title: "RAG Studio: scope and limits",
   intro: "Design, validate, test and visualise the RAG pipeline of facilities-kb.",
@@ -340,8 +348,8 @@ def("azure.aisearch", ["/aisearch", "/aisearch/:rg/:name", "/aisearch/:rg/:name/
 def("azure.foundry.agents", ["/foundry/agents"], {
   title: "Agents: scope and limits",
   intro: "Create agents and chat with them through the Assistants API (assistants, threads, messages, runs) on a deployment of an Azure OpenAI or Foundry resource.",
-  real: ["The page makes the same calls as the openai SDK; a run executes the model once over the thread."],
-  limits: ["Tools are limited to what the Assistants engine runs (no hosted code interpreter or file search sandbox). The model is the local open model, not an OpenAI model."],
+  real: ["The page makes the same calls as the openai SDK; a run executes the model over the thread. Tools: function, code_interpreter (the model's Python really runs in a restricted sandbox; stdout in run steps, written files saved to /files) and file_search (vector stores chunk and embed your files, the top passages go to the model and come back as file_citation annotations)."],
+  limits: ["The code interpreter is a restricted sandbox, not a VM: no network, no image outputs, and on Nano only the Python standard library. file_search ranks by embedding similarity (no ranking_options, no expiry policies, default chunking). The model is the local open model, not an OpenAI model."],
   nano: ["The chat model is WebLLM in the browser (WebGPU)."],
   mesh: ["llama.cpp answers."],
 });

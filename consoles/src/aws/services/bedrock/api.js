@@ -48,25 +48,43 @@ export const associateKb = (id, kb, description) => B("PUT", `/agents/${id}/agen
 export const disassociateKb = (id, kb) => B("DELETE", `/agents/${id}/agentversions/DRAFT/knowledgebases/${kb}`);
 export const listActionGroups = (id) => B("POST", `/agents/${id}/agentversions/DRAFT/agentactiongroups/`, { body: {} }).then((r) => r.actionGroupSummaries || []);
 
-/** InvokeAgent returns vnd.amazon.eventstream: decode the `chunk` events' base64 bytes. */
-export async function invokeAgent(agentId, aliasId, sessionId, inputText) {
+export const updateAgent = (id, a, patch) => B("PUT", `/agents/${id}/`, { body: { agentName: a.agentName, agentResourceRoleArn: a.agentResourceRoleArn, foundationModel: a.foundationModel, instruction: a.instruction,
+  description: a.description, idleSessionTTLInSeconds: a.idleSessionTTLInSeconds, guardrailConfiguration: a.guardrailConfiguration, memoryConfiguration: a.memoryConfiguration,
+  promptOverrideConfiguration: a.promptOverrideConfiguration, agentCollaboration: a.agentCollaboration, ...patch } }).then((r) => r.agent);
+export const getActionGroup = (id, gid) => B("GET", `/agents/${id}/agentversions/DRAFT/actiongroups/${gid}/`).then((r) => r.agentActionGroup);
+export const createActionGroup = (id, body) => B("PUT", `/agents/${id}/agentversions/DRAFT/actiongroups/`, { body }).then((r) => r.agentActionGroup);
+export const deleteActionGroup = (id, gid) => B("DELETE", `/agents/${id}/agentversions/DRAFT/actiongroups/${gid}/`);
+export const listCollaborators = (id) => B("POST", `/agents/${id}/agentversions/DRAFT/agentcollaborators/`, { body: {} }).then((r) => r.agentCollaboratorSummaries || []);
+export const associateCollaborator = (id, body) => B("PUT", `/agents/${id}/agentversions/DRAFT/agentcollaborators/`, { body }).then((r) => r.agentCollaborator);
+export const disassociateCollaborator = (id, cid) => B("DELETE", `/agents/${id}/agentversions/DRAFT/agentcollaborators/${cid}/`);
+export const getAgentMemory = (id, aliasId, memoryId) => B("GET", `/agents/${id}/agentAliases/${aliasId}/memories`, { query: { memoryId, memoryType: "SESSION_SUMMARY" } }).then((r) => r.memoryContents || []);
+
+/** InvokeAgent returns vnd.amazon.eventstream. Returns { text, citations, traces[], returnControl, files[] }.
+ *  opts: { enableTrace, memoryId, sessionState }. A returnControl event (RETURN_CONTROL or requireConfirmation) is returned for the caller to answer
+ *  by calling again with sessionState.invocationId + returnControlInvocationResults and no inputText. */
+export async function invokeAgent(agentId, aliasId, sessionId, inputText, opts = {}) {
+  const body = { ...(inputText ? { inputText } : {}), ...(opts.enableTrace ? { enableTrace: true } : {}), ...(opts.memoryId ? { memoryId: opts.memoryId } : {}), ...(opts.sessionState ? { sessionState: opts.sessionState } : {}) };
   const res = await fetch(`${WIRE_BASE}/agents/${agentId}/agentAliases/${aliasId}/sessions/${sessionId}/text`, {
-    method: "POST", headers: { ...authHeader("bedrock"), "content-type": "application/json" }, body: JSON.stringify({ inputText }) });
+    method: "POST", headers: { ...authHeader("bedrock"), "content-type": "application/json" }, body: JSON.stringify(body) });
   const buf = new Uint8Array(await res.arrayBuffer());
   if (!res.ok) { let d = {}; try { d = JSON.parse(new TextDecoder().decode(buf)); } catch { /* not json */ } throw new WireError(res.status, d.__type || res.headers.get("x-amzn-errortype"), d.message, ""); }
   const dv = new DataView(buf.buffer);
-  let off = 0, text = "", citations = [];
+  let off = 0, text = "", citations = [], traces = [], returnControl = null, files = [];
   while (off + 16 <= buf.length) {
     const total = dv.getUint32(off), hl = dv.getUint32(off + 4);
+    const hdr = new TextDecoder().decode(buf.slice(off + 12, off + 12 + hl));
     const payload = buf.slice(off + 12 + hl, off + total - 4);
     try {
       const j = JSON.parse(new TextDecoder().decode(payload));
       if (j.bytes) text += decodeURIComponent(escape(atob(j.bytes)));
       if (j.attribution?.citations) citations = citations.concat(j.attribution.citations);
+      if (j.trace) traces.push(j);
+      if (j.invocationInputs) returnControl = j;
+      if (j.files && hdr.includes("files")) files = files.concat(j.files);
     } catch { /* non-json frame */ }
     off += total;
   }
-  return { text, citations };
+  return { text, citations, traces, returnControl, files };
 }
 
 // ── AgentCore ──
