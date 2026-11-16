@@ -1,0 +1,42 @@
+# Vyomi Reference Estate - AWS. One application, composed from stages. Every resource is mapped to capability ids in
+# ../../coverage-map.json; `tests/endurance/run_estate.sh estate/aws <endpoint>` is the release check.
+terraform {
+  required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+}
+
+variable "endpoint" { default = "http://host.docker.internal:9000" }
+
+provider "aws" {
+  region                  = "us-east-1"
+  access_key              = "test"
+  secret_key              = "test"
+  skip_metadata_api_check = true
+  s3_use_path_style       = true
+  endpoints {
+    ec2            = var.endpoint
+    iam            = var.endpoint
+    kms            = var.endpoint
+    secretsmanager = var.endpoint
+    sts            = var.endpoint
+    logs           = var.endpoint
+    s3             = var.endpoint
+    rds            = var.endpoint
+    dynamodb       = var.endpoint
+    ecr            = var.endpoint
+  }
+}
+
+module "network_identity" {
+  source = "./modules/stage1-network-identity"
+}
+
+module "compute_data" {
+  source                = "./modules/stage2-compute-data"
+  vpc_id                = module.network_identity.vpc_id
+  public_subnet_id      = module.network_identity.public_subnet_id
+  private_subnet_ids    = module.network_identity.private_subnet_ids
+  web_sg_id             = module.network_identity.web_sg_id
+  db_sg_id              = module.network_identity.db_sg_id
+  kms_key_arn           = module.network_identity.kms_key_arn
+  instance_profile_name = module.network_identity.instance_profile_name
+}

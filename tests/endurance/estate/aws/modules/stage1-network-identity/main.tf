@@ -1,27 +1,6 @@
 # Vyomi Reference Estate - AWS stage 1: network + identity + keys + secrets.
 # Every resource here maps to capability ids in ../../coverage-map.json (status planned until a green run proves it).
-terraform {
-  required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
-}
-
-variable "endpoint" { default = "http://host.docker.internal:9000" }
-variable "name"     { default = "endurance" }
-
-provider "aws" {
-  region                      = "us-east-1"
-  access_key                  = "test"
-  secret_key                  = "test"
-  skip_metadata_api_check     = true
-  s3_use_path_style           = true
-  endpoints {
-    ec2            = var.endpoint
-    iam            = var.endpoint
-    kms            = var.endpoint
-    secretsmanager = var.endpoint
-    sts            = var.endpoint
-    logs           = var.endpoint
-  }
-}
+variable "name" { default = "endurance" }
 
 locals { tags = { Estate = "vyomi-endurance", Stage = "1-network-identity" } }
 
@@ -58,6 +37,12 @@ resource "aws_subnet" "private" {
   availability_zone = "us-east-1a"
   tags              = merge(local.tags, { Name = "${var.name}-private" })
 }
+resource "aws_subnet" "private_b" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.60.3.0/24"
+  availability_zone = "us-east-1b"
+  tags              = merge(local.tags, { Name = "${var.name}-private-b" })
+}
 resource "aws_eip" "nat" {
   domain = "vpc"
   tags   = local.tags
@@ -92,6 +77,10 @@ resource "aws_route" "private_default" {
 }
 resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private.id
+}
+resource "aws_route_table_association" "private_b" {
+  subnet_id      = aws_subnet.private_b.id
   route_table_id = aws_route_table.private.id
 }
 resource "aws_security_group" "web" {
@@ -220,7 +209,13 @@ resource "aws_secretsmanager_secret_version" "db" {
   secret_string = jsonencode({ username = "app", password = "endurance-not-a-real-password" })
 }
 
-output "vpc_id"      { value = aws_vpc.main.id }
+output "vpc_id" { value = aws_vpc.main.id }
+output "public_subnet_id" { value = aws_subnet.public.id }
+output "private_subnet_ids" { value = [aws_subnet.private.id, aws_subnet.private_b.id] }
+output "web_sg_id" { value = aws_security_group.web.id }
+output "db_sg_id" { value = aws_security_group.db.id }
+output "kms_key_id" { value = aws_kms_key.data.key_id }
+output "instance_profile_name" { value = aws_iam_instance_profile.app.name }
 output "private_subnet_id" { value = aws_subnet.private.id }
 output "kms_key_arn" { value = aws_kms_key.data.arn }
 output "app_role_arn" { value = aws_iam_role.app.arn }
