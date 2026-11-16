@@ -195,6 +195,23 @@ def _f21():
            isinstance(desc["EarliestRestorableDateTime"], float) and isinstance(desc["LatestRestorableDateTime"], float))
 
 
+def _f26_f30():
+    s = types.SimpleNamespace()
+    call = lambda **p: v.dispatch(s, p)  # noqa: E731
+    body = lambda r: r.body.decode() if isinstance(r.body, bytes) else r.body  # noqa: E731
+    call(Action="CreateLaunchTemplate", LaunchTemplateName="lt1", **{
+        "LaunchTemplateData.ImageId": "ami-x", "LaunchTemplateData.SecurityGroupId.1": "sg-1",
+        "LaunchTemplateData.TagSpecification.1.ResourceType": "instance",
+        "LaunchTemplateData.TagSpecification.1.Tag.1.Key": "Estate", "LaunchTemplateData.TagSpecification.1.Tag.1.Value": "e"})
+    out = body(call(Action="DescribeLaunchTemplateVersions", LaunchTemplateName="lt1"))
+    _check("F30 launch template returns SecurityGroupId.N and TagSpecifications",
+           "<securityGroupIdSet><item>sg-1</item>" in out and "<resourceType>instance</resourceType>" in out and "<key>Estate</key>" in out)
+    from core import rds_core as r
+    xml = r._parameter_xml("p", {"parameter_value": "1", "source": "user"})
+    _check("F27 user parameters report ApplyMethod", "<ApplyMethod>immediate</ApplyMethod>" in xml)
+    _check("F26 instance describe carries TagList", "<TagList><Tag><Key>A</Key>" in r._db_instance_xml({"db_instance_identifier": "x", "_tags": {"A": "b"}}))
+
+
 if __name__ == "__main__":
-    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12(); _f16(); _f18_f19(); _f21()
+    _f1(); _f4(); _f6_f7(); _f8(); _f11(); _f9_f10_f12(); _f16(); _f18_f19(); _f21(); _f26_f30()
     print("Endurance F1/F4/F6-F20 regressions: ALL GREEN")

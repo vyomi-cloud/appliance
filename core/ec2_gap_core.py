@@ -119,7 +119,10 @@ def _describe_instance_attribute(store, p):
     elif attr in _INST_ATTRS:
         el, key, kind = _INST_ATTRS[attr]
         v = inst.get(key, True if key == "source_dest_check" else ("stop" if key == "shutdown_behavior" else False if kind == "bool" else ""))
-        body += f"<{el}><value>{str(v).lower() if kind == 'bool' else _x(v)}</value></{el}>"
+        if attr == "userData" and not v:
+            body += "<userData/>"   # real EC2 returns no <value> when there is no user data; the Terraform provider hashes an empty <value> differently (F31)
+        else:
+            body += f"<{el}><value>{str(v).lower() if kind == 'bool' else _x(v)}</value></{el}>"
     else:
         raise _err("InvalidParameterValue", f"Value ({attr}) for parameter attribute is invalid.")
     return _V()._envelope("DescribeInstanceAttribute", body)

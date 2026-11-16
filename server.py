@@ -5620,10 +5620,18 @@ def _ec2_instance_xml(instance: dict) -> ET.Element:
     cpu = _ec2_sub(item, "cpuOptions")
     _ec2_sub(cpu, "coreCount", "1")
     _ec2_sub(cpu, "threadsPerCore", "1")
+    if instance.get("iam_instance_profile"):
+        _prof = _ec2_sub(item, "iamInstanceProfile")
+        _ec2_sub(_prof, "arn", f"arn:aws:iam::{AWS_ACCOUNT_ID}:instance-profile/{instance['iam_instance_profile']}")
+        _ec2_sub(_prof, "id", "AIPA" + "".join(c for c in instance["iam_instance_profile"].upper() if c.isalnum())[:17].ljust(17, "X"))
     tag_set = _ec2_sub(item, "tagSet")
-    tag = _ec2_sub(tag_set, "item")
-    _ec2_sub(tag, "key", "Name")
-    _ec2_sub(tag, "value", instance.get("name", ""))
+    _tags = dict(instance.get("tags") or {})
+    if "Name" not in _tags and instance.get("name"):
+        _tags = {"Name": instance["name"], **_tags}
+    for _tk, _tv in _tags.items():
+        tag = _ec2_sub(tag_set, "item")
+        _ec2_sub(tag, "key", _tk)
+        _ec2_sub(tag, "value", _tv)
     if instance.get("runtime_backend") == "lxd":
         _ec2_sub(item, "privateDnsNameOptions")
     return item
@@ -13941,10 +13949,18 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
     security_group_ids = _ec2_filter_values(params, "SecurityGroupId.")
     if not security_group_ids:
         security_group_ids = _ec2_filter_values(params, "NetworkInterface.1.SecurityGroupId.")
+    # TagSpecification.N.{ResourceType,Tag.M.Key,Tag.M.Value} -> instance tags (endurance F29: tags/profile/user-data were dropped)
+    _run_tags: dict[str, str] = {}
+    for _k, _v in params.items():
+        _m = re.match(r"^TagSpecification\.(\d+)\.Tag\.(\d+)\.Key$", _k)
+        if _m and str(params.get(f"TagSpecification.{_m.group(1)}.ResourceType", "instance")) == "instance":
+            _run_tags[str(_v)] = str(params.get(f"TagSpecification.{_m.group(1)}.Tag.{_m.group(2)}.Value", ""))
+    _run_profile = str(params.get("IamInstanceProfile.Name") or str(params.get("IamInstanceProfile.Arn") or "").rsplit("/", 1)[-1])
+    _run_user_data_b64 = str(params.get("UserData", ""))
     launched = []
     for _ in range(count):
         req = EC2InstanceRequest(
-            name=str(params.get("TagSpecification.1.Tag.1.Value", "ec2-instance")),
+            name=_run_tags.get("Name") or str(params.get("TagSpecification.1.Tag.1.Value", "ec2-instance")),
             instance_type=instance_type,
             ami=image_id,
             runtime=profile.get("default_runtime", "python") if (profile := _ami_profile(image_id)) else "python",
@@ -13966,6 +13982,11 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
         # The start is async (non-blocking), so the SDK response isn't delayed.
         instance = api_ec2_create_instance(req, auto_start=True)
         instance["monitoring"] = str(params.get("Monitoring.Enabled", "")).lower() == "true"
+        for _tgt in (instance, ec2_state["instances"].get(instance.get("instance_id"))):
+            if isinstance(_tgt, dict):
+                _tgt["tags"] = dict(_run_tags)
+                _tgt["iam_instance_profile"] = _run_profile
+                _tgt["user_data_b64"] = _run_user_data_b64
         if _cr_target:
             instance["capacity_reservation_id"] = _cr_target
             _live = ec2_state["instances"].get(instance.get("instance_id"))
@@ -14720,15 +14741,34 @@ def _ec2_shadow_register_instances(params: dict, vpc_store) -> None:
     """Instances launched by the runtime-backed RunInstances (Docker/LXD) live in ec2_state; core operations that name them
     (AttachVolume, CreateImage, ModifyInstanceAttribute...) would answer InvalidInstanceID.NotFound. Register a shadow in the
     core model first (idempotent, refreshes state). endurance F18."""
+    from core import vpc_core as _vpc_core
+    model = _vpc_core._model(vpc_store)
+    # keep every shadow's lifecycle in step with the runtime engine, so core dependency checks (DeleteSubnet/SecurityGroup/Vpc)
+    # see a terminated instance as terminated (endurance F33: destroy hung 20 min on DependencyViolation)
+    for _iid, _inst in model["instances"].items():
+        if _inst.get("external"):
+            _ext = ec2_state["instances"].get(_iid)
+            _st = str((_ext or {}).get("state") or "terminated")
+            if _st in ("terminated", "shutting-down", "stopped", "stopping", "running", "pending"):
+                _inst["state"] = _st
     ids = [str(v) for k, v in params.items() if (k == "InstanceId" or k.startswith("InstanceId.")) and str(v).startswith("i-")]
     if not ids:
         return
-    from core import vpc_core as _vpc_core
-    model = _vpc_core._model(vpc_store)
     for iid in ids:
         ext = ec2_state["instances"].get(iid)
         if isinstance(ext, dict):
             _vpc_core.register_external_instance(model, ext)
+
+
+def _ec2_sync_instance_tags_back(action: str, params: dict, vpc_store) -> None:
+    """CreateTags/DeleteTags name instances through the core; the legacy DescribeInstances renders ec2_state, so copy the tags back."""
+    if action not in ("CreateTags", "DeleteTags"):
+        return
+    from core import vpc_core as _vpc_core
+    model = _vpc_core._model(vpc_store)
+    for k, v in params.items():
+        if k.startswith("ResourceId.") and str(v) in ec2_state["instances"] and str(v) in model["instances"]:
+            ec2_state["instances"][str(v)]["tags"] = dict(model["instances"][str(v)].get("tags") or {})
 
 
 def _ec2_core_dispatch(params: dict) -> Response:
@@ -14740,6 +14780,8 @@ def _ec2_core_dispatch(params: dict) -> Response:
     vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]
     _ec2_shadow_register_instances(params, vpc_store)
     r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300:
+        _ec2_sync_instance_tags_back(action, params, vpc_store)
     if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         _persist_state()
     return Response(content=r.body, status_code=r.status, media_type=r.media_type, headers=r.headers or None)
@@ -14957,6 +14999,8 @@ async def api_ec2_query(request: Request):
         vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
         _ec2_shadow_register_instances(params, vpc_store)   # F18
         r = _vpc_core.dispatch(vpc_store, dict(params))
+        if r.status < 300:
+            _ec2_sync_instance_tags_back(action, params, vpc_store)
         if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
             _persist_state()
             if "NetworkInsights" not in action:
@@ -15016,6 +15060,8 @@ def api_vpc_core_query(params: dict) -> Response:
     vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
     _ec2_shadow_register_instances(params, vpc_store)   # runtime-launched instances are known to the core (endurance F18)
     r = _vpc_core.dispatch(vpc_store, dict(params))
+    if r.status < 300:
+        _ec2_sync_instance_tags_back(action, params, vpc_store)
     if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         try:
             _vpc_mirror_from_core()

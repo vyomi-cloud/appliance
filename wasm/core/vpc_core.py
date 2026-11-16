@@ -2871,9 +2871,10 @@ def register_external_instance(m: dict, ext: dict) -> dict:
         "sg_ids": list(ext.get("security_group_ids") or []), "private_ip": priv, "public_ip": pub,
         "private_dns": f"ip-{priv.replace('.', '-')}.ec2.internal" if priv else "",
         "public_dns": f"ec2-{pub.replace('.', '-')}.compute-1.amazonaws.com" if pub else "",
-        "key_name": str(ext.get("key_pair") or ""), "user_data": str(ext.get("user_data") or ""),
+        "key_name": str(ext.get("key_pair") or ""),
         "iam_instance_profile": str(ext.get("iam_instance_profile") or inst.get("iam_instance_profile", "")),
-        "tags": dict(ext.get("tags") or inst.get("tags") or {}),
+        "user_data": str(ext.get("user_data_b64") or ext.get("user_data") or inst.get("user_data", "")),
+        "tags": dict(ext["tags"] if "tags" in ext else (inst.get("tags") or {})),
     })
     if ext.get("name") and not inst["tags"].get("Name"):
         inst["tags"]["Name"] = str(ext["name"])
@@ -3856,7 +3857,7 @@ def _lt_version_data_xml(data: dict) -> str:
         out.append(f"<keyName>{_xml_escape(data['KeyName'])}</keyName>")
     if data.get("SubnetId"):
         out.append(f"<networkInterfaceSet><item><subnetId>{_xml_escape(data['SubnetId'])}</subnetId></item></networkInterfaceSet>")
-    sg_ids = [v for k, v in data.items() if k.startswith("SecurityGroupIds.")]
+    sg_ids = [v for k, v in data.items() if k.startswith(("SecurityGroupIds.", "SecurityGroupId."))]   # SDK sends SecurityGroupId.N (F30)
     if sg_ids:
         out.append("<securityGroupIdSet>" + "".join(f"<item>{_xml_escape(g)}</item>" for g in sg_ids) + "</securityGroupIdSet>")
     if data.get("UserData"):
@@ -3873,6 +3874,16 @@ def _lt_version_data_xml(data: dict) -> str:
         for k, v in data.items() if k.endswith(".DeviceName") and k.startswith("BlockDeviceMapping."))
     if bdm:
         out.append(f"<blockDeviceMappingSet>{bdm}</blockDeviceMappingSet>")
+    specs = []
+    for k, v in sorted(data.items()):
+        mm = re.match(r"^TagSpecification\.(\d+)\.ResourceType$", k)
+        if mm:
+            tags = "".join(f"<item><key>{_xml_escape(str(tv))}</key><value>{_xml_escape(str(data.get(f'TagSpecification.{mm.group(1)}.Tag.{tm.group(1)}.Value', '')))}</value></item>"
+                           for tk, tv in sorted(data.items())
+                           for tm in [re.match(rf"^TagSpecification\.{mm.group(1)}\.Tag\.(\d+)\.Key$", tk)] if tm)
+            specs.append(f"<item><resourceType>{_xml_escape(str(v))}</resourceType><tagSet>{tags}</tagSet></item>")
+    if specs:
+        out.append("<tagSpecificationSet>" + "".join(specs) + "</tagSpecificationSet>")
     return "".join(out)
 
 

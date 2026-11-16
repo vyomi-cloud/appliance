@@ -575,6 +575,8 @@ def _index_view(table: dict, idx: dict) -> dict:
         v["ProvisionedThroughput"] = {"ReadCapacityUnits": int(pt.get("ReadCapacityUnits", 5) or 5),
                                       "WriteCapacityUnits": int(pt.get("WriteCapacityUnits", 5) or 5),
                                       "NumberOfDecreasesToday": 0}
+    else:   # real DynamoDB reports 0/0 provisioned throughput on on-demand GSIs; the Terraform provider needs it to read the index (F32)
+        v["ProvisionedThroughput"] = {"ReadCapacityUnits": 0, "WriteCapacityUnits": 0, "NumberOfDecreasesToday": 0}
     return v
 
 
@@ -604,12 +606,16 @@ def _table_view(store: NoSqlStore, table: dict, include_items: bool = True) -> d
     # billing mode was ever changed; a table created PROVISIONED has none.
     if ppr or table.get("billing_mode_summary"):
         view["BillingModeSummary"] = {"BillingMode": table.get("billing_mode", "PAY_PER_REQUEST")}
-    if ppr:
-        view["OnDemandThroughput"] = dict(table.get("on_demand_throughput") or {"MaxReadRequestUnits": -1, "MaxWriteRequestUnits": -1})
+    if ppr and table.get("on_demand_throughput"):   # real DynamoDB reports it only when a maximum was configured (F28)
+        view["OnDemandThroughput"] = dict(table["on_demand_throughput"])
     view["WarmThroughput"] = {**(table.get("warm_throughput") or _WARM_DEFAULT), "Status": "ACTIVE"}
     sse_type = table.get("sse_type", "")
     if sse_type:
         view["SSEDescription"] = {"Status": "ENABLED", "SSEType": sse_type}
+        if sse_type == "KMS":
+            key = table.get("sse_kms_key") or "alias/aws/dynamodb"
+            view["SSEDescription"]["KMSMasterKeyArn"] = key if key.startswith("arn:") else \
+                "arn:aws:kms:us-east-1:123456789012:key/" + str(uuid.uuid5(uuid.NAMESPACE_DNS, key))
     gsis = table.get("indexes", [])
     if gsis:
         view["GlobalSecondaryIndexes"] = [{**_index_view(table, g), "IndexStatus": g.get("index_status", "ACTIVE")}
@@ -781,7 +787,7 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
     table_class = str(payload.get("TableClass") or payload.get("table_class") or "STANDARD").strip().upper() or "STANDARD"
     deletion_protection = bool(payload.get("DeletionProtectionEnabled") or payload.get("deletion_protection_enabled") or False)
     sse_spec = payload.get("SSESpecification") or payload.get("sse_specification") or {}
-    sse_type = str(sse_spec.get("SSEType") or "").strip().upper() if sse_spec.get("Enabled") else ""
+    sse_type = (str(sse_spec.get("SSEType") or "").strip().upper() or "KMS") if sse_spec.get("Enabled") else ""   # Enabled without a type = KMS (F28)
     tags = payload.get("Tags") or payload.get("tags") or {}
     if isinstance(tags, list):
         tags = {str(t.get("Key", t.get("key", ""))): str(t.get("Value", t.get("value", "")))
@@ -811,6 +817,7 @@ def _create_table_record(store: NoSqlStore, payload: dict[str, Any]) -> dict:
         "on_demand_throughput": _od_throughput(payload.get("OnDemandThroughput"), billing_mode),
         "warm_throughput": _warm_throughput(payload.get("WarmThroughput")),
         "sse_type": sse_type,
+        "sse_kms_key": str(sse_spec.get("KMSMasterKeyId") or ""),
         "tags": copy.deepcopy(tags or {}),
         "indexes": indexes,
         "local_indexes": local_indexes,
