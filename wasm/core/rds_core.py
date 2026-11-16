@@ -243,6 +243,10 @@ def _db_instance_xml(db: dict) -> str:
         (_el("DbiResourceId", db["dbi_resource_id"]) if db.get("dbi_resource_id") else ""),
         _el("InstanceCreateTime", db.get("created", "")),
         _el("DbInstancePort", db.get("endpoint_port", 5432)),
+        (_el("DBName", db["db_name"]) if db.get("db_name") else ""),
+        _el("StorageEncrypted", str(bool(db.get("storage_encrypted"))).lower()),
+        (_el("KmsKeyId", db["kms_key_id"]) if db.get("kms_key_id") else ""),
+        _el("CopyTagsToSnapshot", str(bool(db.get("copy_tags_to_snapshot"))).lower()),
         _el("BackupRetentionPeriod", db.get("backup_retention_period", 7)),
         _el("DeletionProtection", str(db.get("deletion_protection", False)).lower()),
         _el("LatestRestorableTime", db.get("updated", db.get("created", ""))),
@@ -612,6 +616,12 @@ def _create_db_instance(store: SqlStore, params: dict, msg_store=None) -> RdsRes
         "created": _now(),
         "updated": _now(),
         "runtime_backend": "sqlite",  # Nano data-plane engine
+        # real RDS always returns the immutable resource id; the Terraform aws provider uses it AS the resource id,
+        # so without it the instance reads back as 'root object absent' (endurance F24)
+        "dbi_resource_id": "db-" + "".join(c for c in db_id.upper() if c.isalnum())[:26].ljust(26, "X"),
+        "storage_encrypted": str(params.get("StorageEncrypted", "false")).lower() == "true" or bool(params.get("KmsKeyId")),
+        "kms_key_id": str(params.get("KmsKeyId", "")),
+        "copy_tags_to_snapshot": str(params.get("CopyTagsToSnapshot", "false")).lower() == "true",
     }
     if _is_true(params.get("ManageMasterUserPassword")):
         if str(params.get("MasterUserPassword", "")).strip():

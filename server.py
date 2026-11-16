@@ -14955,6 +14955,7 @@ async def api_ec2_query(request: Request):
         vpc_store = _Ec2CoreSpaceStore()
         vpc_store.cw_store = aws_cloudwatch.get_store()
         vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
+        _ec2_shadow_register_instances(params, vpc_store)   # F18
         r = _vpc_core.dispatch(vpc_store, dict(params))
         if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
             _persist_state()
@@ -15013,6 +15014,7 @@ def api_vpc_core_query(params: dict) -> Response:
     vpc_store = _Ec2CoreSpaceStore()
     vpc_store.cw_store = aws_cloudwatch.get_store()
     vpc_store.ram_store = _aps_durable.aws_runtime_core_stores()["ram"]   # shared subnets/SGs can't be deleted
+    _ec2_shadow_register_instances(params, vpc_store)   # runtime-launched instances are known to the core (endurance F18)
     r = _vpc_core.dispatch(vpc_store, dict(params))
     if r.status < 300 and not action.startswith(("Describe", "Get", "List", "AnalyzeReachability")):
         try:
@@ -20967,9 +20969,27 @@ def _rds_find_resource_by_arn_or_name(resource_name: str) -> tuple[str, dict] | 
     return None
 
 
+def _rds_parse_filters(params: dict[str, Any]) -> list[tuple[str, list[str]]]:
+    """RDS Query encodes filters as Filters.Filter.N.Name / Filters.Filter.N.Values.Value.M (SDK v2) or Filters.member.N...
+    (endurance F23: the EC2 `Filter.N` parser never matched, so every Describe returned ALL objects and the Terraform aws
+    provider failed with 'too many results: wanted 1, got 2')."""
+    out: dict[str, list] = {}
+    for k, v in params.items():
+        m = re.match(r"^Filters?\.(?:Filter|member)\.(\d+)\.Name$", k)
+        if m:
+            out.setdefault(m.group(1), [str(v), []])[0] = str(v)
+    for k, v in params.items():
+        m = re.match(r"^Filters?\.(?:Filter|member)\.(\d+)\.Values?\.(?:Value|member)\.(\d+)$", k)
+        if m and m.group(1) in out:
+            out[m.group(1)][1].append(str(v))
+    return [(n, vals) for n, vals in out.values()]
+
+
 def _rds_query_describe_db_instances(params: dict[str, Any]) -> Response:
     db_id = str(params.get("DBInstanceIdentifier", params.get("dbInstanceIdentifier", ""))).strip().lower()
-    filters = _ec2_parse_filters(params)
+    if db_id.startswith("arn:"):
+        db_id = db_id.rsplit(":", 1)[-1]
+    filters = _rds_parse_filters(params) + _ec2_parse_filters(params)
     dbs = []
     for db in rds_state["db_instances"].values():
         if db_id and db.get("db_instance_identifier") != db_id:
@@ -20977,7 +20997,7 @@ def _rds_query_describe_db_instances(params: dict[str, Any]) -> Response:
         matched = True
         for name, values in filters:
             lname = name.lower()
-            if lname == "db-instance-id" and db.get("db_instance_identifier", "") not in [v.lower() for v in values]:
+            if lname == "db-instance-id" and db.get("db_instance_identifier", "") not in [v.lower().rsplit(":", 1)[-1] for v in values]:
                 matched = False
             elif lname == "engine" and db.get("engine", "") not in [v.lower() for v in values]:
                 matched = False
@@ -21093,7 +21113,7 @@ def _rds_query_create_db_snapshot(params: dict[str, Any]) -> Response:
 def _rds_query_describe_db_snapshots(params: dict[str, Any]) -> Response:
     db_id = str(params.get("DBInstanceIdentifier", params.get("dbInstanceIdentifier", ""))).strip().lower()
     snapshot_id = str(params.get("DBSnapshotIdentifier", params.get("dbSnapshotIdentifier", ""))).strip().lower()
-    filters = _ec2_parse_filters(params)
+    filters = _rds_parse_filters(params) + _ec2_parse_filters(params)
     snapshots = []
     for snapshot in rds_state["db_snapshots"].values():
         if db_id and snapshot.get("db_instance_identifier") != db_id:
