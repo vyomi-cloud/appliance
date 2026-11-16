@@ -10,14 +10,14 @@ Substrate-independent, Pyodide-loadable, no fastapi/boto3. The real services run
 simulator does NOT. Instead the "agent" is data:
 
   {"instructions": "You are a weather bot.",          # system prompt
-   "model": "gemini-2.5-flash",                       # optional; llm_core.resolve_model maps it onto the local model
+   "model": "qwen2.5-3b",                             # optional; llm_core.resolve_model maps it onto the local model
    "max_steps": 5, "max_tokens": 256, "temperature": 0.2,
    "tools": [
      {"name": "get_weather", "description": "...", "parameters": {JSON schema},
       "type": "static",   "result": {"temp_c": 21}},                       # fixed value, or "cases":[{"match":{"city":"Paris"},"result":...}]
      {"name": "greet",       "type": "template", "template": "Hello {name}!"},  # str.format over the call arguments
      {"name": "calc",        "type": "builtin",  "builtin": "calculator"},       # calculator | current_time | echo
-     {"name": "lookup",      "type": "webhook",  "url": "http://host/hook", "headers": {...}},  # POST arguments as JSON (offline substrate only)
+     {"name": "lookup",      "type": "webhook",  "url": "http://host/hook", "headers": {...}},  # POST arguments as JSON (Nano: via the allow-listed egress relay)
      {"name": "fn1",         "type": "function"}]}                              # in-process Python function from register_function()
 
 ``run`` is a real tool-calling loop: the model is asked with the tool schemas, every tool call it emits is executed, the result is
@@ -25,7 +25,7 @@ fed back as a tool message and the model is called again until it answers in tex
 backend llm_core raises LlmUnavailable (callers map it to 503) - there is no canned answer.
 
 Honest limits: not the Google ADK / LangChain / Strands / any framework, no container or pickled class, no memory service, tools
-are the declarative kinds above (webhook needs network egress, so it is unavailable inside Nano's browser sandbox), quality is
+are the declarative kinds above (webhook needs network egress: on Nano it goes through the allow-listed egress relay, and fails with the relay's reason when none is reachable), quality is
 the small local model's. On Nano's async model bridge the loop is re-run to resume after each model await, so webhook / function
 tools may execute more than once there - keep them idempotent.
 """
@@ -35,6 +35,7 @@ import ast
 import json
 import operator
 import re
+import sys
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -48,6 +49,7 @@ SPEC_ENV = "VYOMI_AGENT_SPEC"
 HONEST_LIMIT = ("Vyomi agent spec runtime (Dev Simplified): a JSON spec of instructions + declarative tools executed in-process over "
                 "the local model - not a container / pickled class / agent framework.")
 _FUNCS: dict = {}
+_EXT_KINDS: dict = {}   # extension tool kinds registered by other cores (core/agentcore_ext_core: agent / gateway / memory)
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_\-]{0,63}$")
 _KINDS = ("static", "template", "builtin", "webhook", "function")
 _BUILTINS = ("calculator", "current_time", "echo")
@@ -55,6 +57,11 @@ _BUILTINS = ("calculator", "current_time", "echo")
 
 class SpecError(ValueError):
     pass
+
+
+def register_kind(kind: str, fn) -> None:
+    """Register an extension tool kind: fn(tool, args) -> (result, is_error)."""
+    _EXT_KINDS[kind] = fn
 
 
 def register_function(name: str, fn) -> None:
@@ -82,8 +89,8 @@ def parse_spec(spec) -> dict:
             raise SpecError(f"duplicate tool name {t['name']}")
         seen.add(t["name"])
         kind = t.get("type", "static")
-        if kind not in _KINDS:
-            raise SpecError(f"tool {t['name']}: type must be one of {', '.join(_KINDS)}")
+        if kind not in _KINDS and kind not in _EXT_KINDS:
+            raise SpecError(f"tool {t['name']}: type must be one of {', '.join(_KINDS + tuple(_EXT_KINDS))}")
         if kind == "builtin" and t.get("builtin") not in _BUILTINS:
             raise SpecError(f"tool {t['name']}: builtin must be one of {', '.join(_BUILTINS)}")
         if kind == "webhook" and not str(t.get("url", "")).startswith(("http://", "https://")):
@@ -150,11 +157,22 @@ def exec_tool(tool: dict, args: dict):
             if b == "current_time":
                 return datetime.now(timezone.utc).isoformat(), False
             return args, False
+        if kind in _EXT_KINDS:
+            return _EXT_KINDS[kind](tool, args)
         if kind == "function":
             fn = _FUNCS.get(tool["name"])
             if fn is None:
                 return {"error": f"no in-process function registered for {tool['name']}"}, True
             return fn(dict(args)), False
+        if kind == "webhook" and sys.platform == "emscripten":   # Nano: through the allow-listed egress relay (awaited + replayed by llm_core.arun)
+            status, _h, raw_b = llm.http_request("POST", tool["url"], dict({"content-type": "application/json"}, **(tool.get("headers") or {})), json.dumps(args).encode(), float(tool.get("timeout", 10)))
+            raw = raw_b.decode("utf-8", "replace")
+            if status >= 400:
+                return {"error": f"webhook returned HTTP {status}: {raw[:300]}"}, True
+            try:
+                return json.loads(raw), False
+            except ValueError:
+                return raw, False
         if kind == "webhook":
             req = urllib.request.Request(tool["url"], data=json.dumps(args).encode(), method="POST",
                                          headers=dict({"content-type": "application/json"}, **(tool.get("headers") or {})))

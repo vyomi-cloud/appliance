@@ -114,6 +114,9 @@ def _gcp_service(path):
     from core import gcp_agentplatform_core as _gap
     if _gap.handles(path):
         return "gcp-agentplatform"   # RAG Engine / Vertex AI Search / evaluation runs (core/gcp_agentplatform_core)
+    from core import gcp_agentgov_core as _gov
+    if _gov.handles(path):
+        return "gcp-agentgov"   # Agent Platform governance: Model Armor, gateways, MCP servers, policies, provisioned throughput (core/gcp_agentgov_core over the AgentCore + guardrail engines)
     if re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/reasoningEngines([/:]|$)", path.split("?", 1)[0]) \
             or re.match(r"^/v1(beta1)?/projects/[^/]+/locations/[^/]+/operations/ae-[0-9a-f]+$", path.split("?", 1)[0]):
         return "gcp-agentengine"   # Vertex AI Agent Engine reasoningEngines + :query/:streamQuery -> core/gcp_agentengine_core (Vyomi agent spec over llm_core)
@@ -1301,6 +1304,8 @@ class AwsWireRouter:
             return "azure-dns-query"
         if path.startswith("/azure-sql/") or path == "/azure-sql":  # Azure SQL data plane
             return "azure-sql"
+        if "aws4" not in (lheaders.get("authorization", "") or "").lower() and re.match(r"^/(runtimes/.+?/invocations(/|$)|gateways/[^/?]+/mcp/?$)", path.split("?", 1)[0]):
+            return "agentcore"   # AgentCore data plane called without SigV4 (Bearer-JWT MCP / A2A clients, agent-card GET): core/bedrock_agents_core authenticates it
         if path.startswith("/_vyomi/kb/"):   # Vyomi extension: RAG Studio inspect API (core/bedrock_agents_core.inspect_dispatch)
             return "bedrock"
         if path.startswith("/service/" + cw.TARGET_PREFIX + "/") or lheaders.get("smithy-protocol") == "rpc-v2-cbor":
@@ -1578,7 +1583,7 @@ class AwsWireRouter:
             r = await rds.adispatch(self.rds, self._query_params(query, b), msg_store=self.msg, s3_store=self.s3)
             return {"status": r.status, "headers": {"content-type": r.media_type, **dict(r.headers or {})},
                     "body": r.body.encode() if isinstance(r.body, str) else r.body}
-        if svc in ("bedrock", "gcp-aiplatform", "gcp-vertex", "gcp-agentengine", "gcp-agentplatform", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
+        if svc in ("bedrock", "gcp-aiplatform", "gcp-vertex", "gcp-agentengine", "gcp-agentplatform", "gcp-agentgov", "az-openai", "agentcore") or (svc == "azure-arm" and re.search(
                 r"/providers/microsoft\.cognitiveservices/accounts/[^/]+/openai/", path.lower())):   # model inference: Nano's WebLLM backend is async (core/llm_core.arun)
             from core import llm_core
             return await llm_core.arun(lambda: self.handle(method, path, query, headers, body))
@@ -2109,6 +2114,7 @@ class AwsWireRouter:
             if agentcore_eval_core.handles(path.split("?", 1)[0]):
                 return agentcore_eval_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
             from core import bedrock_agents_core
+            bedrock_agents_core.HOOKS.update(iam_key=self.iam.access_keys.get, wire=self.handle)   # SigV4 identity lookup + in-process AWS API calls (smithyModel targets)
             return bedrock_agents_core.agentcore_dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
         if svc == "gcp-aiplatform":
@@ -2118,6 +2124,10 @@ class AwsWireRouter:
         if svc == "gcp-agentplatform":
             from core import gcp_agentplatform_core
             return gcp_agentplatform_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "gcp-agentgov":
+            from core import gcp_agentgov_core
+            return gcp_agentgov_core.dispatch(self.s3, self.lam, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), lheaders.get("host", ""))
 
         if svc == "gcp-agentengine":
             from core import gcp_agentengine_core

@@ -43,7 +43,7 @@ class LlmUnavailable(Exception):
 
 
 _state = {"fn": None, "embed_fn": None, "endpoint": None, "model": None, "afn": None, "acache": {}, "in_arun": False,
-          "stream_fn": None, "no_rf": False, "no_native": False, "aembed": None, "aembed_model": None, "custom_is": None, "custom_afn": None}
+          "stream_fn": None, "no_rf": False, "no_native": False, "aembed": None, "aembed_model": None, "custom_is": None, "custom_afn": None, "ahttp": None}
 
 
 class NeedAsync(BaseException):
@@ -78,6 +78,52 @@ def set_custom_backend(is_fn=None, afn=None) -> None:
     _state["custom_is"], _state["custom_afn"], _state["acache"] = is_fn, afn, {}
 
 
+def set_async_http(afn=None) -> None:
+    """Register an awaitable outbound-HTTP bridge ``afn(req: dict) -> dict`` (req = method/url/headers/body(b64)/timeout; reply =
+    {status, headers, body(b64)} or {error}). Nano: the allow-listed egress relay (wasm/gw-bridge.js, `globalThis.vyomiBackendFetch`).
+    Used through ``arun`` so a synchronous core (AgentCore gateway targets, OAuth token exchange) can reach the network from the browser."""
+    _state["ahttp"], _state["acache"] = afn, {}
+
+
+def _ahttp_bridge():
+    """The registered bridge, else (Nano only) the page's `vyomiBackendFetch` wrapped as an async callable, else None."""
+    if _state["ahttp"]:
+        return _state["ahttp"]
+    import sys
+    if sys.platform != "emscripten":
+        return None
+    try:
+        import js
+        fn = getattr(js.globalThis, "vyomiBackendFetch", None)
+    except Exception:  # noqa: BLE001
+        return None
+    if fn is None:
+        return None
+
+    async def call(req):
+        return json.loads(str(await fn(json.dumps(req))))
+    return call
+
+
+def http_request(method, url, headers, body, timeout):
+    """Outbound HTTP for synchronous cores on a runtime with no socket (Nano). -> (status, headers, bytes). Raises NeedAsync
+    (replayed by ``arun`` after the bridge answers) and RuntimeError when no bridge exists or the relay refused."""
+    import base64
+    req = {"method": method, "url": url, "headers": dict(headers or {}), "body": base64.b64encode(body or b"").decode(), "timeout": timeout}
+    key = "h" + _akey(req)
+    hit = _state["acache"].get(key)
+    if hit is None:
+        if not (_state["in_arun"] and _ahttp_bridge()):
+            raise RuntimeError("outbound HTTP needs the allow-listed egress relay, which is not reachable from this request "
+                               "(open the Nano tab with a Vyomi session, or run `vyomi-tunnel gateway-backend <origin>=<local origin>`)")
+        raise NeedAsync(key, req, "http")
+    if isinstance(hit, Exception):
+        raise RuntimeError(str(hit))
+    if hit.get("error"):
+        raise RuntimeError(str(hit["error"]))
+    return int(hit["status"]), hit.get("headers") or {}, base64.b64decode(hit.get("body") or "")
+
+
 def _is_custom(model) -> bool:
     f = _state["custom_is"]
     try:
@@ -86,11 +132,11 @@ def _is_custom(model) -> bool:
         return False
 
 
-async def arun(handler, max_rounds: int = 16):
+async def arun(handler, max_rounds: int = 40):
     """Run the synchronous ``handler()`` (a whole wire request); every chat() it makes is answered by the async backend
     (awaited here, cached, request replayed) so cores stay synchronous. A request that makes several model calls (tool
     retries) replays once per call. Without an async backend this is just handler()."""
-    if not _state["afn"] and not _state["aembed"] and not _state["custom_afn"]:
+    if not _state["afn"] and not _state["aembed"] and not _state["custom_afn"] and not _ahttp_bridge():
         return handler()
     _state["acache"] = {}
     try:
@@ -103,6 +149,12 @@ async def arun(handler, max_rounds: int = 16):
                     try:
                         _state["acache"][n.key] = {"vectors": await _state["aembed"](list(n.args_))}
                     except Exception as e:
+                        _state["acache"][n.key] = e
+                    continue
+                if n.kind == "http":
+                    try:
+                        _state["acache"][n.key] = await _ahttp_bridge()(n.args_)
+                    except Exception as e:  # noqa: BLE001
                         _state["acache"][n.key] = e
                     continue
                 if n.kind == "custom":

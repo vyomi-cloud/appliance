@@ -178,5 +178,58 @@
   "tests": [
    "tests/conformance/test_ai_agent_runtimes.py"
   ]
+ },
+ "gcp.vertex-ai.model-armor": {
+  "title": "Security: Model Armor templates and sanitizeUserPrompt / sanitizeModelResponse",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Templates (RAI filters, prompt-injection and jailbreak, basic sensitive-data protection) are really evaluated by the Bedrock Guardrails engine (keyword + local-embedding scoring, regex PII), so detection is toy-grade, not Google's models. Malicious-URI detection (Safe Browsing) and advanced SDP (Cloud DLP templates) are reported EXECUTION_SKIPPED. No floor settings, no SCC / Cloud Logging findings: the page keeps the last 200 sanitize results of this simulator. Prompt injection applies to user prompts only."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
+  ]
+ },
+ "gcp.vertex-ai.agent-gateway": {
+  "title": "Gateways and MCP servers (agentGateways, mcpServers registry)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Google's Agent Gateway / Agent Registry have no public API to model: these resources are Vyomi's own (vyomiExtension) over the AgentCore gateway engine. A gateway is a real MCP endpoint (POST /gateways/{id}/mcp) with NONE or JWT auth; attaching an MCP server creates a real mcpServer target (API-key header supported) and tools are listed and called through it. The backing AgentCore gateway also shows in the AWS console of the same account (prefixed gcp-). Calling external MCP servers needs network: direct on the Mesh, through the allow-listed egress relay on Nano."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py",
+   "tests/conformance/test_agentcore_limits.py"
+  ]
+ },
+ "gcp.vertex-ai.agent-policies": {
+  "title": "Policies (agentPolicies: Cedar over a gateway)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Vyomi's own resource over the AgentCore policy engine: a real Cedar policy (cedarpy) decides each gateway tool call (principal = JWT subject, action = <target>___<tool>, context.input = arguments); ENFORCE denies by default, LOG_ONLY allows and audits. Cedar needs cedarpy (Mesh/appliance); on Nano an ENFORCE gateway denies every call (fail closed). Google's org-level agent policies are not modelled."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
+  ]
+ },
+ "gcp.vertex-ai.provisioned-throughput": {
+  "title": "Provisioned Throughput (bookkeeping)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "A record of a model, generative model units and a commitment term. Nothing is reserved, enforced or billed (a local model has no shared capacity). Google exposes no public create API for it, so the path is a Vyomi extension."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_agentgov_core.py"
+  ]
  }
 }
