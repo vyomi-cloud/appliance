@@ -156,6 +156,8 @@ async function bootPyodide() {
     const { loadPyodide } = await import(PYODIDE_INDEX + "pyodide.mjs");
     py = await loadPyodide({ indexURL: PYODIDE_INDEX });   // explicit indexURL: required in a worker
     try { await py.loadPackage("sqlite3"); } catch (e) { log("sqlite3 load skipped: " + e, "dim"); }
+    try { py.unpackArchive(await (await fetch(new URL("../pylib/pypdf-7.1.0-py3-none-any.whl", import.meta.url))).arrayBuffer(), "wheel"); }   // pure-Python pypdf for PDF knowledge-base docs (not a Pyodide package)
+    catch (e) { log("pypdf unavailable (PDF knowledge-base documents will fail): " + e, "dim"); }
     await installTzdata();
     const hasPg = await installPGlite();
     py.globals.set("_USE_PGLITE", hasPg);

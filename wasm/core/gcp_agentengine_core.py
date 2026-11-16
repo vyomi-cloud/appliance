@@ -150,6 +150,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
                 raise _Err(404, "NOT_FOUND", f"Operation {path} not found.")
             return _am()._j(200, op)
         m = _PATH.match(path)
+        if not m:    # a deeper child path the engine does not model (sandbox environments, memory revisions ...)
+            raise _Err(404, "NOT_FOUND", f"Unsupported Agent Engine operation: {method} {path}")
         ver, proj, loc, eid, ops, opid, verb, coll_verb = m.groups()
         parent = f"projects/{proj}/locations/{loc}"
         if eid is None:
