@@ -943,14 +943,16 @@ def _create_window(store: SsmStore, b: dict) -> dict:
     wid = "mw-" + _hex(17)
     store.windows[wid] = {"id": wid, "name": b["Name"], "description": b.get("Description", ""), "schedule": b["Schedule"], "duration": int(b["Duration"]),
                           "cutoff": int(b["Cutoff"]), "allow_unassociated": bool(b["AllowUnassociatedTargets"]), "enabled": True, "created": _now(),
-                          "modified": _now(), "timezone": b.get("ScheduleTimezone", "UTC"), "tags": _tags_in(b.get("Tags")),
+                          "modified": _now(), "timezone": b.get("ScheduleTimezone", "UTC"), "tz_set": b.get("ScheduleTimezone") is not None, "tags": _tags_in(b.get("Tags")),
                           "client_token": ct or "", "targets": {}}
     return {"WindowId": wid}
 
 
 def _window_view(w: dict, full: bool) -> dict:
     out = {"Name": w["name"], "Enabled": w["enabled"], "Duration": w["duration"], "Cutoff": w["cutoff"], "Schedule": w["schedule"],
-           "ScheduleTimezone": w["timezone"], "NextExecutionTime": _window_next(w)}
+           "NextExecutionTime": _window_next(w)}
+    if w.get("tz_set", True):   # real GetMaintenanceWindow omits ScheduleTimezone when none was set (endurance F203)
+        out["ScheduleTimezone"] = w["timezone"]
     if w.get("description"):
         out["Description"] = w["description"]
     if full:
@@ -983,6 +985,8 @@ def _update_window(store: SsmStore, b: dict) -> dict:
                      ("AllowUnassociatedTargets", "allow_unassociated"), ("Enabled", "enabled"), ("ScheduleTimezone", "timezone")):
         if b.get(src) is not None:
             w[dst] = b[src]
+            if src == "ScheduleTimezone":
+                w["tz_set"] = True
     w["modified"] = _now()
     out = _window_view(w, True)
     out.pop("NextExecutionTime", None)

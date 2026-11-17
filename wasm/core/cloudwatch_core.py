@@ -730,7 +730,7 @@ def op_put_metric_alarm(store, a):
            "ActionsEnabled": _b(a.get("ActionsEnabled"), True),
            "OKActions": _actions(a, "OKActions"), "AlarmActions": _actions(a, "AlarmActions"),
            "InsufficientDataActions": _actions(a, "InsufficientDataActions"),
-           "EvaluationPeriods": evp, "DatapointsToAlarm": dta if dta is not None else evp,
+           "EvaluationPeriods": evp, "DatapointsToAlarm": dta,   # omitted on read-back when unset, like real CloudWatch (endurance F202)
            "ComparisonOperator": cmp_, "TreatMissingData": tmd}
     metrics = _list(a.get("Metrics"))
     if metrics:
@@ -818,7 +818,8 @@ class _RuleError(Exception):
 
 
 def _rule_eval(rule: str, state_of) -> bool:
-    toks = re.findall(r'"[^"]*"|\(|\)|[A-Za-z_]+|[^\s()"]+', rule)
+    # a state call ALARM(name) is ONE token so hyphen/dot/colon names (endurance F200) are not split
+    toks = re.findall(r'(?:ALARM|OK|INSUFFICIENT_DATA)\(\s*(?:"[^"]*"|[^\s")]+)\s*\)|"[^"]*"|\(|\)|[A-Za-z_]+|[^\s()"]+', rule)
     pos = [0]
 
     def peek():
@@ -862,12 +863,10 @@ def _rule_eval(rule: str, state_of) -> bool:
         if t.upper() in ("TRUE", "FALSE"):
             take()
             return t.upper() == "TRUE"
-        if t.upper() in ALARM_STATES:
+        m = re.match(r'(ALARM|OK|INSUFFICIENT_DATA)\(\s*(?:"([^"]*)"|([^\s")]+))\s*\)$', t, re.I)
+        if m:
             take()
-            take("(")
-            ref = take().strip('"')
-            take(")")
-            return state_of(_name_of_ref(ref)) == t.upper()
+            return state_of(_name_of_ref(m.group(2) or m.group(3))) == m.group(1).upper()
         raise _RuleError(f"unexpected {t}")
 
     v = expr()
@@ -1092,7 +1091,7 @@ def _evaluate_band_alarm(store, rec: dict, band_ref, n: int, period: int, start:
     vals = [series.get(start + i * period) for i in range(n)]
     states = ["B" if v is not None and breach(v) else ("O" if v is not None else {"breaching": "B", "notBreaching": "O"}.get(tmd, "M")) for v in vals]
     b, o = states.count("B"), states.count("O")
-    dta = rec.get("DatapointsToAlarm", n)
+    dta = rec.get("DatapointsToAlarm") or n
     seen = [(start + i * period, v) for i, v in enumerate(vals) if v is not None]
     when = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%d/%m/%y %H:%M:%S")
     shown = ", ".join(f"{v} ({when(t)})" for t, v in seen[-dta:] or [])
@@ -1147,7 +1146,7 @@ def _evaluate_alarm(store, rec: dict, now: float, initial: bool = False) -> None
         else:
             states.append("B" if _breach(op, v, thr) else "O")
     b, o = states.count("B"), states.count("O")
-    dta = rec.get("DatapointsToAlarm", n)
+    dta = rec.get("DatapointsToAlarm") or n
     seen = [(start + i * period, v) for i, v in enumerate(vals) if v is not None]
     when = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%d/%m/%y %H:%M:%S")
     shown = ", ".join(f"{v} ({when(t)})" for t, v in seen[-dta:] or [])
@@ -2167,12 +2166,12 @@ def _row(store: CloudWatchStore, kind: str, rec: dict) -> dict:
     elif rec.get("Metrics"):
         metric = "Metric math: " + next((m.get("Expression") or m["MetricStat"]["Metric"]["MetricName"] for m in rec["Metrics"] if m.get("ReturnData", True)), "expression")
         thr = rec.get("Threshold")
-        cond = f"{_OP_SYMBOL[rec['ComparisonOperator']]} {thr:g} for {rec['DatapointsToAlarm']} datapoints within {rec['EvaluationPeriods'] * _alarm_period(rec) // 60} minutes"
+        cond = f"{_OP_SYMBOL[rec['ComparisonOperator']]} {thr:g} for {rec.get('DatapointsToAlarm') or rec['EvaluationPeriods']} datapoints within {rec['EvaluationPeriods'] * _alarm_period(rec) // 60} minutes"
         period = f"{_alarm_period(rec)} seconds"
     else:
         metric = f"{rec['Namespace']} / {rec['MetricName']}"
         cond = (f"{rec.get('Statistic') or rec.get('ExtendedStatistic')} {rec['MetricName']} {_OP_SYMBOL[rec['ComparisonOperator']]} {rec['Threshold']:g} "
-                f"for {rec['DatapointsToAlarm']} datapoints within {rec['EvaluationPeriods'] * rec['Period'] // 60} minutes")
+                f"for {rec.get('DatapointsToAlarm') or rec['EvaluationPeriods']} datapoints within {rec['EvaluationPeriods'] * rec['Period'] // 60} minutes")
         period = f"{rec['Period']} seconds"
     n_actions = len(rec.get("OKActions", [])) + len(rec.get("AlarmActions", [])) + len(rec.get("InsufficientDataActions", []))
     return {"name": rec["AlarmName"], "alarm_name": rec["AlarmName"], "arn": rec["AlarmArn"], "type": kind,
@@ -2200,7 +2199,7 @@ def console_get(store: CloudWatchStore, name: str) -> dict:
                 ("Statistic", rec.get("Statistic") or rec.get("ExtendedStatistic")), ("Period", row["period"]),
                 ("Threshold", f"{_OP_SYMBOL[rec['ComparisonOperator']]} {rec['Threshold']:g}")]
     if kind == "MetricAlarm":
-        cfg += [("Evaluation periods", rec["EvaluationPeriods"]), ("Datapoints to alarm", rec["DatapointsToAlarm"]),
+        cfg += [("Evaluation periods", rec["EvaluationPeriods"]), ("Datapoints to alarm", rec.get("DatapointsToAlarm") or rec["EvaluationPeriods"]),
                 ("Missing data treatment", rec["TreatMissingData"])]
     cfg.append(("Last configuration change", _ago(rec["AlarmConfigurationUpdatedTimestamp"])))
     row["details"] = [{"key": k, "value": str(v)} for k, v in cfg]

@@ -497,6 +497,7 @@ _SIGNING = {
     "glue": "glue", "redshift-data": "redshift-data",
     "dms": "dms", "bedrock": "bedrock",   # Bedrock runtime + foundation-model catalogue -> core/ai_models_core over the local-LLM seam (core/llm_core)
     "ecr": "ecr", "inspector2": "inspector2",   # Amazon ECR control plane + Inspector2 findings -> core/ecr_core over the S3 store (images/layers live in the simulator S3)
+    "budgetservice": "budgets", "resource-groups": "resource-groups",   # AWS Budgets (JSON 1.1) + Resource Groups (rest-json) -> core/aws_governance_core over the S3 account bag (endurance F204/F205)
     "backup": "backup",   # AWS Backup subset (region settings + DynamoDB copy jobs) -> core/backup_core over the DynamoDB + S3 stores
     "vyomi-reservations": "vyomi-reservations",   # Vyomi-only: DynamoDB reserved capacity + RDS capacity reservations (rest-json POST /<Operation>) -> core/reservations_core over the DDB + RDS stores
     "networkmanager": "networkmanager",   # AWS Network Manager (rest-json /global-networks...) -> core/networkmanager_core over the S3 account bag + the EC2 model (transit gateways)
@@ -528,6 +529,7 @@ _TARGET_PREFIX = {
     "Route53Resolver": "dnsfw",
     "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101": "cloudtrail",
     "AWSOrganizationsV20161128": "organizations",
+    "AWSBudgetServiceGateway": "budgets",
     "AmazonEC2ContainerRegistry_V20150921": "ecr",   # Amazon ECR
     "AWSInsightsIndexService": "ce",   # Cost Explorer
     "AWSEC2InstanceConnectService": "eic",
@@ -2159,6 +2161,14 @@ class AwsWireRouter:
             finally:
                 if tok is not None:
                     _ctx.REQUEST_PROVIDER.reset(tok)
+
+        if svc == "budgets":
+            from core import aws_governance_core as _gov
+            return _gov.budgets_handle(self.s3, lheaders.get("x-amz-target", "") or "", bytes(body))
+
+        if svc == "resource-groups":
+            from core import aws_governance_core as _gov
+            return _gov.rg_handle(self.s3, method, path, bytes(body))
 
         if svc == "backup":
             from core import backup_core
