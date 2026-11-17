@@ -1,0 +1,377 @@
+{
+ "aws.vpc.dhcp-option-sets": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.elastic-ips": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.internet-gateways": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.managed-prefix-lists": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.nat-gateways": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.network-acls": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.route-tables": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.security-groups": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.subnets": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "aws.vpc.vpcs": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "bedrock.agents": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "bedrock.guardrails": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "dynamodb.table.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "dynamodb.table.indexes": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "dynamodb.table.pitr": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "dynamodb.table.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "dynamodb.table.ttl": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ec2.elastic-ips": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ec2.iam-instance-profiles": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "n/a"
+ },
+ "ec2.instances.details": {
+  "cli": "n/a",
+  "sdk": "n/a",
+  "ui": "n/a"
+ },
+ "ec2.instances.lifecycle": {
+  "cli": "n/a",
+  "sdk": "n/a",
+  "ui": "n/a"
+ },
+ "ec2.key-pairs": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ec2.launch-templates": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ec2.security-groups": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ec2.snapshots": {
+  "cli": "n/a",
+  "sdk": "n/a",
+  "ui": "n/a"
+ },
+ "ec2.volumes": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ecr.lifecycle": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "ecr.repositories": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "eventbridge.bus.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "eventbridge.rule.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "eventbridge.rule.targets": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.policy.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.role.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.role.permissions": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.role.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.role.trust-policy": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.user.access-keys": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.user.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.user.groups": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "iam.user.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "kms.key.aliases": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "kms.key.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "kms.key.rotation": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "kms.key.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "rds.instance.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "rds.instance.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "rds.parameter-groups": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "rds.snapshot.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "rds.subnet-groups": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.cors": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.encryption": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.lifecycle": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.ownership": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.public-access-block": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.bucket.versioning": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "s3.object.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "secretsmanager.secret.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "secretsmanager.secret.deletion": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "secretsmanager.secret.encryption": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "secretsmanager.secret.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "secretsmanager.secret.versions": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sns.subscription.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sns.subscription.filter-policy": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sns.subscription.raw-delivery": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sns.topic.access-policy": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sns.topic.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sns.topic.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.queue.attributes": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.queue.crud": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.queue.dlq-redrive": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.queue.fifo": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.queue.redrive-allow-policy": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.queue.tags": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ },
+ "sqs.sns-subscriptions": {
+  "cli": "pass",
+  "sdk": "pass",
+  "ui": "pass"
+ }
+}

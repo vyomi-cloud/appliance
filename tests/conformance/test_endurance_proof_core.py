@@ -41,6 +41,18 @@ def run():
     r = ag.dispatch(s3, "POST", "/agents/", {}, {}, json.dumps({}).encode())
     _check("F501 ListAgents with an empty body", r["status"] in (200, 202))
 
+    # F502: the Mesh CORS preflight must allow what a native-wire console sends (x-amz-date ...) and PUT/DELETE, or every Nano->Mesh call
+    # from a real browser is blocked (the Nano console showed 'Failed to load ... HTTP 503' on a mesh-homed space)
+    from core import mesh
+    h = dict((k.decode(), v.decode()) for k, v in mesh.cors_headers("http://127.0.0.1:1", "authorization,content-type,x-amz-date,x-amz-target,x-amz-content-sha256"))
+    allowed = [x.strip() for x in h["access-control-allow-headers"].split(",")]
+    _check("F502 preflight allows x-amz-date / x-amz-target / x-amz-content-sha256 plus the mesh token header",
+           {"x-amz-date", "x-amz-target", "x-amz-content-sha256", "x-vyomi-mesh-token", "authorization"} <= set(allowed))
+    _check("F502 preflight allows PUT/DELETE/HEAD", all(m in h["access-control-allow-methods"] for m in ("PUT", "DELETE", "HEAD")))
+    _check("F502 response headers are exposed to the page", h.get("access-control-expose-headers") == "*")
+    _check("F502 junk requested header names are not reflected",
+           "bad header" not in dict((k.decode(), v.decode()) for k, v in mesh.cors_headers("http://x", "bad header,x-ok"))["access-control-allow-headers"])
+
 
 if __name__ == "__main__":
     run()
