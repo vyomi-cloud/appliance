@@ -152,6 +152,35 @@ resource "google_compute_router_nat" "main" {
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
 }
 
+resource "google_compute_network" "peer" {
+  name                    = "vyomi-peer-vpc"
+  auto_create_subnetworks = false
+}
+
+resource "google_compute_network_peering" "a_to_b" {
+  name         = "vyomi-a-to-b"
+  network      = google_compute_network.main.self_link
+  peer_network = google_compute_network.peer.self_link
+}
+
+resource "google_compute_network_peering" "b_to_a" {
+  name         = "vyomi-b-to-a"
+  network      = google_compute_network.peer.self_link
+  peer_network = google_compute_network.main.self_link
+}
+
+resource "google_secret_manager_secret" "api" {
+  secret_id = "vyomi-api-key"
+  labels    = { env = "endurance" }
+  annotations = { owner = "platform" }
+  ttl         = "31536000s"
+  replication {
+    user_managed {
+      replicas { location = "us-central1" }
+    }
+  }
+}
+
 output "network_id" { value = google_compute_network.main.id }
 output "network_name" { value = google_compute_network.main.name }
 output "subnet_ids" { value = [google_compute_subnetwork.public.id, google_compute_subnetwork.private.id] }

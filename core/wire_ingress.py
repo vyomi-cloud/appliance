@@ -91,6 +91,7 @@ pre-v4 `gcp_iam_state` records once per space and projects its writes back into 
 from __future__ import annotations
 
 import os
+import re
 
 from core.aws_wire_router import AwsWireRouter
 
@@ -1071,6 +1072,8 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
         from core import app_context as _ctx
         # /azure-sql + the App Configuration data plane read the Azure space's ARM records (space-scoped by provider)
         tok = _ctx.REQUEST_PROVIDER.set("azure") if request.url.path.startswith(_AZURE_SPACE_PREFIXES) else None
+        if tok is None and re.match(r"^/v2/projects/[^/]+/locations/[^/]+/(functions|runtimes)([/:]|$)", request.url.path):
+            tok = _ctx.REQUEST_PROVIDER.set("gcp")   # F314: Cloud Functions v2 reads the GCP space's Cloud Storage (function source)
         try:
             out = await r.ahandle(request.method, request.url.path,
                                   dict(request.query_params), dict(request.headers), body)
@@ -1093,7 +1096,9 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
                    # over the offline ARM state — Nano serves these via the same router
                    "/kv", "/labels", "/revisions", "/snapshots", "/locks",
                    # Resource Manager tag keys + Essential Contacts (core/gcp_resourcemanager_core.py)
-                   "/v3/tagKeys", "/v1/projects/{project}/contacts"):
+                   "/v3/tagKeys", "/v1/projects/{project}/contacts",
+                   # Cloud Functions v2 (core/gcp_functions_core over the Cloud Run store) — F314: the offline server did not mount it
+                   "/v2/projects/{project}/locations/{location}/functions", "/v2/projects/{project}/locations/{location}/runtimes"):
         app.add_route(prefix, _proxy, methods=methods)
         app.add_route(prefix + "/{rest:path}", _proxy, methods=methods)
     async def _az_queue(request: Request):

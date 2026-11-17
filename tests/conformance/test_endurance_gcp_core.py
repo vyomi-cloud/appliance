@@ -108,7 +108,37 @@ def t_f313():
     _check("F313 an explicitly set container name is kept", g2["template"]["containers"][0]["name"] == "web")
 
 
+def t_f315_f316():
+    from core import gcp_secretmanager_core as sm
+    _check("F315 replication with a null counterpart is valid",
+           sm._validate_replication({"userManaged": {"replicas": [{"location": "us-central1"}]}, "automatic": None}) is None)
+    _check("F315 both set is still rejected", sm._validate_replication({"automatic": {}, "userManaged": {"replicas": [{"location": "us-central1"}]}}) is not None)
+
+
+def t_f316_f317():
+    import json as _j
+    from core import gcp_compute_core as cc
+    st = cc.ComputeStore() if hasattr(cc, "ComputeStore") else None
+    pol = "/compute/v1/projects/p/regions/r/firewallPolicies"
+    cc.dispatch(st, "POST", pol, {}, {}, _j.dumps({"name": "fp"}).encode())
+    rule = {"priority": 1000, "action": "allow", "direction": "INGRESS", "ruleName": "ssh", "match": {"srcIpRanges": ["10.0.0.0/8"]}}
+    cc.dispatch(st, "POST", pol + "/fp/addRule", {}, {}, _j.dumps(rule).encode())
+    r = cc.dispatch(st, "GET", pol + "/fp/getRule", {"priority": "1000"}, {}, b"")
+    g = _j.loads(r.body)
+    _check("F317 firewall policy getRule returns the rule with its ruleName", r.status == 200 and g["ruleName"] == "ssh" and g["kind"] == "compute#firewallPolicyRule")
+
+
+def t_f318():
+    from core import gcp_functions_core as fc
+    import inspect
+    src = inspect.getsource(fc)
+    _check("F318 vpcConnectorEgressSettings is conditional on a connector", 'if (sc.get("vpcConnector") or sc.get("vpcConnectorEgressSettings"))' in src)
+
+
 def run():
+    t_f318()
+    t_f316_f317()
+    t_f315_f316()
     t_f313()
     t_f306_f308()
     t_f304_f305()

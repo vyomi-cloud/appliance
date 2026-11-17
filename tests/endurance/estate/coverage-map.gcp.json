@@ -1,0 +1,797 @@
+{
+ "gcp.artifacts.repository.crud": {
+  "module": "gcp/modules/stage2-compute",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "2-compute",
+  "tf": [
+   "google_artifact_registry_repository.apps"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.cloudscheduler.jobs.crud": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_cloud_scheduler_job.tick"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.cloudscheduler.jobs.targets": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_cloud_scheduler_job.tick"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.compute.disks.crud": {
+  "module": "gcp/modules/stage2-compute",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "2-compute",
+  "tf": [
+   "google_compute_disk.data"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.compute.health_checks.crud": {
+  "module": "gcp/modules/stage2-compute",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "2-compute",
+  "tf": [
+   "google_compute_health_check.http"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.compute.instance_templates.crud": {
+  "module": "gcp/modules/stage2-compute",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "2-compute",
+  "tf": [
+   "google_compute_instance_template.web"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.compute.metadata": {
+  "module": "gcp/modules/stage2-compute",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "2-compute",
+  "tf": [
+   "google_compute_project_metadata_item.env"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.compute.snapshots.crud": {
+  "module": "gcp/modules/stage2-compute",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "2-compute",
+  "tf": [
+   "google_compute_snapshot.data"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.firestore.databases": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_firestore_database.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.firestore.documents": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_firestore_document.doc"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.functions.services.crud": {
+  "module": "gcp/modules/stage5-serverless",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "google_cloudfunctions2_function.hello"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.iam-admin.project-iam-bindings": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_project_iam_member.app_viewer",
+   "google_project_iam_member.app_custom",
+   "google_service_account_iam_member.ci_impersonates_app"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.iam-admin.roles-custom": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_project_iam_custom_role.reader"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.iam-admin.service-accounts": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_service_account.app",
+   "google_service_account.ci"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.kms.key.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_kms_crypto_key.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.kms.key.permissions": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_kms_crypto_key_iam_member.app_use"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.kms.key.rotation": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_kms_crypto_key.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.kms.keyring.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_kms_key_ring.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.logs.metrics.crud": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_logging_metric.errors"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.logs.router.crud": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_logging_project_sink.to_bucket"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.logs.storage.crud": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_logging_project_bucket_config.ops"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.memorystore.instances": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_redis_instance.cache"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.monitoring.alert-policy.crud": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_monitoring_alert_policy.cpu"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.monitoring.dashboards.crud": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_monitoring_dashboard.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.monitoring.notification-channels": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_monitoring_notification_channel.email"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.monitoring.uptime-checks.config": {
+  "module": "gcp/modules/stage7-observability",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "google_monitoring_uptime_check_config.web"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.address.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_address.nat",
+   "google_compute_global_address.lb"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.cloud-nat": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_router.main",
+   "google_compute_router_nat.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.firewall.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_firewall.web",
+   "google_compute_firewall.internal"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.peering": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_network_peering.a_to_b",
+   "google_compute_network_peering.b_to_a"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.route.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_route.egress"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.subnet.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_subnetwork.public",
+   "google_compute_subnetwork.private"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.networking.vpc.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_compute_network.main",
+   "google_compute_network.peer"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.schemas.crud": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_schema.event"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.subscriptions.crud": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_subscription.pull",
+   "google_pubsub_subscription.push"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.subscriptions.dead-lettering": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_subscription.pull"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.subscriptions.push": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_subscription.push"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.subscriptions.retry-policy": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_subscription.pull"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.topics.config": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_topic.events"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.pubsub.topics.crud": {
+  "module": "gcp/modules/stage4-messaging",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "google_pubsub_topic.events",
+   "google_pubsub_topic.dead"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.run.jobs.crud": {
+  "module": "gcp/modules/stage5-serverless",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "google_cloud_run_v2_job.batch"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.run.services.authentication": {
+  "module": "gcp/modules/stage5-serverless",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "google_cloud_run_v2_service_iam_member.public"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.run.services.crud": {
+  "module": "gcp/modules/stage5-serverless",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "google_cloud_run_v2_service.api"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.annotations": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret.api"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.expiration": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret.api"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.labels": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret.db"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.permissions": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret_iam_member.app_read"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.replication": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret.api"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.secret.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret.db",
+   "google_secret_manager_secret.api"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.secret-manager.version.crud": {
+  "module": "gcp/modules/stage1-network-identity",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "google_secret_manager_secret_version.db"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.sql.databases": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_sql_database.app"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.sql.instances": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_sql_database_instance.main"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.sql.users": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_sql_user.app"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.storage.buckets": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_storage_bucket.data",
+   "google_storage_bucket_object.hello",
+   "google_storage_bucket_iam_member.app_reader"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.storage.cors": {
+  "module": "gcp/modules/stage3-data",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "google_storage_bucket.data"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.vertex-ai.datasets": {
+  "module": "gcp/modules/stage6-ai",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "google_vertex_ai_dataset.docs"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.vertex-ai.endpoints": {
+  "module": "gcp/modules/stage6-ai",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "google_vertex_ai_endpoint.serve"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.vertex-ai.experiments": {
+  "module": "gcp/modules/stage6-ai",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "google_vertex_ai_tensorboard.tb"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.vertex-ai.feature-store": {
+  "module": "gcp/modules/stage6-ai",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "google_vertex_ai_feature_online_store.fos"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "gcp.vertex-ai.vector-search": {
+  "module": "gcp/modules/stage6-ai",
+  "proof": {
+   "tf": "gcp estate cycle 2026-11-17 on real server.py :19103 - validate, apply, no-diff replan, destroy, rebuild, destroy all PASS (tests/endurance/run_estate.sh estate/gcp)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "google_vertex_ai_index.idx",
+   "google_vertex_ai_index_endpoint.ie"
+  ],
+  "verify": [
+   "tf"
+  ]
+ }
+}

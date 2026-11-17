@@ -46,3 +46,39 @@ resource "google_cloud_run_v2_job" "batch" {
     }
   }
 }
+
+data "archive_file" "fn_src" {
+  type        = "zip"
+  output_path = "${path.module}/.fn-src.zip"
+  source {
+    content  = join("\n", ["def handler(request):", "    return 'ok'", ""])
+    filename = "main.py"
+  }
+}
+
+resource "google_storage_bucket_object" "fn_src" {
+  name   = "fn-src.zip"
+  bucket = var.bucket
+  source = data.archive_file.fn_src.output_path
+}
+
+resource "google_cloudfunctions2_function" "hello" {
+  name     = "vyomi-fn-${random_id.sl.hex}"
+  location = "us-central1"
+  build_config {
+    runtime     = "python312"
+    entry_point = "handler"
+    source {
+      storage_source {
+        bucket = var.bucket
+        object = google_storage_bucket_object.fn_src.name
+      }
+    }
+  }
+  service_config {
+    max_instance_count    = 2
+    available_memory      = "256M"
+    timeout_seconds       = 60
+    service_account_email = var.sa_email
+  }
+}

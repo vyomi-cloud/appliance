@@ -5,6 +5,7 @@ terraform {
   required_providers {
     google = { source = "hashicorp/google", version = "~> 5.45" }
     random = { source = "hashicorp/random", version = "~> 3.6" }
+    archive = { source = "hashicorp/archive", version = "~> 2.4" }
   }
 }
 
@@ -31,6 +32,7 @@ provider "google" {
   cloud_scheduler_custom_endpoint  = "${var.endpoint}/v1/"
   artifact_registry_custom_endpoint = "${var.endpoint}/v1/"
   logging_custom_endpoint          = "${var.endpoint}/v2/"
+  cloudfunctions2_custom_endpoint  = "${var.endpoint}/v2/"
   cloud_run_v2_custom_endpoint     = "${var.endpoint}/v2/"
   vertex_ai_custom_endpoint        = "${var.endpoint}/v1/"
   monitoring_custom_endpoint       = "${var.endpoint}/"
