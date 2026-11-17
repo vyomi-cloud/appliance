@@ -44,16 +44,33 @@ Reuse: `run_e2e.py`, `report.py`, `runtime.py` (Blocked/PASS/FAIL model), fixtur
 | 2 | Refactor the harness to be cloud-neutral (component interface, per-cloud runtime/naming, shared report) | 1.5 d |
 | 3a | GCP app: 13 components on google-cloud SDKs, approval via Pub/Sub + Firestore (no Workflows) | 4-5 d |
 | 3b | Azure app: 13 components on azure SDKs, approval via Service Bus + Functions + Cosmos | 4-5 d |
-| 4 | Fix simulator gaps the probe finds (unknown until step 1; budget) | 2-4 d |
+| 4 | Fix simulator gaps the probe finds, plus the real-backend wiring above (floor 2-3 d) | 4-7 d |
 | 5 | README, report, Mesh packaging (`vyomi-agent-demo --cloud gcp|azure`), claims register entries | 1.5 d |
 
-Total about 11-15 working days sequential; about 8-10 with two parallel lanes (3a and 3b) after step 2. These are estimates; step 1 is the one that tightens them.
+Total about 13-18 working days sequential; about 10-12 with two parallel lanes (3a and 3b) after step 2. These are estimates; step 1 is the one that tightens them.
 
 ## Verification plan
 Same bar as AWS: exit 0 only if all 13 components PASS, real local model, unmodified vendor SDKs, no mocked results, BLOCKED reported as BLOCKED. Then run on a Mesh Codespace (blocked today by the 402 budget error). Nothing is claimed publicly until the claims register has the entries.
 
+## Decisions (owner, 2026-11-18)
+- **Approval pattern: assembled** (messaging + function + ledger), not a workflow orchestrator.
+- **"Real backend":** the approval path must run on real open-source engines, not on Vyomi's own record-keeping cores, wherever the substrate can run a container (Mesh / offline). Standing rule applies: no new backend of our own.
+
+### What is real today behind the approval path (from `core/capabilities/backends/*.json`)
+| Need | GCP | Azure |
+|---|---|---|
+| Approver inbox (messaging) | Pub/Sub: Vyomi's own core on the SNS/SQS store. A real Google Pub/Sub emulator container exists but is NOT the v4 data plane | Service Bus: Vyomi's own core with a real AMQP 1.0 data plane (pure Python). The Microsoft emulator was rejected earlier (not viable) |
+| Ledger (state) | Firestore: Vyomi's own core. A real Firestore emulator container exists but is NOT the v4 data plane | Cosmos DB: Vyomi's own core, no Cosmos engine. Azure Table storage is real offline (Azurite mirror) |
+| Tool code | Cloud Run functions: Python really executed in Vyomi's sandbox | Function App: Python in a restricted sandbox |
+
+### Proposed real-backend choice (Mesh / offline)
+- **GCP:** Pub/Sub on the real Google Pub/Sub emulator and the ledger on the real Firestore emulator, both already in the repo as cores (`gcp_pubsub_emulator`, `gcp_firestore_emulator`). Work: make them selectable as the data plane for this app (not default for everyone) and prove the approval flow through them.
+- **Azure:** Service Bus on its real AMQP 1.0 data plane (our implementation of the real wire, verified with `azure-servicebus`), ledger in Azure Table storage on Azurite (real engine) instead of Cosmos, which has no real engine we can run cheaply.
+- **Nano:** no containers in the browser, so Nano keeps Vyomi's in-browser cores and the report states that. Mesh is the "real backend" run.
+- Added scope: about 2-3 days (GCP emulators as data plane 1-1.5 d, Azure Table ledger + AMQP flow 1-1.5 d), included in step 4 below as a floor.
+
 ## Open questions for the owner
-1. Is "reference architecture on GCP and Azure" a goal for the Beta, or after Codespace verification and the licence work?
-2. Component 5: ship the assembled pattern (recommended) or add Workflows / Logic Apps first?
+1. Confirm "real backend" means this: real open-source engines behind the approval path on Mesh, Nano on in-browser cores? (If you meant every service in the app, say so; that is a much larger scope.)
+2. Is "reference architecture on GCP and Azure" a goal for the Beta, or after Codespace verification and the licence work?
 3. Is a map of "native equivalent vs assembled from parts" acceptable in the public wording?
-4. Where does it run first: Nano (in-browser model only) or Mesh only? Headless Nano has no local model, so agent steps would be BLOCKED there, as on AWS.
+4. Where does it run first: Nano (in-browser model only) or Mesh only?
