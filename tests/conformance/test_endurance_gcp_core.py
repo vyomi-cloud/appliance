@@ -92,7 +92,24 @@ def t_f306_f308():
     _check("F306 debian-cloud serves a debian-12 family image", any(i["family"] == "debian-12" for i in imgs))
 
 
+def t_f313():
+    import json as _j
+    from core import gcp_run_core as rc
+    st = rc.RunStore()
+    body = {"template": {"containers": [{"image": "us-docker.pkg.dev/cloudrun/container/hello"}]}}
+    r = rc.dispatch(st, "POST", "/v2/projects/p/locations/us-central1/services", {"serviceId": "s1"}, {}, _j.dumps(body).encode())
+    g = _j.loads(rc.dispatch(st, "GET", "/v2/projects/p/locations/us-central1/services/s1", {}, {}, b"").body)
+    c0 = g["template"]["containers"][0]
+    _check("F313 v2 wire view hides simulator-filled container name / cpuIdle / executionEnvironment",
+           "name" not in c0 and "cpuIdle" not in c0.get("resources", {}) and "executionEnvironment" not in g["template"] and "_auto" not in _j.dumps(g))
+    body["template"]["containers"][0]["name"] = "web"
+    rc.dispatch(st, "POST", "/v2/projects/p/locations/us-central1/services", {"serviceId": "s2"}, {}, _j.dumps(body).encode())
+    g2 = _j.loads(rc.dispatch(st, "GET", "/v2/projects/p/locations/us-central1/services/s2", {}, {}, b"").body)
+    _check("F313 an explicitly set container name is kept", g2["template"]["containers"][0]["name"] == "web")
+
+
 def run():
+    t_f313()
     t_f306_f308()
     t_f304_f305()
     t_f300()

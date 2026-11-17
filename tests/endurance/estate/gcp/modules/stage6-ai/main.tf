@@ -24,12 +24,6 @@ resource "google_vertex_ai_tensorboard" "tb" {
   region       = "us-central1"
 }
 
-resource "google_vertex_ai_metadata_store" "meta" {
-  name        = "vyomi-meta-${random_id.ai.hex}"
-  description = "Reference estate metadata store"
-  region      = "us-central1"
-}
-
 resource "google_vertex_ai_feature_online_store" "fos" {
   name   = "vyomi_fos_${random_id.ai.hex}"
   region = "us-central1"

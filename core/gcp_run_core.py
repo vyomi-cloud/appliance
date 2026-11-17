@@ -259,9 +259,11 @@ def _norm_container(c, idx, count, is_job):
     if not isinstance(c, dict) or not c.get("image"):
         raise _E(400, "INVALID_ARGUMENT", "Container image is required: template.containers[%d].image." % idx)
     c = dict(c)
+    auto = []   # F313: defaults the simulator fills for its own use; the v2 wire view hides them (see _wire_strip)
     if not c.get("name"):
         base = re.sub(r"[^a-z0-9]", "", c["image"].rsplit("/", 1)[-1].split(":")[0].split("@")[0].lower())[:20]
         c["name"] = "%s-%d" % (base or "container", idx + 1)
+        auto.append("name")
     res = dict(c.get("resources") or {})
     lim = dict(res.get("limits") or {})
     lim.setdefault("cpu", "1000m")
@@ -272,12 +274,35 @@ def _norm_container(c, idx, count, is_job):
         raise _E(400, "INVALID_ARGUMENT", "Invalid memory limit %r." % lim["memory"])
     res["limits"] = lim
     if not is_job:
+        if "cpuIdle" not in res:
+            auto.append("resources.cpuIdle")
         res.setdefault("cpuIdle", True)
         res.setdefault("startupCpuBoost", False)
         if idx == 0 and not c.get("ports"):
             c["ports"] = [{"name": "http1", "containerPort": 8080}]
     c["resources"] = res
+    if auto:
+        c["_auto"] = auto
     return c
+
+
+def _wire_strip(obj, top=True):
+    """F313: remove the simulator's own default-fills (marked `_auto`) from a v2 wire response."""
+    if isinstance(obj, dict):
+        auto = obj.pop("_auto", None)
+        for a in auto or []:
+            if a == "name":
+                obj.pop("name", None)
+            elif a == "resources.cpuIdle":
+                (obj.get("resources") or {}).pop("cpuIdle", None)
+            else:
+                obj.pop(a, None)
+        for v in obj.values():
+            _wire_strip(v, False)
+    elif isinstance(obj, list):
+        for v in obj:
+            _wire_strip(v, False)
+    return obj
 
 
 def _norm_timeout(v, default):
@@ -298,6 +323,8 @@ def _revision_template(project, spec, is_job, store=None, location=""):
     spec["containers"] = [_norm_container(c, i, len(cs), is_job) for i, c in enumerate(cs)]
     spec["timeout"] = _norm_timeout(spec.get("timeout"), "600s" if is_job else "300s")
     spec.setdefault("serviceAccount", "%s-compute@developer.gserviceaccount.com" % project_number(project))
+    if "executionEnvironment" not in spec:
+        spec["_auto"] = ["executionEnvironment"]
     spec.setdefault("executionEnvironment", "EXECUTION_ENVIRONMENT_GEN2")
     if is_job:
         spec.setdefault("maxRetries", 3)
@@ -1622,7 +1649,13 @@ def _knative(store, method, ns, rest, query, headers, payload):
 
 # ── dispatch ───────────────────────────────────────────────────────────────
 def dispatch(store, method, path, query=None, headers=None, body=b"", log_fn=None, topic_exists=None):
-    return _dispatch(store, method, path, query or {}, headers or {}, body, log_fn=log_fn, topic_exists=topic_exists)
+    r = _dispatch(store, method, path, query or {}, headers or {}, body, log_fn=log_fn, topic_exists=topic_exists)
+    if path.startswith("/v2/") and b'"_auto"' in (r.body or b""):
+        try:
+            r.body = json.dumps(_wire_strip(json.loads(r.body))).encode()
+        except Exception:   # noqa: BLE001 - never break a response over the cosmetic strip
+            pass
+    return r
 
 
 def _dispatch(store, method, path, query, headers, body, log_fn=None, topic_exists=None):

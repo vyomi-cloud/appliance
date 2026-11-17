@@ -31,6 +31,8 @@ provider "google" {
   cloud_scheduler_custom_endpoint  = "${var.endpoint}/v1/"
   artifact_registry_custom_endpoint = "${var.endpoint}/v1/"
   logging_custom_endpoint          = "${var.endpoint}/v2/"
+  cloud_run_v2_custom_endpoint     = "${var.endpoint}/v2/"
+  vertex_ai_custom_endpoint        = "${var.endpoint}/v1/"
   monitoring_custom_endpoint       = "${var.endpoint}/"
 }
 
@@ -67,4 +69,18 @@ module "observability" {
   project  = var.project
   bucket   = module.data.bucket
   topic_id = module.messaging.topic_id
+}
+
+module "ai" {
+  source     = "./modules/stage6-ai"
+  project    = var.project
+  kms_key_id = module.network_identity.kms_key_id
+  bucket     = module.data.bucket
+}
+
+module "serverless" {
+  source   = "./modules/stage5-serverless"
+  project  = var.project
+  sa_email = module.network_identity.sa_email
+  bucket   = module.data.bucket
 }
