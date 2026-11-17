@@ -1,0 +1,1 @@
+{"module":"estate/azure","endpoint":"host.docker.internal:19114","passed":true,"steps":[{"step":"init","rc":0,"seconds":1},{"step":"validate","rc":0,"seconds":1},{"step":"apply","rc":0,"seconds":143},{"step":"replan","rc":0},{"step":"destroy","rc":0,"seconds":94},{"step":"reapply","rc":0,"seconds":144},{"step":"final-destroy","rc":0,"seconds":94}]}

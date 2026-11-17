@@ -181,14 +181,14 @@ def _new_store(rid, name, sub, rg, payload, soft_deleted=None, base=""):
         "endpoint": _endpoint(name, base),
         "encryption": {"keyVaultProperties": pay.get("encryption", {}).get("keyVaultProperties")} if (pay.get("encryption") or {}).get("keyVaultProperties") else {},
         "privateEndpointConnections": [],
-        "publicNetworkAccess": pay.get("publicNetworkAccess") or "Enabled",
+        **({"publicNetworkAccess": pay["publicNetworkAccess"]} if pay.get("publicNetworkAccess") else {}),   # absent unless set (endurance F422)
         "disableLocalAuth": _to_bool(pay.get("disableLocalAuth")),
         "softDeleteRetentionInDays": 0 if free else (_to_int(pay.get("softDeleteRetentionInDays"), 7)),
         "enablePurgeProtection": False if free else _to_bool(pay.get("enablePurgeProtection")),
         "dataPlaneProxy": pay.get("dataPlaneProxy") or {"authenticationMode": "Local", "privateLinkDelegation": "Disabled"},
     }
     rec = {"id": rid, "name": name, "type": f"{NAMESPACE}/configurationStores", "location": loc,
-           "tags": dict(payload.get("tags") or {}), "sku": {"name": str(sku).capitalize()}, "properties": props,
+           "tags": dict(payload.get("tags") or {}), "sku": {"name": str(sku)}, "properties": props,
            "systemData": _sysdata(), "_type": f"{NAMESPACE}/configurationStores", "_sub": sub, "_rg": rg,
            "_created": _now(), "_keys": _keys(rid, name),
            "_kv": {"items": {}, "history": [], "snapshots": {}, "seq": 0}, "_replicas": {}}
@@ -222,7 +222,7 @@ def _apply_props(rec, payload):
         new = str(payload["sku"]["name"])
         if new.lower() not in SKUS:
             raise _E(400, "InvalidSku", f"The sku '{new}' is not valid.")
-        rec["sku"]["name"] = new.capitalize()
+        rec["sku"]["name"] = new
         if new.lower() == "free":
             p["softDeleteRetentionInDays"], p["enablePurgeProtection"] = 0, False
     if "disableLocalAuth" in pay:

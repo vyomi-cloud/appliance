@@ -628,6 +628,9 @@ def _component_props(props, old=None):
            "AppId": app_id, "InstrumentationKey": ik, "Name": p.get("Name") or "",
            "ConnectionString": f"InstrumentationKey={ik};IngestionEndpoint=/_obs/;LiveEndpoint=/_obs/",
            "TenantId": "00000000-0000-0000-0000-000000000000", "provisioningState": "Succeeded"}
+    for _k in ("SamplingPercentage", "DisableIpMasking", "ImmediatePurgeDataOn30Days", "ForceCustomerStorageForProfiler", "DisableLocalAuth"):
+        if p.get(_k) is not None:
+            out[_k] = p[_k]       # echoed like real ARM; azurerm reads sampling_percentage etc. back (endurance F423)
     if p.get("WorkspaceResourceId"):
         out["WorkspaceResourceId"] = str(p["WorkspaceResourceId"])
     return out

@@ -1051,6 +1051,8 @@ def after_upsert(state, rec, payload=None) -> None:
     """Type-specific fields ARM computes on write (called by both dispatchers)."""
     t = str(rec.get("_type") or "").lower()
     p = rec.setdefault("properties", {})
+    if t == "microsoft.servicebus/namespaces/topics/subscriptions" and not p.get("isClientAffine"):
+        p.pop("clientAffineProperties", None)      # real Service Bus omits it unless the subscription is client-affine (endurance F414)
     if t == VM_T:
         _vm_fill(rec)
     if t == NIC_T.lower():
@@ -1250,9 +1252,20 @@ def _sql_db_fill(state, rec):
     p.setdefault("databaseId", str(uuid.uuid5(uuid.NAMESPACE_URL, rec["id"].lower())))
     p.setdefault("creationDate", rec.get("_created") or _now())
     p.setdefault("earliestRestoreDate", p["creationDate"])
-    p.setdefault("collation", "SQL_Latin1_General_CP1_CI_AS")
+    if not p.get("collation"):
+        p["collation"] = "SQL_Latin1_General_CP1_CI_AS"
     p.setdefault("maxSizeBytes", 34359738368)
     rec.setdefault("sku", {"name": "GP_S_Gen5", "tier": "GeneralPurpose", "family": "Gen5", "capacity": 1})
+    # azurerm_mssql_database reads sku_name from currentServiceObjectiveName; DTU skus carry tier/capacity (endurance F410)
+    _dtu = {"Basic": ("Basic", 5), "S0": ("Standard", 10), "S1": ("Standard", 20), "S2": ("Standard", 50), "S3": ("Standard", 100),
+            "P1": ("Premium", 125), "P2": ("Premium", 250)}
+    _sk = rec["sku"]
+    if _sk.get("name") in _dtu:
+        _sk.setdefault("tier", _dtu[_sk["name"]][0]); _sk.setdefault("capacity", _dtu[_sk["name"]][1])
+    p["currentServiceObjectiveName"] = _sk.get("name")
+    p["requestedServiceObjectiveName"] = _sk.get("name")
+    p["currentSku"] = {k: v for k, v in _sk.items() if k in ("name", "tier", "family", "capacity")}
+    p.setdefault("currentBackupStorageRedundancy", p.get("requestedBackupStorageRedundancy") or "Geo")
     _ensure_child(state, rec, "transparentDataEncryption", "current",
                   "Microsoft.Sql/servers/databases/transparentDataEncryption", {"state": "Enabled"})
     _ensure_child(state, rec, "backupShortTermRetentionPolicies", "default",
@@ -1394,6 +1407,10 @@ def _cosmos_fill(rec):
     cp.setdefault("defaultConsistencyLevel", "Session")
     cp.setdefault("maxIntervalInSeconds", 5)
     cp.setdefault("maxStalenessPrefix", 100)
+    # real ARM always returns a backup policy; azurerm refuses an account without a `type` (endurance F405)
+    if not (p.get("backupPolicy") or {}).get("type"):
+        p["backupPolicy"] = {"type": "Periodic", "periodicModeProperties": {
+            "backupIntervalInMinutes": 240, "backupRetentionIntervalInHours": 8, "backupStorageRedundancy": "Geo"}}
     locs = p.get("locations")
     if not isinstance(locs, list) or not locs:
         locs = [{"locationName": _region_name(rec.get("location")), "failoverPriority": 0, "isZoneRedundant": False}]
@@ -1408,6 +1425,9 @@ def _cosmos_fill(rec):
     multi = bool(p.get("enableMultipleWriteLocations"))
     p["writeLocations"] = [dict(l) for l in locs] if multi else [dict(first)]
     p["readLocations"] = [dict(l) for l in locs]
+    # azurerm builds geo_location from failoverPolicies (endurance F411)
+    p["failoverPolicies"] = [{"id": l["id"], "locationName": l["locationName"], "failoverPriority": l.get("failoverPriority", 0)}
+                             for l in sorted(locs, key=lambda x: x.get("failoverPriority", 0))]
     p.setdefault("enableMultipleWriteLocations", False)
     p.setdefault("enableAutomaticFailover", False)
     p.setdefault("publicNetworkAccess", "Enabled")
