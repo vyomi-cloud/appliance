@@ -1,0 +1,462 @@
+{
+ "cloud": "gcp",
+ "generated": "2026-11-17T21:13:20Z",
+ "components": [
+  {
+   "id": "01",
+   "name": "Access",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 1.0,
+   "steps": [
+    {
+     "status": "FAIL",
+     "step": "Identity Platform accounts:signUp + signInWithPassword",
+     "detail": "RuntimeError: POST /v1/accounts:signUp -> HTTP 405: <?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Resource>/v1/accounts:signUp</Resource><RequestId>CD197EE08AAA476C</RequestId></Error>"
+    },
+    {
+     "status": "PASS",
+     "step": "iamcredentials generateIdToken",
+     "detail": "id token is a JWT"
+    },
+    {
+     "status": "FAIL",
+     "step": "API Gateway: OpenAPI YAML config upload",
+     "detail": "RuntimeError: POST /v1/projects/vyomi-project/locations/global/apis/fac-ay-033afa/configs -> HTTP 400: {\"error\": {\"code\": 400, \"message\": \"Cannot parse the OpenAPI document: unexpected list item at line 12.\", \"status\": \"INVALID_ARGUMENT\"}}"
+    },
+    {
+     "status": "PASS",
+     "step": "API Gateway: JSON config + gateway create",
+     "detail": "gateway projects/vyomi-project/locations/us-central1/gateways/gw1 host gw1-32f7fb9e.uc.gateway.dev"
+    },
+    {
+     "status": "FAIL",
+     "step": "API Gateway data plane enforces JWT (401 without, accepted with ID token)",
+     "detail": "AssertionError: token claims iss=https://accounts.google.com aud=https://facilities.example.com; valid sim-issued ID token rejected: 401 Jwt verification fails"
+    },
+    {
+     "status": "PASS",
+     "step": "Cloud Armor compute securityPolicies create/get",
+     "detail": "securityPolicy created"
+    }
+   ]
+  },
+  {
+   "id": "02",
+   "name": "Channels",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 0.9,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "Model Armor: create template",
+     "detail": "projects/vyomi-project/locations/us-central1/templates/fac-7d9ca3"
+    },
+    {
+     "status": "PASS",
+     "step": "Model Armor sanitizeUserPrompt: benign allowed",
+     "detail": "NO_MATCH_FOUND"
+    },
+    {
+     "status": "PASS",
+     "step": "Model Armor sanitizeUserPrompt: prompt injection blocked",
+     "detail": "MATCH_FOUND (prompt injection blocked)"
+    },
+    {
+     "status": "PASS",
+     "step": "Pub/Sub (google-cloud-pubsub REST): topic+subscription publish/pull/ack",
+     "detail": "publish->pull->ack ok, no redelivery"
+    },
+    {
+     "status": "FAIL",
+     "step": "Pub/Sub default gRPC client (unmodified app code, PUBSUB_EMULATOR_HOST) against the simulator",
+     "detail": "ServiceUnavailable: 503 failed to connect to all addresses; last error: INTERNAL: ipv4:127.0.0.1:57088: Failed parsing HTTP/2 (Expected SETTINGS frame as the first frame, got frame type 80) (Trying to connect an http1.x server (HTTP status 400))"
+    }
+   ]
+  },
+  {
+   "id": "03",
+   "name": "Runtime",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 1.3,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "create_reasoning_engine (Vyomi agent-spec in deploymentSpec.env) + get",
+     "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/4293261671404602230"
+    },
+    {
+     "status": "FAIL",
+     "step": "create_reasoning_engine with real-shaped package_spec (pickle from GCS) and query it",
+     "detail": "AssertionError: package_spec engine cannot be queried: HTTP 400 {\"error\": {\"code\": 400, \"message\": \"This Reasoning Engine has no Vyomi agent spec (set spec.vyomiAgentSpec or a spec.deploymentSpec.env entry named VYOMI_AGENT_SPEC); the simulator does not run pickle"
+    },
+    {
+     "status": "BLOCKED",
+     "step": "reasoningEngines:query on the spec engine (needs a model)",
+     "detail": "needs a model (HTTP 503: {\"error\": {\"code\": 503, \"message\": \"Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.\",); request shape accepted up to model call"
+    }
+   ]
+  },
+  {
+   "id": "04",
+   "name": "Gateway",
+   "status": "PASS",
+   "exit_code": 0,
+   "seconds": 0.7,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "mcpServers registry: create",
+     "detail": "{'name': 'projects/vyomi-project/locations/us-central1/mcpServers/fac-d737ac', 'displayName': 'Facilities tools', 'descr"
+    },
+    {
+     "status": "PASS",
+     "step": "agentGateways: create + get",
+     "detail": "{'name': 'projects/vyomi-project/locations/us-central1/agentGateways/gw-d737ac', 'displayName': 'Facilities gateway', 'description': '', 'pr"
+    },
+    {
+     "status": "PASS",
+     "step": "agentPolicies (Cedar): create + :test allow/deny",
+     "detail": "permitted tool ALLOW, other tool DENY"
+    },
+    {
+     "status": "PASS",
+     "step": "agentGateways:attachPolicy",
+     "detail": "{'name': 'projects/vyomi-project/locations/us-central1/agentGateways/gw-d737ac', 'displayName': 'Facilities gateway', 'description': '', 'protocols': ['MCP'], '"
+    }
+   ]
+  },
+  {
+   "id": "05",
+   "name": "Approval",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 1.2,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "setup: Pub/Sub inbox + decision function (+ Firestore gapic REST client)",
+     "detail": "topic + subscription + decision function ready"
+    },
+    {
+     "status": "PASS",
+     "step": "full loop: request->PENDING->publish->pull->function decides->ledger APPROVED->waiting caller sees it",
+     "detail": "waiting caller observed APPROVED by duty.manager@example.com"
+    },
+    {
+     "status": "FAIL",
+     "step": "function writes the ledger itself (import google-cloud-firestore inside a Cloud Function)",
+     "detail": "AssertionError: function cannot import google-cloud-firestore: HTTP 500 Error: ImportError: module 'google.cloud' is not available in the function sandbox"
+    },
+    {
+     "status": "FAIL",
+     "step": "high-level firestore.Client (gRPC) against the simulator front door",
+     "detail": "ServiceUnavailable: 503 failed to connect to all addresses; last error: INTERNAL: ipv4:127.0.0.1:57115: Failed parsing HTTP/2 (Expected SETTINGS frame as the first frame, got frame type 80) (Trying to connect an http1.x server (HTTP status 400))"
+    }
+   ]
+  },
+  {
+   "id": "05b",
+   "name": "Approval on real emulators",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 6.3,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "start real Pub/Sub + Firestore emulator containers (local image)",
+     "detail": "pubsub emulator :57127, firestore emulator :57128"
+    },
+    {
+     "status": "PASS",
+     "step": "(a) approval loop on the real emulators with official high-level gRPC clients",
+     "detail": "full approval loop on the real emulators with the high-level gRPC clients"
+    },
+    {
+     "status": "FAIL",
+     "step": "(b) Pub/Sub through the simulator front door lands in the real emulator",
+     "detail": "AssertionError: topic created through the simulator is NOT in the real Pub/Sub emulator (emulator has ['projects/vyomi-project/topics/real-c2ec4e'])"
+    },
+    {
+     "status": "FAIL",
+     "step": "(b) Firestore through the simulator front door lands in the real emulator",
+     "detail": "AssertionError: document written through the simulator is NOT in the real Firestore emulator"
+    }
+   ]
+  },
+  {
+   "id": "06",
+   "name": "Knowledge",
+   "status": "PASS",
+   "exit_code": 0,
+   "seconds": 1.3,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "RAG Engine: create_rag_corpus (gapic REST)",
+     "detail": "projects/vyomi-project/locations/us-central1/ragCorpora/3519451271791580"
+    },
+    {
+     "status": "PASS",
+     "step": "RAG Engine: GCS upload (google-cloud-storage) + import_rag_files",
+     "detail": "1 rag file(s) imported from GCS"
+    },
+    {
+     "status": "PASS",
+     "step": "RAG Engine: retrieve_contexts returns the boiler SOP chunk",
+     "detail": "1 contexts; top source_uri=gs://kb-da3949/sop/boiler.txt"
+    },
+    {
+     "status": "PASS",
+     "step": "Vector Search: index + upsert + indexEndpoint + deployIndex + findNeighbors",
+     "detail": "findNeighbors top=a"
+    },
+    {
+     "status": "PASS",
+     "step": "Vertex AI Search: dataStore + import documents + servingConfig search",
+     "detail": "totalSize=1"
+    }
+   ]
+  },
+  {
+   "id": "07",
+   "name": "Tools",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 0.8,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "Cloud Functions gen2: pure-compute function deploys and returns a result over HTTPS",
+     "detail": "{'asset_id': 'B-12', 'over_limit': True}"
+    },
+    {
+     "status": "PASS",
+     "step": "Firestore (gapic REST): seed asset doc + read back",
+     "detail": "{'asset_id': 'B-12', 'status': 'degraded', 'psi': 31}"
+    },
+    {
+     "status": "PASS",
+     "step": "Cloud Functions gen2: generate_upload_url + PUT zip + create_function",
+     "detail": "projects/vyomi-project/locations/us-central1/functions/asset-status-bb5995 state=ACTIVE"
+    },
+    {
+     "status": "FAIL",
+     "step": "invoke function over HTTPS; it reads the Firestore doc from inside (urllib)",
+     "detail": "AssertionError: HTTP 500: Error: ImportError: module 'urllib.request' is not available in the function sandbox"
+    },
+    {
+     "status": "PASS",
+     "step": "function invocation visible in Cloud Logging",
+     "detail": "1 log entries for the function"
+    }
+   ]
+  },
+  {
+   "id": "08",
+   "name": "Observability",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 1.0,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "Cloud Trace v2: batch_write_spans",
+     "detail": "2 spans written"
+    },
+    {
+     "status": "FAIL",
+     "step": "Cloud Trace v1: get_trace + list_traces read the spans back",
+     "detail": "ParseError: Failed to parse spans field: Failed to parse spanId field: invalid literal for int() with base 10: 'aaaaaaaaaaaaaaaa'.."
+    },
+    {
+     "status": "PASS",
+     "step": "Cloud Logging raw REST entries:write + entries:list",
+     "detail": "raw REST write+list ok"
+    },
+    {
+     "status": "FAIL",
+     "step": "Cloud Logging entries:list honours the SDK's default timestamp>= \"...+0000\" filter",
+     "detail": "AssertionError: entry written seconds ago is not returned for timestamp>=2026-11-16T21:13:35.086586+0000"
+    },
+    {
+     "status": "BLOCKED",
+     "step": "Cloud Logging (gapic REST): write_log_entries + list_log_entries",
+     "detail": "google-cloud-logging gapic LoggingServiceV2Client has only grpc/grpc_asyncio transports; the simulator front door is HTTP/1.1 only, so this client cannot be pointed at it"
+    },
+    {
+     "status": "FAIL",
+     "step": "Cloud Logging (high-level logging.Client, HTTP): log_struct + list_entries",
+     "detail": "AssertionError: no entries"
+    },
+    {
+     "status": "PASS",
+     "step": "Cloud Monitoring raw REST custom metric write+read",
+     "detail": "raw REST custom metric write+read = 7"
+    },
+    {
+     "status": "BLOCKED",
+     "step": "Cloud Monitoring (gapic MetricServiceClient): custom metric write + list",
+     "detail": "google-cloud-monitoring MetricServiceClient has only grpc/grpc_asyncio transports; simulator is HTTP/1.1 only"
+    }
+   ]
+  },
+  {
+   "id": "09",
+   "name": "Memory",
+   "status": "BLOCKED",
+   "exit_code": 2,
+   "seconds": 2.5,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "create a reasoning engine to host sessions/memories",
+     "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/4898558583030744003"
+    },
+    {
+     "status": "PASS",
+     "step": "Sessions: vertexai.Client.agent_engines.sessions.create",
+     "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/4898558583030744003/sessions/595252781146643981"
+    },
+    {
+     "status": "PASS",
+     "step": "Memory Bank: vertexai.Client.agent_engines.memories.create + retrieve",
+     "detail": "memory created and retrieved via vertexai.Client"
+    },
+    {
+     "status": "PASS",
+     "step": "Sessions + Memory Bank over raw REST",
+     "detail": "raw REST sessions + memories:retrieve ok (embedding = {'memory': {'name': 'projects/vyomi-project/locations/us-central1/reasoningEngines/48985585830307440)"
+    },
+    {
+     "status": "BLOCKED",
+     "step": "Memory Bank memories:generate (LLM fact extraction)",
+     "detail": "memories:generate extracts facts with a model: HTTP 503 (no model); shape accepted"
+    }
+   ]
+  },
+  {
+   "id": "10",
+   "name": "Models",
+   "status": "BLOCKED",
+   "exit_code": 2,
+   "seconds": 1.0,
+   "steps": [
+    {
+     "status": "BLOCKED",
+     "step": "generateContent (Vertex via google-genai)",
+     "detail": "needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOM"
+    },
+    {
+     "status": "BLOCKED",
+     "step": "generateContent with function declarations",
+     "detail": "needs a model (request with tools accepted up to the model call): 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm"
+    },
+    {
+     "status": "PASS",
+     "step": "embedContent text-embedding-005",
+     "detail": "2 vectors, dim 256"
+    },
+    {
+     "status": "PASS",
+     "step": "embedContent: paraphrase sharing words closer than unrelated text (lexical hash fallback without a model; cannot prove semantic)",
+     "detail": "near=0.60 far=0.00"
+    }
+   ]
+  },
+  {
+   "id": "11",
+   "name": "Response",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 1.4,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "RAG corpus + file for grounding",
+     "detail": "projects/vyomi-project/locations/us-central1/ragCorpora/2366625504961430"
+    },
+    {
+     "status": "FAIL",
+     "step": "generateContent with Vertex RAG retrieval tool returns grounded answer + groundingMetadata",
+     "detail": "ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'tools.retrieval is not supported by the local model (only functionDeclarations).', 'status': 'INVALID_ARGUMENT'}}"
+    },
+    {
+     "status": "PASS",
+     "step": "Model Armor sanitizeModelResponse flags PII in the answer",
+     "detail": "clean output passes, PII output flagged"
+    }
+   ]
+  },
+  {
+   "id": "12",
+   "name": "Pipeline",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 11.6,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "setup: bucket + Pub/Sub topic/subscription + RAG corpus",
+     "detail": "bucket, topic+subscription, RAG corpus"
+    },
+    {
+     "status": "FAIL",
+     "step": "GCS bucket notification (OBJECT_FINALIZE -> Pub/Sub) on upload",
+     "detail": "NotFound: 404 POST http://127.0.0.1:57215/storage/v1/b/sop-c1cdeb/notificationConfigs?prettyPrint=false: Unknown path: /storage/v1/b/sop-c1cdeb/notificationConfigs"
+    },
+    {
+     "status": "FAIL",
+     "step": "Eventarc trigger (storage finalized) delivers to a Cloud Function",
+     "detail": "AssertionError: Eventarc trigger never delivered the finalize event to the function: {'deliveries': [{'time': '2026-11-17T21:13:48.507Z', 'eventId': '740cc9fb1b094833', 'type': 'google.cloud.storage.object.v1.finalized', 'status': 'RETRYING', 'error': \"NameError: name 'print' is not defined\", 'destination': {'kind': 'service', 'project': 'vyomi-project', 'location': 'us-central1', 'name': 'onfinal-c1cdeb'}, 'attemptCount': 4, 'maxAttempts': 5, 'nextAttemptTime': '2026-11-17T21:13:56.507Z', 'orderingKey': 'sop/s"
+    },
+    {
+     "status": "PASS",
+     "step": "RAG import_rag_files from the bucket, then retrieve the SOP",
+     "detail": "uploaded SOP is now retrievable"
+    },
+    {
+     "status": "PASS",
+     "step": "re-upload the SOP and re-import: only the new version is served",
+     "detail": "re-import replaced the old version"
+    }
+   ]
+  },
+  {
+   "id": "13",
+   "name": "Governance",
+   "status": "FAIL",
+   "exit_code": 1,
+   "seconds": 1.1,
+   "steps": [
+    {
+     "status": "PASS",
+     "step": "KMS: key ring + ENCRYPT_DECRYPT key with rotation",
+     "detail": "projects/vyomi-project/locations/us-central1/keyRings/fac-0e06b4/cryptoKeys/ledger"
+    },
+    {
+     "status": "FAIL",
+     "step": "KMS envelope: wrap data key with AAD, wrong AAD refused",
+     "detail": "AssertionError: decrypt succeeded with the wrong additional_authenticated_data"
+    },
+    {
+     "status": "PASS",
+     "step": "Cloud Audit Logs: admin-activity entries for the run (CreateCryptoKey ...)",
+     "detail": "admin-activity audit: CreateCryptoKey, CreateKeyRing, CreateTopic"
+    },
+    {
+     "status": "PASS",
+     "step": "Cloud Audit Logs: Pub/Sub CreateTopic is audited",
+     "detail": "Pub/Sub CreateTopic audited"
+    },
+    {
+     "status": "BLOCKED",
+     "step": "Cloud Audit Logs: KMS Encrypt/Decrypt in data_access log (needs audit config)",
+     "detail": "NOT VERIFIED: no KMS Encrypt/Decrypt in the data_access log. Real GCP makes these opt-in (auditConfig) and this probe did not enable one; the simulator documents it generates Data Access logs only via the IAM audit-config path. no KMS Encrypt/Decrypt in data_access audit log ; methods seen: []"
+    }
+   ]
+  }
+ ]
+}
