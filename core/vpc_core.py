@@ -3967,6 +3967,9 @@ def _describe_launch_template_versions(store, params):
     versions = [lt["versions"][k] for k in sorted(lt["versions"])]
     wanted = [v for k, v in params.items() if k.startswith("LaunchTemplateVersion.")]
     if wanted:
+        # real EC2 accepts the symbolic tokens $Latest / $Default as well as version numbers (endurance F500)
+        sym = {"$Latest": str(lt["latest_version"]), "$Default": str(lt.get("default_version", 1))}
+        wanted = [sym.get(w, w) for w in wanted]
         versions = [v for v in versions if str(v["version"]) in wanted]
     else:
         min_v, max_v = params.get("MinVersion"), params.get("MaxVersion")

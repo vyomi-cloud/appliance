@@ -2009,6 +2009,15 @@ def dispatch(s3, method, path, query, headers, body, lam=None):
 
 def _dispatch_inner(s3, method, path, query, headers, body, lam=None):
     method = method.upper()
+    # bedrock-agent List* operations are POST on a trailing-slash collection (ListAgents = POST /agents/, ListAgentAliases = POST
+    # /agents/{id}/agentaliases/, ListKnowledgeBases = POST /knowledgebases/ ...) with maxResults/nextToken in the JSON body (endurance F501).
+    if method == "POST" and path.split("?", 1)[0].endswith("/") and not path.startswith("/_vyomi"):
+        try:
+            _lb = json.loads(body) if body else {}
+        except ValueError:
+            _lb = None
+        if isinstance(_lb, dict) and set(_lb) <= {"maxResults", "nextToken"}:
+            method, query = "GET", {**(query or {}), **{k: str(v) for k, v in _lb.items()}}
     path = re.sub(r"/{2,}", "/", "/" + path.strip("/"))
     segs = [urllib.parse.unquote(s) for s in path.strip("/").split("/")]
     low = [s.lower() for s in segs]
