@@ -20,6 +20,7 @@ import * as api from "./api.js";
 import * as tuneApi from "./inferTune/api.js";
 import { ServingBar } from "./inferTune/ImportedModels.jsx";
 import { modelOption, ModelPicker } from "./Common.jsx";
+import WebLlmLoader from "./WebLlmLoader.jsx";
 
 export default function Playground() {
   const models = useAsync(() => api.listModels(), []);
@@ -62,6 +63,7 @@ export default function Playground() {
                     <div data-testid="converse-output" style={{ whiteSpace: "pre-wrap" }}>{t.out.output.message.content.map((c) => c.text).join("")}</div>
                     <Box variant="small" color="text-body-secondary">{t.out.usage.inputTokens} input tokens, {t.out.usage.outputTokens} output tokens, {t.out.metrics.latencyMs} ms, stop: {t.out.stopReason}</Box>
                   </SpaceBetween>))}
+                <WebLlmLoader hint={model.label} onLoaded={() => setError(null)} />
                 {isImported && <ServingBar />}
                 {error && <Alert type="error" header={error.code === "ModelNotReadyException" ? "The local model is not available" : error.code}>{error.message}</Alert>}
                 <FormField label="Prompt"><Textarea value={prompt} rows={3} onChange={({ detail }) => setPrompt(detail.value)} ariaLabel="Prompt" placeholder="Write a prompt" /></FormField>
