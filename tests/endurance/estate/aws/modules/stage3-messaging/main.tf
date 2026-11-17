@@ -79,3 +79,5 @@ resource "aws_cloudwatch_event_rule" "nightly" {
 output "orders_queue_url" { value = aws_sqs_queue.orders.id }
 output "topic_arn" { value = aws_sns_topic.events.arn }
 output "bus_name" { value = aws_cloudwatch_event_bus.app.name }
+output "orders_queue_name" { value = aws_sqs_queue.orders.name }
+output "dlq_name" { value = aws_sqs_queue.dlq.name }

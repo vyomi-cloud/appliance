@@ -29,6 +29,12 @@ provider "aws" {
     eventbridge    = var.endpoint
     bedrock        = var.endpoint
     bedrockagent   = var.endpoint
+    cloudwatch     = var.endpoint
+    cloudtrail     = var.endpoint
+    ssm            = var.endpoint
+    backup         = var.endpoint
+    budgets        = var.endpoint
+    resourcegroups = var.endpoint
   }
 }
 
@@ -56,4 +62,25 @@ module "ai" {
   source      = "./modules/stage6-ai"
   kms_key_arn = module.network_identity.kms_key_arn
   log_bucket  = module.compute_data.bucket
+}
+
+module "observability" {
+  source        = "./modules/stage7-observability"
+  kms_key_arn   = module.network_identity.kms_key_arn
+  queue_name    = module.messaging.orders_queue_name
+  dlq_name      = module.messaging.dlq_name
+  table_name    = module.compute_data.table_name
+  db_identifier = module.compute_data.db_identifier
+  instance_id   = module.compute_data.instance_id
+  topic_arn     = module.messaging.topic_arn
+  log_bucket    = module.compute_data.bucket
+}
+
+module "lifecycle" {
+  source          = "./modules/stage8-lifecycle"
+  kms_key_arn     = module.network_identity.kms_key_arn
+  topic_arn       = module.messaging.topic_arn
+  backup_role_arn = module.network_identity.app_role_arn
+  table_arn       = module.compute_data.table_arn
+  db_arn          = module.compute_data.db_arn
 }

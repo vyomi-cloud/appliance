@@ -1,0 +1,119 @@
+{
+ "aws.cloudwatch.alarms.composite": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm validated but not applied)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_composite_alarm.data_tier"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.cloudwatch.alarms.metric": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm is in the module but was not applied (needs the instance))"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_metric_alarm.queue_depth",
+   "module.observability.aws_cloudwatch_metric_alarm.dlq_not_empty",
+   "module.observability.aws_cloudwatch_metric_alarm.ddb_throttle",
+   "module.observability.aws_cloudwatch_metric_alarm.rds_cpu",
+   "module.observability.aws_cloudwatch_metric_alarm.app_errors"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.cloudwatch.dashboards": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm validated but not applied)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_dashboard.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.cloudwatch.logs.groups": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm validated but not applied)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_log_group.app",
+   "module.observability.aws_cloudwatch_log_group.audit"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.cloudwatch.logs.insights": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm validated but not applied)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_query_definition.errors"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.cloudwatch.logs.metric-filters": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm validated but not applied)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_log_metric_filter.errors"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ },
+ "aws.cloudwatch.logs.streams": {
+  "module": "aws/modules/stage7-observability",
+  "proof": {
+   "tf": "aws-observability 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (targeted: stage-2 EC2 instance excluded because the host disk guard blocks RunInstances; ec2_status alarm validated but not applied)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "module.observability.aws_cloudwatch_log_stream.app"
+  ],
+  "verify": [
+   "tf",
+   "sdk",
+   "cli",
+   "ui"
+  ]
+ }
+}

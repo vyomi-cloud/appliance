@@ -1139,7 +1139,7 @@ def _aws_query_target_service(request: Request) -> str:
 _ROUTER_QUERY_SERVICES = ("ecr", "fsx", "dax", "ram", "dms", "cloudformation", "network-firewall", "route53resolver", "cloudtrail", "codeconnections", "codestar-connections", "redshift")
 _ROUTER_REST_SERVICES = ("eks", "inspector2", "dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "xray", "mgn", "backup", "bedrock", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
 _ROUTER_QUERY_SERVICES = ("fsx", "dax", "ram", "dms", "glue", "redshift-data", "cloudformation", "network-firewall", "route53resolver", "cloudtrail", "redshift")
-_ROUTER_REST_SERVICES = ("eks", "dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "xray", "mgn", "backup", "bedrock", "bedrock-agentcore", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans")
+_ROUTER_REST_SERVICES = ("eks", "dlm", "pipes", "apigateway", "s3tables", "s3vectors", "rbin", "xray", "mgn", "backup", "bedrock", "bedrock-agentcore", "vpc-lattice", "aws-marketplace", "s3files", "cloudfront", "savingsplans", "resource-groups")
 
 
 def _signed_service(request: Request) -> str:
