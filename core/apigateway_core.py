@@ -50,7 +50,30 @@ class ApiGwResponse:
 def _json(status: int, obj) -> ApiGwResponse:
     if obj is None:
         return ApiGwResponse(status=status, body=b"")
-    return ApiGwResponse(status=status, body=json.dumps(obj).encode())
+    return ApiGwResponse(status=status, body=json.dumps(_epoch_dates(obj)).encode())
+
+
+_DATE_KEYS = frozenset({"createdDate", "lastUpdatedDate", "expirationDate", "lastUpdatedDate", "startDate", "endDate"})
+
+
+def _epoch_dates(obj):
+    """API Gateway (v1) is restJson1 with epoch-seconds timestamps: the AWS SDKs/Terraform provider refuse ISO strings
+    ('expected Timestamp to be a JSON Number'). State keeps ISO strings; the wire gets numbers."""
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            if k in _DATE_KEYS and isinstance(v, str):
+                try:
+                    out[k] = datetime.datetime.strptime(v, "%Y-%m-%dT%H:%M:%S.000Z").replace(
+                        tzinfo=datetime.timezone.utc).timestamp()
+                    continue
+                except ValueError:
+                    pass
+            out[k] = _epoch_dates(v)
+        return out
+    if isinstance(obj, list):
+        return [_epoch_dates(v) for v in obj]
+    return obj
 
 
 def _err(status: int, code: str, message: str) -> ApiGwResponse:
@@ -646,6 +669,8 @@ def _put_stage(api, name, deployment_id, body):
     st["description"] = body.get("description", st.get("description", ""))
     if body.get("variables"):
         st["variables"].update(body["variables"])
+    if body.get("tags"):
+        st["tags"].update({str(k): str(v) for k, v in body["tags"].items()})
     api["stages"][name] = st
     return st
 

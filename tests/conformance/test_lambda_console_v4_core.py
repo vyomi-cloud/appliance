@@ -253,7 +253,9 @@ def run(store=None):
           call("DELETE", f"/2015-03-31/code-signing-configs/{enforce_arn.rsplit(':', 1)[-1]}").status == 409)
 
     _check("DeleteFunctionCodeSigningConfig", call("DELETE", f"{F}/{sigfn}/code-signing-config").status == 204)
-    _check("GetFunctionCodeSigningConfig 404s once detached", call("GET", f"{F}/{sigfn}/code-signing-config").status == 404)
+    _r = call("GET", f"{F}/{sigfn}/code-signing-config")
+    _check("GetFunctionCodeSigningConfig is 200 without an ARN once detached (endurance F100)",
+           _r.status == 200 and "CodeSigningConfigArn" not in json.loads(_r.body))
     r = call("PUT", f"{F}/{sigfn}/code", {"Source": "def handler(e, c):\n    return {'v': 3}\n"})
     _check("UpdateFunctionCode allowed again once detached", r.status == 200)
 

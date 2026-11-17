@@ -280,12 +280,15 @@ def _fn_view(fn: dict, qualifier: str | None = None) -> dict:
         "Architectures": fn.get("architectures", ["x86_64"]),
         "EphemeralStorage": {"Size": fn.get("ephemeral_storage_mb", 512)},
         "SnapStart": {"ApplyOn": fn.get("snap_start", "None"), "OptimizationStatus": "Off"},
-        "Environment": {"Variables": fn.get("env", {})},
         "LastModified": fn.get("last_modified", ""),
         "RevisionId": fn.get("revision_id", ""),
         "TracingConfig": {"Mode": fn.get("tracing_mode", "PassThrough")},
         "LoggingConfig": {"LogFormat": fn.get("log_format", "Text")},
     }
+    if fn.get("env"):
+        out["Environment"] = {"Variables": fn["env"]}
+    if fn.get("kms_key_arn"):
+        out["KMSKeyArn"] = fn["kms_key_arn"]
     if fn.get("layers"):
         out["Layers"] = [{"Arn": a, "CodeSize": 0} for a in fn["layers"]]
     if fn.get("vpc_config"):
@@ -299,8 +302,19 @@ def _fn_view(fn: dict, qualifier: str | None = None) -> dict:
     return out
 
 
+def _bare_fn_name(name) -> str:
+    """Lambda accepts a name, name:qualifier, a partial ARN (123456789012:function:name) or a full ARN."""
+    parts = str(name or "").strip().split(":")
+    if parts[0] == "arn" and len(parts) >= 7 and parts[5] == "function":
+        return parts[6]
+    if len(parts) >= 3 and parts[0].isdigit() and parts[1] == "function":
+        return parts[2]
+    return parts[0]
+
+
 def _find_fn(store, name) -> dict | None:
-    return _functions(store).get(name)
+    fns = _functions(store)
+    return fns.get(name) or fns.get(_bare_fn_name(name))
 
 
 def _require_fn(store, name) -> dict:
@@ -389,6 +403,7 @@ def _create_function(store, body):
         "file_systems": body.get("FileSystemConfigs") or [],
         "recursive_loop": "Terminate",
         "tracing_mode": (body.get("TracingConfig") or {}).get("Mode", "PassThrough"),
+        "kms_key_arn": body.get("KMSKeyArn") or None,
         "log_format": (body.get("LoggingConfig") or {}).get("LogFormat", "Text"),
         "reserved_concurrency": None,
         "function_url": None,
@@ -405,6 +420,10 @@ def _create_function(store, body):
     if sig_err:
         return sig_err
     _functions(store)[name] = fn
+    if body.get("Publish"):
+        pub = _publish_version(store, name, {})
+        if pub.status == 201:
+            return pub
     _persist(store)
     return _json(201, _fn_view(fn))
 
@@ -465,6 +484,8 @@ def _update_function_configuration(store, name, body):
         fn["ephemeral_storage_mb"] = int((body.get("EphemeralStorage") or {}).get("Size") or 512)
     if "SnapStart" in body:
         fn["snap_start"] = (body.get("SnapStart") or {}).get("ApplyOn", "None")
+    if "KMSKeyArn" in body:
+        fn["kms_key_arn"] = body.get("KMSKeyArn") or None
     if "TracingConfig" in body:
         fn["tracing_mode"] = (body.get("TracingConfig") or {}).get("Mode", "PassThrough")
     if "LoggingConfig" in body:
@@ -487,8 +508,11 @@ def _get_function(store, name, qualifier=None):
         cfg = _version_view(fn, qualifier) if snap else _fn_view(fn, fn["aliases"][qualifier]["FunctionVersion"])
     else:
         cfg = _fn_view(fn)
-    return _json(200, {"Configuration": cfg, "Tags": fn.get("tags", {}),
-                       "Code": {"RepositoryType": "S3", "Location": f"https://vyomi-lambda.example/{name}", "Source": fn.get("source", "")}})
+    out = {"Configuration": cfg, "Tags": fn.get("tags", {}),
+           "Code": {"RepositoryType": "S3", "Location": f"https://vyomi-lambda.example/{name}", "Source": fn.get("source", "")}}
+    if fn.get("reserved_concurrency") is not None:
+        out["Concurrency"] = {"ReservedConcurrentExecutions": fn["reserved_concurrency"]}
+    return _json(200, out)
 
 
 def _get_function_configuration(store, name):
@@ -606,8 +630,9 @@ def _delete_function_url_config(store, name):
 # ── aliases ──────────────────────────────────────────────────────────────────────────────
 def _alias_view(name, a):
     return {"AliasArn": _fn_arn(name, a["Name"]), "Name": a["Name"], "FunctionVersion": a["FunctionVersion"],
-            "Description": a.get("Description", ""), "RoutingConfig": a.get("RoutingConfig"),
-            "RevisionId": a.get("RevisionId", "")}
+            "Description": a.get("Description", ""),
+            "RevisionId": a.get("RevisionId", ""),
+            **({"RoutingConfig": a["RoutingConfig"]} if a.get("RoutingConfig") else {})}
 
 
 def _create_alias(store, name, body):
@@ -684,6 +709,11 @@ def _publish_version(store, name, body):
         "handler": fn["handler"], "memory_size": fn["memory_size"], "timeout": fn["timeout"],
         "env": dict(fn["env"]), "description": body.get("Description", fn["description"]),
         "last_modified": _now_iso(),
+        "layers": list(fn.get("layers") or []), "kms_key_arn": fn.get("kms_key_arn"),
+        "tracing_mode": fn.get("tracing_mode", "PassThrough"), "dead_letter_config": fn.get("dead_letter_config"),
+        "vpc_config": fn.get("vpc_config"), "role": fn.get("role", ""),
+        "architectures": list(fn.get("architectures") or ["x86_64"]),
+        "ephemeral_storage_mb": fn.get("ephemeral_storage_mb", 512),
     }
     _persist(store)
     return _json(201, _version_view(fn, version))
@@ -766,7 +796,33 @@ def _delete_layer_version(store, layer_name, version):
 # function and LastProcessingResult reflects the outcome. The other source types have no
 # poller/subscriber behind them, so their mappings stay inert ("No records processed") —
 # see lambda.triggers / sqs.lambda-triggers limitations.
+def _epoch(iso: str):
+    """restJson1 timestamps are epoch-seconds numbers (SDK: 'expected Date to be a JSON Number')."""
+    import datetime as _dt
+    try:
+        return _dt.datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S.000+0000").replace(tzinfo=_dt.timezone.utc).timestamp()
+    except (ValueError, TypeError):
+        return _dt.datetime.now(_dt.timezone.utc).timestamp()
+
+
+_ESM_ECHO = ("MaximumBatchingWindowInSeconds", "FunctionResponseTypes", "ScalingConfig", "FilterCriteria",
+             "MaximumRecordAgeInSeconds", "MaximumRetryAttempts", "BisectBatchOnFunctionError",
+             "ParallelizationFactor", "DestinationConfig", "TumblingWindowInSeconds", "StartingPosition",
+             "Topics", "Queues", "SourceAccessConfigurations", "KMSKeyArn", "MetricsConfig")
+
+
 def _esm_view(e):
+    v = _esm_view_raw(e)
+    v["LastModified"] = _epoch(e.get("LastModified", ""))
+    for k in _ESM_ECHO:
+        if k in e and e[k] is not None:
+            v[k] = e[k]
+    if "MaximumBatchingWindowInSeconds" not in v and v["EventSourceType"] in ("SQS", "DynamoDB", "Kinesis"):
+        v["MaximumBatchingWindowInSeconds"] = 0
+    return v
+
+
+def _esm_view_raw(e):
     return {"UUID": e["UUID"], "EventSourceArn": e.get("EventSourceArn", ""),
             "FunctionArn": _fn_arn(e["FunctionName"]), "FunctionName": e["FunctionName"],
             "EventSourceType": e.get("EventSourceType", "Unknown"),
@@ -776,7 +832,7 @@ def _esm_view(e):
 
 
 def _create_event_source_mapping(store, body):
-    fn_name = str(body.get("FunctionName", "")).strip()
+    fn_name = _bare_fn_name(body.get("FunctionName", ""))
     try:
         _require_fn(store, fn_name)
     except _NotFound as e:
@@ -786,6 +842,7 @@ def _create_event_source_mapping(store, body):
         "EventSourceType": body.get("EventSourceType") or _esm_source_type(body.get("EventSourceArn", "")),
         "State": "Enabled" if body.get("Enabled", True) else "Disabled",
         "BatchSize": int(body.get("BatchSize") or 10), "LastModified": _now_iso()}
+    e.update({k: body[k] for k in _ESM_ECHO if k in body and body[k] is not None})
     _esms(store)[uid] = e
     _persist(store)
     return _json(202, _esm_view(e))
@@ -823,6 +880,7 @@ def _update_event_source_mapping(store, uid, body):
         e["State"] = "Enabled" if body["Enabled"] else "Disabled"
     if "BatchSize" in body:
         e["BatchSize"] = int(body["BatchSize"])
+    e.update({k: body[k] for k in _ESM_ECHO if k in body and body[k] is not None})
     e["LastModified"] = _now_iso()
     _persist(store)
     return _json(200, _esm_view(e))
@@ -977,8 +1035,8 @@ def _get_function_code_signing_config(store, name):
         return _err(404, "ResourceNotFoundException", str(e))
     arn = fn.get("code_signing_config_arn")
     if not arn:
-        return _err(404, "CodeSigningConfigNotFoundException",
-                    f"Cannot find a code signing configuration associated with function: {name}")
+        # real Lambda answers 200 with only FunctionName when no config is attached
+        return _json(200, {"FunctionName": name})
     return _json(200, {"CodeSigningConfigArn": arn, "FunctionName": name})
 
 
@@ -1187,7 +1245,7 @@ def _list_replicas(store):
 
 
 # ── resource policy (AddPermission / GetPolicy / RemovePermission) ─────────────────────
-def _add_permission(store, name, body):
+def _add_permission(store, name, body, qualifier=None):
     try:
         fn = _require_fn(store, name)
     except _NotFound as e:
@@ -1201,7 +1259,9 @@ def _add_permission(store, name, body):
     principal_doc = "*" if principal == "*" else (
         {"AWS": principal} if principal.startswith("arn:") or principal.isdigit() else {"Service": principal})
     stmt = {"Sid": sid, "Effect": "Allow", "Action": body.get("Action", "lambda:InvokeFunction"),
-            "Principal": principal_doc, "Resource": _fn_arn(name)}
+            "Principal": principal_doc, "Resource": _fn_arn(name, qualifier)}
+    if body.get("FunctionUrlAuthType"):
+        stmt["Condition"] = {"StringEquals": {"lambda:FunctionUrlAuthType": body["FunctionUrlAuthType"]}}
     cond: dict = {}
     if body.get("PrincipalOrgID"):
         cond.setdefault("StringEquals", {})["aws:PrincipalOrgID"] = body["PrincipalOrgID"]
@@ -1210,20 +1270,24 @@ def _add_permission(store, name, body):
     if body.get("SourceAccount"):
         cond.setdefault("StringEquals", {})["AWS:SourceAccount"] = body["SourceAccount"]
     if cond:
-        stmt["Condition"] = cond
+        stmt.setdefault("Condition", {})
+        for k, v in cond.items():
+            stmt["Condition"].setdefault(k, {}).update(v)
     fn["policy_statements"][sid] = stmt
     _persist(store)
     return _json(201, {"Statement": json.dumps(stmt)})
 
 
-def _get_policy(store, name):
+def _get_policy(store, name, qualifier=None):
     try:
         fn = _require_fn(store, name)
     except _NotFound as e:
         return _err(404, "ResourceNotFoundException", str(e))
-    if not fn["policy_statements"]:
+    want = _fn_arn(name, qualifier)
+    stmts = [st for st in fn["policy_statements"].values() if st.get("Resource") == want]
+    if not stmts:
         return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
-    policy = {"Version": "2012-10-17", "Id": "default", "Statement": list(fn["policy_statements"].values())}
+    policy = {"Version": "2012-10-17", "Id": "default", "Statement": stmts}
     return _json(200, {"Policy": json.dumps(policy), "RevisionId": uuid.uuid4().hex})
 
 
@@ -1283,6 +1347,10 @@ def _get_function_recursion_config(store, name):
 
 
 # ── event invoke config ("Destinations") ────────────────────────────────────────────────
+def _eic_wire(cfg):
+    return {**cfg, "LastModified": _epoch(cfg.get("LastModified", ""))}
+
+
 def _put_function_event_invoke_config(store, name, body):
     try:
         fn = _require_fn(store, name)
@@ -1294,14 +1362,14 @@ def _put_function_event_invoke_config(store, name, body):
           "LastModified": _now_iso()}
     fn["event_invoke_config"] = cfg
     _persist(store)
-    return _json(200, {"FunctionArn": _fn_arn(name), **cfg})
+    return _json(200, {"FunctionArn": _fn_arn(name), **_eic_wire(cfg)})
 
 
 def _get_function_event_invoke_config(store, name):
     fn = _find_fn(store, name)
     if not fn or not fn.get("event_invoke_config"):
         return _err(404, "ResourceNotFoundException", "The resource you requested doesn't exist.")
-    return _json(200, {"FunctionArn": _fn_arn(name), **fn["event_invoke_config"]})
+    return _json(200, {"FunctionArn": _fn_arn(name), **_eic_wire(fn["event_invoke_config"])})
 
 
 def _delete_function_event_invoke_config(store, name):
@@ -1918,9 +1986,9 @@ def _dispatch_functions(store, method, tail, query, body, headers=None, msg_stor
     if sub == "policy":
         if not rest:
             if method == "POST":
-                return _add_permission(store, name, _parse(body))
+                return _add_permission(store, name, _parse(body), query.get("Qualifier") or None)
             if method == "GET":
-                return _get_policy(store, name)
+                return _get_policy(store, name, query.get("Qualifier") or None)
         elif len(rest) == 1 and method == "DELETE":
             return _remove_permission(store, name, rest[0])
 
