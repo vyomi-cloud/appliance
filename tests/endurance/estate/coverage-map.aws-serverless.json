@@ -1,0 +1,240 @@
+{
+ "apigateway.apikeys": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_api_gateway_api_key.partner"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "apigateway.http.api": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_apigatewayv2_api.http",
+   "aws_apigatewayv2_integration.http",
+   "aws_apigatewayv2_route.get",
+   "aws_apigatewayv2_authorizer.jwt",
+   "aws_apigatewayv2_stage.default"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "apigateway.rest.api": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_api_gateway_rest_api.orders"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "apigateway.rest.deploy-stages": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_api_gateway_deployment.orders",
+   "aws_api_gateway_stage.prod"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "apigateway.rest.resources-methods": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_api_gateway_resource.orders",
+   "aws_api_gateway_method.get",
+   "aws_api_gateway_integration.get",
+   "aws_lambda_permission.rest"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "apigateway.usageplans": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_api_gateway_usage_plan.partner",
+   "aws_api_gateway_usage_plan_key.partner"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "aws.states.state-machine.crud": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_sfn_state_machine.flow",
+   "aws_iam_role.sfn"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "aws.states.state-machine.logging": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_sfn_state_machine.flow",
+   "aws_cloudwatch_log_group.sfn"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "aws.states.state-machine.tags": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_sfn_state_machine.flow"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "aws.states.state-machine.tracing": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_sfn_state_machine.flow"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.aliases-versions": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_alias.live",
+   "aws_lambda_function.orders"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.concurrency": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_function.processor"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.function-url": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_function_url.orders",
+   "aws_lambda_permission.url_public"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.function.crud": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_function.orders",
+   "aws_lambda_function.processor",
+   "aws_iam_role.fn",
+   "aws_cloudwatch_log_group.orders"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.layers": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_layer_version.common"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.tags": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_function.orders"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "lambda.triggers": {
+  "module": "aws/modules/stage5-serverless",
+  "proof": {
+   "tf": "aws-serverless gate 2026-11-17: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py :19101"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "aws_lambda_event_source_mapping.orders_queue",
+   "aws_cloudwatch_event_target.audit"
+  ],
+  "verify": [
+   "tf"
+  ]
+ }
+}
