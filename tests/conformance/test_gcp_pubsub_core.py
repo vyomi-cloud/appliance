@@ -230,7 +230,7 @@ def run() -> int:
     scc = ps.dispatch(st, "POST", f"/v1/projects/{P}/schemas", {"schemaId": "order-v1"}, {},
                       json.dumps({"type": "AVRO", "definition": '{"type":"record","name":"Order","fields":[]}'}).encode())
     _check("create schema 200 returns definition", scc.status == 200 and "Order" in _jbody(scc)["definition"])
-    basic = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {}, {}, b"")
+    basic = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {"view": "BASIC"}, {}, b"")
     _check("get schema BASIC view omits definition", "definition" not in _jbody(basic))
     full = ps.dispatch(st, "GET", f"/v1/{SCHEMA}", {"view": "FULL"}, {}, b"")
     _check("get schema FULL view includes definition", "Order" in _jbody(full)["definition"])

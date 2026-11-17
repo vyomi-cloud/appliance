@@ -37,6 +37,7 @@ simplification gcp_cloudsql_core and gcp_container_core use for these older-styl
 from __future__ import annotations
 
 import hashlib
+import zlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -166,7 +167,7 @@ def _synthetic_ip(prefix, name):
 
 
 # ── operations ───────────────────────────────────────────────────────────────
-def _operation(store, project, scope, op_type, target_name, target_link, user="vyomi-console-ui@vyomi.local"):
+def _operation(store, project, scope, op_type, target_name, target_link, user="vyomi-console-ui@vyomi.local", target_id=None):
     """`scope` is a zone name, a region name, or None (global)."""
     store.seq["op"] += 1
     oid = "operation-%d-%s" % (store.seq["op"], hashlib.sha1(("%s%d" % (target_link, store.seq["op"])).encode()).hexdigest()[:10])
@@ -175,7 +176,7 @@ def _operation(store, project, scope, op_type, target_name, target_link, user="v
     now = _ts()
     op = {
         "id": _next_id(store), "name": oid, "operationType": op_type, "status": "DONE", "progress": 100,
-        "user": user, "targetId": _next_id(store), "targetLink": target_link,
+        "user": user, "targetId": str(target_id) if target_id else _next_id(store), "targetLink": target_link,
         "selfLink": _selflink(full), "insertTime": now, "startTime": now, "endTime": now,
         "kind": "compute#operation",
     }
@@ -983,14 +984,17 @@ def insert_instance_template(store, project, payload):
     now = _ts()
     tpl = {
         "id": _next_id(store), "name": name, "kind": "compute#instanceTemplate",
+        # F309b: keep every property the client sent (tags, serviceAccounts, scheduling, metadata, canIpForward ...);
+        # the stub that dropped them made the Terraform provider force-replace the template forever
         "properties": {
-            "machineType": mt_name, "disks": props.get("disks") or [], "networkInterfaces": props.get("networkInterfaces") or [],
+            **_copy(props), "machineType": mt_name, "disks": props.get("disks") or [], "networkInterfaces": props.get("networkInterfaces") or [],
             "labels": props.get("labels") or {}, "description": props.get("description", ""),
         },
         "description": payload.get("description", ""), "creationTimestamp": now, "selfLink": _selflink(full),
     }
     store.instance_templates[full] = tpl
-    return _operation(store, project, None, "insert", name, _selflink(full))
+    # F309: the operation's targetId is the template's id and the template can be read back by that id (the provider does)
+    return _operation(store, project, None, "insert", name, _selflink(full), target_id=tpl["id"])
 
 
 def list_instance_templates(store, project):
@@ -1008,6 +1012,9 @@ def list_instance_templates(store, project):
 
 def get_instance_template(store, project, name):
     full = "projects/%s/global/instanceTemplates/%s" % (project, name)
+    if full not in store.instance_templates and str(name).isdigit():
+        full = next((k for k, v in store.instance_templates.items()
+                     if k.startswith("projects/%s/global/instanceTemplates/" % project) and str(v.get("id")) == str(name)), full)
     v = _get(store, store.instance_templates, full, "instanceTemplate")
     return _json(200, v)
 
@@ -1304,9 +1311,11 @@ def insert_health_check(store, project, payload):
     }
     key = "%sHealthCheck" % hctype.lower().replace("ssl", "ssl").replace("grpc", "grpc").replace("http2", "http2")
     detail = payload.get(key) or {}
-    hc[key] = {"port": detail.get("port", 80 if "HTTP" in hctype and hctype != "HTTPS" else 443 if hctype in ("HTTPS", "SSL") else 80),
+    hc[key] = {**detail, "port": detail.get("port", 80 if "HTTP" in hctype and hctype != "HTTPS" else 443 if hctype in ("HTTPS", "SSL") else 80),
                "requestPath": detail.get("requestPath", "/") if "HTTP" in hctype else None,
                "host": detail.get("host")}
+    if hctype != "GRPC":
+        hc[key].setdefault("proxyHeader", "NONE")   # F312: real health checks always report proxyHeader
     store.health_checks[full] = hc
     return _operation(store, project, None, "insert", name, _selflink(full))
 
@@ -1380,7 +1389,7 @@ def get_project(store, project):
 
 
 def set_common_instance_metadata(store, project, payload):
-    items = payload.get("items") or []
+    items = [i for i in (payload.get("items") or []) if isinstance(i, dict)]   # F310: the provider sends null slots; never store them
     store.project_metadata[project] = {"items": items, "fingerprint": _fingerprint(items)}
     return _operation(store, project, None, "setMetadata", project, _selflink("projects/%s" % project))
 
@@ -1496,12 +1505,43 @@ def _dispatch(store, method, path, query, headers, body):
     return _err(404, "NOT_FOUND", "Unknown path: %s" % path)
 
 
+# F306: Google's public image projects (what `source_image = "debian-cloud/debian-12"` resolves through images.getFromFamily).
+PUBLIC_IMAGES = {
+    "debian-cloud": [("debian-12", "debian-12-bookworm-v20241112", "Debian GNU/Linux 12 (bookworm)"),
+                     ("debian-11", "debian-11-bullseye-v20241112", "Debian GNU/Linux 11 (bullseye)")],
+    "ubuntu-os-cloud": [("ubuntu-2204-lts", "ubuntu-2204-jammy-v20241115", "Ubuntu 22.04 LTS"),
+                        ("ubuntu-2404-lts-amd64", "ubuntu-2404-noble-amd64-v20241115", "Ubuntu 24.04 LTS")],
+    "cos-cloud": [("cos-stable", "cos-stable-113-18244-151-14", "Container-Optimized OS stable")],
+    "rocky-linux-cloud": [("rocky-linux-9", "rocky-linux-9-v20241112", "Rocky Linux 9")],
+}
+
+
+def _public_image(project, family, name, desc):
+    full = "projects/%s/global/images/%s" % (project, name)
+    return {"kind": "compute#image", "id": str(zlib.crc32(full.encode()) * 1000003), "creationTimestamp": "2024-11-12T00:00:00.000-08:00",
+            "name": name, "description": desc, "sourceType": "RAW", "status": "READY", "archiveSizeBytes": "4000000000",
+            "diskSizeGb": "10", "family": family, "selfLink": _selflink(full), "labelFingerprint": "42WmSpB8rSM="}
+
+
+def public_images(project):
+    return [_public_image(project, f, n, d) for f, n, d in PUBLIC_IMAGES.get(project, [])]
+
+
 def _global(store, method, project, rest, verb, payload):
     if not rest:
         return _err(404, "NOT_FOUND", "Unknown path.")
     coll, rest2 = rest[0], rest[1:]
     if coll == "imageJobs" and method == "GET" and not rest2:
         return _json(200, {"kind": "vyomi#imageJobList", "items": list_image_jobs(store, project)})
+    if coll == "images" and project in PUBLIC_IMAGES and method == "GET":
+        pub = public_images(project)
+        if not rest2:
+            return _json(200, {"kind": "compute#imageList", "items": pub})
+        key = rest2[1] if rest2[0] == "family" and len(rest2) == 2 else rest2[0] if len(rest2) == 1 else None
+        hit = next((i for i in pub if key in (i["family"], i["name"])), None)
+        if hit:
+            return _json(200, hit)
+        return _err(404, "NOT_FOUND", "The resource 'projects/%s/global/images/%s' was not found" % (project, "/".join(rest2)))
     if coll == "images":
         if len(rest2) == 1 and verb == "export" and method == "POST":
             return _json(200, export_image(store, project, rest2[0], payload))

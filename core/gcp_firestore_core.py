@@ -1787,6 +1787,19 @@ def _admin_dispatch(store: FirestoreStore, method: str, path: str,
     return _err(404, "NOT_FOUND", f"Unknown path: {path}")
 
 
+def _db_lro(store: FirestoreStore, project: str, dbid: str, kind: str, response: dict | None) -> dict:
+    """F303: database create/update/delete are long-running operations on the real API (the Terraform provider reads
+    `name`/`done`/`response` from the reply and polls the operation); the finished operation stays fetchable."""
+    opid = _auto_id()
+    ts = _now()
+    op = {"name": f"projects/{project}/databases/{dbid}/operations/{opid}",
+          "metadata": {"@type": f"type.googleapis.com/google.firestore.admin.v1.{kind}DatabaseMetadata"},
+          "done": True,
+          "response": {"@type": "type.googleapis.com/google.firestore.admin.v1.Database", **(response or {})}}
+    store.operations.setdefault(dbid, {})[opid] = op
+    return op
+
+
 def _dispatch_databases_collection(store: FirestoreStore, project: str, method: str,
                                    query: dict, body: bytes) -> FirestoreResponse:
     if method == "GET":
@@ -1804,7 +1817,7 @@ def _dispatch_databases_collection(store: FirestoreStore, project: str, method: 
                   "pointInTimeRecoveryEnablement", "databaseEdition"):
             if k in data:
                 rec[k] = data[k]
-        return _json(200, rec)
+        return _json(200, _db_lro(store, project, dbid, "Create", rec))
     return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on databases")
 
 
@@ -1894,7 +1907,7 @@ def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suff
                 db[k] = data[k]
         db["updateTime"] = _now()
         db["etag"] = _auto_id()
-        return _json(200, db)
+        return _json(200, _db_lro(store, project, dbid, "Update", db))
     if method == "DELETE":
         if db is None:
             return _err(404, "NOT_FOUND", f"Database does not exist: projects/{project}/databases/{dbid}")
@@ -1914,7 +1927,7 @@ def _dispatch_database_item(store: FirestoreStore, project: str, dbid: str, suff
         store.key_access.pop(dbid, None)
         for key in [k for k in store.history if k.startswith(prefix)]:
             store.history.pop(key, None)
-        return _json(200, db)
+        return _json(200, _db_lro(store, project, dbid, "Delete", db))
     return _err(400, "INVALID_ARGUMENT", f"Unsupported method {method} on database")
 
 
