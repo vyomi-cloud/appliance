@@ -271,6 +271,13 @@ def matches_filter(event: dict, flt: dict) -> bool:
     return True
 
 
+def _cloudevents_v1(event: dict, topic: str = "") -> dict:
+    """CloudEvents 1.0 envelope (what a CloudEventSchemaV1_0 subscription receives)."""
+    return {"specversion": "1.0", "id": event.get("id") or uuid.uuid4().hex, "source": event.get("topic") or topic,
+            "type": event.get("eventType", "Default"), "subject": event.get("subject", ""),
+            "time": event.get("eventTime") or _now(), "datacontenttype": "application/json", "data": event.get("data", {})}
+
+
 def _cloud_event(event: dict, props: dict) -> dict:
     return {
         "id": event.get("id") or uuid.uuid4().hex,
@@ -320,8 +327,15 @@ def _deliver_webhook(dprops: dict, event: dict, props: dict) -> bool:
     if WEBHOOK_POST is None or not url.startswith(("http://", "https://")):
         return False
     try:
-        body = json.dumps([event] if (props.get("eventDeliverySchema") or "EventGridSchema") == "EventGridSchema" else _cloud_event(event, props)).encode()
-        st = WEBHOOK_POST(url, body, {"content-type": "application/json", "aeg-event-type": "Notification"})
+        # Real Event Grid: EventGridSchema -> application/json + aeg-event-type: Notification; CloudEvents v1.0 -> a JSON
+        # batch (array) with content-type application/cloudevents-batch+json and no aeg-event-type.
+        if str(props.get("eventDeliverySchema") or "EventGridSchema").lower().startswith("cloudevent"):
+            body = json.dumps([_cloudevents_v1(event)]).encode()
+            hdrs = {"content-type": "application/cloudevents-batch+json; charset=utf-8"}
+        else:
+            body = json.dumps([event]).encode()
+            hdrs = {"content-type": "application/json", "aeg-event-type": "Notification"}
+        st = WEBHOOK_POST(url, body, hdrs)
         return 200 <= int(st) < 300
     except Exception:
         return False
