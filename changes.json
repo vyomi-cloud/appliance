@@ -1,16 +1,6 @@
 {
- "at": "2026-11-17T11:12:36+00:00",
+ "at": "2026-11-17T12:12:29+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "azure",
-   "service": "app",
-   "kind": "spec-commit",
-   "key": "azure:app:c282d1cc7e",
-   "title": "Azure app: [ACA] Add missing identity to Sandbox group (#48176)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/c282d1cc7e0dfaa6f9ce2f2f38e1982a4ecf40ed",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
