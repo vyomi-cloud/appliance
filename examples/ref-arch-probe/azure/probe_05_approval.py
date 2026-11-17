@@ -17,13 +17,15 @@ def func_app():
     w.app_service_plans.begin_create_or_update(RG, "plan1", {"location": LOC, "sku": {"name": "Y1", "tier": "Dynamic"}, "kind": "functionapp"}).result()
     w.web_apps.begin_create_or_update(RG, "approvals-fn", {"location": LOC, "kind": "functionapp", "server_farm_id": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Web/serverfarms/plan1",
         "site_config": {"app_settings": [{"name": "FUNCTIONS_WORKER_RUNTIME", "value": "python"}]}}).result()
-    code = f'''import json
+    # The function runs in the simulator's own interpreter, which has no azure-data-tables (see fn_has_sdk): write the ledger with stdlib urllib on the Table REST wire
+    code = f'''import json, urllib.request
 import azure.functions as func
-from azure.data.tables import TableClient, UpdateMode
 def main(req: func.HttpRequest) -> func.HttpResponse:
     b = req.get_json()
-    t = TableClient.from_connection_string({TCS!r}, "ledger")
-    t.upsert_entity({{"PartitionKey": "req", "RowKey": b["request_id"], "status": b["decision"], "approver": b["approver"]}}, mode=UpdateMode.REPLACE)
+    ent = {{"PartitionKey": "req", "RowKey": b["request_id"], "status": b["decision"], "approver": b["approver"]}}
+    u = {B!r} + "/devstoreaccount1/ledger(PartitionKey='req',RowKey='" + b["request_id"] + "')"
+    rq = urllib.request.Request(u, data=json.dumps(ent).encode(), method="PUT", headers={{"Content-Type": "application/json", "Accept": "application/json;odata=nometadata", "If-Match": "*", "x-ms-version": "2019-02-02"}})
+    urllib.request.urlopen(rq, timeout=10).read()
     return func.HttpResponse(json.dumps({{"ok": True, "request_id": b["request_id"]}}), mimetype="application/json")
 '''
     z = io.BytesIO()
@@ -32,6 +34,17 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     r = requests.post(B + "/azure-data/functions/approvals-fn/api/zipdeploy", data=z.getvalue(), timeout=30)
     assert r.status_code == 200, (r.status_code, r.text[:150])
     return "function app + zipdeploy of approve()"
+
+
+def fn_has_sdk():
+    """Real function apps import azure.functions AND an Azure SDK (azure-data-tables) in the same module. (The simulator's azure.functions shim shadows the azure namespace.)"""
+    code = "import azure.functions as func\ndef main(req):\n    import azure.data.tables\n    return {'ok': True}\n"
+    z = io.BytesIO()
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("__init__.py", code)
+    requests.post(B + "/azure-data/functions/approvals-fn/api/zipdeploy", data=z.getvalue(), timeout=30)
+    r = requests.post(B + "/azure-data/functions/approvals-fn/api/probe_sdk", json={}, timeout=30)
+    assert r.status_code == 200, f"{r.status_code} {r.text[-200:]}"
 
 
 def table_basic():
@@ -178,8 +191,8 @@ def backend_is_real():
     assert "not in Azurite" not in note, "Table data is held in Vyomi's own state slots, NOT in Azurite: " + note[:230]
 
 
-if P.step("Function App + zipdeploy of an approve() function that writes the ledger (azure.functions + azure-data-tables)", func_app):
-    pass
+P.step("Function can import azure-data-tables (SDK deps available to function code)", lambda: (func_app(), fn_has_sdk()))
+P.step("Function App + zipdeploy of an approve() function that writes the ledger over the Table REST wire (urllib)", func_app)
 if P.step("Table ledger: create table + entity, read back (azure-data-tables)", table_basic):
     P.step("Table: replace-mode update + upsert (PUT)", table_replace)
     P.step("Table: merge-mode update (PATCH)", table_merge)

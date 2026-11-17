@@ -96,12 +96,12 @@ class Probe:
                 rec["blocked_reason"] = blocked
         rec["seconds"] = round(time.time() - t, 2)
         self.steps.append(rec)
-        print(f"  [{rec['status']}] {name} {rec.get('evidence') or rec.get('error') or ''}"[:300], flush=True)
+        print(f"  [{rec['status']}] {name} {rec.get('evidence') or rec.get('error') or ''}"[:int(os.environ.get("W", "300"))], flush=True)
         return rec["status"] == "PASS"
 
     def note(self, name, text, status="PASS"):
         self.steps.append({"step": name, "status": status, "evidence": text})
-        print(f"  [{status}] {name} {text}"[:300], flush=True)
+        print(f"  [{status}] {name} {text}"[:int(os.environ.get("W", "300"))], flush=True)
 
     @property
     def status(self):
