@@ -890,7 +890,21 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         missing = missing_identity_ref(_state, ua)
         if missing:
             return _error(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+    _body = b""
+    if method in ("PUT", "PATCH", "POST", "DELETE"):
+        try:
+            _body = await request.body()
+        except Exception:
+            _body = b""
     resp = await _handle_arm_inner(request, rest)
+    if method != "GET" and not getattr(request.state, "_arm_core_recorded", False):
+        # Security audit feed (Defender alerts, workflow automations): the shared ARM core records every write it serves; a write the
+        # offline catalog served itself (Storage accounts, Key Vaults, NSGs, ...) must reach the same feed or Defender never raises.
+        try:
+            from core import azure_security_core as _sec
+            _sec.record_call(_state, rest.split("/", 1)[0], method, "/subscriptions/" + rest.split("?")[0], _body.decode("utf-8", "replace"), resp.status_code)
+        except Exception:
+            pass
     if ua and resp.status_code < 300:
         from core.azure_arm_core import resolve_identity_refs
         rec = _state.get(("/subscriptions/" + rest.split("?")[0].strip("/")).lower())
@@ -1672,6 +1686,7 @@ def _subscription_meta(key: str) -> dict:
 
 async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
     arm = core_arm()
+    request.state._arm_core_recorded = True   # arm.handle() writes the security audit feed itself
     arm._base = base
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     out = arm.handle(method, "/subscriptions/" + rest, dict(request.query_params), payload)
@@ -2185,3 +2200,22 @@ def register(app, _h=None) -> None:
         app.add_api_route("/subscriptions/{rest:path}", arm_dispatch,
                           methods=["GET", "PUT", "POST", "PATCH", "DELETE"],
                           include_in_schema=False)
+
+    # Azure Resource Graph is TENANT-scoped: POST /providers/Microsoft.ResourceGraph/resources (no /subscriptions prefix), what
+    # `az graph query` and the Resource Graph Explorer call. The shared ARM core answers it; without this route the request fell
+    # through to the S3 catch-all (405 MethodNotAllowed).
+    async def arm_resourcegraph(request: Request):
+        from core import app_context as _ctx
+        payload = await _safe_json(request) if request.method == "POST" else {}
+        _tok = _ctx.REQUEST_PROVIDER.set("azure")   # a tenant-scoped path carries no /subscriptions prefix, so nothing else selects the Azure space
+        try:
+            out = core_arm().handle(request.method, "/providers/Microsoft.ResourceGraph/resources", dict(request.query_params), payload)
+        finally:
+            _ctx.REQUEST_PROVIDER.reset(_tok)
+        body = out.get("body")
+        resp = JSONResponse(status_code=out.get("status", 200), content=body) if body is not None else Response(status_code=out.get("status", 200))
+        for hk, hv in (out.get("headers") or {}).items():
+            resp.headers[hk] = str(hv)
+        return resp
+
+    app.add_api_route("/providers/Microsoft.ResourceGraph/resources", arm_resourcegraph, methods=["GET", "POST"], include_in_schema=False)
