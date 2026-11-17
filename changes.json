@@ -1,76 +1,48 @@
 {
- "at": "2026-11-17T22:12:40+00:00",
+ "at": "2026-11-17T23:12:48+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "azure",
    "service": "cosmos-db",
    "kind": "spec-commit",
-   "key": "azure:cosmos-db:bef29bc884",
-   "title": "Azure cosmos-db: Add Cosmos DB preview API version 2026-09-01-preview (#45791)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/bef29bc88400d23665b90ef5b2c07b4f711ffffe",
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon VPC",
-   "kind": "announcement",
-   "key": "feed:aws:78e07fdf45bc",
-   "title": "Amazon EVS launches support for r7i.metal instances, external principal storage, and an Agent Skill ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-evs-r7i-agent-skill-support/",
-   "detail": "Today, we are announcing that Amazon Elastic VMware Service (Amazon EVS) now supports the r7i.metal-24xl and r7i.metal-48xl Amazon Elastic Compute Cloud (EC2) bare metal instance types for VMware Cloud Foundation (VCF) 9.x deployments. EC2 r7i instances are memory optimized, with custom 4th Generation Intel Xeon Scalable (Sapphire Rapids) processors, and designed to be used with external storage. With these instances possessing no local NVMe disks, Amazon EVS now supports VCF external principal storage with solutions such as Amazon FSx for NetApp ONTAP. With this launch, you can use the Amazon",
+   "key": "azure:cosmos-db:64b700f0b5",
+   "title": "Azure cosmos-db: Bugfix: Correct Cosmos DB embedding generator mutability (#48308)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/64b700f0b538eb97717aa921a9d1bec1b99dfbd2",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "AWS Lambda",
+   "service": "Amazon S3, DynamoDB",
    "kind": "announcement",
-   "key": "feed:aws:b19661a76811",
-   "title": "AWS Lambda durable functions now supports pausing and deleting executions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-pause-delete/",
-   "detail": "AWS Lambda durable functions now lets you pause a running durable execution and resume it later without losing its progress. When you resume an execution, it continues from its last checkpoint on the same function version. By default, time spent paused doesn't count toward the execution timeout. You can also now delete a completed execution's data before its retention period ends. With Lambda durable functions, you can build resilient multi-step applications and AI workflows that run for up to one year, with built-in checkpointing and automatic retries. With this launch, when a downstream serv",
+   "key": "feed:aws:4477658bf50b",
+   "title": "Amazon EMR 8.2 is now available",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-emr-8.2/",
+   "detail": "Amazon EMR 8.2 is now available with new features across Amazon EMR on EC2, Amazon EMR on EKS, and Amazon EMR Serverless. This release upgrades Apache Spark to 4.1.3, Apache Iceberg to 1.11.0, and Delta Lake to 4.2.0, and it is designated a Long Term Support (LTS) release. This release makes it easier to run secure, governed analytics at scale \u2014 you can now write to the same Delta Lake table on Amazon S3 from multiple clusters concurrently, refresh Iceberg materialized views incrementally, and propagate end-user identity from Spark jobs and interactive sessions all the way to AWS Lake Formatio",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon EC2",
+   "service": "AWS IAM",
    "kind": "announcement",
-   "key": "feed:aws:007803f1865a",
-   "title": "AWS Workload Credentials Provider adds container support for ACM certificates",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/acm-certificates-container-support/",
-   "detail": "The open source AWS Workload Credentials Provider can now export AWS Certificate Manager (ACM) certificates to applications running in containers on Amazon Elastic Container Service (Amazon ECS), including AWS Fargate, Amazon Elastic Kubernetes Service (Amazon EKS), and Docker on Amazon EC2. You can now automate certificate deployment and renewal for containerized TLS workloads the same way you do on EC2 instances, on both Linux and Windows. The provider runs as a sidecar in your ECS task or EKS pod. It exports each certificate and private key to a shared volume and writes the renewed files wh",
+   "key": "feed:aws:1812b2334c87",
+   "title": "Introducing the Apache Spark Optimization Agent for Amazon EMR Serverless",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/apache-spark-optimization-agent/",
+   "detail": "Amazon EMR Serverless now offers the Apache Spark optimization agent, which analyzes completed Spark job runs and delivers cost and performance optimization recommendations in seconds. You can select a cost or performance goal, and the agent returns specific configuration changes with the telemetry evidence and plain-language reasoning behind each suggestion. The agent can analyze a single run or compare it against a known-good baseline to pinpoint what changed. You access it from the EMR Serverless console or through the SageMaker Unified Studio MCP Server. The agent takes the job's configura",
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "Virtual Machines",
+   "cloud": "aws",
+   "service": "DynamoDB",
    "kind": "announcement",
-   "key": "feed:azure:3409088797d5",
-   "title": "[Launched] Generally Available: Snapshot backup for SQL Server in Azure VMs",
-   "link": "https://azure.microsoft.com/updates?id=564668",
-   "detail": "Azure Backup now supports snapshot-based backup for SQL Server running on Azure Virtual Machines. This new capability uses Azure disk snapshots combined with native SQL transaction log backups to deliver near-instant, low-impact full backups for large SQL",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Virtual Network",
-   "kind": "announcement",
-   "key": "feed:azure:8142ada814b1",
-   "title": "[In preview] Generally Available: Private endpoint support for Azure HorizonDB clusters",
-   "link": "https://azure.microsoft.com/updates?id=574153",
-   "detail": "You can now connect to Azure HorizonDB clusters privately through Azure Private Link, using a private IP address from your virtual network. Private DNS integration makes connection setup easier, while the option to disable public access keeps database tra",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "API Management",
-   "kind": "announcement",
-   "key": "feed:azure:312fe0473b8f",
-   "title": "[In preview] Public Preview: Azure API Management Application",
-   "link": "https://azure.microsoft.com/updates?id=581277",
-   "detail": "The Applications feature in Azure API Management is now available in public preview to all customers, with no sign-up or registration required.Applications provide a streamlined way to organize APIs around consuming applications and manage application-lev",
+   "key": "feed:aws:c00852965cc3",
+   "title": "Amazon DynamoDB caching is now available with Amazon ElastiCache Serverless for Valkey",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/dynamodb-caching-elasticache/",
+   "detail": "Today, AWS announces the general availability of DynamoDB caching with Amazon ElastiCache Serverless for Valkey, enabling sub-millisecond read latency for frequently accessed DynamoDB data. Previously, if you required faster reads than DynamoDB's single-digit millisecond latency, you had to manually manage cache infrastructure or keep a separate cache in sync. Now you can access DynamoDB table data from a write-through cache that updates as data changes and automatically scales to meet changing workload demands. DynamoDB caching requires no application logic changes and minimal configuration. ",
    "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
+ ]
 }
