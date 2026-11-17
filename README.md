@@ -1,17 +1,17 @@
 # Release checks — v4.0.4
 
-Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/44003802306) for tag `v4.0.4`.
+Generated 2026-11-17 20:11 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/44137283311) for tag `v4.0.4`.
 
 | Package / check | Platform | Result |
 |---|---|---|
 | DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | ✅ passed |
 | RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | ✅ passed |
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
-| CLI: aws / gcloud / az suites + CLI ↔ console both ways (78/84 checks passed) | Linux, release images | ❌ failure |
-| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (79/84 checks passed) | Chromium, release wasm bundle | ❌ failure |
+| CLI: aws / gcloud / az suites + CLI ↔ console both ways (79/84 checks passed) | Linux, release images | ❌ failure |
+| Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (80/84 checks passed) | Chromium, release wasm bundle | ❌ failure |
 | MSI: install, upgrade, uninstall (+ signing) | Windows (GitHub) | ✅ passed ([run](https://github.com/vyomi-cloud/appliance/actions/runs/44003802360)) |
 | Startup: all services + UI status | Linux, release images | ❌ null ([run](https://github.com/vyomi-cloud/appliance/actions/runs/null)) |
-| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | — not run |
+| Windows E2E: MSI → vyomi up → services + UI | Windows laptop (private runner) | ❌ failure |
 
 ## DEB
 
@@ -19,7 +19,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_4.0.4_all.deb | 4s |
+| ✅ | install vyomi_4.0.4_all.deb | 13s |
 | ✅ | package manager reports version 4.0.4 | found '4.0.4' |
 | ✅ | bundled VERSION is 4.0.4 | /usr/share/vyomi/packaging/common/VERSION = 4.0.4 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -57,7 +57,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.0.4 | exit 0; compose v4.0.4; ==> Vyomi 4.0.4 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.0.4 (SHA256-checked) | exit 0; cached compose v4.0.4 |
-| ✅ | after update, vyomi runs the cached v4.0.4 |   compose   : v4.0.4 (/tmp/tmp.MQQfjQlD0k/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.0.4 |   compose   : v4.0.4 (/tmp/tmp.DCeL3MKo6M/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (4.0.4) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -106,7 +106,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.0.4 | exit 0; compose v4.0.4; ==> Vyomi 4.0.4 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.0.4 (SHA256-checked) | exit 0; cached compose v4.0.4 |
-| ✅ | after update, vyomi runs the cached v4.0.4 |   compose   : v4.0.4 (/tmp/tmp.7vR1CPvjt8/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.0.4 |   compose   : v4.0.4 (/tmp/tmp.HLR7nG9YkS/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -117,7 +117,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 8s |
+| ✅ | install vyomi | 9s |
 | ✅ | package manager reports version 4.0.4 | found '4.0.4' |
 | ✅ | bundled VERSION is 4.0.4 | /opt/homebrew/opt/vyomi/libexec/VERSION = 4.0.4 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -156,7 +156,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.0.4 | exit 0; compose v4.0.4; ==> Vyomi 4.0.4 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.0.4 (SHA256-checked) | exit 0; cached compose v4.0.4 |
-| ✅ | after update, vyomi runs the cached v4.0.4 |   compose   : v4.0.4 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.u73yy7d1dV/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.0.4 |   compose   : v4.0.4 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.JDKTIpIaBq/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/4.0.4/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/4.0.4... (12 files, 27.6MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -164,7 +164,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 
 ## CLI (aws / gcloud / az) and CLI ↔ console
 
-**78/84 checks passed** against `http://localhost:9000`.
+**79/84 checks passed** against `http://localhost:9000`.
 
 ### CLIs (4/4)
 
@@ -232,7 +232,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 | ✅ | Azure: virtual network created in the console |  |
 | ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-### CLI suites, each on its own (28/33)
+### CLI suites, each on its own (29/33)
 
 | | Check | Detail |
 |---|---|---|
@@ -257,7 +257,7 @@ Generated 2026-11-17 05:11 UTC by [Release checks report](https://github.com/vyo
 | ❌ | azure-netenforce: 5 passed, 3 failed | Service Bus: other IP BLOCKED (201); Cosmos CORS preflight: unlisted origin BLOCKED (200); diagnostic setting delivered an OperationalLogs row to the workspace |
 | ✅ | azure-operationalinsights: 20 passed, 0 failed |  |
 | ✅ | azure-packetcapture: 11 passed, 0 failed |  |
-| ❌ | azure-rgtools: 6 passed, 1 failed | Insights: 2 resources, 1 untagged, 1 VM |
+| ✅ | azure-rgtools: 7 passed, 0 failed |  |
 | ❌ | azure-workbooks: 7 passed, 1 failed | render returns the KQL table (west 17, east 5) |
 | ✅ | gcp-artifactregistry: 11 passed, 0 failed |  |
 | ✅ | gcp: 6 passed, 0 failed |  |
@@ -277,7 +277,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Nano CLI through the tunnel and CLI ↔ console
 
-**79/84 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
+**80/84 checks passed** against Nano through the relay tunnel `http://127.0.0.1:8090`.
 
 ### CLIs (4/4)
 
@@ -345,7 +345,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 | ✅ | Azure: virtual network created in the console |  |
 | ✅ | Azure: virtual network created in the console shows in the CLI |  |
 
-### CLI suites, each on its own (28/33)
+### CLI suites, each on its own (29/33)
 
 | | Check | Detail |
 |---|---|---|
@@ -370,7 +370,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 | ❌ | azure-netenforce: 6 passed, 2 failed | Cosmos CORS preflight: listed origin allowed (204); Cosmos CORS preflight: unlisted origin BLOCKED (204) |
 | ✅ | azure-operationalinsights: 20 passed, 0 failed |  |
 | ✅ | azure-packetcapture: 11 passed, 0 failed |  |
-| ❌ | azure-rgtools: 6 passed, 1 failed | Insights: 2 resources, 1 untagged, 1 VM |
+| ✅ | azure-rgtools: 7 passed, 0 failed |  |
 | ✅ | azure-workbooks: 8 passed, 0 failed |  |
 | ✅ | gcp-artifactregistry: 11 passed, 0 failed |  |
 | ✅ | gcp: 6 passed, 0 failed |  |
@@ -444,28 +444,60 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## Console UI (Nano) — aws
 
-❌ 35/37 suites passed
+❌ 36/37 suites passed
 
 | Failing suite | Passed | Failed |
 |---|---|---|
 | `nano-ui-default-cloud` | 4 | 1 |
-| `nightly-aws-v4-roundtrip` | 89 | 1 |
 
 
 ## Console UI (Nano) — azure
 
-❌ 24/26 suites passed
-
-| Failing suite | Passed | Failed |
-|---|---|---|
-| `nano-ui-crawl` | 33 | 1 |
-| `nano-ui-azure-cognitiveservices` | 26 | 3 |
+✅ 26/26 suites passed
 
 
 ## Console UI (Nano) — gcp
 
 ✅ 25/25 suites passed
 
+
+## Windows E2E
+
+### Vyomi 3.0.46 startup — 31/31 checks passed
+
+| | Check | Detail |
+|---|---|---|
+| ✅ | simulator answers /healthz | 3s |
+| ✅ | readiness reports every service ready | 17/17 ready, 100% |
+| ✅ | service Vyomi simulator ready | ready after 5s |
+| ✅ | service PostgreSQL ready | ready after 5s |
+| ✅ | service MySQL ready | ready after 5s |
+| ✅ | service Vault (KMS / secrets) ready | ready after 5s |
+| ✅ | service MinIO (S3) ready | ready after 5s |
+| ✅ | service DynamoDB ready | ready after 294s |
+| ✅ | service NATS (EventBridge) ready | ready after 7s |
+| ✅ | service ElasticMQ (SQS) ready | ready after 7s |
+| ✅ | service fake-gcs-server ready | ready after 7s |
+| ✅ | service Pub/Sub emulator ready | ready after 7s |
+| ✅ | service Firestore emulator ready | ready after 7s |
+| ✅ | service CloudSim Plus ready | ready after 7s |
+| ✅ | service VictoriaMetrics (CloudWatch metrics) ready | ready after 7s |
+| ✅ | service Caddy gateway (API Gateway V2) ready | ready after 7s |
+| ✅ | service Valkey (Memorystore) ready | ready after 7s |
+| ✅ | service OCI registry (Artifact Registry) ready | ready after 7s |
+| ✅ | service Azurite (Blob / Queue) ready | ready after 623s |
+| ✅ | /clouds status banner says 'Appliance is Ready' | Appliance is Ready |
+| ✅ | /clouds banner counts every service | — all 17 services running |
+| ✅ | running version is 3.0.46 | reports 3.0.46 |
+| ✅ | AWS console loads its service rail | 31 rail items |
+| ✅ | AWS console has no page errors |  |
+| ✅ | AWS console has no 5xx API calls |  |
+| ✅ | GCP console loads its service rail | 18 rail items |
+| ✅ | GCP console has no page errors |  |
+| ✅ | GCP console has no 5xx API calls |  |
+| ✅ | AZURE console loads its service rail | 21 rail items |
+| ✅ | AZURE console has no page errors |  |
+| ✅ | AZURE console has no 5xx API calls |  |
 
 
 ---
