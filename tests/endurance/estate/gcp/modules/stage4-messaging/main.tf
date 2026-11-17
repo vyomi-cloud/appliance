@@ -55,3 +55,5 @@ resource "google_cloud_scheduler_job" "tick" {
     data       = base64encode("tick")
   }
 }
+
+output "topic_id" { value = google_pubsub_topic.events.id }

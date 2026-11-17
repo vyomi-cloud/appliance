@@ -68,7 +68,32 @@ def t_f304_f305():
     _check("F305 redis instance without displayName/redisConfigs reports neither", "displayName" not in i and i["redisConfigs"] == {})
 
 
+def t_f306_f308():
+    import json as _j
+    from core import gcp_logging_core as lg, gcp_compute_instances_core as ci
+    st = lg.LoggingStore()
+    def call(method, path, body=None, query=None):
+        r = lg.dispatch(st, method, path, query or {}, {}, _j.dumps(body or {}).encode())
+        return r.status, _j.loads(r.body or b"{}")
+    s_, m = call("POST", "/v2/projects/p/metrics", {"name": "errs", "filter": "severity>=ERROR"})
+    _check("F307 LogMetric.name on the wire is the short id", m["name"] == "errs")
+    _check("F307 metric GET by that name works", call("GET", "/v2/projects/p/metrics/errs")[1]["name"] == "errs")
+    s_, op = call("POST", "/v2/projects/p/locations/global/buckets:createAsync", {"retentionDays": 30}, {"bucketId": "ops"})
+    _check("F308 buckets:createAsync returns a done operation with the bucket", op["done"] and op["response"]["name"].endswith("/buckets/ops"))
+    _check("F308 the operation is fetchable", call("GET", "/v2/" + op["name"])[1]["done"] is True)
+    cs = ci.ComputeStore()
+    ci.set_common_instance_metadata(cs, "p", {"items": [None, {"key": "k", "value": "v"}]})
+    _check("F310 null metadata items are dropped", ci.get_project(cs, "p")["commonInstanceMetadata"]["items"] == [{"key": "k", "value": "v"}])
+    op = ci.insert_instance_template(cs, "p", {"name": "t1", "properties": {"machineType": "e2-small"}})
+    tpl = cs.instance_templates["projects/p/global/instanceTemplates/t1"]
+    _check("F309 insert op targetId is the template id and GET by that id works",
+           op["targetId"] == str(tpl["id"]) and ci.get_instance_template(cs, "p", op["targetId"]).status == 200)
+    imgs = ci.public_images("debian-cloud")
+    _check("F306 debian-cloud serves a debian-12 family image", any(i["family"] == "debian-12" for i in imgs))
+
+
 def run():
+    t_f306_f308()
     t_f304_f305()
     t_f300()
     t_router()

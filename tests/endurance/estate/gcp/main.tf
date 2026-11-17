@@ -29,6 +29,9 @@ provider "google" {
   redis_custom_endpoint            = "${var.endpoint}/v1/"
   pubsub_custom_endpoint           = "${var.endpoint}/v1/"
   cloud_scheduler_custom_endpoint  = "${var.endpoint}/v1/"
+  artifact_registry_custom_endpoint = "${var.endpoint}/v1/"
+  logging_custom_endpoint          = "${var.endpoint}/v2/"
+  monitoring_custom_endpoint       = "${var.endpoint}/"
 }
 
 module "network_identity" {
@@ -49,4 +52,19 @@ module "messaging" {
   project    = var.project
   kms_key_id = module.network_identity.kms_key_id
   bucket     = module.data.bucket
+}
+
+module "compute" {
+  source     = "./modules/stage2-compute"
+  project    = var.project
+  network_id = module.network_identity.network_id
+  subnet_id  = module.network_identity.subnet_ids[1]
+  sa_email   = module.network_identity.sa_email
+}
+
+module "observability" {
+  source   = "./modules/stage7-observability"
+  project  = var.project
+  bucket   = module.data.bucket
+  topic_id = module.messaging.topic_id
 }

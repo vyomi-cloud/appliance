@@ -422,10 +422,19 @@ def delete_sink(store, project, sid):
     store.persist()
 
 
+def _sview(s):
+    """F307b: wire LogSink.name is the short id and `disabled` is omitted unless true (provider reads both back)."""
+    out = _copy(s)
+    out["name"] = str(out["name"]).rsplit("/", 1)[-1]
+    if not out.get("disabled"):
+        out.pop("disabled", None)
+    return out
+
+
 def list_sinks(store, project):
     prefix = f"projects/{project}/"
     items = sorted((s for n, s in store.sinks.items() if n.startswith(prefix)), key=lambda s: s["name"])
-    return _json(200, {"sinks": [_copy(s) for s in items]} if items else {})
+    return _json(200, {"sinks": [_sview(s) for s in items]} if items else {})
 
 
 def _route_to_sinks(store, new_entries):
@@ -503,10 +512,17 @@ def delete_metric(store, project, mid):
     store.persist()
 
 
+def _mview(m):
+    """F307: the wire LogMetric.name is the client-assigned short id (the Terraform provider re-uses it in the GET url)."""
+    out = _copy(m)
+    out["name"] = str(out["name"]).rsplit("/", 1)[-1]
+    return out
+
+
 def list_metrics(store, project):
     prefix = f"projects/{project}/"
     items = sorted((m for n, m in store.metrics.items() if n.startswith(prefix)), key=lambda m: m["name"])
-    return _json(200, {"metrics": [_copy(m) for m in items]} if items else {})
+    return _json(200, {"metrics": [_mview(m) for m in items]} if items else {})
 
 
 def metric_usage(store, m, now_t):
@@ -619,6 +635,12 @@ def create_bucket(store, project, location, bucket_id, body):
     store.buckets[name] = b
     store.persist()
     return _copy(b)
+
+
+def _bucket_op(project, location, bid, bucket, verb):
+    return {"name": f"projects/{project}/locations/{location}/operations/bucket-{bid}",
+            "metadata": {"@type": f"type.googleapis.com/google.logging.v2.{verb}BucketRequest"},
+            "done": True, "response": {"@type": "type.googleapis.com/google.logging.v2.LogBucket", **_copy(bucket)}}
 
 
 def _get_bucket(store, project, location, bid):
@@ -740,14 +762,14 @@ def dispatch(store: LoggingStore, method: str, path: str, query: dict | None = N
             if method == "POST":
                 uwi = str(query.get("uniqueWriterIdentity", "false")).lower() == "true"
                 s = create_sink(store, project, payload, uwi)
-                return _json(200, s)
+                return _json(200, _sview(s))
         m = re.match(rf"^/v2/projects/({_P})/sinks/({_P})$", p)
         if m:
             project, sid = m.groups()
             if method == "GET":
-                return _json(200, _copy(_get_sink(store, project, sid)))
+                return _json(200, _sview(_get_sink(store, project, sid)))
             if method in ("PUT", "PATCH"):
-                return _json(200, patch_sink(store, project, sid, payload, query.get("updateMask")))
+                return _json(200, _sview(patch_sink(store, project, sid, payload, query.get("updateMask"))))
             if method == "DELETE":
                 delete_sink(store, project, sid)
                 return _json(200, {})
@@ -758,18 +780,35 @@ def dispatch(store: LoggingStore, method: str, path: str, query: dict | None = N
             if method == "GET":
                 return list_metrics(store, project)
             if method == "POST":
-                return _json(200, create_metric(store, project, payload))
+                return _json(200, _mview(create_metric(store, project, payload)))
         m = re.match(rf"^/v2/projects/({_P})/metrics/({_P})$", p)
         if m:
             project, mid = m.groups()
             if method == "GET":
-                return _json(200, _copy(_get_metric(store, project, mid)))
+                return _json(200, _mview(_get_metric(store, project, mid)))
             if method in ("PUT", "PATCH"):
-                return _json(200, update_metric(store, project, mid, payload))
+                return _json(200, _mview(update_metric(store, project, mid, payload)))
             if method == "DELETE":
                 delete_metric(store, project, mid)
                 return _json(200, {})
 
+        # F308: buckets:createAsync / :updateAsync are long-running operations (the Terraform provider uses them); the
+        # operation name carries the bucket id so a later GET operations/<id> can be answered statelessly.
+        m = re.match(rf"^/v2/projects/({_P})/locations/({_P})/buckets:createAsync$", p)
+        if m and method == "POST":
+            project, location = m.groups()
+            b = create_bucket(store, project, location, query.get("bucketId"), payload)
+            return _json(200, _bucket_op(project, location, b["name"].rsplit("/", 1)[-1], b, "Create"))
+        m = re.match(rf"^/v2/projects/({_P})/locations/({_P})/buckets/({_P}):updateAsync$", p)
+        if m and method == "POST":
+            project, location, bid = m.groups()
+            b = patch_bucket(store, project, location, bid, payload, query.get("updateMask"))
+            return _json(200, _bucket_op(project, location, bid, b, "Update"))
+        m = re.match(rf"^/v2/projects/({_P})/locations/({_P})/operations/bucket-({_P})$", p)
+        if m and method == "GET":
+            project, location, bid = m.groups()
+            b = store.buckets.get(_bucket_name(project, location, bid))
+            return _json(200, _bucket_op(project, location, bid, b or {}, "Create"))
         m = re.match(rf"^/v2/projects/({_P})/locations/({_P})/buckets$", p)
         if m:
             project, location = m.groups()
