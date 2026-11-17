@@ -1,6 +1,26 @@
 {
- "at": "2026-11-17T16:12:37+00:00",
+ "at": "2026-11-17T17:12:58+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:736d6f0759",
+   "title": "Azure cognitiveservices: Fix Go AKS acronym casing for attached cluster client (#48258)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/736d6f07591ba5d6e41d8aa46a9e46cd0773a7ee",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "EventBridge",
+   "kind": "announcement",
+   "key": "feed:aws:b68497af7868",
+   "title": "AWS Security Hub extends unified security management to Google Cloud Platform",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-gcp/",
+   "detail": "Today, AWS announces that AWS Security Hub now monitors Google Cloud Platform (GCP) resources, extending risk analytics, cloud security posture management, vulnerability management, and security response management across both clouds. Many AWS customers running workloads in AWS and GCP have had to operate separate security tools for each environment, making it difficult to prioritize risks holistically or respond consistently. Security Hub now provides a single, unified experience to detect and respond to risks across your AWS and GCP environments in addition to existing support for monitoring",
+   "actionable": false
+  }
+ ],
  "errors": []
 }

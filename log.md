@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-17T17:12:58+00:00
+
+Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `announcement` AWS Security Hub extends unified security management to Google Cloud Platform ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-gcp/))
+- · `spec-commit` Azure cognitiveservices: Fix Go AKS acronym casing for attached cluster client (#48258) ([link](https://github.com/Azure/azure-rest-api-specs/commit/736d6f07591ba5d6e41d8aa46a9e46cd0773a7ee))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-17T16:12:37+00:00
 
 Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3008,3 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.6 → v1.114.7
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.8 → v1.52.9
 - · `release` pypi:boto3: 1.43.123 → 1.43.124
-- · `release` pypi:botocore: 1.43.123 → 1.43.124
-
-Filed 5 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-04T16:31:05+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
