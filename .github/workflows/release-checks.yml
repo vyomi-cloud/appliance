@@ -200,8 +200,10 @@ jobs:
   # Every console UI suite (crawl of every page/tab, Home cards, default-cloud + drawer,
   # UI <-> SDK round trip, per-service flows) against the PUBLISHED release images —
   # one job per cloud, same suites the hourly conformance agent runs.
+  # The offline appliance has no console from 4.0 on (all consoles are Nano/headless), so these only run for v1-v3.
   console-ui:
     needs: resolve
+    if: needs.resolve.outputs.checks_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -344,13 +346,15 @@ jobs:
             echo "$label|$wf|${id:-}|${concl:-not run}" >> ext/index.txt
             [ -n "$id" ] && gh run download "$id" -R "$R" -n "$art" -D "ext/$label" 2>/dev/null || true
           }
-          collect msi-validate.yml "msi-validation-$VER" msi
+          # No Windows MSI from 4.0 on (releases are the Mesh image + Nano), so only v1-v3 are checked for it.
+          [ "${{ needs.resolve.outputs.checks_ref }}" = main ] && collect msi-validate.yml "msi-validation-$VER" msi
           collect release-startup-validate.yml "startup-check-$VER" startup
           cat ext/index.txt
 
       # The private repo saves each version's result as results/<ver>.md on its
       # state branch; reading a file only needs Contents access on the token.
       - name: Windows E2E (private repo)
+        if: needs.resolve.outputs.checks_ref == 'main'
         run: |
           if [ -z "$E2E_TOKEN" ]; then echo "windows-e2e|||no access" >> ext/index.txt; exit 0; fi
           mkdir -p ext/windows-e2e/startup-check
@@ -375,6 +379,7 @@ jobs:
             echo
             echo "| Package / check | Platform | Result |"
             echo "|---|---|---|"
+            [ "${{ needs.resolve.outputs.checks_ref }}" != main ] && echo "| Offline console UI, Windows MSI, Windows E2E | — | n/a since 4.0 (headless: no offline console, no MSI) |"
             echo "| DEB: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Ubuntu (GitHub) | $(res "${{ needs.deb.result }}") |"
             echo "| RPM: vyomi + vyomi-docker (install, vyomi commands, uninstall) | Fedora 40 (GitHub) | $(res "${{ needs.rpm.result }}") |"
             echo "| Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | $(res "${{ needs.brew.result }}") |"
