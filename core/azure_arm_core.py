@@ -5107,7 +5107,8 @@ class AzureArm:
             rec["properties"] = {"provisioningState": "Succeeded"}
             self.state[key] = rec
             self._record_activity(rid, "Microsoft.Resources/resourceGroups/write", sub)
-            return _ok(_view(rec), status=200)
+            # real ARM answers 201 Created for a new group, 200 for an update (endurance F400)
+            return _ok(_view(rec), status=200 if prior else 201)
 
         if method == "DELETE":
             existed = self.state.pop(key, None) is not None

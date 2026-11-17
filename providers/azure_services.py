@@ -979,9 +979,15 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         if method != "GET" and _x["status"] < 300 and _x.get("scope"):
             _record_usage(f"azure.{method.lower()}", {"type": _x["type"], "name": _x["name"],
                                                        "resource_id": _x["scope"]})
+        _xh = dict(_x.get("headers") or {})
+        if (after[0].lower() == "microsoft.network" and method == "PUT" and _x["status"] < 300
+                and _x.get("scope") and not any(k.lower() in ("azure-asyncoperation", "location") for k in _xh)):
+            # real ARM: Network child writes (subnets, rules, ...) are LROs; without the header the SDK
+            # falls back to a 10 s default poll interval (endurance F401)
+            _xh.update(_lro_headers(base, _make_operation(_x["scope"], method), request.query_params.get("api-version") or "2023-01-01"))
         if _x["body"] is None:
-            return Response(status_code=_x["status"])
-        return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_x.get("headers") or {})
+            return Response(status_code=_x["status"], headers=_xh)
+        return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_xh)
 
     namespace = after[0]
     # after = [ns, type, name?, childType?, childName?, ...]
