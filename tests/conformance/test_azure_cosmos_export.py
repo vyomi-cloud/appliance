@@ -53,4 +53,7 @@ try:
 except ImportError:
     print("[SKIP] pyarrow not installed: Parquet checks skipped")
 print(f"\n{PASS} passed, {FAIL} failed")
-sys.exit(1 if FAIL else 0)
+sys.stdout.flush()
+# os._exit: pyarrow's global thread pool can deadlock in its destructor at interpreter shutdown on macOS (test passed, process
+# never exits, a sweep stalls); the results are already printed and flushed.
+os._exit(1 if FAIL else 0)

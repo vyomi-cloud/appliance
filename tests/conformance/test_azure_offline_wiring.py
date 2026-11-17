@@ -129,8 +129,17 @@ def test_sql_datamasking_ledger_discovery_over_offline_wire():
     assert not v["ok"] and "outside the ledger" in v["issues"][0]
 
 
+_KEY_VAULT = {"cmk1": "kv1", "cmkc": "owkv"}   # every other key in this file lives in owkv2
+
+
 def _kvkey(method, path, body=None):
-    return C.request(method, path, params={"api-version": "7.4"}, json=body or {})
+    # Key Vault data planes are per-vault: the vault must exist (ARM) and be addressed by host (<vault>.vault.azure.net);
+    # a bare /keys/... is 404 VaultNotFound '_'.
+    vault = _KEY_VAULT.get(path.split("/")[2], "owkv2")
+    _rg()
+    arm("PUT", f"{RG}/providers/Microsoft.KeyVault/vaults/{vault}",
+        {"location": "eastus", "properties": {"tenantId": "t", "sku": {"family": "A", "name": "standard"}}}, "2023-07-01")
+    return C.request(method, path, params={"api-version": "7.4"}, json=body or {}, headers={"host": f"{vault}.vault.azure.net"})
 
 
 def test_sql_always_encrypted_over_offline_wire():
