@@ -479,6 +479,19 @@ def _meter_storage_write(request, response, orig_path: str) -> None:
         pass
 
 
+def _collapse_doubled_version(request):
+    path = request.scope.get("path", "")
+    # F300: google-provider clients that append their API version to a *_custom_endpoint already ending in /v1/
+    # (KMS cryptoKeyVersions on destroy) produce /v1/v1/...; real endpoints never see this, so collapse it.
+    for _ver in ("/v1/v1/", "/v1beta1/v1beta1/", "/v2/v2/"):
+        if path.startswith(_ver):
+            path = path[len(_ver) // 2:]
+            request.scope["path"] = path
+            request.scope["raw_path"] = path.encode()
+            break
+    return path
+
+
 async def _gcp_normalize_project(request):
     """Every GCP request names its project by ID, number or a legacy id; map it
     onto the space's project ID (path, query, JSON body) before any handler sees
@@ -521,7 +534,7 @@ async def provider_api_alias_middleware(request, call_next):
 
 
 async def _provider_api_alias(request, call_next):
-    path = request.scope.get("path", "")
+    path = _collapse_doubled_version(request)
     _gcp_capture_public_base(request)
     if _is_azure_native_path(path):
         provider = "azure"
