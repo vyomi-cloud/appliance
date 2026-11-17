@@ -419,9 +419,9 @@
       var aiText = aiChip(link === "connected" ? (state[SESSION_ID] || {}).status : null); if (aiText) text += " · " + aiText;
     } else if (st === "pending" || st === "starting") { cls = "vyb-c-warn"; text = "Mesh starting… (about 2 minutes)"; }
     else if (st === "stopping") { cls = "vyb-c-warn"; text = "Mesh stopping…"; }
-    else if (err) { cls = "vyb-c-err"; text = "Mesh: could not start"; action = err.action || "retry"; }
+    else if (err) { cls = "vyb-c-err"; text = err.message ? "Mesh could not start: " + err.message : "Mesh: could not start"; action = err.action || "retry"; }
     else if (st === "ended" && sess.ended_note) { text = sess.ended_note; action = "restart"; }
-    else { text = "Mesh off · " + (sess.hours_remaining != null ? sess.hours_remaining + " h left this month" : "start it from your dashboard"); action = "restart"; }
+    else { text = "Mesh off · " + (sess.hours_used != null && sess.allowance_hours ? sess.hours_used + " of " + sess.allowance_hours + " h used this cycle" : "start it from your dashboard"); action = "restart"; }
     var dismissible = !!action && st !== "running" && st !== "pending" && st !== "starting" && st !== "stopping", dkey = "vyb-dismissed";
     try { if (dismissible && sessionStorage.getItem(dkey) === text) { kill("vyb-chip"); return; } if (!dismissible) sessionStorage.removeItem(dkey); } catch (_) {}
     var c = el("vyb-chip", "vyb-chip " + cls); c.className = "vyb-chip " + cls; c.setAttribute("role", "status"); c.setAttribute("data-state", st || "off"); c.setAttribute("data-link", link);
@@ -794,7 +794,7 @@
     toastEl.textContent = String(text);
     toastEl.classList.add("on");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toastEl.classList.remove("on"); }, 5000);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("on"); }, Math.max(5000, String(text).length * 70));
   }
   window.VyomiMesh = {
     toast: toast, connectModal: connectModal, confirmTerms: function () { return termsAgreed() ? Promise.resolve(true) : termsModal(); }, termsAccept: termsAccept, sessionStart: sessionStart, sessionStop: sessionStop,

@@ -26,23 +26,25 @@
     "#vy-md .md-welcome b{display:block;font-size:15px;line-height:1.3;margin-bottom:2px}" +
     "#vy-md .md-welcome span{color:var(--md-al-fg);font-size:13.5px}" +
     "#vy-md .md-tabrow{position:relative;height:0}" +
-    "#vy-md .md-tab{pointer-events:auto;position:absolute;left:50%;top:0;transform:translateX(-50%);display:block;width:260px;height:26px;padding:0;border:0;background:none;cursor:pointer;color:var(--md-fg);font:600 12.5px var(--md-font)}" +
-    "#vy-md .md-tab svg{position:absolute;left:0;top:-1px;width:100%;height:27px}" +
-    "#vy-md .md-tab span{position:absolute;left:0;right:0;top:0;height:22px;display:flex;align-items:center;justify-content:center;gap:7px;letter-spacing:.02em}" +
+    "#vy-md .md-tab{pointer-events:auto;position:absolute;left:50%;top:8px;transform:translateX(-50%);display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;height:var(--md-bh);padding:0 var(--md-bp);border:1px solid var(--md-bbd);border-radius:var(--md-br);background:var(--md-bbg);color:var(--md-bfg);cursor:pointer;font:var(--md-bfw) 14px/1 var(--md-font);letter-spacing:var(--md-bls);box-shadow:var(--md-bsh);transition:background .15s,box-shadow .15s}" +
+    "#vy-md .md-tab svg{flex:none;width:16px;height:16px}" +
+    "#vy-md .md-tab span{display:inline-flex;align-items:center;gap:8px}" +
     "#vy-md .md-tab i{display:inline-block;width:7px;height:7px;border-right:1.8px solid currentColor;border-bottom:1.8px solid currentColor;transform:translateY(-2px) rotate(45deg);transition:transform .2s}" +
     "#vy-md.open .md-tab i{transform:translateY(1px) rotate(225deg)}" +
-    "#vy-md.wait .md-tab{cursor:progress;opacity:.55}#vy-md.wait .md-tab i{width:9px;height:9px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;transform:none;animation:vymdspin .8s linear infinite}@keyframes vymdspin{to{transform:rotate(360deg)}}#vy-md.wait .md-panel{display:none}" +
-    "#vy-md .md-tab:hover{color:var(--md-accent)}#vy-md .md-tab:focus-visible{outline:2px solid var(--md-accent);outline-offset:2px}" +
+    "#vy-md.wait .md-tab{cursor:progress;opacity:.6}#vy-md.wait .md-tab i{width:9px;height:9px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;transform:none;animation:vymdspin .8s linear infinite}@keyframes vymdspin{to{transform:rotate(360deg)}}#vy-md.wait .md-panel{display:none}" +
+    "#vy-md .md-tab:hover{background:var(--md-bhv)}#vy-md .md-tab:focus-visible{outline:2px solid var(--md-bbg);outline-offset:3px}" +
     "#vy-md .md-line{pointer-events:none;position:absolute;left:0;right:0;top:0;border-top:1px solid var(--md-line)}" +
-    "#vy-md .md-tab .t-edge{fill:none;stroke:var(--md-line)}#vy-md .md-tab .t-fill{fill:var(--md-bg)}" +
     "#vy-md .vy-nano-video{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch}" +
     /* native look per cloud: AWS Cloudscape, Google Material, Azure Fluent */
     "#vy-md.c-aws{--md-font:'Open Sans','Helvetica Neue',Roboto,Arial,sans-serif;--md-fg:#0f141a;--md-line:#c6c6cd;--md-accent:#0972d3;--md-al-bg:#f2f8fd;--md-al-bd:#0972d3;--md-al-fg:#0f141a;--md-al-r:12px;--md-al-bw:2px}" +
+    "#vy-md.c-aws{--md-bh:32px;--md-bp:20px;--md-br:20px;--md-bbg:#0972d3;--md-bhv:#033160;--md-bbd:#0972d3;--md-bfg:#fff;--md-bfw:700;--md-bls:0;--md-bsh:none}" +
+    "#vy-md.c-gcp{--md-bh:36px;--md-bp:20px;--md-br:18px;--md-bbg:#0b57d0;--md-bhv:#0a4cb8;--md-bbd:#0b57d0;--md-bfg:#fff;--md-bfw:500;--md-bls:.01em;--md-bsh:0 1px 2px rgba(60,64,67,.3),0 1px 3px 1px rgba(60,64,67,.15)}" +
+    "#vy-md.c-azure{--md-bh:32px;--md-bp:16px;--md-br:4px;--md-bbg:#0f6cbd;--md-bhv:#115ea3;--md-bbd:#0f6cbd;--md-bfg:#fff;--md-bfw:600;--md-bls:0;--md-bsh:none}" +
     "#vy-md.c-gcp{--md-font:'Google Sans Text','Google Sans',Roboto,'Segoe UI','Helvetica Neue',Arial,sans-serif;--md-fg:#1f1f1f;--md-line:#c4c7c5;--md-bg:#fff;--md-accent:#0b57d0;--md-al-bg:#e5f6fd;--md-al-bd:transparent;--md-al-fg:#014361;--md-al-r:8px;--md-al-bw:0px;--md-shadow:0 6px 10px 4px rgba(60,64,67,.15),0 2px 3px rgba(60,64,67,.3)}" +
-    "#vy-md.c-gcp .md-welcome svg{color:#0288d1}#vy-md.c-gcp .md-welcome b{font-weight:500;color:#014361}#vy-md.c-gcp .md-tab{font-weight:500}" +
+    "#vy-md.c-gcp .md-welcome svg{color:#0288d1}#vy-md.c-gcp .md-welcome b{font-weight:500;color:#014361}" +
     "#vy-md.c-azure{--md-font:'Segoe UI','Segoe UI Web (West European)',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',sans-serif;--md-fg:#242424;--md-line:#e0e0e0;--md-accent:#0f6cbd;--md-al-bg:#f5f5f5;--md-al-bd:#e0e0e0;--md-al-fg:#424242;--md-al-r:4px;--md-al-bw:1px;--md-shadow:0 8px 16px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12)}" +
     "#vy-md.c-azure .md-welcome svg{color:#0f6cbd}#vy-md.c-azure .md-welcome b{font-weight:600}" +
-    "@media(max-width:700px){#vy-md .md-tab{width:200px}}";
+    "@media(max-width:700px){#vy-md .md-tab{padding:0 12px}}";
 
   function header() { return document.querySelector(HEADER[CLOUD] || "header"); }
   var box, open = LS("g") === "1";
@@ -64,7 +66,7 @@
       '</div></div></div>' +
       '<div class="md-tabrow">' +
         '<button type="button" class="md-tab" aria-expanded="' + open + '" title="Vyomi Mesh: welcome, how it works, Global Mesh">' +
-          '<svg viewBox="0 0 260 27" preserveAspectRatio="none" aria-hidden="true"><path class="t-fill" d="M12 0L24 22.5H236L248 0Z"/><path class="t-edge" d="M12 0L24 22.5H236L248 0"/></svg>' +
+          '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z" fill="currentColor"/></svg>' +
           '<span>Vyomi Mesh<i></i></span></button></div>';
     document.body.appendChild(box);
     var row = box.querySelector(".vy-nano-video");

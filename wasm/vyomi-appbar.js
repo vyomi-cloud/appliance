@@ -247,7 +247,7 @@
       var ss = x.session, live = !!x.active, label, tip = '';
       if (!x.github || !x.github.connected) label = 'Mesh \u00b7 Connect GitHub';
       else if (live) { var sec = ss.countdown_seconds | 0; label = (ss.state === 'running' ? 'Leave the Mesh \u00b7 ' + Math.floor(sec / 3600) + 'h ' + String(Math.floor(sec % 3600 / 60)).padStart(2, '0') + 'm left' : 'Mesh starting\u2026 (Stop)'); }
-      else label = 'Join the Mesh \u00b7 ' + (x.hours_remaining != null ? x.hours_remaining + ' h left' : '');
+      else label = 'Join the Mesh \u00b7 ' + (x.hours_used != null && x.allowance_hours ? x.hours_used + ' of ' + x.allowance_hours + ' h used' : '');
       bo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>' + esc(label) + '</span>'; bo.style.display = '';
     }
     window.addEventListener('vyomi-mesh-session', paintMesh); setInterval(paintMesh, 15000);

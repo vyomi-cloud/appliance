@@ -303,7 +303,8 @@
       var sub = a.source === "trial" && a.days_left != null ? tierName + " trial: " + a.days_left + " day" + (a.days_left === 1 ? "" : "s") + " left" + (cloudName ? " \u00b7 " + cloudName + " only" : "") : (cloudName ? tierName + " \u00b7 " + cloudName + " only" : "");
       var CLOUD_NAMES = { aws: "AWS", gcp: "GCP", azure: "Azure" };
       var offCloud = !!(a.clouds === "one" && a.primary_cloud && CLOUD && String(a.primary_cloud).toLowerCase() !== CLOUD);   // Pro = one cloud; this console is another
-      var hrs = x && x.hours_remaining != null ? x.hours_remaining + " h left this cycle" : "";
+      var hrs = x && x.hours_used != null && x.allowance_hours ? x.hours_used + " of " + x.allowance_hours + " h used this cycle" : "";
+      var ls = x && x.last_session; if (ls && ls.seconds > 0) hrs += (hrs ? " \u00b7 " : "") + "last run " + Math.floor(ls.seconds / 3600) + " h " + String(Math.floor(ls.seconds % 3600 / 60)).padStart(2, "0") + " m, " + ls.label;
       var line, btn, warn = false, tunLink = "";
       var stg = "";
       if (starting) { var el0 = ss && ss.started_at ? Math.max(0, (Date.now() - Date.parse(ss.started_at)) / 1000) : 0; line = "Your Mesh is coming up on a GitHub Codespace."; stg = progressHtml(); btn = '<button class="go" disabled>Starting\u2026 ' + esc(mmss(el0)) + '</button>'; }
