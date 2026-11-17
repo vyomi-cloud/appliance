@@ -1,24 +1,24 @@
 {
- "at": "2026-11-17T17:12:58+00:00",
+ "at": "2026-11-17T18:12:39+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "azure",
-   "service": "cognitiveservices",
+   "service": "keyvault",
    "kind": "spec-commit",
-   "key": "azure:cognitiveservices:736d6f0759",
-   "title": "Azure cognitiveservices: Fix Go AKS acronym casing for attached cluster client (#48258)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/736d6f07591ba5d6e41d8aa46a9e46cd0773a7ee",
+   "key": "azure:keyvault:bd8790dbc9",
+   "title": "Azure keyvault: Generate Key Vault crate, Rust fakes (#48241)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/bd8790dbc93db8b62f59a3c55cde480721faf127",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "EventBridge",
+   "service": "AWS IAM, Identity and Access Management",
    "kind": "announcement",
-   "key": "feed:aws:b68497af7868",
-   "title": "AWS Security Hub extends unified security management to Google Cloud Platform",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-gcp/",
-   "detail": "Today, AWS announces that AWS Security Hub now monitors Google Cloud Platform (GCP) resources, extending risk analytics, cloud security posture management, vulnerability management, and security response management across both clouds. Many AWS customers running workloads in AWS and GCP have had to operate separate security tools for each environment, making it difficult to prioritize risks holistically or respond consistently. Security Hub now provides a single, unified experience to detect and respond to risks across your AWS and GCP environments in addition to existing support for monitoring",
+   "key": "feed:aws:8a60b2ec97e4",
+   "title": "AWS IAM announces Access Troubleshooter to debug access denied errors",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-access-troubleshooter/",
+   "detail": "AWS Identity and Access Management (IAM) introduces Access Troubleshooter , a new capability that gives you visibility into the full authorization context behind access denied errors so you can resolve them without trial-and-error. Previously, developers relied on the Amazon Resource Name (ARN) of the denying policy to debug a denial, with no visibility into the authorization context or other policies evaluated in the request that could contribute to the denial. This made troubleshooting access issues time-consuming and inefficient. Starting today, access denied error messages for supported se",
    "actionable": false
   }
  ],
