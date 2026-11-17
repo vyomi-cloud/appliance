@@ -389,6 +389,14 @@ def register(app: FastAPI) -> None:
         fn = L._lambda_find_function(name)
         if not isinstance(fn, dict):
             raise HTTPException(404, detail="ResourceNotFoundException")
+        try:   # unified engine: `fn` is a legacy_view copy; share the engine's own alias / saved-test-event stores so edits stick
+            lu = _srv()._lambda_unified()
+            rec = lu._find(name) if lu is not None else None
+            if rec is not None:
+                fn["aliases"] = rec.setdefault("aliases", {})
+                fn["test_events"] = rec.setdefault("test_events", {})
+        except Exception:
+            pass
         return D.lambda_ensure(fn)
 
     def _role_info(name: str):
@@ -400,6 +408,53 @@ def register(app: FastAPI) -> None:
         return {"policies": [pols.get(p, {}).get("policy_name", p) for p in r.get("policies") or []],
                 "trust": r.get("assume_role_policy_document")}
 
+    def _lambda_engine_call(name: str, section: str, body: dict, view: dict, n_versions: int) -> None:
+        """PublishVersion / AddPermission / RemovePermission land on the unified engine (the console view is a copy)."""
+        try:
+            lu = _srv()._lambda_unified()
+            if lu is None:
+                return
+            base = f"/2015-03-31/functions/{name}"
+            if section == "versions":
+                if len(view.get("versions") or []) > n_versions:
+                    lu._call("POST", base + "/versions", {"Description": str(body.get("description") or "")})
+            elif body.get("action") == "remove":
+                lu._call("DELETE", f"{base}/policy/{body.get('statement_id')}")
+            else:
+                req = {"StatementId": body.get("statement_id"), "Action": body.get("action") or "lambda:InvokeFunction",
+                       "Principal": body.get("principal")}
+                if body.get("source_arn"):
+                    req["SourceArn"] = body["source_arn"]
+                if body.get("source_account"):
+                    req["SourceAccount"] = body["source_account"]
+                lu._call("POST", base + "/policy", req)
+        except Exception:
+            pass
+
+    def _lambda_write_back(name: str, view: dict) -> None:
+        """On the unified Lambda engine `_fn` is a legacy_view COPY, so a console edit mutated only the copy and was
+        lost on the next GET (and never reached the runtime). Copy the edited fields onto the engine's own record."""
+        try:
+            lu = _srv()._lambda_unified()
+            rec = lu._find(name) if lu is not None else None
+            if rec is None:
+                return
+            import base64
+            import hashlib
+            code = view.get("code")
+            if code and code != rec.get("source"):
+                rec["source"] = code
+                rec["code_sha256"] = base64.b64encode(hashlib.sha256(code.encode()).digest()).decode()
+            if isinstance(view.get("environment"), dict):
+                rec["env"] = dict(view["environment"])
+            for k in ("memory_size", "timeout", "description", "handler", "role", "ephemeral_storage", "tracing_mode"):
+                if view.get(k) is not None:
+                    rec[k] = view[k]
+            from core import lambda_core as _lc
+            _lc._persist(lu._store())
+        except Exception:
+            pass
+
     @app.get("/api/lambda/functions/{name}/detail/{section}")
     def lambda_section(name: str, section: str):
         try:
@@ -410,8 +465,10 @@ def register(app: FastAPI) -> None:
     @app.put("/api/lambda/functions/{name}/detail/{section}")
     async def lambda_update(name: str, section: str, request: Request):
         fn = _fn(name)
+        body = await _body(request)
+        n_versions = len(fn.get("versions") or [])
         try:
-            out = D.lambda_update_section(fn, section, await _body(request), _role_info)
+            out = D.lambda_update_section(fn, section, body, _role_info)
         except D.DetailError as e:
             _fail(e)
         except (TypeError, ValueError) as e:
@@ -421,6 +478,9 @@ def register(app: FastAPI) -> None:
                 _srv()._lambda_sync_code_artifact(fn)   # the runtime invokes the synced artifact
             except Exception:
                 pass
+            _lambda_write_back(name, fn)
+        elif section in ("versions", "policy"):
+            _lambda_engine_call(name, section, body, fn, n_versions)
         ctx.persist_state()
         ctx.record_usage(f"lambda.update_{section.replace('-', '_')}", {"function_name": name, "resource_id": name})
         return {"function_name": name, "section": section, **out}
