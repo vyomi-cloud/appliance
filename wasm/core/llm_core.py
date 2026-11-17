@@ -194,6 +194,15 @@ def set_backend(fn=None, embed_fn=None, model: str | None = None, endpoint: str 
     _state.update(fn=fn, embed_fn=embed_fn, model=model, endpoint=endpoint, stream_fn=stream_fn, no_rf=False, no_native=False)
 
 
+def _no_backend_msg() -> str:
+    try:
+        import js  # noqa: F401  (Pyodide / Nano)
+    except ImportError:
+        return "No local LLM backend is available on this substrate."
+    return ("No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and "
+            "choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.")
+
+
 def _endpoint() -> str | None:
     if _state["endpoint"]:
         return _state["endpoint"]
@@ -261,7 +270,7 @@ def _http(path: str, payload: dict | None, timeout: float = 120.0, role: str | N
     if role and role_endpoint(role):
         timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))   # a CPU vision/reasoning call on 2 vCPUs can take minutes
     if not ep:
-        raise LlmUnavailable("No local LLM backend is available on this substrate.")
+        raise LlmUnavailable(_no_backend_msg())
     req = urllib.request.Request(ep + path, data=None if payload is None else json.dumps(payload).encode(),
                                  headers={"content-type": "application/json"}, method="GET" if payload is None else "POST")
     try:
@@ -286,7 +295,7 @@ def _http_open(path: str, payload: dict, timeout: float = 120.0, role: str | Non
     if role and role_endpoint(role):
         timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))
     if not ep:
-        raise LlmUnavailable("No local LLM backend is available on this substrate.")
+        raise LlmUnavailable(_no_backend_msg())
     req = urllib.request.Request(ep + path, data=json.dumps(payload).encode(), headers={"content-type": "application/json"}, method="POST")
     try:
         return urllib.request.urlopen(req, timeout=timeout)

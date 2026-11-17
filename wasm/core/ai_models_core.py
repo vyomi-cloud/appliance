@@ -187,7 +187,7 @@ def _ll_err(e):
         return _b_err("ModelErrorException", str(e), 424)
     if "mported chat model" in str(e):
         return _b_err("ModelNotReadyException", f"{e}", 429)
-    return _b_err("ModelNotReadyException", f"{e} (the local model has not been started)", 429)
+    return _b_err("ModelNotReadyException", (str(e) if "in-browser model" in str(e) else f"{e} (the local model has not been started)"), 429)
 
 
 # ───────────── document / image content blocks + prompt-cache accounting ─────────────
