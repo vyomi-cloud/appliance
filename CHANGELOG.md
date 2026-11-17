@@ -4,6 +4,17 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.4] — 2026-11-18
+
+Fix release on top of v4.0.3 (AI stack Beta).
+
+### Fixes
+
+- **[Nano]** Relay endpoint page was missing 14 AI cores (HTTP 500 on GCP AI requests through the tunnel; four Azure Service Bus claims failed). Fixed, with a parity test.
+- **[all]** Vault 1.15 listed as BUSL-1.1 (was MPL-2.0) in notices, SBOM and the Notices page.
+- **[Mesh]** `llm-chat` falls back to base-only when a LoRA adapter fails to load; Facilities agent reference app available in the Mesh Codespace.
+- **[tunnel]** Homebrew formula brought to vyomi-tunnel 1.2.5.
+
 ## [4.0.3] — 2026-11-17
 
 **AI stack (Beta).** Agent-app development against Bedrock, Vertex AI and Azure AI Foundry / OpenAI with the unmodified SDKs, in Nano and on Mesh. Every feature is Dev Simplified (a local small-model stand-in, not the managed service).

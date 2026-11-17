@@ -83,10 +83,10 @@ def test_abandon_deadletter_defer(nano, c):
 def test_schedule_sessions_and_topic(nano, c):
     nano.create("pq3")
     with c.get_queue_sender("pq3") as s:
-        s.schedule_messages(ServiceBusMessage("later"), datetime.now(timezone.utc) + timedelta(seconds=2))
+        s.schedule_messages(ServiceBusMessage("later"), datetime.now(timezone.utc) + timedelta(seconds=7))   # 7s: opening the receiver link on a loaded machine takes >2s
     with c.get_queue_receiver("pq3", max_wait_time=1) as r:
         assert r.receive_messages(1, max_wait_time=1) == []
-    time.sleep(2.2)
+    time.sleep(7.2)
     with c.get_queue_receiver("pq3", receive_mode=ServiceBusReceiveMode.RECEIVE_AND_DELETE, max_wait_time=3) as r:
         assert [body(m) for m in r.receive_messages(2, max_wait_time=3)] == [b"later"]
 

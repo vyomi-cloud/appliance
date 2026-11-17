@@ -1,7 +1,7 @@
 {
  "bomFormat": "CycloneDX",
  "specVersion": "1.5",
- "serialNumber": "urn:uuid:81eee44e-c3b5-5392-ae1f-24b74d6a8ad5",
+ "serialNumber": "urn:uuid:67c7c22f-6c31-56d6-be52-25b43db31886",
  "version": 1,
  "metadata": {
   "component": {
@@ -2052,7 +2052,8 @@
    "licenses": [
     {
      "license": {
-      "id": "MPL-2.0"
+      "name": "Business Source License 1.1 (HashiCorp Vault terms)",
+      "url": "https://github.com/hashicorp/vault/blob/v1.15.6/LICENSE"
      }
     }
    ],

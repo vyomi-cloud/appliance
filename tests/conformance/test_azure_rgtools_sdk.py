@@ -55,7 +55,9 @@ def test_force_delete_and_insights_sdk():
     vm1, vm2, vm3 = mk(rg1), mk(rg2), mk(rg3)
 
     ins = requests.get(f"{BASE}/subscriptions/{SUB}/resourceGroups/{rg1}/providers/Microsoft.Vyomi/insights", params={"api-version": "2024-01-01"}, timeout=30).json()
-    ok("Insights reflects the real VM", ins["inventory"]["resourceCount"] == 1 and ins["compute"]["virtualMachines"] == 1 and ins["tags"]["coveragePercent"] == 100, ins)
+    ok("Insights reflects the real VM", ins["compute"]["virtualMachines"] == 1 and {x["type"]: x["count"] for x in ins["inventory"]["byType"]} == {"Microsoft.Compute/virtualMachines": 1, "Microsoft.Compute/disks": 1}
+       and ins["inventory"]["resourceCount"] == 2 and ins["tags"]["tagged"] == 1 and ins["tags"]["keys"] == [{"key": "env", "count": 1}], ins)
+    # (a VM create also materialises its OS disk as an ARM resource since 016ffb155; the disk is untagged, so coverage is 1 of 2)
 
     try:
         rm.resource_groups.begin_delete(rg1, force_deletion_types="Microsoft.Storage/storageAccounts").result()

@@ -272,5 +272,19 @@ if shutil.which("sh"):
     check("entry script starts without adapters, then restarts llama-server with --lora-scaled <file>:0 when one lands",
           len(starts) == 2 and "--lora-scaled" not in starts[0] and starts[1].endswith("a.gguf:0") and "-c 4096" in starts[1], txt)
 
+    # corrupt adapter: llama-server exits at start when a --lora-scaled file is bad; the entry script must fall back to base-only, not crash-loop
+    ad2 = os.path.join(tmp, "ad2"); os.makedirs(ad2); open(os.path.join(ad2, "bad.gguf"), "w").write("BAD")
+    fake2 = os.path.join(tmp, "fake2")
+    open(fake2, "w").write('#!/bin/sh\necho "START $*"\ncase "$*" in *--lora-scaled*) echo "failed to load lora" >&2; exit 1;; esac\nexec sleep 601\n'); os.chmod(fake2, 0o755)
+    log2 = open(os.path.join(tmp, "log2"), "w")
+    pr2 = subprocess.Popen(["sh", f"{d}/llm-chat-entry.sh", "-c", "4096"], stdout=log2, stderr=subprocess.STDOUT,
+                           env=dict(os.environ, LLAMA_BIN=fake2, VYOMI_LLM_ADAPTER_DIR=ad2, VYOMI_LLM_ADAPTER_POLL="1"))
+    time.sleep(4); alive = pr2.poll() is None
+    os.remove(os.path.join(ad2, "bad.gguf")); time.sleep(3)
+    pr2.terminate(); pr2.wait(); subprocess.run(["pkill", "-f", "sleep 601"]); txt2 = open(os.path.join(tmp, "log2")).read()
+    st2 = [l for l in txt2.splitlines() if l.startswith("START")]
+    check("a corrupt adapter makes the entry script fall back to base-only (script keeps running, last START has no --lora-scaled)",
+          alive and len(st2) >= 2 and "--lora-scaled" in st2[0] and "--lora-scaled" not in st2[-1] and "WITHOUT adapters" in txt2, txt2)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

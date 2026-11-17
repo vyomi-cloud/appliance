@@ -30,6 +30,11 @@ services:
       # AI pack: the model ids to ADMIT against the AI RAM bucket (core/mesh_ai.py). The mesh appliance then points
       # VYOMI_LLM_ENDPOINT at the `llm` gateway below; WebLLM stays the Nano-only fallback.
       VYOMI_MESH_AI_MODEL: ${VYOMI_MESH_AI_MODEL:-qwen3-4b}
+      # Lambda functions run inside the simulator and call back into it with boto3: they need ambient (dummy) credentials like real Lambda's role env.
+      # Found by running the reference app (examples/enterprise-facilities-agent) against a bare simulator: NoCredentialsError without these.
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-test}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       VYOMI_MESH_AI_EMBED: ${VYOMI_MESH_AI_EMBED:-bge-small}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

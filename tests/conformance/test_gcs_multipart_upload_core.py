@@ -42,12 +42,12 @@ def read(st, bucket, name):
 
 
 st = InMemoryObjectStore()
-gcs.dispatch(st, "POST", "/storage/v1/b", {"project": "p"}, {"content-type": "application/json"}, json.dumps({"name": "mp"}).encode())
+gcs.dispatch(st, "POST", "/storage/v1/b", {"project": "p"}, {"content-type": "application/json"}, json.dumps({"name": "mp-bucket"}).encode())
 for label, quote, nl in [("gcloud: single quotes + LF", "'", "\n"), ("client libs: double quotes + CRLF", '"', "\r\n"), ("no quotes + CRLF", "", "\r\n")]:
     name = "f-" + label.split(":")[0].replace(" ", "-") + ".txt"
-    r = upload(st, "mp", name, b"hello\n", quote=quote, nl=nl)
+    r = upload(st, "mp-bucket", name, b"hello\n", quote=quote, nl=nl)
     check(f"{label}: upload 200", r.status == 200)
-    status, data = read(st, "mp", name)
+    status, data = read(st, "mp-bucket", name)
     check(f"{label}: stored under metadata name, bytes intact (trailing newline kept)", status == 200 and data == b"hello\n")
 
 if FAILS:

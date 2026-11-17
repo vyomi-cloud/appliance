@@ -25,6 +25,11 @@ case "$verb" in
   compose)  # the simulator's container name, for the console's own API tunnel; no other service is revealed
     [ "$arg" = "simulator" ] || deny
     "$DOCKER" ps --filter label=com.docker.compose.service=simulator --format '{{.Names}}' | head -1; exit 0 ;;
+  sim-ip)   # address of the simulator (the Mesh endpoint), nothing else about it: lets the owner's own apps/examples call their Mesh
+    [ -z "$arg" ] || deny
+    sim=$("$DOCKER" ps --filter label=com.docker.compose.service=simulator --format '{{.Names}}' | head -1)
+    [ -n "$sim" ] || deny
+    exec "$DOCKER" inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "$sim" | awk '{print $1}' ;;
   instance-key)   # the key that opens the user's own VMs
     [ -z "$arg" ] || deny
     sim=$("$DOCKER" ps --filter label=com.docker.compose.service=simulator --format '{{.Names}}' | head -1)
