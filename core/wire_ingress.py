@@ -577,7 +577,7 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
         if service in ("azure_acr", "azure_servicebus"):
             from core import azure_acr_core, azure_servicebus_core
             mod, st = (azure_acr_core, r.az_acr) if service == "azure_acr" else (azure_servicebus_core, r.az_sb)
-            kwargs = {"arm_state": r.az_arm.state} if service == "azure_servicebus" else {}   # namespace network rules
+            kwargs = {"arm_state": _ctx.azure_arm_state} if service == "azure_servicebus" else {}   # namespace network rules + diagnostic settings: the ARM records the offline control plane wrote (the router's own az_arm.state is a different, empty store)
             if service == "azure_acr":
                 # Same per-registry networking/retention enforcement as the Nano router
                 # (aws_wire_router.py) — see azure.acr.networking / azure.acr.retention. The

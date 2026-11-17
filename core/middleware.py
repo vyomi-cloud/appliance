@@ -1102,12 +1102,15 @@ def register_middleware(app) -> None:
     else:
         origins = ["*"]
     class _AppCors(CORSMiddleware):
-        """The app-wide CORS layer must not answer a Storage Queue/Table preflight itself: those are governed by the storage
+        """The app-wide CORS layer must not answer a Storage Queue/Table or Cosmos preflight itself: those are governed by the storage
         account's own service-properties CORS rules (core/azure_storage_svc_core, 403 CorsPreflightFailure on no match)."""
 
         async def __call__(self, scope, receive, send):
             if scope.get("type") == "http" and str(scope.get("path", "")).startswith(("/azure-data/queue-core", "/azure-data/tableroot")):
                 return await self.app(scope, receive, send)
+            if scope.get("type") == "http" and scope.get("method") == "OPTIONS" and str(scope.get("path", "")).startswith("/dbs") \
+                    and any(k == b"x-vyomi-account" for k, _ in (scope.get("headers") or [])):
+                return await self.app(scope, receive, send)   # a Cosmos data-plane preflight is answered from the account's own properties.cors rules (403 on no match)
             return await super().__call__(scope, receive, send)
 
     app.add_middleware(

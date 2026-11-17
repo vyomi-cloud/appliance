@@ -103,8 +103,8 @@ def register(app) -> list:
             app.add_route(tok, _graph, methods=["POST"])
         mounted.append("azure_graph")
     if _wi.is_unified("azure_cosmos"):
-        app.add_route("/dbs", _cosmos, methods=_METHODS)
-        app.add_route("/dbs/{rest:path}", _cosmos, methods=_METHODS)
+        app.add_route("/dbs", _cosmos, methods=_METHODS + ["OPTIONS"])   # OPTIONS: the CORS preflight (account properties.cors)
+        app.add_route("/dbs/{rest:path}", _cosmos, methods=_METHODS + ["OPTIONS"])
         mounted.append("azure_cosmos")
     if _wi.is_unified("azure_table"):
         app.add_route("/azure-data/tableroot/{rest:path}", _table, methods=_METHODS + ["HEAD", "MERGE", "OPTIONS"])

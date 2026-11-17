@@ -69,7 +69,9 @@ def sb_path(path: str, headers: dict, exists) -> bool:
     segs = [s for s in path.split("?", 1)[0].split("/") if s]
     if not segs or segs[0] in ("api", "azure-data", "_wire", "v4", "static", "assets", "subscriptions"):
         return False
-    sb_header = "brokerproperties" in headers or "atom+xml" in str(headers.get("content-type") or "")
+    # x-vyomi-namespace is Vyomi's own "this is namespace X" marker (the console and the network-rule checks send it): the namespace's
+    # networkRuleSets are enforced on exactly those requests, so they must reach the Service Bus core, not the S3 catch-all.
+    sb_header = "brokerproperties" in headers or "atom+xml" in str(headers.get("content-type") or "") or "x-vyomi-namespace" in headers
     if sb_header:
         return True
     if segs[0].startswith("$") or not exists(segs[0]):

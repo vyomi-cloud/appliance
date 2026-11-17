@@ -931,7 +931,14 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     # (Microsoft.Resources/tags/default) and subscription-scope locks — the subscription blade —
     # are the shared core ARM engine's, over the persisted per-subscription names/tags.
     low0 = [s.lower() for s in rest_segs]
-    if (not rest_segs
+    # Microsoft.Insights extension resources scoped to ANY other resource's id (…/providers/{ns}/{type}/{name}/providers/Microsoft.Insights/
+    # diagnosticSettings|metrics|metricDefinitions): the shared core ARM engine owns them (settings are real Monitor records the diagnostic
+    # pipeline delivers from). Without this the generic catalog stored them as an inert "<type>/providers/diagnosticSettings" stub.
+    _prov = [i for i, x in enumerate(low0) if x == "providers"]
+    _nested_insights = len(_prov) >= 2 and any(
+        i + 2 < len(low0) and low0[i + 1] == "microsoft.insights" and low0[i + 2] in ("diagnosticsettings", "diagnosticsettingscategories", "metrics", "metricdefinitions")
+        for i in _prov[1:])
+    if (_nested_insights or not rest_segs
             or low0 == ["locations"]                   # subscription locations list
             or low0 == ["resources"]                   # the subscription's generic resource list
             or low0 == ["providers"]                   # resource providers: list / get / (un)register
