@@ -1,59 +1,59 @@
 {
- "at": "2026-11-16T23:12:11+00:00",
+ "at": "2026-11-17T00:12:11+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:a001197d83b4",
-   "title": "Amazon S3 Vectors now supports hybrid search combining vector and full text for more relevant search results",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/s3-vectors-hybrid-search/",
-   "detail": "Amazon S3 Vectors now supports hybrid search that combines vector similarity search with full-text search within a single query. By combining semantic meaning and exact term matching into a single ranked list of results, hybrid search captures both intent and precise terms for retrieval-augmented generation (RAG), agent memory, and search applications. This can deliver more relevant ranked results than either method alone. Hybrid search works with the same S3 Vectors APIs and maintains subsecond latency for infrequent queries and latency around 100 milliseconds or less for frequent queries. S3",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS KMS, Key Management Service",
-   "kind": "announcement",
-   "key": "feed:aws:58a86a05cf2e",
-   "title": "AWS KMS now supports key sharing with AWS Resource Access Manager",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/kms-key-sharing-resource-access-manager/",
-   "detail": "AWS Key Management Service (KMS) now integrates with AWS Resource Access Manager (RAM), giving you a simpler and more consistent way to share KMS keys across your AWS accounts, within your organization in AWS Organizations, and with specific IAM roles and users. You can now let trusted parties define the access they need through reusable managed permissions in RAM, while keeping full control of your keys and key policies. To share a key, create a resource share by selecting the keys to share, choosing a managed permission, and specifying the principals. You can use AWS managed permissions for ",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Secrets Manager",
-   "kind": "announcement",
-   "key": "feed:aws:a234693c6a54",
-   "title": "AWS Secrets Manager adds managed external secrets support for Auth0, Okta, and Palo Alto Networks",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/secrets-manager-managed-external-secrets-auth0-okta-palo-alto/",
-   "detail": "AWS Secrets Manager now supports managed external secrets for Auth0, Okta, and Palo Alto Networks. Long-lived credentials that are not rotated increase the risk of unauthorized access if exposed. Rotating a third-party credential requires coordinated updates to the external service and every application that uses it. You set a rotation schedule from the AWS Management Console or API. Secrets Manager rotates the credential and stores the current value without a custom rotation Lambda function. Secrets Manager offers self-rotation and administrator-assisted rotation for Auth0 credentials. With s",
-   "actionable": false
+   "service": "EventBridge",
+   "kind": "lifecycle",
+   "key": "feed:aws:7d66fb1e58de",
+   "title": "Amazon ECR now replicates image deletions across regions and accounts",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/replication-deletes-amazon-ecr",
+   "detail": "Amazon Elastic Container Registry (Amazon ECR) now supports replicating image deletions and tag removals to your replication destinations. Previously, ECR replication copied images to destination regions and accounts but did not replicate deletions, requiring you to manage deletions separately in each location. With replication of deletes, your destination repositories stay consistent with the source automatically. Teams running multi-region or multi-account architectures no longer need to script or manually track image cleanup across every destination. When you delete an image or remove a tag",
+   "actionable": true
   },
   {
    "cloud": "aws",
    "service": "AWS IAM",
    "kind": "announcement",
-   "key": "feed:aws:f3c72074a8a2",
-   "title": "IAM Identity Center now supports VPC endpoints and network access controls",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-identity-center-vpc-endpoints/",
-   "detail": "AWS IAM Identity Center now supports interface VPC endpoints powered by AWS PrivateLink and network access controls, enabling you to keep IAM Identity Center traffic private and restrict which networks can reach your IAM Identity Center services. Previously, IAM Identity Center rejected traffic arriving through VPC endpoints, requiring all sign-in and API traffic to use public endpoints. With this launch, you can create interface VPC endpoints for AWS access portal and service APIs to route traffic over the AWS private network. IAM Identity Center sign-in traffic flows through the AWS Sign-in ",
+   "key": "feed:aws:872689b2d087",
+   "title": "AWS IAM Identity Center now supports ForceAuthn in SAML requests",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-identity-center-reauth/",
+   "detail": "AWS IAM Identity Center now gives you the option to require workforce users to re-authenticate with your external identity provider (IdP) each time their user interactive session expires. By default, when a user's session expires, IAM Identity Center renews it through the user's existing IdP session, and the user isn't prompted to sign in again. For organizations with strict security or compliance requirements that mandate explicit user verification at regular intervals, this automatic renewal may not meet policy requirements. When you set user re-authentication to Required and a user's user i",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "Amazon EC2, Amazon VPC",
+   "cloud": "gcp",
+   "service": "Compute Engine",
    "kind": "announcement",
-   "key": "feed:aws:910a01ae0bdf",
-   "title": "AWS announces Networking Flexible Cost Allocation for Amazon VPC",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/networking-flexible-cost-allocation/",
-   "detail": "Amazon Virtual Private Cloud (VPC) now supports Networking Flexible Cost Allocation (FCA), which splits shared networking costs by the resources that actually drive them, so you can see what each team or application used. Until now, AWS Cost and Usage Report (CUR), including CUR 2.0 in AWS Data Exports, showed networking usage as a single item, and most customers split it across teams with custom scripts and manual estimates. FCA splits this line item by the resources that generated it. It supports NAT gateway data processing and data transfer, including traffic to the internet, and in-Region ",
+   "key": "feed:gcp:09e8b8521393",
+   "title": "Compute Engine: Feature (November 16, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_16_2026",
+   "detail": "Generally available : You can convert an automatically consumed reservation into a specifically targeted reservation, or a specifically targeted reservation into an automatically consumed reservation. This modification is useful when the consumption needs of your workloads change. For more information, see Modify reservations .",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Google Kubernetes Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:0e5861f5d6b1",
+   "title": "Google Kubernetes Engine: Feature (November 16, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_16_2026",
+   "detail": "The h4d-megamem-192 and h4d-megamem-192-lssd machine types from the H4D machine series are generally available on GKE. You can create node pools with these machine types in Standard clusters. In version 1.37.2-gke.1325000 or later, you can also use them with node pool auto-creation, and the Performance compute class in Autopilot clusters. For more information, see Run high performance computing (HPC) workloads with H4D and Resource requests in GKE Autopilot .",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "API Gateway",
+   "kind": "announcement",
+   "key": "feed:gcp:b9ae2ddcdc3c",
+   "title": "API Gateway: Feature (November 10, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_10_2026",
+   "detail": "MCP method and tool name in request logs API Gateway request logs now include the Model Context Protocol (MCP) method of each MCP request, and the tool name of each tools/call request, in the jsonPayload.mcp field. You can use this field to find MCP traffic and the calls to a specific tool. For more information, see Configure Model Context Protocol .",
    "actionable": false
   }
  ],
  "errors": [
-  "pypi/azure-mgmt-cognitiveservices: <urlopen error _ssl.c:994: The handshake operation timed out>"
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
  ]
 }

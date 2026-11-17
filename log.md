@@ -1,3 +1,18 @@
+### Upstream watch — 2026-11-17T00:12:11+00:00
+
+Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 1 actionable.**
+- 🔧 `lifecycle` Amazon ECR now replicates image deletions across regions and accounts ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/replication-deletes-amazon-ecr))
+- · `announcement` AWS IAM Identity Center now supports ForceAuthn in SAML requests ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/iam-identity-center-reauth/))
+- · `announcement` API Gateway: Feature (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
+- · `announcement` Compute Engine: Feature (November 16, 2026) ([link](https://docs.cloud.google.com/release-notes#November_16_2026))
+- · `announcement` Google Kubernetes Engine: Feature (November 16, 2026) ([link](https://docs.cloud.google.com/release-notes#November_16_2026))
+
+Sources that failed this run (1): maven/com.azure:azure-security-keyvault-secrets: The read operation timed out
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-16T23:12:11+00:00
 
 Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,18 +3013,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **1 change(s), 1 actionable.**
 - 🔧 `spec-commit` Azure cognitiveservices: [CognitiveServices] Add project tool controls and private CA trust to 2026-09-15-preview (#47492) ([link](https://github.com/Azure/azure-rest-api-specs/commit/0249a450b30462c0c672fa6218750766667cce11))
 
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-03T19:28:42+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `announcement` [In preview] Public Preview: Extend immutability for PITR backups for Azure SQL Database and Azure SQL Managed Instance ([link](https://azure.microsoft.com/updates?id=579305))
-- · `announcement` [Launched] Generally Available: Enhanced Azure Site Recovery support for VMSS Flex ([link](https://azure.microsoft.com/updates?id=578926))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-03T18:32:54+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
