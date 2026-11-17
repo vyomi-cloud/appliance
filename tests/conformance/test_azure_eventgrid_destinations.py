@@ -37,6 +37,15 @@ def run():
     eg.bind_destinations(lambda: store, lambda url, body, h: (calls.append((url, json.loads(body), h)), 200)[1])
     out = {o["subscription"]: o["result"] for o in eg.deliver(state, T, ev[0])}
     _check("webhook delivered", out["w"] == "delivered" and calls and calls[0][1][0]["eventType"] == "app.created" and calls[0][2]["aeg-event-type"] == "Notification")
+    state[f"{T}/es/w"]["properties"]["eventDeliverySchema"] = "CloudEventSchemaV1_0"
+    calls.clear()
+    eg.bind_destinations(lambda: store, lambda url, body, h: (calls.append((url, json.loads(body), h)), 200)[1])
+    eg.deliver(state, T, ev[0])
+    cw = [c for c in calls if c[0].endswith("/hook")]
+    _check("CloudEvents webhook gets a cloudevents-batch array, no aeg-event-type",
+           bool(cw) and isinstance(cw[0][1], list) and cw[0][1][0].get("specversion") == "1.0" and cw[0][1][0].get("type") == "app.created"
+           and "cloudevents" in cw[0][2]["content-type"] and "aeg-event-type" not in cw[0][2])
+    state[f"{T}/es/w"]["properties"]["eventDeliverySchema"] = "EventGridSchema"
     eg.bind_destinations(lambda: store, lambda url, body, h: 500)
     _check("webhook 500 fails delivery", {o["subscription"]: o["result"] for o in eg.deliver(state, T, ev[0])}["w"] == "dead-lettered")
     eg.bind_destinations(None, None)
