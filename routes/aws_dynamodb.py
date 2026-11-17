@@ -759,6 +759,10 @@ def _ddb_sync_from_local() -> None:
     api_dynamodb_aws), so the console lists what is there: tables created outside the
     console are added to its records, and records whose table was deleted there are
     dropped. Without DynamoDB Local the console keeps its own records."""
+    if _ddb_unified():
+        # v4 unified engine: the wire and the console share ONE table map and DynamoDB Local is unused. Syncing from a reachable but
+        # empty Local would drop every table as "deleted there" (CLI-created tables vanished on the next console list).
+        return
     names, start = [], None
     while True:
         page = _ddb_local_call("ListTables", {"ExclusiveStartTableName": start} if start else {})
