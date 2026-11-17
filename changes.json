@@ -1,59 +1,1504 @@
 {
- "at": "2026-11-17T20:12:50+00:00",
+ "at": "2026-11-17T21:12:40+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.115.0",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.10 \u2192 v1.115.0",
-   "actionable": false
+   "cloud": "aws",
+   "service": "s3",
+   "kind": "operation-changed",
+   "key": "aws:s3:AbortMultipartUpload:07e45827dbe3",
+   "title": "AWS s3: operation AbortMultipartUpload changed",
+   "detail": {
+    "out": {
+     "was": [
+      "RequestCharged"
+     ],
+     "now": [
+      "RequestCharged",
+      "VersionId"
+     ]
+    }
+   },
+   "actionable": true
   },
   {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.74.1",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.74.0 \u2192 v1.74.1",
-   "actionable": false
+   "cloud": "aws",
+   "service": "s3",
+   "kind": "operation-changed",
+   "key": "aws:s3:CreateMultipartUpload:273a2ee9fe26",
+   "title": "AWS s3: operation CreateMultipartUpload changed",
+   "detail": {
+    "out": {
+     "was": [
+      "AbortDate",
+      "AbortRuleId",
+      "Bucket",
+      "BucketKeyEnabled",
+      "ChecksumAlgorithm",
+      "ChecksumType",
+      "Key",
+      "RequestCharged",
+      "SSECustomerAlgorithm",
+      "SSECustomerKeyMD5",
+      "SSEKMSEncryptionContext",
+      "SSEKMSKeyId",
+      "ServerSideEncryption",
+      "UploadId"
+     ],
+     "now": [
+      "AbortDate",
+      "AbortRuleId",
+      "Bucket",
+      "BucketKeyEnabled",
+      "ChecksumAlgorithm",
+      "ChecksumType",
+      "Key",
+      "RequestCharged",
+      "SSECustomerAlgorithm",
+      "SSECustomerKeyMD5",
+      "SSEKMSEncryptionContext",
+      "SSEKMSKeyId",
+      "ServerSideEncryption",
+      "UploadId",
+      "VersionId"
+     ]
+    }
+   },
+   "actionable": true
   },
   {
-   "cloud": "sdk",
-   "service": "cli:aws",
-   "kind": "release",
-   "key": "ver:cli:aws:2.41.0",
-   "title": "cli:aws: 2.40.4 \u2192 2.41.0",
+   "cloud": "aws",
+   "service": "s3",
+   "kind": "operation-changed",
+   "key": "aws:s3:ListParts:bd1d0f929142",
+   "title": "AWS s3: operation ListParts changed",
+   "detail": {
+    "out": {
+     "was": [
+      "AbortDate",
+      "AbortRuleId",
+      "Bucket",
+      "ChecksumAlgorithm",
+      "ChecksumType",
+      "Initiator",
+      "IsTruncated",
+      "Key",
+      "MaxParts",
+      "NextPartNumberMarker",
+      "Owner",
+      "PartNumberMarker",
+      "Parts",
+      "RequestCharged",
+      "StorageClass",
+      "UploadId"
+     ],
+     "now": [
+      "AbortDate",
+      "AbortRuleId",
+      "Bucket",
+      "ChecksumAlgorithm",
+      "ChecksumType",
+      "Initiator",
+      "IsTruncated",
+      "Key",
+      "MaxParts",
+      "NextPartNumberMarker",
+      "Owner",
+      "PartNumberMarker",
+      "Parts",
+      "RequestCharged",
+      "StorageClass",
+      "UploadId",
+      "VersionId"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "s3",
+   "kind": "operation-changed",
+   "key": "aws:s3:UploadPart:8970b4ca2287",
+   "title": "AWS s3: operation UploadPart changed",
+   "detail": {
+    "out": {
+     "was": [
+      "BucketKeyEnabled",
+      "ChecksumCRC32",
+      "ChecksumCRC32C",
+      "ChecksumCRC64NVME",
+      "ChecksumMD5",
+      "ChecksumSHA1",
+      "ChecksumSHA256",
+      "ChecksumSHA512",
+      "ChecksumXXHASH128",
+      "ChecksumXXHASH3",
+      "ChecksumXXHASH64",
+      "ETag",
+      "RequestCharged",
+      "SSECustomerAlgorithm",
+      "SSECustomerKeyMD5",
+      "SSEKMSKeyId",
+      "ServerSideEncryption"
+     ],
+     "now": [
+      "BucketKeyEnabled",
+      "ChecksumCRC32",
+      "ChecksumCRC32C",
+      "ChecksumCRC64NVME",
+      "ChecksumMD5",
+      "ChecksumSHA1",
+      "ChecksumSHA256",
+      "ChecksumSHA512",
+      "ChecksumXXHASH128",
+      "ChecksumXXHASH3",
+      "ChecksumXXHASH64",
+      "ETag",
+      "RequestCharged",
+      "SSECustomerAlgorithm",
+      "SSECustomerKeyMD5",
+      "SSEKMSKeyId",
+      "ServerSideEncryption",
+      "VersionId"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "s3",
+   "kind": "operation-changed",
+   "key": "aws:s3:UploadPartCopy:d845a7ce6912",
+   "title": "AWS s3: operation UploadPartCopy changed",
+   "detail": {
+    "out": {
+     "was": [
+      "BucketKeyEnabled",
+      "CopyPartResult",
+      "CopySourceVersionId",
+      "RequestCharged",
+      "SSECustomerAlgorithm",
+      "SSECustomerKeyMD5",
+      "SSEKMSKeyId",
+      "ServerSideEncryption"
+     ],
+     "now": [
+      "BucketKeyEnabled",
+      "CopyPartResult",
+      "CopySourceVersionId",
+      "RequestCharged",
+      "SSECustomerAlgorithm",
+      "SSECustomerKeyMD5",
+      "SSEKMSKeyId",
+      "ServerSideEncryption",
+      "VersionId"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "lambda",
+   "kind": "operation-added",
+   "key": "aws:lambda:DeleteDurableExecution:added",
+   "title": "AWS lambda: new operation DeleteDurableExecution",
+   "detail": {
+    "in": [
+     "DurableExecutionArn"
+    ],
+    "required": [
+     "DurableExecutionArn"
+    ],
+    "out": [
+     "DeletionRequestTimestamp"
+    ],
+    "http": "DELETE",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "lambda",
+   "kind": "operation-added",
+   "key": "aws:lambda:PauseDurableExecution:added",
+   "title": "AWS lambda: new operation PauseDurableExecution",
+   "detail": {
+    "in": [
+     "ClientToken",
+     "DurableExecutionArn",
+     "ExecutionTimeoutPaused",
+     "Reason"
+    ],
+    "required": [
+     "DurableExecutionArn"
+    ],
+    "out": [],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "lambda",
+   "kind": "operation-added",
+   "key": "aws:lambda:ResumeDurableExecution:added",
+   "title": "AWS lambda: new operation ResumeDurableExecution",
+   "detail": {
+    "in": [
+     "ClientToken",
+     "DurableExecutionArn",
+     "Reason"
+    ],
+    "required": [
+     "DurableExecutionArn"
+    ],
+    "out": [],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "lambda",
+   "kind": "operation-changed",
+   "key": "aws:lambda:GetDurableExecution:01bb58be655b",
+   "title": "AWS lambda: operation GetDurableExecution changed",
+   "detail": {
+    "out": {
+     "was": [
+      "DurableConfig",
+      "DurableExecutionArn",
+      "DurableExecutionName",
+      "EndTimestamp",
+      "Error",
+      "ExecutionDataIncluded",
+      "FunctionArn",
+      "InputPayload",
+      "Result",
+      "StartTimestamp",
+      "Status",
+      "TraceHeader",
+      "Version"
+     ],
+     "now": [
+      "DurableConfig",
+      "DurableExecutionArn",
+      "DurableExecutionName",
+      "EndTimestamp",
+      "Error",
+      "ExecutionDataIncluded",
+      "ExpectedExecutionTimeoutTimestamp",
+      "FunctionArn",
+      "InputPayload",
+      "PauseDetails",
+      "Result",
+      "StartTimestamp",
+      "Status",
+      "TraceHeader",
+      "Version"
+     ]
+    }
+   },
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "API Gateway",
-   "kind": "announcement",
-   "key": "feed:aws:a83e37816d06",
-   "title": "Amazon API Gateway REST APIs now support JWT authorizers",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-api-gateway-rest-authorizers-jwt/",
-   "detail": "Amazon API Gateway now offers a native JWT authorizer for REST APIs, a new authorizer type that validates JSON Web Tokens directly in the gateway. Until now, validating tokens from an OpenID Connect or OAuth 2.0 identity provider other than Amazon Cognito required a Lambda authorizer. You now configure token validation instead of writing and operating code for it. You can define one or more issuers, the audiences accepted for each, the signing algorithms you permit, and any additional claims a token may present. API Gateway verifies each token's signature, issuer, audience, expiry, and claims ",
+   "service": "ec2",
+   "kind": "operation-added",
+   "key": "aws:ec2:ModifyTransitGatewayPeeringAttachment:added",
+   "title": "AWS ec2: new operation ModifyTransitGatewayPeeringAttachment",
+   "detail": {
+    "in": [
+     "DryRun",
+     "Options",
+     "TransitGatewayAttachmentId"
+    ],
+    "required": [
+     "TransitGatewayAttachmentId"
+    ],
+    "out": [
+     "TransitGatewayPeeringAttachment"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "ec2",
+   "kind": "operation-changed",
+   "key": "aws:ec2:CreateVpcPeeringConnection:3382666f9c27",
+   "title": "AWS ec2: operation CreateVpcPeeringConnection changed",
+   "detail": {
+    "in": {
+     "was": [
+      "DryRun",
+      "PeerOwnerId",
+      "PeerRegion",
+      "PeerVpcId",
+      "TagSpecifications",
+      "VpcId"
+     ],
+     "now": [
+      "DryRun",
+      "PeerOwnerId",
+      "PeerRegion",
+      "PeerVpcId",
+      "RequesterPeeringConnectionOptions",
+      "TagSpecifications",
+      "VpcId"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "ec2",
+   "kind": "operation-changed",
+   "key": "aws:ec2:DescribeCapacityBlockOfferings:a25b5149b61f",
+   "title": "AWS ec2: operation DescribeCapacityBlockOfferings changed",
+   "detail": {
+    "in": {
+     "was": [
+      "AllAvailabilityZones",
+      "CapacityDurationHours",
+      "DryRun",
+      "EndDateRange",
+      "InstanceCount",
+      "InstanceType",
+      "MaxResults",
+      "NextToken",
+      "StartDateRange",
+      "UltraserverCount",
+      "UltraserverType"
+     ],
+     "now": [
+      "AllAvailabilityZones",
+      "CapacityDurationHours",
+      "DryRun",
+      "EndDateRange",
+      "InstanceCount",
+      "InstanceType",
+      "InstanceTypePreferences",
+      "MaxResults",
+      "NextToken",
+      "StartDateRange",
+      "UltraserverCount",
+      "UltraserverType"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "ec2",
+   "kind": "operation-changed",
+   "key": "aws:ec2:PurchaseCapacityBlock:2474e8df99bc",
+   "title": "AWS ec2: operation PurchaseCapacityBlock changed",
+   "detail": {
+    "out": {
+     "was": [
+      "CapacityBlocks",
+      "CapacityReservation"
+     ],
+     "now": [
+      "CapacityBlocks",
+      "CapacityReservation",
+      "CapacityReservations"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "apigateway",
+   "kind": "operation-changed",
+   "key": "aws:apigateway:CreateAuthorizer:71fcab5fb5ff",
+   "title": "AWS apigateway: operation CreateAuthorizer changed",
+   "detail": {
+    "in": {
+     "was": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "identitySource",
+      "identityValidationExpression",
+      "name",
+      "providerARNs",
+      "restApiId",
+      "type"
+     ],
+     "now": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "identitySource",
+      "identityValidationExpression",
+      "jwtConfiguration",
+      "name",
+      "providerARNs",
+      "restApiId",
+      "type"
+     ]
+    },
+    "out": {
+     "was": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "id",
+      "identitySource",
+      "identityValidationExpression",
+      "name",
+      "providerARNs",
+      "type"
+     ],
+     "now": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "id",
+      "identitySource",
+      "identityValidationExpression",
+      "jwtConfiguration",
+      "name",
+      "providerARNs",
+      "type"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "apigateway",
+   "kind": "operation-changed",
+   "key": "aws:apigateway:GetAuthorizer:ebd7f06c3931",
+   "title": "AWS apigateway: operation GetAuthorizer changed",
+   "detail": {
+    "out": {
+     "was": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "id",
+      "identitySource",
+      "identityValidationExpression",
+      "name",
+      "providerARNs",
+      "type"
+     ],
+     "now": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "id",
+      "identitySource",
+      "identityValidationExpression",
+      "jwtConfiguration",
+      "name",
+      "providerARNs",
+      "type"
+     ]
+    }
+   },
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Aurora, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:6a1aafb7fb67",
-   "title": "Amazon Aurora DSQL now offers SQL statement statistics in Database Insights",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-statement-statistics/",
-   "detail": "Amazon Aurora DSQL now records statistics for each SQL statement your cluster runs and publishes them as Amazon CloudWatch OpenTelemetry (OTel) metrics. You can view them in Amazon CloudWatch Database Insights. For each statement, you see how often it runs, how long it takes, the rows it scans, returns, or changes, and the DPUs it uses. Statement statistics measure every successful statement rather than sampling activity. Use them to find the statements that take the most time, run most often, or cost the most. In Database Insights, choose a statement under Top SQL to see its normalized SQL te",
+   "service": "apigateway",
+   "kind": "operation-changed",
+   "key": "aws:apigateway:UpdateAuthorizer:2dd51b03989b",
+   "title": "AWS apigateway: operation UpdateAuthorizer changed",
+   "detail": {
+    "out": {
+     "was": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "id",
+      "identitySource",
+      "identityValidationExpression",
+      "name",
+      "providerARNs",
+      "type"
+     ],
+     "now": [
+      "authType",
+      "authorizerCredentials",
+      "authorizerResultTtlInSeconds",
+      "authorizerUri",
+      "id",
+      "identitySource",
+      "identityValidationExpression",
+      "jwtConfiguration",
+      "name",
+      "providerARNs",
+      "type"
+     ]
+    }
+   },
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:AcknowledgeDeadLetterQueueRecords:added",
+   "title": "AWS kinesis: new operation AcknowledgeDeadLetterQueueRecords",
+   "detail": {
+    "in": [
+     "Entries",
+     "QueueARN"
+    ],
+    "required": [
+     "Entries",
+     "QueueARN"
+    ],
+    "out": [
+     "Failed",
+     "Successful"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:AcknowledgeQueueRecords:added",
+   "title": "AWS kinesis: new operation AcknowledgeQueueRecords",
+   "detail": {
+    "in": [
+     "Entries",
+     "QueueARN"
+    ],
+    "required": [
+     "Entries",
+     "QueueARN"
+    ],
+    "out": [
+     "Failed",
+     "Successful"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:CreateQueue:added",
+   "title": "AWS kinesis: new operation CreateQueue",
+   "detail": {
+    "in": [
+     "QueueAttributes",
+     "QueueName",
+     "StreamConfigurationList",
+     "Tags"
+    ],
+    "required": [
+     "QueueName",
+     "StreamConfigurationList"
+    ],
+    "out": [
+     "QueueDescription"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:DeleteQueue:added",
+   "title": "AWS kinesis: new operation DeleteQueue",
+   "detail": {
+    "in": [
+     "QueueARN"
+    ],
+    "required": [
+     "QueueARN"
+    ],
+    "out": [],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:DescribeQueue:added",
+   "title": "AWS kinesis: new operation DescribeQueue",
+   "detail": {
+    "in": [
+     "QueueARN"
+    ],
+    "required": [
+     "QueueARN"
+    ],
+    "out": [
+     "QueueDescription"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:ListQueues:added",
+   "title": "AWS kinesis: new operation ListQueues",
+   "detail": {
+    "in": [
+     "MaxResults",
+     "NextToken",
+     "StreamFilter"
+    ],
+    "required": [],
+    "out": [
+     "NextToken",
+     "QueueSummaries"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:ReceiveDeadLetterQueueRecords:added",
+   "title": "AWS kinesis: new operation ReceiveDeadLetterQueueRecords",
+   "detail": {
+    "in": [
+     "Limit",
+     "QueueARN",
+     "VisibilityTimeoutSeconds",
+     "WaitTimeSeconds"
+    ],
+    "required": [
+     "QueueARN"
+    ],
+    "out": [
+     "QueueRecords"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:ReceiveQueueRecords:added",
+   "title": "AWS kinesis: new operation ReceiveQueueRecords",
+   "detail": {
+    "in": [
+     "Limit",
+     "QueueARN",
+     "VisibilityTimeoutSeconds",
+     "WaitTimeSeconds"
+    ],
+    "required": [
+     "QueueARN"
+    ],
+    "out": [
+     "QueueRecords"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:RestoreDeadLetterQueueRecords:added",
+   "title": "AWS kinesis: new operation RestoreDeadLetterQueueRecords",
+   "detail": {
+    "in": [
+     "Entries",
+     "QueueARN"
+    ],
+    "required": [
+     "Entries",
+     "QueueARN"
+    ],
+    "out": [
+     "Failed",
+     "Successful"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:UpdateDeadLetterQueueRecordsVisibility:added",
+   "title": "AWS kinesis: new operation UpdateDeadLetterQueueRecordsVisibility",
+   "detail": {
+    "in": [
+     "Entries",
+     "QueueARN"
+    ],
+    "required": [
+     "Entries",
+     "QueueARN"
+    ],
+    "out": [
+     "Failed",
+     "Successful"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:UpdateQueue:added",
+   "title": "AWS kinesis: new operation UpdateQueue",
+   "detail": {
+    "in": [
+     "QueueARN",
+     "QueueAttributes"
+    ],
+    "required": [
+     "QueueARN",
+     "QueueAttributes"
+    ],
+    "out": [
+     "QueueDescription"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "kinesis",
+   "kind": "operation-added",
+   "key": "aws:kinesis:UpdateQueueRecordsVisibility:added",
+   "title": "AWS kinesis: new operation UpdateQueueRecordsVisibility",
+   "detail": {
+    "in": [
+     "Entries",
+     "QueueARN"
+    ],
+    "required": [
+     "Entries",
+     "QueueARN"
+    ],
+    "out": [
+     "Failed",
+     "Successful"
+    ],
+    "http": "POST",
+    "deprecated": false
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:boto3",
+   "kind": "release",
+   "key": "ver:pypi:boto3:1.44.5",
+   "title": "pypi:boto3: 1.44.4 \u2192 1.44.5",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.44.5",
+   "title": "pypi:botocore: 1.44.4 \u2192 1.44.5",
    "actionable": false
   },
   {
    "cloud": "aws",
    "service": "Amazon S3",
    "kind": "announcement",
-   "key": "feed:aws:fd294ee64344",
-   "title": "AWS Split Cost Allocation Data now supports Amazon S3",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/split-cost-allocation-data-s3/",
-   "detail": "Starting today, you can allocate the storage and request costs of a shared Amazon S3 general purpose bucket to the prefixes in that bucket in the AWS Cost and Usage Report (CUR). Organizations often store data for many teams, applications, or tenants in one bucket under different prefixes, such as `marketing/` and `finance/`. Until now, attributing that bucket's bill to each prefix required custom pipelines built on S3 Inventory or Storage Lens reports and your own pricing logic. With Split Cost Allocation Data for Amazon S3, Amazon S3 Storage Lens publishes prefix-level storage and request me",
+   "key": "feed:aws:2a81af555f08",
+   "title": "Amazon SageMaker now supports AI data preparation capabilities to build high-quality datasets for model development",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-ai-data-prep-capabilities/",
+   "detail": "Building high-quality training datasets has traditionally required weeks of manual labeling and data cleaning. Amazon SageMaker now offers AI data preparation capabilities that help data scientists and ML engineers build high-quality training and evaluation datasets for both text-based model customization and traditional ML. Teams can generate synthetic examples grounded in their own documents, auto-label records at scale with confidence scores, incorporate expert feedback through human review, evaluate data quality, and transform data for their chosen training or evaluation technique. Synthet",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:40c46235e1e5",
+   "title": "AWS Transit Gateway now shares resource context with firewalls for segmentation policies",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/transit-gateway-firewall-context-sharing/",
+   "detail": "AWS Transit Gateway now supports context sharing with security services, such as attached firewalls, allowing you to use Amazon Virtual Private Clouds (VPCs), VPC subnets, VPC security groups, and transit gateway attachments in firewall policies alongside IP addresses. Until now, attached firewalls segmented traffic by IP address, which is hard to plan and maintain, or by resource tags, which firewalls periodically synchronize with IP addresses and can miss new workloads in between. With this feature, you can enforce segmentation based on how workloads and attachments are defined in AWS. Trans",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:86e4b869a943",
+   "title": "AWS Security Hub now detects when vulnerable software is running on Amazon EC2 instances",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-detects-vulnerable-software/",
+   "detail": "AWS Security Hub now detects when software with a known vulnerability is actively running on your Amazon EC2 instances. Exposure findings now include a new trait, *The EC2 instance is running software with a known vulnerability*. These findings get a higher severity rating than findings for the same vulnerability where the software isn't running. This helps your security team focus on the vulnerabilities that pose the greatest risk, without investing time and resources to investigate if the software is actually in use. Security teams managing thousands of instances can now prioritize patching ",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon RDS",
+   "kind": "announcement",
+   "key": "feed:aws:4ebd51ee28ee",
+   "title": "AWS Security Hub Network Scanning now supports scanning Amazon Relational Database Service (Amazon RDS) database instances",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-network-scanning-rds/",
+   "detail": "AWS Security Hub Network Scanning now scans Amazon RDS DB instances to identify those that are reachable from the internet. Network Scanning automatically discovers existing and new RDS DB instances in your accounts and scans each instance that has Public Access configured. For each reachable port associated with a DB instance, Security Hub creates a finding with details about the instance and the reachable port. RDS scanning gives you more visibility into which resources in your environment are reachable from the internet. You can then investigate and update their access settings as needed. R",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Cloud Monitoring",
+   "kind": "announcement",
+   "key": "feed:gcp:7570a9ea3734",
+   "title": "Cloud Monitoring: Change (November 17, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_17_2026",
+   "detail": "Ops Agent version 2.72.0 changed the processing of all supported logging pipelines from the Logging Agent service to the Metric Agent service. When you upgrade from an earlier version of the Ops Agent to version 2.72.0 or later, you will see duplicated logs for a period, because each service maintains its own record of the logs it has processed. This is expected. If the duplicated logs are causing problems, then you can temporarily reconfigure the agent to continue using the Logging Agent service. For more information, see Upgraded logging pipelines .",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:54e39728395d",
+   "title": "[In preview] Public Preview: Azure Artifact Validation for VM images",
+   "link": "https://azure.microsoft.com/updates?id=581249",
+   "detail": "Azure Artifact Validation, in public preview, lets VM image publishers and enterprise platform teams run Azure's certification-grade quality and security checks on their images in their own Azure subscriptions, at any point in the build process.Previously",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:d7e174f5f6d3",
+   "title": "[In preview] Public Preview: VM adaptive placement",
+   "link": "https://azure.microsoft.com/updates?id=581244",
+   "detail": "VM adaptive placement, now in public preview, helps increase Azure VM deployment success when capacity is constrained.With a standard VM create, you specify one exact size, and the deployment fails if that size isn't available. With adaptive placement, yo",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:e1138e8012f3",
+   "title": "[In development] Private Preview: Azure confidential VMs on 5th Gen AMD EPYC processors (DCasv7 and ECasv7 series)",
+   "link": "https://azure.microsoft.com/updates?id=581199",
+   "detail": "Azure's next-generation confidential VMs, the DCasv7, DCadsv7, DCalsv7, DCaldsv7, ECasv7 and ECadsv7 series, are now in private preview. Built on 5th Gen AMD EPYC processors with AMD SEV-SNP, they protect data while it's being processed by isolating each",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:2c16c244239f",
+   "title": "[Launched] Generally Available: Azure Linux 4.0",
+   "link": "https://azure.microsoft.com/updates?id=581165",
+   "detail": "Azure Linux 4.0 is being introduced as part of Microsoft Ignite. The general availability of Azure Linux 4.0 for Azure Virtual Machines and VM Scale Sets is Microsoft's first-party open-source Linux distribution purpose-built for Azure. It brings a modern",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:a9491bdc48b4",
+   "title": "[Launched] Generally Available: Azure Ebsv6 and Ebdsv6",
+   "link": "https://azure.microsoft.com/updates?id=581160",
+   "detail": "We\u2019re excited to announce the general availability of Azure Ebsv6 and Ebdsv6 VMs, powered by 5th Gen Intel\u00ae Xeon\u00ae processors and Azure Boost, delivering enhanced storage performance for I/O-intensive workloads.Designed for relational databases, in-memory",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:1b2493873b2a",
+   "title": "[In preview] Public Preview: Azure Compute Spot plus",
+   "link": "https://azure.microsoft.com/updates?id=581145",
+   "detail": "Azure Compute Spot plus, now in public preview, is an enhanced tier of Azure Spot Virtual Machines, bringing greater runtime consistency and earlier eviction signals to interruption-tolerant workloads.Standard Spot suits highly resilient workloads focused",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Machines",
+   "kind": "announcement",
+   "key": "feed:azure:513c6f21b71a",
+   "title": "[In preview] Public Preview: Compute templates for Azure",
+   "link": "https://azure.microsoft.com/updates?id=580624",
+   "detail": "Announcing the public preview of Azure compute templates, a new capability that simplifies virtual machine (VM) configuration management by enabling customers to define, version, and reuse standardized VM configurations across deployments.With compute tem",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Network",
+   "kind": "announcement",
+   "key": "feed:azure:69732870efb2",
+   "title": "[In preview] Public Preview: Virtual network integration in Logic Apps Automation",
+   "link": "https://azure.microsoft.com/updates?id=580549",
+   "detail": "Virtual network (VNet) integration is now available in public preview in Azure Logic Apps Automation, enabling organizations to securely connect workflows and agents to resources within their Azure virtual networks.As organizations automate business proce",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Blob Storage",
+   "kind": "announcement",
+   "key": "feed:azure:125e22d532ef",
+   "title": "[In preview] Public Preview: Session-based authentication for Azure Blob and Data Lake Storage",
+   "link": "https://azure.microsoft.com/updates?id=580306",
+   "detail": "Session-based authentication is now in public preview for Azure Blob and Data Lake Storage.Session-based authentication reduces the per-request authentication and authorization time for AI agents and applications while preserving the security controls org",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:509fa07b87e3",
+   "title": "[Launched] Generally Available: Azure Monitor Health Models ",
+   "link": "https://azure.microsoft.com/updates?id=580261",
+   "detail": "Azure Monitor Health Models is now Generally Available. You can now build a Azure Monitor Health Model that defines and operationalizes workload health as a first-class construct by aggregating signals across metrics, logs, and dependencies into a single",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:46fca2d43253",
+   "title": "[In preview] Public Preview: Azure Monitor traces and Trace Analytics",
+   "link": "https://azure.microsoft.com/updates?id=580184",
+   "detail": "You can now analyze and compare thousands of traces, isolate the transactions that matter, and move from trends to root cause with advanced distributed tracing within Azure Monitor Application Insights.Azure Monitor traces (preview) provides a dedicated t",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "API Management",
+   "kind": "announcement",
+   "key": "feed:azure:5a03d905c139",
+   "title": "[Launched] Generally Available: Azure AI Gateway ",
+   "link": "https://azure.microsoft.com/updates?id=580080",
+   "detail": "Azure AI Gateway, previously available as the AI Gateway tier of API Management, is now generally available as a fully managed Azure service for connecting users, applications, and agents to AI models and MCP tools across providers.Platform teams can cent",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "API Management",
+   "kind": "announcement",
+   "key": "feed:azure:fc4df555a9c7",
+   "title": "[Launched] Generally Available: Microsoft Agent 365 integration with Azure API Management and Azure AI Gateway ",
+   "link": "https://azure.microsoft.com/updates?id=580055",
+   "detail": "The integration between Microsoft Agent 365 and Azure API Management is now generally available, enabling organizations to centrally govern AI agents and MCP tools while enforcing security and access policies at runtime through Azure API Management and Az",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "API Management",
+   "kind": "announcement",
+   "key": "feed:azure:26dc92357bbd",
+   "title": "[Launched] Generally Available: Azure API Management Premium v2 ",
+   "link": "https://azure.microsoft.com/updates?id=580046",
+   "detail": "Azure API Management Premium v2 is now available in 35 Azure regions, giving organizations greater flexibility to deploy and scale enterprise API workloads across more geographic locations. With this expanded regional availability, customers have more opt",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "API Management",
+   "kind": "announcement",
+   "key": "feed:azure:749d642433b3",
+   "title": "[Launched] Generally Available: Unified Model API in Azure API Management ",
+   "link": "https://azure.microsoft.com/updates?id=580036",
+   "detail": "Azure API Management now offers the Unified Model API, a standardized way to connect applications to AI models from multiple providers without managing different API interfaces and integration requirements.Building applications with multiple AI models oft",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:b8a212bd9cac",
+   "title": "[Launched] Generally Available: Azure HorizonDB Monitoring via Alerts",
+   "link": "https://azure.microsoft.com/updates?id=579933",
+   "detail": "Azure HorizonDB now supports Azure Monitor alerts, enabling you to proactively monitor your database environment and receive notifications when specified conditions are met. You can create alert rules based on HorizonDB metrics, configure thresholds, and",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Log Analytics, Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:14de6b9aaa09",
+   "title": "[Launched] Generally Available: Azure HorizonDB Auditing",
+   "link": "https://azure.microsoft.com/updates?id=579928",
+   "detail": "Azure HorizonDB now supports database auditing with the pgAudit extension. You can capture selected PostgreSQL database activities, including data access, modifications, role changes, and DDL operations, and send audit logs to Azure Monitor Log Analytics",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:06db239ab8df",
+   "title": "[In preview] Public Preview: Azure SQL Database container provisioning in SQL Server Management Studio",
+   "link": "https://azure.microsoft.com/updates?id=579665",
+   "detail": "Now in public preview, you can provision an Azure SQL Database development environment in seconds directly from SQL Server Management Studio (SSMS), with no Azure subscription, credit card, or existing database required.Azure SQL Database container brings",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Log Analytics, Azure Monitor",
+   "kind": "announcement",
+   "key": "feed:azure:2de1f2a5d761",
+   "title": "[Launched] Generally Available: Azure HorizonDB Generic Log Analytics Integration",
+   "link": "https://azure.microsoft.com/updates?id=579574",
+   "detail": "Azure HorizonDB now supports integration with Azure Monitor diagnostic settings, enabling you to send database logs and diagnostic data to Azure Log Analytics. This provides a centralized way to query and analyze database activity, troubleshoot issues, an",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL, Key Vault",
+   "kind": "announcement",
+   "key": "feed:azure:a6e767160620",
+   "title": "[Launched] Generally Available: Transparent data encryption (TDE) in Azure SQL Database AES keys ",
+   "link": "https://azure.microsoft.com/updates?id=579531",
+   "detail": "You can now use AES-256 keys stored in Azure Key Vault Premium or Managed HSM as TDE protectors, providing an alternative to RSA keys for protecting data at rest. While RSA may remain secure against today\u2019s classical computing capabilities, advances in qu",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:b95a0ad3ac79",
+   "title": "[In preview] Public Preview: Build with Azure SQL Database container locally without an Azure subscription or credit card ",
+   "link": "https://azure.microsoft.com/updates?id=579525",
+   "detail": "You can now build and test applications using Azure SQL Database container, which runs the same Azure SQL Database engine locally that you run in the cloud. It\u2019s free for local dev and CI, with no Azure subscription or credit card required. This cross-pl",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:ceff02676e88",
+   "title": "[Launched] Generally Available: Managed Connectors in Azure Functions",
+   "link": "https://azure.microsoft.com/updates?id=579440",
+   "detail": "Managed connectors in Azure Functions are now generally available, enabling developers to build event-driven applications that react to events and take actions across Microsoft 365, SaaS, and business systems using the familiar Azure Functions programming",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:abdbbeb7c530",
+   "title": "[In preview] Public Preview: Bring-your-own image and Cosmos DB MCP server in Azure Connector Namespace hosted MCP\u200b",
+   "link": "https://azure.microsoft.com/updates?id=579435",
+   "detail": "Azure Connector Namespace\u2019s hosted MCP server capability gives AI agents access to tools without requiring developers to build and operate a separate hosting stack. The platform provisions and manages the hosting infrastructure and provides Microsoft Entr",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Key Vault",
+   "kind": "announcement",
+   "key": "feed:azure:2844b202fdec",
+   "title": "[Launched] Generally Available: Symmetric keys on Azure Key Vault Premium ",
+   "link": "https://azure.microsoft.com/updates?id=579374",
+   "detail": "Building on the public preview introduced in July 2026, this release enables customers and partners to use symmetric encryption capabilities with the oct-HSM key type and the Advanced Encryption Standard (AES) algorithm directly within Azure Key Vault Pre",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:8bbefc23d3b3",
+   "title": "[In preview] Public Preview: Azure SQL updates for mid-November 2026 ",
+   "link": "https://azure.microsoft.com/updates?id=579359",
+   "detail": "In mid-November 2026, the following updates and enhancements were made to Azure SQL: In SSMS, the new Create and Apply wizards make it simpler to create and use .dacpac and .bacpac files. The new feature consolidates and replaces the var",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL, Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:53ce4a96d26c",
+   "title": "[Launched] Generally Available: Database Hub in Microsoft Fabric",
+   "link": "https://azure.microsoft.com/updates?id=579216",
+   "detail": "Database Hub in Microsoft Fabric is a unified experience for discovering, managing, monitoring, and optimizing databases across SQL Server, Azure SQL, PostgreSQL, Azure Cosmos DB, and Fabric SQL. By bringing AI-powered insights and agents into a single co",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:f8b570e58250",
+   "title": "[Launched] Generally Available: Azure Backup for Azure Cosmos DB",
+   "link": "https://azure.microsoft.com/updates?id=579147",
+   "detail": "Azure Backup for Azure Cosmos DB is now generally available. Vaulted backup protects your Azure Cosmos DB accounts with immutable, long-term backups stored in a logically air-gapped backup vault, isolated from your production environment. It complements n",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Blob Storage",
+   "kind": "announcement",
+   "key": "feed:azure:46bec3f86685",
+   "title": "[Launched] Generally Available: Smart Tier (Azure Blob and Data Lake Storage) in Azure Government and China regions",
+   "link": "https://azure.microsoft.com/updates?id=579040",
+   "detail": "Announcing the GA of smart tier for Azure Blob and Data Lake Storage (ADLS) in Azure Government and China regions.Smart tier is a fully managed and automated data tiering solution, avoiding manual tier placement for object storage standard online tiers.",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Blob Storage",
+   "kind": "announcement",
+   "key": "feed:azure:85e89cd2ec3d",
+   "title": "[In preview] Public Preview: Azure Blob Storage turbo tier",
+   "link": "https://azure.microsoft.com/updates?id=579031",
+   "detail": "Azure Blob Storage turbo tier is now in Public Preview, bringing SSD-backed performance to performance-sensitive data in eligible Azure Blob Storage accounts. Designed for AI training, inference, analytics, and other demanding data workloads, turbo tier d",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:bef9a745bc0e",
+   "title": "[In preview] Public Preview: MSSQL extension for Visual Studio Code - local-to-cloud deployment wizard ",
+   "link": "https://azure.microsoft.com/updates?id=579014",
+   "detail": "The MSSQL extension now provides a guided local-to-cloud deployment experience for Azure SQL Database. You can move from a local Azure SQL Database container to the cloud directly from Visual Studio Code. The wizard supports schema-only or schema-and-data",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:f8e7dd121ad8",
+   "title": "[In preview] Public Preview: MSSQL extension for Visual Studio Code- Azure SQL Database container provisioning ",
+   "link": "https://azure.microsoft.com/updates?id=579009",
+   "detail": "The MSSQL extension now supports the Azure SQL Database container, making it easy to create and manage a cloud-aligned local database environment directly in Visual Studio Code. With automatic runtime detection across Docker, WSL, Apple containers, Podman",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:e516f1165f88",
+   "title": "[In preview] Public Preview: MSSQL extension for Visual Studio Code performance dashboard ",
+   "link": "https://azure.microsoft.com/updates?id=579004",
+   "detail": "The new query performance dashboard, now in public preview in the MSSQL extension for VS Code, leverages Query Store to surface performance insights, analyze trends, investigate execution plans, and optimize queries with GitHub Copilot.Learn more.",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:f7ce137d75a1",
+   "title": "[Launched] Generally Available: Fuzzy string match is available across Microsoft SQL offerings ",
+   "link": "https://azure.microsoft.com/updates?id=578998",
+   "detail": "Fuzzy string match is now generally available across Microsoft SQL offerings, including Azure SQL Database, Azure SQL Managed Instanced, SQL database in Microsoft Fabric, and SQL Server 2025. You can compare strings based on how similar or different they",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:6b2e7ac6c286",
+   "title": "[In preview] Public Preview: Task Queues for Azure Functions durable task scheduler",
+   "link": "https://azure.microsoft.com/updates?id=578989",
+   "detail": "Task Queues for Azure Functions durable task scheduler are now available in public preview. Workloads sharing a task hub can have different throughput requirements and downstream service limits. Create named queues within a task hub and configure a shared",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions, Service Bus",
+   "kind": "announcement",
+   "key": "feed:azure:f30fafdd6036",
+   "title": "[In preview] Public Preview: Azure Functions Network Troubleshooter v2",
+   "link": "https://azure.microsoft.com/updates?id=578980",
+   "detail": "Azure Functions Network Troubleshooter v2 is now in Public Preview. Network Troubleshooter v2 gives customers a top-down view of Function App dependencies across Storage, Service Bus, and Azure Files. For each supported dependency, customers can inspect c",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:e7ecc4071f0f",
+   "title": "[In preview] Public Preview: OS-level dependency support via containers for Azure Functions Flex Consumption",
+   "link": "https://azure.microsoft.com/updates?id=578975",
+   "detail": "OS-level dependency support via containers for Azure Functions Flex Consumption is now in preview. Previously, Flex Consumption apps ran in a Microsoft-managed worker environment that customers couldn\u2019t extend with native executables, system libraries, or",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:8ea70889622e",
+   "title": "[In preview] Public Preview: Hosted Skill and Agent Bindings for Azure Functions",
+   "link": "https://azure.microsoft.com/updates?id=578845",
+   "detail": "Hosted Skill and Agent bindings for Azure Functions are now available in public preview. Adding agents to an application often requires setup and lifecycle code before developers can focus on business logic. These bindings reduce that plumbing while keepi",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:dde550ab3e4c",
+   "title": "[Launched] Generally Available: Durable Task extension for Microsoft Agent Framework",
+   "link": "https://azure.microsoft.com/updates?id=578829",
+   "detail": "The Durable Task extension for Microsoft Agent Framework is now generally available for C# and Python. Build agents, multi-agent orchestrations, and Microsoft Agent Framework workflows that can run reliably for minutes, days, or weeks. The extension persi",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:88ba54015ea1",
+   "title": "[Launched] Generally Available: Private endpoints for Azure Functions durable task scheduler ",
+   "link": "https://azure.microsoft.com/updates?id=578824",
+   "detail": "Private endpoints for Azure Functions durable task scheduler are now generally available for both Dedicated and Consumption SKU schedulers. Customers can connect Azure Functions and other durable task SDK workloads to a scheduler through a private IP addr",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:25289d6d5146",
+   "title": "[Launched] Generally Available: Golang support on Azure Functions Flex Consumption",
+   "link": "https://azure.microsoft.com/updates?id=578812",
+   "detail": "First-class Go support on Azure Functions Flex Consumption is now generally available.The Go worker offers a code-first programming model with typed Go handlers, standard Go modules, and integration with Azure Functions Core Tools and Azure CLI. Developer",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:d000a67aadc3",
+   "title": "[In preview] Public Preview: Azure Functions support for Node.js 26",
+   "link": "https://azure.microsoft.com/updates?id=578807",
+   "detail": "Azure Functions support for Node.js 26 is now in public preview.Developers can evaluate their JavaScript and TypeScript function apps on the new runtime while continuing to use the Azure Functions programming model on Linux in the Flex Consumption, Elasti",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:bf311f1ff563",
+   "title": "[In preview] Public Preview: Azure Functions support for Python 3.15",
+   "link": "https://azure.microsoft.com/updates?id=578802",
+   "detail": "Azure Functions support for Python 3.15 is now in public preview.Developers can evaluate Python applications, dependencies, native extensions and deployment workflows using the existing v1 and v2 programming models.Dependency overlap between the Python wo",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Network",
+   "kind": "announcement",
+   "key": "feed:azure:6cf021d6c7d0",
+   "title": "[In preview] Public Preview: Network Watcher Private Link support",
+   "link": "https://azure.microsoft.com/updates?id=578792",
+   "detail": "Azure Network Watcher VNet Flow Logs now supports flow log enrichment for Azure Private Link Service, providing greater visibility into network traffic flowing through Private Link Service. With this capability, Virtual Network Flow Logs retain backend fl",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:b28b382bd1e1",
+   "title": "[Launched] Generally Available: Customer-managed keys for Azure Functions durable task scheduler ",
+   "link": "https://azure.microsoft.com/updates?id=578768",
+   "detail": "Customer-managed keys for Azure Functions Durable Task Scheduler are now generally available for Dedicated SKU schedulers.Organizations that need to manage their own encryption keys can now use customer-managed keys to protect their workflow data, support",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:28a5ff9850a3",
+   "title": "[In preview] Public Preview: Native disaster recovery for Azure Functions durable task scheduler",
+   "link": "https://azure.microsoft.com/updates?id=578762",
+   "detail": "Disaster recovery for Azure Functions durable task scheduler is now available in public preview for the Dedicated SKU in supported Azure regions.Recover business-critical workflows from regional outages without rebuilding orchestration state, with a repea",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "announcement",
+   "key": "feed:azure:2e1ffea84a96",
+   "title": "[In preview] Public Preview: Durable Task SDK for Go ",
+   "link": "https://azure.microsoft.com/updates?id=578748",
+   "detail": "The Durable Task SDK for Go is available in public preview. Developers can write orchestrations, activities, and durable entities in Go, with Durable Task Scheduler managing execution history and work dispatch. Customers can build workflows with retries,",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:7d2221f5f39c",
+   "title": "[Launched] Generally Available: Azure SQL updates for mid-November 2026 ",
+   "link": "https://azure.microsoft.com/updates?id=578471",
+   "detail": "In mid-November 2026, the following updates and enhancements were made to Azure SQL: Fuzzy string matching enables you to compare strings based on similarity rather than relying only on exact matches. Using built-in functions, you can m",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:4c6b0a56d5bc",
+   "title": "[Launched] Generally Available: Azure SQL Managed Instance updates for mid-November 2026 ",
+   "link": "https://azure.microsoft.com/updates?id=578465",
+   "detail": "In mid-November 2026, the following updates and enhancements were made to Azure SQL Managed Instance: Boost transaction throughput in Next-gen General Purpose Azure SQL Managed Instance with increased log rates of up to 220 MiB/s and higher pe",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:81e8727e0a1d",
+   "title": "[In preview] Public Preview:  AI-assisted data modeler and other updates in Azure Cosmos DB extension for VS Code ",
+   "link": "https://azure.microsoft.com/updates?id=578444",
+   "detail": "You can now use the AI-assisted Data Modeler in Visual Studio Code to design an effective Azure Cosmos DB data model earlier in the development lifecycle. It analyzes document structure, query patterns, write distribution, expected scale, and data growth",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:4549c7f323b6",
+   "title": "[Launched] Generally Available: Azure Cosmos DB Shell ",
+   "link": "https://azure.microsoft.com/updates?id=578439",
+   "detail": "We\u2019re excited to announce the general availability of Azure Cosmos DB Shell, a command-line experience that makes it easier for you and for AI agents to work with Azure Cosmos DB. Azure Cosmos DB Shell provides a consistent, scriptable workflow for navig",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:fac1ffa59189",
+   "title": "[In preview] Public Preview: Managed MCP Server in Azure Cosmos DB ",
+   "link": "https://azure.microsoft.com/updates?id=578434",
+   "detail": "We\u2019re announcing the preview of the Azure Cosmos DB hosted MCP experience, enabling enterprise AI agents to securely connect to business data through a standard, managed MCP endpoint. Agents can discover schemas, retrieve documents, and use full-text, vec",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Role-based access",
+   "kind": "announcement",
+   "key": "feed:azure:58efbefc8525",
+   "title": "[In preview] Public Preview: Fine-grained role-based access control for databases and collections in Azure DocumentDB ",
+   "link": "https://azure.microsoft.com/updates?id=578262",
+   "detail": "Azure DocumentDB now offers granular role-based access control (RBAC) , well beyond the cluster-level permissions that have been offered in the service. You can now use database-level and collection-level RBAC to manage data access. Instead of relying onl",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Log Analytics",
+   "kind": "announcement",
+   "key": "feed:azure:e746209feb9e",
+   "title": "[In preview] Public Preview: Azure Network Watcher \u2013 Packet capture insights",
+   "link": "https://azure.microsoft.com/updates?id=578172",
+   "detail": "Packet capture Insights uses AI-assisted analysis to surface key findings from packet captures and can ingest structured protocol logs into log analytics ingestion for deeper investigation. Packet capture insights help make capture data more accessible by",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:86f01bc784e6",
+   "title": "[Launched] Generally Available: Azure Cosmos DB SDK for Rust ",
+   "link": "https://azure.microsoft.com/updates?id=578054",
+   "detail": "The Azure Cosmos DB SDK for Rust gives you a native Rust client for building applications on Azure Cosmos DB for NoSQL. You get access to database operations directly from Rust, with built-in performance optimizations and failure handling. Efficient binar",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:f45a90ac13b3",
+   "title": "[In preview] Public Preview: Embedding generation in Azure Cosmos DB ",
+   "link": "https://azure.microsoft.com/updates?id=578049",
+   "detail": "Embedding generation converts content into vector embeddings that capture semantic meaning, helping applications find relevant information beyond exact keyword matches. It uses specialized Azure Data-developed models to support semantic search and retriev",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:fbe61312924e",
+   "title": "[Launched] Generally Available: Azure Backup for Azure Cosmos DB ",
+   "link": "https://azure.microsoft.com/updates?id=578044",
+   "detail": "Vaulted backups add an independent protection layer by storing immutable backup copies in an Azure Backup vault, isolated from the source Azure Cosmos DB account, and managed through Azure Backup. This update helps you meet a key requirement of many regul",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:5312723edcf8",
+   "title": "[Launched] Generally Available: Zone-redundant Next-gen GP tier in Azure SQL Managed Instance ",
+   "link": "https://azure.microsoft.com/updates?id=578033",
+   "detail": "Zone redundancy for the Next-gen General Purpose service tier helps improve the resiliency of Azure SQL Managed Instance by distributing critical service components across availability zones. This update helps you protect applications against zonal failur",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL",
+   "kind": "announcement",
+   "key": "feed:azure:8f4739039af8",
+   "title": "[Launched] Generally Available: Azure SQL Managed Instance link support for availability groups with multiple databases ",
+   "link": "https://azure.microsoft.com/updates?id=578028",
+   "detail": "You can now use a single Azure SQL Managed Instance link to extend a SQL Server Always On Availability Group with multiple databases to Azure SQL Managed Instance. You can extend an existing availability group or create a new one with multiple databases,",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure SQL, Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:e47e734c6515",
+   "title": "[Launched] Generally Available: Azure Managed Redis database integration guidance ",
+   "link": "https://azure.microsoft.com/updates?id=577553",
+   "detail": "Improved database integration guidance for Azure Managed Redis helps you add caching to applications built with Azure Database for PostgreSQL flexible server, Azure Cosmos DB, and Azure SQL. You can use practical guidance, reference architectures, and ste",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Cosmos DB",
+   "kind": "announcement",
+   "key": "feed:azure:3bc280f24127",
+   "title": "[Launched] Generally Available: Azure Cosmos DB full-text search BM25 score projection",
+   "link": "https://azure.microsoft.com/updates?id=577531",
+   "detail": "Azure Cosmos DB full-text search now includes BM25 score projection, giving you clear visibility into why results appear in the order they do. Your app can now access the relevance score for each result directly, making search ranking more transparent.Thi",
    "actionable": false
   }
  ],
