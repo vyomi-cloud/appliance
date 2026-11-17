@@ -1,3 +1,18 @@
+### Upstream watch — 2026-11-17T22:12:40+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**7 change(s), 1 actionable.**
+- 🔧 `spec-commit` Azure cosmos-db: Add Cosmos DB preview API version 2026-09-01-preview (#45791) ([link](https://github.com/Azure/azure-rest-api-specs/commit/bef29bc88400d23665b90ef5b2c07b4f711ffffe))
+- · `announcement` AWS Lambda durable functions now supports pausing and deleting executions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-pause-delete/))
+- · `announcement` AWS Workload Credentials Provider adds container support for ACM certificates ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/acm-certificates-container-support/))
+- · `announcement` Amazon EVS launches support for r7i.metal instances, external principal storage, and an Agent Skill  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-evs-r7i-agent-skill-support/))
+- · `announcement` [In preview] Generally Available: Private endpoint support for Azure HorizonDB clusters ([link](https://azure.microsoft.com/updates?id=574153))
+- · `announcement` [In preview] Public Preview: Azure API Management Application ([link](https://azure.microsoft.com/updates?id=581277))
+- · `announcement` [Launched] Generally Available: Snapshot backup for SQL Server in Azure VMs ([link](https://azure.microsoft.com/updates?id=564668))
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-17T21:12:40+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,106 +3013,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T12:07:36+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T11:07:24+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T10:07:25+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T09:07:48+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T08:07:20+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T07:07:22+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T06:07:21+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T05:07:21+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T04:07:18+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T03:07:16+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T02:07:15+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 0 actionable.**
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stopReplay changed
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T01:07:17+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**5 change(s), 0 actionable.**
-- · `announcement` Amazon S3 Tables now provide a simple, cost-effective path for data lake modernization ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-managed-migration-hive-to-iceberg/))
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
