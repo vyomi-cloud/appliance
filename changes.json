@@ -1,59 +1,17 @@
 {
- "at": "2026-11-17T00:12:11+00:00",
+ "at": "2026-11-17T01:12:17+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "EventBridge",
-   "kind": "lifecycle",
-   "key": "feed:aws:7d66fb1e58de",
-   "title": "Amazon ECR now replicates image deletions across regions and accounts",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/replication-deletes-amazon-ecr",
-   "detail": "Amazon Elastic Container Registry (Amazon ECR) now supports replicating image deletions and tag removals to your replication destinations. Previously, ECR replication copied images to destination regions and accounts but did not replicate deletions, requiring you to manage deletions separately in each location. With replication of deletes, your destination repositories stay consistent with the source automatically. Teams running multi-region or multi-account architectures no longer need to script or manually track image cleanup across every destination. When you delete an image or remove a tag",
-   "actionable": true
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS IAM",
+   "service": "Key Management Service",
    "kind": "announcement",
-   "key": "feed:aws:872689b2d087",
-   "title": "AWS IAM Identity Center now supports ForceAuthn in SAML requests",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-identity-center-reauth/",
-   "detail": "AWS IAM Identity Center now gives you the option to require workforce users to re-authenticate with your external identity provider (IdP) each time their user interactive session expires. By default, when a user's session expires, IAM Identity Center renews it through the user's existing IdP session, and the user isn't prompted to sign in again. For organizations with strict security or compliance requirements that mandate explicit user verification at regular intervals, this automatic renewal may not meet policy requirements. When you set user re-authentication to Required and a user's user i",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Compute Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:09e8b8521393",
-   "title": "Compute Engine: Feature (November 16, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_16_2026",
-   "detail": "Generally available : You can convert an automatically consumed reservation into a specifically targeted reservation, or a specifically targeted reservation into an automatically consumed reservation. This modification is useful when the consumption needs of your workloads change. For more information, see Modify reservations .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:0e5861f5d6b1",
-   "title": "Google Kubernetes Engine: Feature (November 16, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_16_2026",
-   "detail": "The h4d-megamem-192 and h4d-megamem-192-lssd machine types from the H4D machine series are generally available on GKE. You can create node pools with these machine types in Standard clusters. In version 1.37.2-gke.1325000 or later, you can also use them with node pool auto-creation, and the Performance compute class in Autopilot clusters. For more information, see Run high performance computing (HPC) workloads with H4D and Resource requests in GKE Autopilot .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "API Gateway",
-   "kind": "announcement",
-   "key": "feed:gcp:b9ae2ddcdc3c",
-   "title": "API Gateway: Feature (November 10, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_10_2026",
-   "detail": "MCP method and tool name in request logs API Gateway request logs now include the Model Context Protocol (MCP) method of each MCP request, and the tool name of each tools/call request, in the jsonPayload.mcp field. You can use this field to find MCP traffic and the calls to a specific tool. For more information, see Configure Model Context Protocol .",
+   "key": "feed:aws:50148a1d6509",
+   "title": "Amazon EBS now supports associating additional KMS keys with snapshots",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ebs-snapshots-associate-kms-keys/",
+   "detail": "Amazon Elastic Block Store (EBS) now supports associating additional AWS Key Management Service (KMS) keys with EBS snapshots. This new capability enables you to share and copy encrypted snapshots across accounts without first re-encrypting them, simplifying your disaster recovery and backup workflows. Customers use EBS snapshots as durable, point-in-time backups of EBS volumes. By associating an additional customer-managed KMS key (CMK) with a snapshot encrypted with an AWS managed key (AMK), for example, you enable cross-account sharing for that snapshot without re-encrypting its data. This ",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
- ]
+ "errors": []
 }
