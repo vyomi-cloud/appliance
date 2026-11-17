@@ -24,9 +24,29 @@ provider "google" {
   storage_custom_endpoint          = "${var.endpoint}/storage/v1/"
   resource_manager_custom_endpoint = "${var.endpoint}/v1/"
   cloud_resource_manager_custom_endpoint = "${var.endpoint}/v1/"
+  sql_custom_endpoint              = "${var.endpoint}/sql/v1beta4/"
+  firestore_custom_endpoint        = "${var.endpoint}/v1/"
+  redis_custom_endpoint            = "${var.endpoint}/v1/"
+  pubsub_custom_endpoint           = "${var.endpoint}/v1/"
+  cloud_scheduler_custom_endpoint  = "${var.endpoint}/v1/"
 }
 
 module "network_identity" {
   source  = "./modules/stage1-network-identity"
   project = var.project
+}
+
+module "data" {
+  source     = "./modules/stage3-data"
+  project    = var.project
+  kms_key_id = module.network_identity.kms_key_id
+  sa_email   = module.network_identity.sa_email
+  network_id = module.network_identity.network_id
+}
+
+module "messaging" {
+  source     = "./modules/stage4-messaging"
+  project    = var.project
+  kms_key_id = module.network_identity.kms_key_id
+  bucket     = module.data.bucket
 }

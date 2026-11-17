@@ -25,6 +25,9 @@ def t_f300():
     middleware._collapse_doubled_version(r)
     _check("F300 /v1/v1/ (provider client appends the version to a custom endpoint) collapses to /v1/",
            r.scope["path"].startswith("/v1/locations/") and not r.scope["path"].startswith("/v1/v1"))
+    r = _Req("/sql/v1beta4/sql/v1beta4/projects/p/instances")
+    middleware._collapse_doubled_version(r)
+    _check("F300 Cloud SQL /sql/v1beta4/sql/v1beta4/ collapses", r.scope["path"] == "/sql/v1beta4/projects/p/instances")
 
 
 def t_router():
@@ -37,9 +40,39 @@ def t_router():
     _check("F302 NAT keeps a set logConfig", nats[0]["logConfig"]["filter"] == "ERRORS_ONLY")
 
 
+def t_f303_f305():
+    import json as _j
+    from core import gcp_firestore_core as fs, gcp_pubsub_core as ps, gcp_redis_core as rc
+    st = fs.FirestoreStore() if hasattr(fs, "FirestoreStore") else None
+    r = fs.dispatch(st, "POST", "/v1/projects/p/databases", {"databaseId": "(default)"}, {}, _j.dumps({"locationId": "nam5", "type": "FIRESTORE_NATIVE"}).encode())
+    op = _j.loads(r.body)
+    _check("F303 firestore database create is a done LRO carrying the Database",
+           op["done"] is True and "/operations/" in op["name"] and op["response"]["locationId"] == "nam5")
+    g = fs.dispatch(st, "GET", "/v1/" + op["name"], {}, {}, b"")
+    _check("F303 the create operation is fetchable by name", g.status == 200 and _j.loads(g.body)["done"] is True)
+    d = fs.dispatch(st, "DELETE", "/v1/projects/p/databases/(default)", {}, {}, b"")
+    _check("F303 firestore database delete is an LRO", _j.loads(d.body)["done"] is True)
+
+
+def t_f304_f305():
+    import json as _j
+    from core import gcp_pubsub_core as ps, gcp_redis_core as rc
+    from core.messaging_store import InMemoryMessagingStore
+    st = InMemoryMessagingStore()
+    ps.dispatch(st, "POST", "/v1/projects/p/schemas", {"schemaId": "s1"}, {}, _j.dumps({"type": "AVRO", "definition": "{}"}).encode())
+    g = _j.loads(ps.dispatch(st, "GET", "/v1/projects/p/schemas/s1", {}, {}, b"").body)
+    _check("F304 schemas.get with no view returns the definition (the Terraform provider sends none)", g.get("definition") == "{}")
+    rs = rc.RedisStore()
+    rc.dispatch(rs, "POST", "/v1/projects/p/locations/us-central1/instances", {"instanceId": "r1"}, {}, _j.dumps({"memorySizeGb": 1}).encode())
+    i = _j.loads(rc.dispatch(rs, "GET", "/v1/projects/p/locations/us-central1/instances/r1", {}, {}, b"").body)
+    _check("F305 redis instance without displayName/redisConfigs reports neither", "displayName" not in i and i["redisConfigs"] == {})
+
+
 def run():
+    t_f304_f305()
     t_f300()
     t_router()
+    t_f303_f305()
 
 
 if __name__ == "__main__":

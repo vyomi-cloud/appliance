@@ -482,8 +482,8 @@ def _meter_storage_write(request, response, orig_path: str) -> None:
 def _collapse_doubled_version(request):
     path = request.scope.get("path", "")
     # F300: google-provider clients that append their API version to a *_custom_endpoint already ending in /v1/
-    # (KMS cryptoKeyVersions on destroy) produce /v1/v1/...; real endpoints never see this, so collapse it.
-    for _ver in ("/v1/v1/", "/v1beta1/v1beta1/", "/v2/v2/"):
+    # (KMS cryptoKeyVersions on destroy, Cloud SQL instances) produce /v1/v1/...; real endpoints never see this, so collapse it.
+    for _ver in ("/v1/v1/", "/v1beta1/v1beta1/", "/v2/v2/", "/sql/v1beta4/sql/v1beta4/"):
         if path.startswith(_ver):
             path = path[len(_ver) // 2:]
             request.scope["path"] = path

@@ -44,7 +44,7 @@ def run() -> int:
     cr = fs.dispatch(st, "POST", f"{DB_BASE}", {"databaseId": "orders-db"}, {},
                      json.dumps({"locationId": "nam5", "type": "FIRESTORE_NATIVE"}).encode())
     _check("create database 200", cr.status == 200)
-    cd = _jbody(cr)
+    cd = _jbody(cr)["response"]   # F303: create is a long-running operation (done, response = Database)
     _check("create database name", cd["name"] == f"projects/{PROJECT}/databases/orders-db")
     _check("create database default PITR disabled", cd["pointInTimeRecoveryEnablement"] == "POINT_IN_TIME_RECOVERY_DISABLED")
 
@@ -64,7 +64,7 @@ def run() -> int:
     pr = fs.dispatch(st, "PATCH", f"{DB_BASE}/orders-db", {"updateMask": "pointInTimeRecoveryEnablement"}, {},
                      json.dumps({"pointInTimeRecoveryEnablement": "POINT_IN_TIME_RECOVERY_ENABLED"}).encode())
     _check("patch database 200", pr.status == 200)
-    _check("patch database enabled PITR", _jbody(pr)["pointInTimeRecoveryEnablement"] == "POINT_IN_TIME_RECOVERY_ENABLED")
+    _check("patch database enabled PITR", _jbody(pr)["response"]["pointInTimeRecoveryEnablement"] == "POINT_IN_TIME_RECOVERY_ENABLED")
 
     # 5. documents in orders-db are isolated from (default)
     fs.dispatch(st, "POST", f"{DB_BASE}/orders-db/documents/users", {"documentId": "alice"}, {},
