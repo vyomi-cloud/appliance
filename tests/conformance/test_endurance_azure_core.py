@@ -90,5 +90,8 @@ sc = c.put(f"{S}/providers/Microsoft.Security/securityContacts/default?api-versi
 check("F424 securityContacts PUT/GET/DELETE", sc.status_code == 200 and c.get(f"{S}/providers/Microsoft.Security/securityContacts/default?api-version=2017-08-01-preview").status_code == 200
       and c.delete(f"{S}/providers/Microsoft.Security/securityContacts/default?api-version=2017-08-01-preview").status_code == 200)
 check("F428 Key Vault purge of a deleted vault is accepted", c.post(f"{S}/providers/Microsoft.KeyVault/locations/eastus/deletedVaults/kv1/purge?api-version=2023-07-01").status_code == 202)
+c.delete(f"{R}/Microsoft.Web/sites/site1?api-version=2023-12-01"); c.delete(f"{R}/Microsoft.Web/sites/fn1?api-version=2023-12-01")
+left = [r for r in c.get(f"{S}/resourceGroups/{RGN}/resources?api-version=2023-07-01").json()["value"] if r["type"].lower().startswith("microsoft.web/sites")]
+check("F429 deleting a site removes its config children (they blocked the resource group delete)", not left)
 c.delete(f"{S}/resourceGroups/{RGN}?api-version=2023-07-01")
 sys.exit(1 if fails else 0)

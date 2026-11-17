@@ -1,0 +1,502 @@
+{
+ "azure.appconfiguration.store.crud": {
+  "module": "azure/modules/stage7-observability",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "azurerm_app_configuration.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.appservices.applicationinsights": {
+  "module": "azure/modules/stage7-observability",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "azurerm_application_insights.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.appservices.plan.crud": {
+  "module": "azure/modules/stage5-serverless",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "azurerm_service_plan.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.appservices.webapp.crud": {
+  "module": "azure/modules/stage5-serverless",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "azurerm_linux_web_app.api"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.cognitiveservices.account.crud": {
+  "module": "azure/modules/stage6-ai",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "azurerm_cognitive_account.openai",
+   "azurerm_cognitive_account.language"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.cognitiveservices.deployments": {
+  "module": "azure/modules/stage6-ai",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "6-ai",
+  "tf": [
+   "azurerm_cognitive_deployment.chat"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.cosmos.account.crud": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_cosmosdb_account.core",
+   "azurerm_cosmosdb_sql_database.app",
+   "azurerm_cosmosdb_sql_container.orders"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.cosmos.default_consistency": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_cosmosdb_account.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.cosmos.replicate_data_globally": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_cosmosdb_account.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.defender.plans": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_security_center_subscription_pricing.vms"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.dns.recordset.crud": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_dns_a_record.www"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.dns.zone.crud": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_dns_zone.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.eventgrid.topics.crud": {
+  "module": "azure/modules/stage4-messaging",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "azurerm_eventgrid_topic.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.functionapp.site.crud": {
+  "module": "azure/modules/stage5-serverless",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "5-serverless-api",
+  "tf": [
+   "azurerm_linux_function_app.worker"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.keyvaults.access_configuration": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_key_vault.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.keyvaults.vault.crud": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_key_vault.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.loganalytics.workspace.crud": {
+  "module": "azure/modules/stage7-observability",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "azurerm_log_analytics_workspace.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.managedidentity.userassigned": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_user_assigned_identity.app",
+   "azurerm_role_assignment.app_reader"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.monitor.action_groups": {
+  "module": "azure/modules/stage7-observability",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "azurerm_monitor_action_group.ops"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.monitor.log_analytics_workspaces": {
+  "module": "azure/modules/stage7-observability",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "7-observability-ops",
+  "tf": [
+   "azurerm_log_analytics_workspace.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.nsgs.associations": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_subnet_network_security_group_association.web"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.nsgs.nsg.crud": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_network_security_group.web"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.nsgs.security_rules": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_network_security_group.web"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.resourcegroups.rg.crud": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_resource_group.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.resourcegroups.rg.tags": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_resource_group.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.servicebus.namespace.crud": {
+  "module": "azure/modules/stage4-messaging",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "azurerm_servicebus_namespace.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.servicebus.queue.crud": {
+  "module": "azure/modules/stage4-messaging",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "azurerm_servicebus_queue.orders"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.servicebus.topic.crud": {
+  "module": "azure/modules/stage4-messaging",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "4-messaging-events",
+  "tf": [
+   "azurerm_servicebus_topic.events",
+   "azurerm_servicebus_subscription.audit"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.sql.connectivity": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_mssql_server.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.sql.database.crud": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_mssql_database.app"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.sql.firewallrules": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_mssql_firewall_rule.allow_azure"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.sql.server.crud": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_mssql_server.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.storage.account.crud": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_storage_account.data"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.storage.account.tags": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_storage_account.data"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.storage.containers": {
+  "module": "azure/modules/stage3-data",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "3-data",
+  "tf": [
+   "azurerm_storage_container.assets"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.vnets.address_space": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_virtual_network.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.vnets.subnets": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_subnet.web",
+   "azurerm_subnet.data"
+  ],
+  "verify": [
+   "tf"
+  ]
+ },
+ "azure.vnets.vnet.crud": {
+  "module": "azure/modules/stage1-network-identity",
+  "proof": {
+   "tf": "azure gate: apply, no-diff replan, destroy, rebuild, destroy PASS on real server.py (see docs/architecture/v4.0/branches/endurance-azure.md)"
+  },
+  "stage": "1-network-identity",
+  "tf": [
+   "azurerm_virtual_network.core"
+  ],
+  "verify": [
+   "tf"
+  ]
+ }
+}

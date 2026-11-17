@@ -675,6 +675,8 @@ def _site_ops(state, sub, rg, chain, method, payload):
             if blocked:
                 return blocked
         state.pop(rid.lower(), None)
+        for _k in [k for k in state if k.startswith(rid.lower() + "/")]:     # a site's config/slot children go with it; leftovers blocked the RG delete (endurance F429)
+            state.pop(_k, None)
         resp = _ok(None, 200 if rec is not None else 204, rid=rid, verb="delete")
         if rec is not None:
             _log_site_call(state, rec, [], method, resp, True)

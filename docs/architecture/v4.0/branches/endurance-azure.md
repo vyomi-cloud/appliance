@@ -63,8 +63,26 @@ What WAS a simulator defect: Network child PUTs (subnets) had no `Azure-AsyncOpe
 | F421 | App Insights `currentbillingfeatures` |
 | F422 | App Configuration echoes sku as sent, omits `publicNetworkAccess` unless set |
 | F423 | App Insights echoes `SamplingPercentage` etc. |
+| F424 | `Microsoft.Security/securityContacts` PUT/GET/DELETE |
+| F425 | Azure OpenAI deployment of a legacy model name echoes `format: OpenAI` (was the backing model's vendor, forced replacement) |
+| F426 | Cognitive account returns `networkAcls` only when configured |
+| F427 | Function app: client-sent app settings win over defaults; no default `APPINSIGHTS_INSTRUMENTATIONKEY` |
+| F428 | Key Vault `deletedVaults` GET 404 / `purge` 202 |
+| F429 | Deleting a site cascades its `config/*` children (leftovers blocked the resource group delete forever) |
 
 Regression tests: `tests/conformance/test_endurance_azure_core.py` (plus the updated `test_azure_webapp_core.py`).
 
 ## Open issues / gaps
-See the bottom of this file (updated at the end of the run).
+Gate result (tests/endurance/run_estate.sh estate/azure host.docker.internal:19114): ESTATE CYCLE PASS, 39 resources, init/validate/apply 143 s /
+no-diff replan / destroy 94 s / rebuild 144 s / final destroy 94 s (see `estate/azure/estate-report.json`). Time floors are provider-inherent (RG 20 s, KV ~130 s, role assignment 20 s, SQL DB ~70 s).
+
+Covered capabilities: `tests/endurance/estate/coverage-map.azure.json` (38 ids, verify = tf only; SDK/CLI/UI proof not done in this lane).
+
+Open gaps / not done:
+* Stage 2 (VMs, AKS, ACR, Container Apps) and API Management, Defender plans beyond pricing, Event Hubs, Azure SQL/PostgreSQL flexible server, AI Foundry/Search are not in the estate yet.
+* Key Vault secrets/keys via the data plane (`azurerm_key_vault_secret`) not attempted.
+* `front.py` is still a side process (TLS + metadata + token); the server already serves `/{tenant}/oauth2/v2.0/token`, so metadata + TLS termination are the only missing pieces to fold into the appliance image.
+* Host-style storage endpoints need `--add-host` per account name in the container and the `VYOMI_AZURE_STORAGE_SUFFIX` env on the server.
+* `tests/conformance/test_azure_one_subscription.py::test_resource_groups_persist_and_delete_cascades` fails on a tags assertion (a second PUT without tags); it was not touched by this branch's status change and looks pre-existing (not bisected).
+* Several `test_azure_*` suites need SDK packages (`azure.mgmt`, `azure.cosmos`, ...) that are not in the endurance venv, so they were not run.
+* Delete latency: network/SQL/NSG deletes cost 10 s each (SDK default delete poll); returning 202 + `Retry-After` did not shorten it (the poller GETs the resource after its fixed delay), so it is left as real-Azure-like.

@@ -66,7 +66,7 @@ def run() -> int:
     # 3. Resource group create + list + get
     r = arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{RG}", {"api-version": AV},
                    {"location": "eastus", "tags": {"env": "dev"}})
-    _check("rg put 200", r["status"] == 200 and r["body"]["name"] == RG)
+    _check("rg put 201 on create (endurance F400)", r["status"] == 201 and r["body"]["name"] == RG)
     r = arm.handle("GET", f"/subscriptions/{SUB}/resourcegroups")
     _check("rg list contains default", any(g["name"] == RG for g in r["body"]["value"]))
 
@@ -484,7 +484,7 @@ def run() -> int:
     empty_rg = "uic-empty-rg"
     r = arm.handle("PUT", f"/subscriptions/{SUB}/resourceGroups/{empty_rg}", {"api-version": AV},
                    {"location": "westus", "tags": {"team": "platform"}})
-    _check("empty rg put 200", r["status"] == 200 and r["body"]["location"] == "westus" and r["body"]["tags"]["team"] == "platform")
+    _check("empty rg put 201 on create (endurance F400)", r["status"] == 201 and r["body"]["location"] == "westus" and r["body"]["tags"]["team"] == "platform")
     r = arm.handle("GET", f"/subscriptions/{SUB}/resourceGroups/{empty_rg}", {"api-version": AV})
     _check("empty rg get persists tags/location", r["status"] == 200 and r["body"]["tags"] == {"team": "platform"} and r["body"]["location"] == "westus")
     r = arm.handle("GET", f"/subscriptions/{SUB}/resourcegroups")
