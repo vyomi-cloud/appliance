@@ -201,3 +201,5 @@ resource "aws_ecr_lifecycle_policy" "app" {
 output "instance_id" { value = aws_instance.app.id }
 output "db_endpoint" { value = aws_db_instance.main.endpoint }
 output "bucket" { value = aws_s3_bucket.assets.id }
+output "orders_table_name" { value = aws_dynamodb_table.orders.name }
+output "orders_table_arn" { value = aws_dynamodb_table.orders.arn }
