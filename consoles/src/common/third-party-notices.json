@@ -127,6 +127,12 @@
    "name": "Google Cloud SDK terms (Apache-2.0 for the SDK code; emulator image terms apply)",
    "spdx": "LicenseRef-Google-Cloud-SDK",
    "url": "https://cloud.google.com/terms/"
+  },
+  "busl-1.1-vault": {
+   "name": "Business Source License 1.1 (HashiCorp Vault terms)",
+   "spdx": "LicenseRef-HashiCorp-Vault-BUSL-1.1",
+   "url": "https://github.com/hashicorp/vault/blob/v1.15.6/LICENSE",
+   "file": "licenses/LicenseRef-HashiCorp-Vault-BUSL-1.1.txt"
   }
  },
  "models": [
@@ -1164,14 +1170,14 @@
    "kind": "image",
    "version": "1.15",
    "scope": "",
-   "license": "Mozilla Public License 2.0",
-   "licenseId": "MPL-2.0",
-   "licenseUrl": "https://www.mozilla.org/MPL/2.0/",
+   "license": "Business Source License 1.1 (HashiCorp Vault terms)",
+   "licenseId": "LicenseRef-HashiCorp-Vault-BUSL-1.1",
+   "licenseUrl": "https://github.com/hashicorp/vault/blob/v1.15.6/LICENSE",
    "upstream": "https://github.com/hashicorp/vault",
    "copyright": "HashiCorp, Inc.",
    "paths": [],
-   "note": "Keep pinned to 1.15.x: later releases moved to BUSL-1.1, which forbids competing hosted offerings. Consider OpenBao (MPL-2.0).",
-   "verified": "confirm"
+   "note": "Source-available, NOT open source: Vault 1.15.x is BUSL-1.1 (LICENSE read at hashicorp/vault v1.15.0 and v1.15.6), not MPL-2.0. The Additional Use Grant allows production use but not offering Vault to third parties on a hosted or embedded basis to compete with HashiCorp's paid versions. Counsel to review our use. Plan: replace with OpenBao (MPL-2.0), see docs/architecture/v4.0/BACKEND-LICENCE-PLAN.md.",
+   "verified": "fetched"
   },
   {
    "name": "amazon/dynamodb-local",
