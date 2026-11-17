@@ -46,7 +46,7 @@ Estate rules that mirror real GCP: KMS key rings/keys are undeletable, so the ri
 | F318 | Functions v2 `vpcConnectorEgressSettings` only reported with a connector. |
 Existing suites adjusted to the real wire shapes: firestore admin/datastore (create returns an operation), pubsub schema get default view, logging metric/sink names.
 
-## Estate (tests/endurance/estate/gcp, 68 resources, one root, 7 stage modules)
+## Estate (tests/endurance/estate/gcp, 70 resources, one root, 7 stage modules)
 stage1 network+identity (VPC x2, subnets, firewall x2, route, router+NAT, addresses, peering x2, SAs, custom role, IAM members, KMS ring/key, secrets x2),
 stage2 compute (disk, snapshot, health check, instance template, Artifact Registry repo, project metadata), stage3 data (GCS bucket+object+IAM,
 Cloud SQL instance+db+user, Firestore db+document, Memorystore), stage4 messaging (Pub/Sub schema/topics/subscriptions incl. DLQ+push, Scheduler job),
