@@ -11,3 +11,5 @@ COPY vyomi-lockdown /usr/local/sbin/vyomi-lockdown
 RUN chown root:root /usr/local/sbin/vyomi-gate /usr/local/sbin/vyomi-lockdown \
  && chmod 0755 /usr/local/sbin/vyomi-gate /usr/local/sbin/vyomi-lockdown \
  && printf 'vscode ALL=(root) NOPASSWD: /usr/local/sbin/vyomi-gate\n' > /etc/sudoers.d/vyomi-gate && chmod 0440 /etc/sudoers.d/vyomi-gate
+# Reference app (examples/enterprise-facilities-agent) runs in a venv on the host: needs python3-venv (small; pip packages are fetched on first run).
+RUN apt-get update && apt-get install -y --no-install-recommends python3-venv python3-pip && rm -rf /var/lib/apt/lists/*

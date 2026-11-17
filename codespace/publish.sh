@@ -33,6 +33,14 @@ if [ -d "$SRC/.devcontainer/mesh" ]; then
   mkdir -p "$DEST/.devcontainer/mesh"
   cp -v "$SRC/.devcontainer/mesh/"* "$DEST/.devcontainer/mesh/"
   chmod +x "$DEST/.devcontainer/mesh/boot-mesh.sh"
+  # Reference app + helper: example sources land in the workspace so a trial user runs `vyomi-agent-demo` (bounded copy, no results/venv/caches).
+  EXSRC="$SRC/../examples/enterprise-facilities-agent"
+  if [ -d "$EXSRC" ]; then
+    mkdir -p "$DEST/examples/enterprise-facilities-agent"
+    (cd "$EXSRC" && tar --exclude=results --exclude=.venv --exclude=__pycache__ -cf - .) | (cd "$DEST/examples/enterprise-facilities-agent" && tar -xf -)
+    cp -v "$SRC/MESH-DEMO.md" "$DEST/"
+  fi
+  chmod +x "$DEST/.devcontainer/mesh/vyomi-agent-demo"
 fi
 cp -v "$SRC/README.md"                                 "$DEST/"
 chmod +x "$DEST/.devcontainer/boot.sh"
