@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-17T19:12:36+00:00
+
+Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `announcement` AWS Split Cost Allocation Data now supports Amazon S3 ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/s3-split-cost-allocation/))
+- · `announcement` Amazon API Gateway REST APIs now support JWT authorizers ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-api-gateway-rest-jwt-authorizers))
+- · `announcement` Amazon S3 Storage Lens now tracks S3 Intelligent-Tiering access tiers ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-storage-lens-s3-intelligent-tiering-access-tiers/))
+- · `announcement` Amazon VPC, AWS Transit Gateway, and AWS Cloud WAN now offer a 99.999% availability SLA for cross-Region traffic ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/vpc-tgw-cloudwan-99999-sla/))
+- · `announcement` Amazon WorkSpaces Advisor now helps you find issues before your users notice them (Public Preview)  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/workspaces-advisor-proactive-troubleshooting-preview))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-17T18:12:39+00:00
 
 Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3011,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **21 change(s), 5 actionable.**
-- 🔧 `operation-added` AWS dynamodb: new operation CancelBulkOperation
-- 🔧 `operation-added` AWS dynamodb: new operation DescribeBulkOperation
-- 🔧 `operation-added` AWS dynamodb: new operation ListBulkOperations
-- 🔧 `operation-added` AWS dynamodb: new operation StartBulkPutItems
-- 🔧 `lifecycle` Retirement: Transition to Entra ID (formerly known as Azure AD) to query data from Azure Monitor application insights by March 31, 2027 ([link](https://azure.microsoft.com/updates?id=transition-to-azure-ad-to-query-data-from-azure-monitor-application-insights-by-31-march-2026))
-- · `announcement` AWS DataSync Enhanced mode supports OpenID Connect (OIDC) for Google Cloud and Microsoft Azure ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/datasync-enhanced-oidc-google-azure/))
-- · `operation-changed` AWS rds: operation CopyDBSnapshot changed
-- · `announcement` Amazon CloudWatch now supports API keys for OpenTelemetry traces ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-api-keys-opentelemetry/))
-- · `announcement` Amazon DocumentDB (with MongoDB compatibility) is now available in the Asia Pacific (Taipei) and Asia Pacific (New Zealand) Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-documentdb-mongodb-compatibility-asia-pacific-taipei-new-zealand-regions/))
-- · `announcement` Amazon EC2 and VPC now display related resources for all resource types ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-vpc-related-resources-all-types/))
