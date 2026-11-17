@@ -1,8 +1,10 @@
 {
- "at": "2026-11-17T02:12:15+00:00",
+ "at": "2026-11-17T03:12:11+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
-  "maven/com.azure:azure-cosmos: The read operation timed out"
+  "maven/software.amazon.awssdk:sqs: The read operation timed out",
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
  ]
 }

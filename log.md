@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-17T03:12:11+00:00
+
+Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (3): maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-17T02:12:15+00:00
 
 Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - 🔧 `spec-commit` Azure cosmos-db: Add 2026-07-15 stable API version for Cosmos DB (#45986) ([link](https://github.com/Azure/azure-rest-api-specs/commit/6ad5af824ebf340b4a83889dbdd70572124b57a5))
 - · `announcement` Amazon RDS now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-supports-latest-cumulative-update-gdr-microsoft-sql-server/))
 
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-03T22:28:58+00:00
-
-Tracking 4252 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 0 actionable.**
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.start changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.startReplay changed
-- · `operation-flapping` GCP sqladmin/v1beta4: operation sql.workloadCaptures.stop changed
