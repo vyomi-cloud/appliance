@@ -38,6 +38,7 @@ jobs:
     outputs:
       tag: ${{ steps.r.outputs.tag }}
       ver: ${{ steps.r.outputs.ver }}
+      checks_ref: ${{ steps.r.outputs.checks_ref }}
     env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
     steps:
       - id: r
@@ -45,6 +46,10 @@ jobs:
           TAG="${{ github.event.workflow_run.head_branch }}"
           [ -n "$TAG" ] || { [ -n "${{ inputs.version }}" ] && TAG="v${{ inputs.version }}" || TAG=$(gh release view -R "${{ github.repository }}" --json tagName -q .tagName); }
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"; echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
+          # The checks come from the branch that is ahead of the release: v4 releases are built on v4-on-main
+          # (main only catches up at go-live, so its tests are the v3 ones and fail every v4 release).
+          case "${TAG#v}" in 1.*|2.*|3.*) REF=main;; *) REF=v4-on-main;; esac
+          echo "checks_ref=$REF" >> "$GITHUB_OUTPUT"
 
   deb:
     needs: resolve
@@ -114,10 +119,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: '${{ needs.resolve.outputs.tag }}' }
-      - name: Use main's checks (they test this release, so they can be newer than it)
+      - name: Use the trunk's checks (main for v1-v3, v4-on-main for v4+) (they test this release, so they can be newer than it)
         run: |
-          git fetch -q origin main
-          git checkout -q origin/main -- tests/release tests/cli
+          git fetch -q origin ${{ needs.resolve.outputs.checks_ref }}
+          git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- tests/release tests/cli
       # These checks start when the Release workflow ends, but Docker Publish builds the
       # images in parallel and finishes later; boot only once this release's images exist.
       - name: Wait for this release's Docker images
@@ -167,11 +172,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: '${{ needs.resolve.outputs.tag }}' }
-      - name: Use main's checks (they test this release, so they can be newer than it)
+      - name: Use the trunk's checks (main for v1-v3, v4-on-main for v4+) (they test this release, so they can be newer than it)
         run: |
-          git fetch -q origin main
+          git fetch -q origin ${{ needs.resolve.outputs.checks_ref }}
           # The local relay too: users run the separately published vyomi-tunnel, built from main's copy.
-          git checkout -q origin/main -- tests/release tests/cli wasm/ui-tests/lib.mjs wasm/relay/local-relay.mjs
+          git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- tests/release tests/cli wasm/ui-tests/lib.mjs wasm/relay/local-relay.mjs
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - name: Playwright + ws
@@ -211,10 +216,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: '${{ needs.resolve.outputs.tag }}' }
-      - name: Use main's checks (they test this release, so they can be newer than it)
+      - name: Use the trunk's checks (main for v1-v3, v4-on-main for v4+) (they test this release, so they can be newer than it)
         run: |
-          git fetch -q origin main
-          git checkout -q origin/main -- tests/conformance wasm/ui-tests
+          git fetch -q origin ${{ needs.resolve.outputs.checks_ref }}
+          git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- tests/conformance wasm/ui-tests
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - uses: actions/setup-node@v4
@@ -272,10 +277,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: '${{ needs.resolve.outputs.tag }}' }
-      - name: Use main's checks
+      - name: Use the trunk's checks (main for v1-v3, v4-on-main for v4+)
         run: |
-          git fetch -q origin main
-          git checkout -q origin/main -- tests/conformance wasm/ui-tests wasm/relay/local-relay.mjs
+          git fetch -q origin ${{ needs.resolve.outputs.checks_ref }}
+          git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- tests/conformance wasm/ui-tests wasm/relay/local-relay.mjs
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - uses: actions/setup-node@v4

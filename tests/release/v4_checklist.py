@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import filecmp
 import json
+import time
 import os
 import re
 import shutil
@@ -265,22 +266,34 @@ def check_image_published(root: Path, sha: str | None):
     cid = "image-published"
     if not (os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")) or not shutil.which("gh"):
         return R(cid, "global", SKIPPED, "needs `gh` and GH_TOKEN to read the docker-publish runs")
-    try:
-        rc, out = run(["gh", "run", "list", "-R", REPO, "--workflow", "docker-publish.yml", "--limit", "20",
-                       "--json", "conclusion,headSha,createdAt"], root, 60)
-        runs = json.loads(out) if rc == 0 else None
-    except Exception as exc:
-        return R(cid, "global", SKIPPED, f"could not query docker-publish runs: {exc}")
-    if runs is None:
-        return R(cid, "global", SKIPPED, "gh run list failed: " + out.strip()[:160])
     rc, head = run(["git", "rev-parse", sha or "HEAD"], root)
     want = head.strip()
-    for r in runs:
-        if r.get("conclusion") != "success":
-            continue
-        # the image built from this sha or from any later commit contains it
-        if r["headSha"] == want or run(["git", "merge-base", "--is-ancestor", want, r["headSha"]], root)[0] == 0:
-            return R(cid, "global", PASS, f"docker-publish succeeded at {r['headSha'][:9]} (contains {want[:9]}, {r['createdAt']})")
+    # The checklist starts when the Release workflow ends, but Docker Publish (triggered by the same tag push) finishes
+    # up to ~15 min later. Wait for a run that contains this sha to finish instead of failing on a run still in flight.
+    deadline = time.time() + int(os.environ.get("VYOMI_IMAGE_WAIT_SECS", "1380"))
+    while True:
+        try:
+            rc, out = run(["gh", "run", "list", "-R", REPO, "--workflow", "docker-publish.yml", "--limit", "20",
+                           "--json", "conclusion,status,headSha,createdAt"], root, 60)
+            runs = json.loads(out) if rc == 0 else None
+        except Exception as exc:
+            return R(cid, "global", SKIPPED, f"could not query docker-publish runs: {exc}")
+        if runs is None:
+            return R(cid, "global", SKIPPED, "gh run list failed: " + out.strip()[:160])
+        pending = False
+        for r in runs:
+            # the image built from this sha or from any later commit contains it
+            if not (r["headSha"] == want or run(["git", "merge-base", "--is-ancestor", want, r["headSha"]], root)[0] == 0):
+                continue
+            if r.get("conclusion") == "success":
+                return R(cid, "global", PASS, f"docker-publish succeeded at {r['headSha'][:9]} (contains {want[:9]}, {r['createdAt']})")
+            if r.get("status") in ("queued", "in_progress", "waiting", "pending", "requested"):
+                pending = True
+        if not pending or time.time() >= deadline:
+            break
+        time.sleep(30)
+    if pending:
+        return R(cid, "global", FAIL, f"docker-publish for {want[:9]} still running after the wait")
     return R(cid, "global", FAIL, f"no successful docker-publish run contains {want[:9]} in the last 20 runs")
 
 
