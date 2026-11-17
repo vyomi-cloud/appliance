@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-16 23:33 UTC · refreshes after every pipeline run_
+_Updated 2026-11-17 00:16 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-16 23:33 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
-- **Upstream watch:** 74 open changes from the real clouds to adopt
+- **Upstream watch:** 75 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -88,7 +88,7 @@ _Updated 2026-11-16 23:33 UTC · refreshes after every pipeline run_
 | Lambda | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+lambda) | before gate |
 | API Gateway | caddy · Lite | not audited | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+apigateway) | before gate |
 | VPC | — | not audited | ✅ 14/14 · ✅ 14/14 | 0 · 0 | ⚠️ 25 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
-| EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 13/14 · 🧩 13/14 | 0 · 0 | ✅ watched | before gate |
+| EventBridge | nats · Lite | 🟡 rules match and deliver to SQS only; Lambda/HTTP/other targets not delivered | 🧩 13/14 · 🧩 13/14 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+events) | before gate |
 | Secrets Manager | — | not audited | 🧩 14/15 · 🧩 14/15 | 0 · 0 | ⚠️ 8 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+secretsmanager) | before gate |
 | KMS | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+kms) | before gate |
 | CloudWatch Logs | logstore · in-process · + fluent-bit agent | ✅ in-process engine, SQLite store; filter + Insights queries | 🧩 10/11 · 🧩 10/11 | 0 · 0 | ✅ watched | [v3.0.11](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.11) |
