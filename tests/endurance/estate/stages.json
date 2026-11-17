@@ -1,0 +1,13 @@
+{
+ "$doc": "Maps a capability's service token (second segment of aws.<svc>.x, first segment of bare ids) to one of the eight estate stages. coverage.py fails on a token with no stage, so a new service cannot appear without a home in the estate.",
+ "stages": {
+  "1-network-identity": ["vpc","networkmanager","networking","vnets","nsgs","dns","iam","iam-admin","entra","managedidentity","kms","keyvaults","secretsmanager","secret-manager","resource-manager","resourcegroups","subscriptions","common","guardduty","securityhub","scc","defender","audit"],
+  "2-compute": ["ec2","compute","vms","ecr","acr","artifacts","eks","aks","kubernetes","containerapps","run","appservices","cloudbuild","clouddeploy"],
+  "3-data": ["rds","sql","dynamodb","cosmos","firestore","datastore","redshift","s3","storage","memorystore","backupdr"],
+  "4-messaging-events": ["sqs","sns","kinesis","eventbridge","eventgrid","eventarc","pubsub","servicebus","cloudscheduler","states","streamanalytics"],
+  "5-serverless-api": ["lambda","functions","functionapp","apigateway","apim","hub"],
+  "6-ai": ["bedrock","vertex-ai","cognitiveservices","gemini-developer-api"],
+  "7-observability-ops": ["cloudwatch","logs","monitor","monitoring","loganalytics","ssm","appconfiguration","cost-explorer","cost","cloudformation"],
+  "8-lifecycle": []
+ }
+}
