@@ -87,5 +87,10 @@ class H(BaseHTTPRequestHandler):
 
 
 ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); ctx.load_cert_chain(ARGS.cert, ARGS.key)
-srv = ThreadingHTTPServer(("0.0.0.0", ARGS.port), H); srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+class Srv(ThreadingHTTPServer):
+    request_queue_size = 512      # the default backlog of 5 refused connections under terraform's parallelism
+    daemon_threads = True
+
+
+srv = Srv(("0.0.0.0", ARGS.port), H); srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
 print(f"front on {BASE} -> {ARGS.upstream}", flush=True); srv.serve_forever()

@@ -752,6 +752,7 @@ _SINGLETON_DEFAULTS = {
     ("microsoft.storage", "storageaccounts", "queueservices"): {"cors": {"corsRules": []}},
     ("microsoft.storage", "storageaccounts", "tableservices"): {"cors": {"corsRules": []}},
     ("microsoft.sql", "servers", "sqlvulnerabilityassessments"): {"state": "Disabled"},
+    ("microsoft.servicebus", "namespaces", "networkrulesets"): {"defaultAction": "Allow", "publicNetworkAccess": "Enabled", "trustedServiceAccessEnabled": False, "ipRules": [], "virtualNetworkRules": []},
     ("microsoft.sql", "servers", "connectionpolicies"): {"connectionType": "Default"},
     ("microsoft.sql", "servers", "auditingsettings"): {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": [], "isStorageSecondaryKeyInUse": False, "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
     ("microsoft.sql", "servers", "extendedauditingsettings"): {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": [], "isStorageSecondaryKeyInUse": False, "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
@@ -1011,6 +1012,12 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             _record_usage(f"azure.{method.lower()}", {"type": _x["type"], "name": _x["name"],
                                                        "resource_id": _x["scope"]})
         _xh = dict(_x.get("headers") or {})
+        if after[0].lower() == "microsoft.insights" and method == "PUT" and _x["status"] == 201:
+            _x["status"] = 200            # Application Insights components are a sync 200 PUT in real ARM (endurance F419)
+        if after[0].lower() == "microsoft.web" and method == "PUT" and _x["status"] == 201 and not _xh:
+            # App Service plans / sites: CreateOrUpdate is an LRO answering 200/202, never a bare 201 (endurance F415)
+            _x["status"] = 200
+            _xh.update(_lro_headers(base, _make_operation(_x["scope"] or "/", method), request.query_params.get("api-version") or "2024-04-01"))
         if (after[0].lower() == "microsoft.network" and method == "PUT" and _x["status"] < 300
                 and _x.get("scope") and not any(k.lower() in ("azure-asyncoperation", "location") for k in _xh)):
             # real ARM: Network child writes (subnets, rules, ...) are LROs; without the header the SDK
@@ -1020,6 +1027,18 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             return Response(status_code=_x["status"], headers=_xh)
         return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_xh)
 
+    if (len(after) >= 4 and after[0].lower() == "microsoft.keyvault" and after[1].lower() == "locations"
+            and after[3].lower() == "deletedvaults"):
+        # soft-deleted vaults: a vault delete here is immediate (nothing is retained), so GET is 404 and purge is an accepted no-op (endurance F428)
+        if method == "POST" and len(after) == 6 and after[5].lower() == "purge":
+            return Response(status_code=202, headers=_lro_headers(base, _make_operation(f"/subscriptions/{sub}/providers/Microsoft.KeyVault/locations/{after[2]}/deletedVaults/{after[4]}", "POST"),
+                                                                  request.query_params.get("api-version") or "2023-07-01"))
+        if method == "GET" and len(after) == 5:
+            return _error(404, "ResourceNotFound", f"The deleted vault '{after[4]}' was not found.")
+    if method == "POST" and len(after) == 2 and after[1].lower() == "checknameavailability":
+        return JSONResponse({"nameAvailable": True, "reason": "", "message": ""})    # azurerm checks names before creating Web apps etc. (endurance F417)
+    if method == "GET" and len(after) == 2 and after[0].lower() == "microsoft.operationalinsights" and after[1].lower() == "deletedworkspaces":
+        return JSONResponse({"value": []})      # soft-deleted workspaces list (azurerm checks before creating a workspace) (endurance F416)
     namespace = after[0]
     # after = [ns, type, name?, childType?, childName?, ...]
     chain = after[1:]
@@ -1070,6 +1089,12 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() in ("diagnosticsettings", "diagnosticsettingscategories"):
         return await _handle_core_arm(request, method, rest, base)   # subscription-scope Activity log export (shared core engine)
 
+    if (namespace.lower() == "microsoft.insights" and len(chain) == 3 and chain[0].lower() == "components"
+            and chain[2].lower() == "currentbillingfeatures" and method in ("GET", "PUT")):
+        # App Insights billing features (azurerm reads them after creating a component) (endurance F421)
+        return JSONResponse({"DataVolumeCap": {"Cap": 100, "ResetTime": 0, "WarningThreshold": 90,
+                                               "StopSendNotificationWhenHitThreshold": False, "StopSendNotificationWhenHitCap": False},
+                             "CurrentBillingFeatures": ["Basic"]})
     if namespace.lower() == "microsoft.insights":
         from core import azure_monitor_core as _mon_probe
         if _mon_probe.handles(chain):
@@ -1279,6 +1304,7 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             if _fe:
                 return JSONResponse(status_code=400, content=_fe)
         _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
+        _existed = key in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if full_type.lower() == _ext.VM_T and key in _state:
             _ext.after_vm_upsert(_state, _state[key])
@@ -1300,13 +1326,14 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             resp = JSONResponse(status_code=resp.status_code, content=_b2)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
-        if resp.status_code == 201 and leaf_name.lower() in ("default", "current") and len(type_chain) > 2:
+        if resp.status_code == 201 and ((len(type_chain) > 2 and (leaf_name.lower() in ("default", "current") or namespace.lower() == "microsoft.servicebus"))
+                                        or namespace.lower() == "microsoft.insights"):
             resp.status_code = 200      # singleton settings children are sync 200 in real ARM; the SDKs reject 201 (endurance F408)
         if lro:
             # Generated SDK LRO create methods accept only a subset of 2xx for
             # the initial response (armstorage→{200,202}, armcompute→{200,201});
             # 200 is the common intersection. 201 breaks armstorage.
-            resp.status_code = 200
+            resp.status_code = 201 if (namespace.lower() == "microsoft.eventgrid" and not _existed) else 200   # EventGrid CreateOrUpdate wants 201 (endurance F413)
             op_id = _make_operation(rid, method)
             for hk, hv in _lro_headers(base, op_id, api_version).items():
                 resp.headers[hk] = hv
@@ -1334,8 +1361,8 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         # pollers (a header-less terminal status = immediately complete). The
         # create path above carries the Azure-AsyncOperation header that
         # exercises real LRO polling.
-        if rec is not None and namespace.lower() == "microsoft.documentdb":
-            # Cosmos DELETE is an LRO (202 + operation headers); a header-less 200 is an SDK error (endurance F412)
+        if rec is not None and namespace.lower() in ("microsoft.documentdb", "microsoft.eventgrid"):
+            # Cosmos / EventGrid DELETE is an LRO (202 + operation headers); a header-less 200 is an SDK error (endurance F412)
             return Response(status_code=202, headers=_lro_headers(base, _make_operation(rid, method), api_version))
         return Response(status_code=200 if rec is not None else 204)
     return _error(405, "MethodNotAllowed", f"{method} not allowed.")
@@ -1391,6 +1418,8 @@ async def _handle_monitor(request: Request, method: str, sub: str, rg: str | Non
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
         _record_arm_activity(r["rid"], ("Microsoft.Insights/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
+    if resp.status_code == 201 and chain[0].lower() == "components":
+        resp.status_code = 200      # App Insights components: sync 200 PUT (endurance F419)
     return resp
 
 

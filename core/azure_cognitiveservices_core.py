@@ -251,7 +251,7 @@ def _build_account(rid, name, sub, rg, payload, kind, loc, sku, sd, pay, restore
         "dateCreated": _now(), "callRateLimit": {"renewalPeriod": 60, "count": 30 if sku.startswith("F") else 1000, "rules": []},
         "endpoints": _endpoints(kind, loc, sd), "capabilities": _capabilities(kind), "provisioningState": "Succeeded",
         "publicNetworkAccess": pay.get("publicNetworkAccess") or "Enabled", "disableLocalAuth": _to_bool(pay.get("disableLocalAuth", False)),
-        "networkAcls": pay.get("networkAcls") or {"defaultAction": "Allow", "ipRules": [], "virtualNetworkRules": []},
+        **({"networkAcls": pay["networkAcls"]} if pay.get("networkAcls") else {}),   # real ARM returns it only when configured (endurance F426)
         "privateEndpointConnections": [], "isMigrated": False,
         "skuChangeInfo": {"countOfDowngrades": 0, "countOfUpgradesAfterDowngrades": 0},
     }
@@ -483,7 +483,7 @@ def _find_model(fmt, name, version):
     cid = CAT.resolve("azure", name) if name and not isinstance(name, (dict, list)) else None
     if cid:                         # hidden compat alias (gpt-4o, o1, ...): deployable, never listed; the model echoes the requested name
         m = next(x for x in _models() if x[1] == cid)
-        return (m[0], str(name), str(version or m[2]), m[3], m[4])
+        return (str(fmt or m[0]), str(name), str(version or m[2]), m[3], m[4])   # echo the requested vendor format (OpenAI), not the backing model's (endurance F425)
     return None
 
 

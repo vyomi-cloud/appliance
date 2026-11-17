@@ -250,7 +250,13 @@ _SUB_LABELS = {"functions": "function", "keys": "function key", "host": "host ke
                "slots": "deployment slot", "hostnamebindings": "custom domain"}
 _CONFIG_LABELS = {"web": "configuration", "appsettings": "application settings",
                   "connectionstrings": "connection strings", "logs": "App Service logs", "backup": "backup configuration",
-                  "authsettingsv2": "authentication settings"}
+                  "authsettingsv2": "authentication settings", "azurestorageaccounts": "storage account mounts",
+                  "authsettings": "authentication settings", "slotconfignames": "slot configuration names",
+                  "metadata": "metadata", "pushsettings": "push settings"}
+# plain property-bag config documents azurerm reads/writes on every site (endurance F418)
+_CONFIG_BAGS = {"azurestorageaccounts": {}, "slotconfignames": {"appSettingNames": None, "connectionStringNames": None},
+                "metadata": {}, "pushsettings": {"isPushEnabled": False},
+                "authsettings": {"enabled": False, "runtimeVersion": "~1", "unauthenticatedClientAction": "RedirectToLoginPage"}}
 _LOGGED_ACTIONS = {"start", "stop", "restart", "slotsswap", "resetpublishxml"}
 _READ_ACTIONS = {"list", "listkeys", "invoke", "publishxml"}
 
@@ -561,9 +567,10 @@ def _new_site(state, sub, rg, name, payload):
         cfg["linuxFxVersion"] = _fx_version(runtime, version) if is_linux else ""
         cfg["windowsFxVersion"] = "" if is_linux else _fx_version(runtime, version)
         worker = runtime.lower().replace(".net", "dotnet-isolated").replace(" core", "").replace(".js", "")
-        rec["_appsettings"].update({"FUNCTIONS_EXTENSION_VERSION": "~4", "FUNCTIONS_WORKER_RUNTIME": worker,
-                                    "AzureWebJobsStorage": f"DefaultEndpointsProtocol=https;AccountName=vyomi{_h(name, n=10)};AccountKey=sim;",
-                                    "APPINSIGHTS_INSTRUMENTATIONKEY": _h(rid, "aik", n=32)})
+        # defaults only: never override what the client sent, and no App Insights key unless configured (endurance F427)
+        for _k, _v in {"FUNCTIONS_EXTENSION_VERSION": "~4", "FUNCTIONS_WORKER_RUNTIME": worker,
+                       "AzureWebJobsStorage": f"DefaultEndpointsProtocol=https;AccountName=vyomi{_h(name, n=10)};AccountKey=sim;"}.items():
+            rec["_appsettings"].setdefault(_k, _v)
         scale = (pay.get("functionAppConfig") or {}).get("scaleAndConcurrency") or {}
         rec["properties"]["sku"] = "FlexConsumption" if pay.get("functionAppConfig") else "Dynamic"
         rec["properties"]["functionAppConfig"] = pay.get("functionAppConfig") or {
@@ -862,11 +869,19 @@ def _config_ops(rec, rest, method, payload):
             _bad = _dpb().app_config_backup(_STATE_REF[0], rec, method, payload)
             if _bad:
                 return _conv(_bad)
+        if read and not rec["_backupconfig"]:
+            # a site with no backup configured answers 404 in real ARM (azurerm nil-derefs the default's null startTime) (endurance F420)
+            return _err(404, "NotFound", "No backup configuration found for the site.")
         if read:
             return _ok({"properties": rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG})
         if method in ("PUT", "PATCH"):
             rec["_backupconfig"] = _merge(rec["_backupconfig"] or DEFAULT_BACKUP_CONFIG, _props(payload))
             return _ok({"properties": rec["_backupconfig"]})
+    elif kind in _CONFIG_BAGS:
+        bag = rec.setdefault("_bags", {}).setdefault(kind, dict(_CONFIG_BAGS[kind]))
+        if method in ("PUT", "PATCH"):
+            bag = rec["_bags"][kind] = dict(_props(payload)) if method == "PUT" else {**bag, **_props(payload)}
+        return _ok({"properties": dict(bag)})
     elif kind == "authsettingsv2":
         auth = rec["_authsettingsv2"]
         if read:

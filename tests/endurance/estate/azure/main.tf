@@ -28,3 +28,29 @@ module "data" {
   rg_name  = module.network_identity.rg_name
   location = module.network_identity.location
 }
+
+module "messaging" {
+  source   = "./modules/stage4-messaging"
+  rg_name  = module.network_identity.rg_name
+  location = module.network_identity.location
+}
+
+module "observability" {
+  source   = "./modules/stage7-observability"
+  rg_name  = module.network_identity.rg_name
+  location = module.network_identity.location
+}
+
+module "ai" {
+  source   = "./modules/stage6-ai"
+  rg_name  = module.network_identity.rg_name
+  location = module.network_identity.location
+}
+
+module "serverless" {
+  source               = "./modules/stage5-serverless"
+  rg_name              = module.network_identity.rg_name
+  location             = module.network_identity.location
+  storage_account_name = module.data.storage_account_name
+  storage_account_key  = module.data.storage_account_key
+}

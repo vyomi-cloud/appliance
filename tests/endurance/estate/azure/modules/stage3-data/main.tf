@@ -62,3 +62,9 @@ resource "azurerm_mssql_firewall_rule" "allow_azure" {
   start_ip_address = "0.0.0.0"
   end_ip_address   = "0.0.0.0"
 }
+
+output "storage_account_name" { value = azurerm_storage_account.data.name }
+output "storage_account_key" {
+  value     = azurerm_storage_account.data.primary_access_key
+  sensitive = true
+}

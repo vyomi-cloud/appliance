@@ -109,3 +109,16 @@ resource "azurerm_key_vault" "core" {
   purge_protection_enabled   = false
   rbac_authorization_enabled = true
 }
+
+resource "azurerm_security_center_subscription_pricing" "vms" {
+  tier          = "Standard"
+  resource_type = "VirtualMachines"
+}
+
+resource "azurerm_security_center_contact" "secops" {
+  name                = "default"
+  email               = "secops@vyomi.test"
+  phone               = "+15555550100"
+  alert_notifications = true
+  alerts_to_admins    = true
+}

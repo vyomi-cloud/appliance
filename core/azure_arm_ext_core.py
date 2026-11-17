@@ -1049,6 +1049,8 @@ def after_upsert(state, rec, payload=None) -> None:
     """Type-specific fields ARM computes on write (called by both dispatchers)."""
     t = str(rec.get("_type") or "").lower()
     p = rec.setdefault("properties", {})
+    if t == "microsoft.servicebus/namespaces/topics/subscriptions" and not p.get("isClientAffine"):
+        p.pop("clientAffineProperties", None)      # real Service Bus omits it unless the subscription is client-affine (endurance F414)
     if t == VM_T:
         _vm_fill(rec)
     if t == NIC_T.lower():

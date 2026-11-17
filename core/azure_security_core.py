@@ -669,6 +669,27 @@ def dispatch(state: dict, method: str, sub: str, rg, chain: list, payload: dict,
         if method == "GET":
             return _ok(cur if len(chain) > 1 else {"value": [cur]})
         return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    if head == "securitycontacts":
+        # Microsoft.Security/securityContacts (azurerm_security_center_contact): PUT/GET/DELETE, list (endurance F424)
+        base = f"/subscriptions/{sub}/providers/{NS}/securityContacts"
+        if len(chain) == 1:
+            if method != "GET":
+                return _err(405, "MethodNotAllowed", "Collection supports GET only.")
+            return _ok({"value": [v for k, v in state.items() if isinstance(v, dict) and k.startswith(base.lower() + "/")]})
+        key = f"{base}/{chain[1]}".lower()
+        if method in ("PUT", "PATCH"):
+            pr = (payload or {}).get("properties") or {}
+            rec = {"id": f"{base}/{chain[1]}", "name": chain[1], "type": f"{NS}/securityContacts",
+                   "properties": {"email": pr.get("email", ""), "phone": pr.get("phone", ""),
+                                  "alertNotifications": pr.get("alertNotifications", "On"), "alertsToAdmins": pr.get("alertsToAdmins", "On")}}
+            state[key] = rec
+            return _ok(rec)
+        if method == "GET":
+            return _ok(state[key]) if key in state else _err(404, "ResourceNotFound", f"Security contact '{chain[1]}' not found.")
+        if method == "DELETE":
+            state.pop(key, None)
+            return _ok(None, 200)
+        return _err(405, "MethodNotAllowed", f"{method} not allowed.")
     if head in ("alerts", "locations"):
         _fire_automations(state, sub)
         return _alerts(state, method, sub, rg, chain, ctx)
