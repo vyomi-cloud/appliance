@@ -744,6 +744,35 @@ def _apim_default_policy(type_chain, names, state, rid=""):
     return None
 
 
+# Singleton child resources real ARM always answers with (GET before any PUT): {type-chain tail -> default properties} (endurance F406)
+_SINGLETON_DEFAULTS = {
+    ("microsoft.storage", "storageaccounts", "blobservices"): {"cors": {"corsRules": []}, "deleteRetentionPolicy": {"enabled": False},
+        "containerDeleteRetentionPolicy": {"enabled": False}, "isVersioningEnabled": False, "changeFeed": {"enabled": False}},
+    ("microsoft.storage", "storageaccounts", "fileservices"): {"cors": {"corsRules": []}, "shareDeleteRetentionPolicy": {"enabled": True, "days": 7}},
+    ("microsoft.storage", "storageaccounts", "queueservices"): {"cors": {"corsRules": []}},
+    ("microsoft.storage", "storageaccounts", "tableservices"): {"cors": {"corsRules": []}},
+    ("microsoft.sql", "servers", "sqlvulnerabilityassessments"): {"state": "Disabled"},
+    ("microsoft.sql", "servers", "connectionpolicies"): {"connectionType": "Default"},
+    ("microsoft.sql", "servers", "auditingsettings"): {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": [], "isStorageSecondaryKeyInUse": False, "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
+    ("microsoft.sql", "servers", "extendedauditingsettings"): {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": [], "isStorageSecondaryKeyInUse": False, "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
+    ("microsoft.sql", "servers", "devopsauditingsettings"): {"state": "Disabled", "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
+    ("microsoft.sql", "servers", "securityalertpolicies"): {"state": "Disabled", "disabledAlerts": [], "emailAddresses": [], "emailAccountAdmins": False, "retentionDays": 0},
+    ("microsoft.sql", "servers", "advancedthreatprotectionsettings"): {"state": "Disabled"},
+    ("microsoft.sql", "servers", "encryptionprotector"): {"serverKeyType": "ServiceManaged", "serverKeyName": "ServiceManaged", "autoRotationEnabled": False},
+    ("microsoft.sql", "servers", "vulnerabilityassessments"): {"recurringScans": {"isEnabled": False, "emailSubscriptionAdmins": True, "emails": []}},
+}
+
+
+def _singleton_default(type_chain, names, rid):
+    """GET of a not-yet-written 'default'-style singleton under an existing parent -> the real default document."""
+    if len(type_chain) == 3 and len(names) == 2:
+        props = _SINGLETON_DEFAULTS.get(tuple(t.lower() for t in type_chain))
+        if props is not None and rid.rsplit("/", 2)[0].lower() in _state:
+            import copy as _c
+            return {"id": rid, "name": names[1], "type": "/".join(type_chain), "properties": _c.deepcopy(props)}
+    return None
+
+
 def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[str]) -> str:
     seg = [f"/subscriptions/{sub}"]
     if rg:
@@ -842,6 +871,8 @@ def _lro_headers(base: str, op_id: str, api_version: str) -> dict:
 def _is_lro_type(namespace: str, type_chain: list[str]) -> bool:
     # Top-level resources are long-running, except RBAC role assignments
     # (synchronous in real Azure).
+    if namespace.lower() == "microsoft.documentdb" and len(type_chain) >= 3:    # Cosmos sqlDatabases/containers PUT are LROs; SDK rejects 201 (endurance F409)
+        return True
     return len(type_chain) == 2 and namespace.lower() != "microsoft.authorization"
 
 
@@ -1141,7 +1172,7 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     if method == "GET":
         rec = _state.get(key)
         if not rec:
-            rec = _apim_default_policy(type_chain, names, _state, rid)
+            rec = _apim_default_policy(type_chain, names, _state, rid) or _singleton_default(type_chain, names, rid)
         if not rec:
             return _error(404, "ResourceNotFound", f"Resource '{rid}' not found.")
         _ext.after_upsert(_state, rec)
@@ -1269,6 +1300,8 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             resp = JSONResponse(status_code=resp.status_code, content=_b2)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
+        if resp.status_code == 201 and leaf_name.lower() in ("default", "current") and len(type_chain) > 2:
+            resp.status_code = 200      # singleton settings children are sync 200 in real ARM; the SDKs reject 201 (endurance F408)
         if lro:
             # Generated SDK LRO create methods accept only a subset of 2xx for
             # the initial response (armstorage→{200,202}, armcompute→{200,201});
@@ -1301,6 +1334,9 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         # pollers (a header-less terminal status = immediately complete). The
         # create path above carries the Azure-AsyncOperation header that
         # exercises real LRO polling.
+        if rec is not None and namespace.lower() == "microsoft.documentdb":
+            # Cosmos DELETE is an LRO (202 + operation headers); a header-less 200 is an SDK error (endurance F412)
+            return Response(status_code=202, headers=_lro_headers(base, _make_operation(rid, method), api_version))
         return Response(status_code=200 if rec is not None else 204)
     return _error(405, "MethodNotAllowed", f"{method} not allowed.")
 

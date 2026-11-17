@@ -22,3 +22,9 @@ provider "azurerm" {
 module "network_identity" {
   source = "./modules/stage1-network-identity"
 }
+
+module "data" {
+  source   = "./modules/stage3-data"
+  rg_name  = module.network_identity.rg_name
+  location = module.network_identity.location
+}

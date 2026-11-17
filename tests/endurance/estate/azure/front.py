@@ -26,8 +26,8 @@ def metadata():
         "portal": BASE, "authentication": {"loginEndpoint": BASE, "audiences": [BASE + "/", "https://management.core.windows.net/"], "tenant": "common", "identityProvider": "AAD"},
         "media": BASE, "graphAudience": BASE + "/", "graph": BASE + "/", "name": "VyomiAzure",
         "suffixes": {"azureDataLakeStoreFileSystem": "azuredatalakestore.net", "acrLoginServer": "azurecr.io", "sqlServerHostname": ".database.windows.net",
-                     "azureDataLakeAnalyticsCatalogAndJob": "azuredatalakeanalytics.net", "keyVaultDns": "vault.azure.net", "storage": "core.windows.net",
-                     "azureFrontDoorEndpointSuffix": "azurefd.net", "storageEndpointSuffix": "core.windows.net", "mhsmDns": "managedhsm.azure.net",
+                     "azureDataLakeAnalyticsCatalogAndJob": "azuredatalakeanalytics.net", "keyVaultDns": "vault.azure.net", "storage": "core.windows.net" + (":" + ARGS.host.split(":")[1] if ":" in ARGS.host else ""),
+                     "azureFrontDoorEndpointSuffix": "azurefd.net", "storageEndpointSuffix": "core.windows.net" + (":" + ARGS.host.split(":")[1] if ":" in ARGS.host else ""), "mhsmDns": "managedhsm.azure.net",
                      "attestationEndpoint": "attest.azure.net"},
         "batch": BASE + "/", "resourceManager": BASE + "/", "vmImageAliasDoc": BASE, "activeDirectoryDataLake": BASE + "/", "sqlManagement": BASE + "/",
         "microsoftGraphResourceId": BASE + "/", "appInsightsResourceId": "https://api.applicationinsights.io",
@@ -72,8 +72,10 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, {"tenant_discovery_endpoint": f"{BASE}/common/v2.0/.well-known/openid-configuration", "api-version": "1.1", "metadata": []})
         c = http.client.HTTPConnection(UP.hostname, UP.port, timeout=120)
         hdrs = {k: v for k, v in self.headers.items() if k.lower() not in ("host", "connection")}
+        hdrs["Host"] = self.headers.get("Host") or ARGS.host; hdrs["X-Forwarded-Proto"] = "https"   # the simulator builds vaultUri / Location / endpoints from these
         c.request(self.command, ARGS.prefix + self.path, body, hdrs)
         r = c.getresponse(); data = r.read()
+        if r.status >= 400: sys.stderr.write("front-ERR %s %s%s -> %s %s\n" % (self.command, self.headers.get("Host","")[:40], self.path, r.status, data[:160]))
         self.send_response(r.status)
         for k, v in r.getheaders():
             if k.lower() in ("transfer-encoding", "connection", "content-length"): continue
