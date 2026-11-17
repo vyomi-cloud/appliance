@@ -20,7 +20,7 @@ orders API: Lambda layer, orders function (published version, KMS key, X-Ray, DL
 Vendored cores re-synced with `wasm/build_cores.py`.
 
 ## Result
-See the final report in the PR/handoff: the targeted stage-5 cycle (`-target=module.serverless`, which pulls in KMS/DynamoDB/SQS/SNS/EventBridge dependencies) passes apply, no-diff replan, destroy, rebuild, final destroy.
+Targeted stage-5 cycle on a fresh server (`-target=module.serverless`, 34-40 resources incl. KMS/DynamoDB/SQS/SNS/EventBridge dependencies): apply, no-diff replan (exit 0), destroy, rebuild, final destroy all PASS.
 
 ## Open issues
 - The full-estate gate could not complete on this host: stage 2 `aws_instance` is rejected by the simulator's `disk_freeze` guard (Mac at 98% disk, ~4 GiB free). Not a serverless defect; re-run `tests/endurance/run_estate.sh` on estate/aws once disk is free.
