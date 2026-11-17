@@ -67,6 +67,18 @@ def register(app) -> None:
     async def _gcf(project: str, location: str, function: str, request: Request, rest: str = ""):
         fn = _find_function(function)
         if not fn:
+            # Not a legacy-store function: a Cloud Functions v1/v2 function deployed through gcloud/REST (core/gcp_functions_core) is
+            # served by the shared router, the same code Nano runs.
+            from core import wire_ingress as _wi, app_context as _ctx
+            _r = _wi.new_services_router() or _wi.appliance_router()
+            if _r is not None:
+                _tok = _ctx.REQUEST_PROVIDER.set("gcp")
+                try:
+                    _resp = await _wi.serve(_r, request, path=request.url.path)
+                finally:
+                    _ctx.REQUEST_PROVIDER.reset(_tok)
+                if _resp.status_code != 404 and not (_resp.body or b"").startswith(b"<?xml"):
+                    return _resp
             return Response(content=json.dumps({"error": {"code": 404, "message": f"Function {function} not found", "status": "NOT_FOUND"}}),
                             status_code=404, media_type="application/json")
         body = await request.body()

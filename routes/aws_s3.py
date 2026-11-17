@@ -1228,12 +1228,13 @@ def _register_unified_s3(app: FastAPI) -> None:
         if path.startswith("/openai/") and request.method == "POST":
             # Azure OpenAI data plane (deployments/{d}/chat/completions, /openai/v1/...) -> shared router -> core/ai_models_core
             return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
-        if path.lstrip("/").split("/", 1)[0] in ("v1", "v1beta1", "v2", "v3"):
+        if path.lstrip("/").split("/", 1)[0] in ("v1", "v1beta1", "v2", "v3", "dns", "gcf", "gcf-upload"):
             # A GCP REST family with no dedicated offline route: these catch-alls are registered
             # LAST, so nothing else claimed it. If the shared router knows the path, serve it there
             # (Nano's behaviour) over the same durable stores, instead of a bogus S3 NoSuchBucket.
             from core.aws_wire_router import _gcp_service
-            if _gcp_service(path):
+            from core import gcp_wire_ext as _gwx   # Cloud DNS / Functions / SCC / schema-driven GCP paths (served by the shared router's pre())
+            if _gcp_service(path) or _gwx.owns(path):
                 from core import app_context as _ctx
                 _tok = _ctx.REQUEST_PROVIDER.set("gcp")
                 try:

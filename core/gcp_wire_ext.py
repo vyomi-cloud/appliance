@@ -126,6 +126,21 @@ def pre(router, method, path, query, headers, body):
     return None
 
 
+def owns(path):
+    """True when pre() or the schema-driven store would answer this GCP REST path. The offline catch-all uses it to forward
+    Cloud DNS / Functions / SCC / logging-sink style paths to the shared router instead of answering with an S3 NoSuchBucket."""
+    p = path.split("?", 1)[0]
+    if not p.startswith(("/v1/", "/v2/", "/dns/", "/gcf", "/gcf-upload/")):
+        return False
+    from core import gcp_dns_core, gcp_functions_core, gcp_scc_v1_core
+    if gcp_dns_core.handles(p) or gcp_functions_core.handles(p) or p.startswith("/gcf/") or gcp_scc_v1_core.handles(p) or _SU.match(p):
+        return True
+    if re.match(r"^/v1/projects(?:/[^/:]+)?$", p) or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/defaultServiceAccount$", p) \
+            or re.match(r"^/v1/projects/[^/]+/locations/[^/]+/services/[^/:]+:(?:get|set)IamPolicy$|^/v1/projects/[^/]+/locations/[^/]+/services/[^/:]+:testIamPermissions$", p):
+        return True   # the inline routes in pre(): CRM project get/list, Cloud Build default SA, Cloud Run v1 IAM verbs
+    return any(c[3].match(p) for c in _specs())
+
+
 def _gcs_mod():
     from core import gcp_storage_core
     return gcp_storage_core
