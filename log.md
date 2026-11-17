@@ -1,3 +1,17 @@
+### Upstream watch — 2026-11-17T20:12:50+00:00
+
+Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**6 change(s), 0 actionable.**
+- · `announcement` AWS Split Cost Allocation Data now supports Amazon S3 ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/split-cost-allocation-data-s3/))
+- · `announcement` Amazon API Gateway REST APIs now support JWT authorizers ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-api-gateway-rest-authorizers-jwt/))
+- · `announcement` Amazon Aurora DSQL now offers SQL statement statistics in Database Insights ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-statement-statistics/))
+- · `release` cli:aws: 2.40.4 → 2.41.0
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.74.0 → v1.74.1
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.10 → v1.115.0
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-17T19:12:36+00:00
 
 Tracking 4282 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,16 +3012,3 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-04T23:07:11+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` Cloud Storage: Feature (November 04, 2026) ([link](https://docs.cloud.google.com/release-notes#November_04_2026))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-04T22:07:06+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**21 change(s), 5 actionable.**
