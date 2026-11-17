@@ -83,6 +83,75 @@ resource "google_secret_manager_secret_version" "db" {
   secret_data = "s3cr3t-endurance"
 }
 
+resource "google_project_iam_custom_role" "reader" {
+  role_id     = "vyomiEndurance${random_id.kms.hex}"
+  title       = "Vyomi endurance reader"
+  description = "Custom role for the reference estate"
+  permissions = ["storage.buckets.get", "storage.objects.list", "pubsub.topics.get"]
+}
+
+resource "google_project_iam_member" "app_custom" {
+  project = var.project
+  role    = google_project_iam_custom_role.reader.id
+  member  = "serviceAccount:${google_service_account.app.email}"
+}
+
+resource "google_service_account" "ci" {
+  account_id   = "vyomi-ci"
+  display_name = "Vyomi CI"
+}
+
+resource "google_service_account_iam_member" "ci_impersonates_app" {
+  service_account_id = google_service_account.app.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${google_service_account.ci.email}"
+}
+
+resource "google_kms_crypto_key_iam_member" "app_use" {
+  crypto_key_id = google_kms_crypto_key.main.id
+  role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
+  member        = "serviceAccount:${google_service_account.app.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "app_read" {
+  secret_id = google_secret_manager_secret.db.id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.app.email}"
+}
+
+resource "google_compute_address" "nat" {
+  name   = "vyomi-nat-ip"
+  region = "us-central1"
+}
+
+resource "google_compute_global_address" "lb" {
+  name = "vyomi-lb-ip"
+}
+
+resource "google_compute_route" "egress" {
+  name             = "vyomi-egress"
+  network          = google_compute_network.main.name
+  dest_range       = "0.0.0.0/0"
+  next_hop_gateway = "default-internet-gateway"
+  priority         = 1000
+  tags             = ["egress"]
+}
+
+resource "google_compute_router" "main" {
+  name    = "vyomi-router"
+  region  = "us-central1"
+  network = google_compute_network.main.id
+}
+
+resource "google_compute_router_nat" "main" {
+  name                               = "vyomi-nat"
+  router                             = google_compute_router.main.name
+  region                             = "us-central1"
+  nat_ip_allocate_option             = "MANUAL_ONLY"
+  nat_ips                            = [google_compute_address.nat.self_link]
+  source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
+}
+
 output "network_id" { value = google_compute_network.main.id }
 output "network_name" { value = google_compute_network.main.name }
 output "subnet_ids" { value = [google_compute_subnetwork.public.id, google_compute_subnetwork.private.id] }
