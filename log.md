@@ -1,3 +1,17 @@
+### Upstream watch — 2026-11-18T22:14:49+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**4 change(s), 0 actionable.**
+- · `announcement` Amazon Aurora DSQL now supports audit logging ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-dsql-audit-logging/))
+- · `announcement` Amazon OpenSearch Ingestion Service now supports next-generation time series collections ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-ingestion-service-nextgen-time-series-collections))
+- · `announcement` Amazon OpenSearch Memory is now generally available ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-memory-generally-available/))
+- · `announcement` Amazon SageMaker AI now supports cross-Region inference routing ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-cross-region-routing/))
+
+Sources that failed this run (6): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T21:13:09+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2995,24 +3009,6 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-06T19:08:13+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T18:08:11+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `announcement` AWS Glue Data Catalog now supports catalog-vended credentials with Apache Iceberg REST catalog federation ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/glue-catalog-vended-credentials-iceberg/))
-- · `announcement` AWS launches support for amortization of EC2 Capacity Blocks for ML ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/aws-ec2-capacity-blocks-ml/))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T17:08:07+00:00
 
 Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
