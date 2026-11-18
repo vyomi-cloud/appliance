@@ -4,6 +4,30 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.9] — 2026-11-19
+
+Nano console fixes (Vyomi Mesh drawer, AWS prompt optimization), tunnel 1.3.1, and the release-checks SDK pass rate. Beta, Dev Simplified.
+
+### Added
+
+- **[Release checks]** An SDK pass-rate step (`sdk-checks` per cloud: Python, Go and Java SDK suites on the published image) writes an `sdk-pass-rate` marker into each release's `RELEASE-CHECKS.md`; the portal's SDK tiles read it.
+- **[Tunnel]** vyomi-tunnel 1.3.1: forwards the API for Codespace Meshes under the protection, with Codespace fixes from the real-Mesh run.
+
+### Changed (Nano consoles)
+
+- **[Nano]** The Vyomi Mesh drawer in the AWS, Google and Azure consoles opens expanded by default, pushes the console down instead of overlapping it, has no shadow and no rule under its button, and its content lines up with each console's own content column. The open/closed choice is stored under a new key (`vyomi.meshDrawer2.<cloud>`), so a collapse saved by an older version no longer applies.
+
+### Fixes
+
+- **[Nano, AWS]** Bedrock "Advanced prompt optimization" no longer shows looping or invented `{{input}}{{output}}` placeholders; the AWS console bundle is rebuilt.
+- **[GCP]** `gcloud functions deploy --gen2` no longer fails with a 400 when the image has no `packaging` module (the new requirements check rejected `functions-framework` on its fallback path).
+- **[CI]** Release checks no longer wait up to 100 minutes for the retired startup and MSI workflows; they are recorded as skipped. The Nano UI crawl ignores the portal-only `/api/usage/views` route, the harness serves a directory's `index.html`, and the Azure tabs check waits for slow tabs.
+
+### Known limits
+
+- Drawer alignment was measured in Chrome with the Nano backend not booted; the consoles scroll sideways at 800 px and below in that state (also before this change).
+- Five SDK assertions fail in the v4.0.8 run (Python AWS, Java and Go SNS, sweepA AWS, Python Azure VM run-command) and an Azure Event Grid partner configuration tab is empty; these are not fixed in 4.0.9.
+
 ## [4.0.8] — 2026-11-18
 
 GCP reference architecture (13/13) on the real Google SDKs, with the supporting simulator fixes. Beta, Dev Simplified.
