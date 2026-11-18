@@ -913,6 +913,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
     return resp
 
 
+# Namespaces whose dedicated core answers checkNameAvailability with real taken/invalid results
+_OWN_NAME_CHECK_NAMESPACES = {"microsoft.appconfiguration", "microsoft.search", "microsoft.support"}
+
 async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     """Parse `/subscriptions/{rest}` and CRUD the in-memory ARM store."""
     base = _public_base(request)
@@ -1056,7 +1059,8 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
                                                                   request.query_params.get("api-version") or "2023-07-01"))
         if method == "GET" and len(after) == 5:
             return _error(404, "ResourceNotFound", f"The deleted vault '{after[4]}' was not found.")
-    if method == "POST" and len(after) == 2 and after[1].lower() == "checknameavailability":
+    if (method == "POST" and len(after) == 2 and after[1].lower() == "checknameavailability"
+            and after[0].lower() not in _OWN_NAME_CHECK_NAMESPACES):
         return JSONResponse({"nameAvailable": True, "reason": "", "message": ""})    # azurerm checks names before creating Web apps etc. (endurance F417)
     if method == "GET" and len(after) == 2 and after[0].lower() == "microsoft.operationalinsights" and after[1].lower() == "deletedworkspaces":
         return JSONResponse({"value": []})      # soft-deleted workspaces list (azurerm checks before creating a workspace) (endurance F416)
