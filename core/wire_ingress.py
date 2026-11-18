@@ -572,6 +572,16 @@ def kv_core_path(path: str) -> str:
     return path.split("?", 1)[0]
 
 
+def _kv_infer_vault(r, arm_st, kvs, kvk, kind: str, p: str) -> str:
+    """A Key Vault request that names no vault (the host is the simulator's own, e.g. a CryptographyClient built from a key id)."""
+    try:
+        from providers import azure_services as _azp
+        arm_st = _azp._state if kvs.vault_names(_azp._state) else arm_st
+    except Exception:
+        pass
+    return kvs.infer_vault_for_request(arm_st, r.az_kvsec, r.az_kvkeys, r.az_kvcerts, kind, p)
+
+
 def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, query: dict,
                     headers: dict, body: bytes) -> dict:
     """Key Vault / ACR data planes. The state is Azure's: the request is bound to the Azure
@@ -641,6 +651,8 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
                     arm_st = _azp._state
             except Exception:
                 pass
+        if not vault0:
+            vault0 = _kv_infer_vault(r, arm_st, kvs, kvk, kind, p)
         if vault0 and not kvs.vault_exists(arm_st, vault0):
             resp404 = kvs.vault_not_found(vault0)
             return {"status": resp404.status, "headers": {"content-type": "application/json"}, "body": resp404.body}
