@@ -2284,7 +2284,36 @@ def _az_block_output(acct, dep, text):
     return _az_filtered(r["assessment"]) if r["blocked"] else None
 
 
+def _foundry_project(arm_state, method, path, query, headers, body, net_state):
+    """Foundry project endpoint (`/api/projects/<p>/...`, azure-ai-projects + azure-ai-agents): the classic agents surface is the
+    Assistants/files/vector-store core under the project prefix; project-only routes (agents v2, connections, deployments, conversations)
+    live in azure_openai_agents_core.project_dispatch."""
+    rest = re.sub(r"^/api/projects/[^/]+", "", path) or "/"
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    if not (lh.get("api-key") or lh.get("authorization")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    ag = _azure_agents()
+    m = re.match(r"^/agents/[^/]+/endpoint/protocols/openai(/.*)$", rest)     # hosted-agent OpenAI endpoint
+    if m:
+        rest = "/openai/v1" + m.group(1)
+    if re.match(r"^/(assistants|threads|files|vector_stores|responses|evals|fine_tuning)(/|$)", rest):
+        rest = "/openai" + rest
+    if rest.startswith("/openai/"):
+        if rest.startswith("/openai/v1/conversations"):
+            p0 = _body(body)
+            if p0 is None:
+                return _a_err(400, "BadRequest", "Invalid JSON body.")
+            return ag.project_dispatch(arm_state, method, rest, query or {}, p0) or _a_err(404, "404", "Resource not found")
+        return azure_openai_dispatch(arm_state, method, rest, query, headers, body, net_state)
+    p0 = _body(body)
+    if p0 is None:
+        return _a_err(400, "BadRequest", "Invalid JSON body.")
+    return ag.project_dispatch(arm_state, method, rest, query or {}, p0) or _a_err(404, "404", "Resource not found")
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
+    if path.startswith("/api/projects/"):
+        return _foundry_project(arm_state, method, path, query, headers, body, net_state)
     if re.match(r"^/openai(/v1)?/(files|fine_tuning)(/|$)", path):
         return _azure_files_ft(method, path, query, {k.lower(): v for k, v in (headers or {}).items()}, body)
     if re.match(r"^/openai(/v1)?/vyomi/custom-models(/|$)", path):
@@ -2300,6 +2329,8 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         p0 = _body(body)
         if p0 is None:
             return _a_err(400, "BadRequest", "Invalid JSON body.")
+        if re.match(r"^/openai(/v1)?/conversations(/|$)", path):
+            return ag.project_dispatch(arm_state, method, re.sub(r"^/openai(/v1)?", "/openai/v1", path), query or {}, p0) or _a_err(404, "404", "Resource not found")
         rm = re.match(r"^/openai/(?:v1/)?responses/([^/]+)$", path)
         if rm:
             return ag.responses_other(method.upper(), rm.group(1))
@@ -2310,6 +2341,11 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
     p = _body(body)
     if p is None:
         return _a_err(400, "BadRequest", "Invalid JSON body.")
+    if mt.group(2) == "responses" and (p.get("agent_reference") or p.get("agent")):      # Foundry v2 agent invoked through Responses
+        try:
+            p = ag.resolve_agent_ref(p)
+        except ag.Bad as e:
+            return ag._err(e)
     dep_name, op = mt.group(1) or p.get("model"), mt.group(2)
     if not dep_name:
         return _a_err(400, "BadRequest", "Missing required parameter: 'model'.", "model")

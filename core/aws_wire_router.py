@@ -371,6 +371,8 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
+    if re.match(r"^/api/projects/[^/]+(/|$)", p0):
+        return "az-openai"   # Foundry project endpoint (azure-ai-projects / azure-ai-agents) -> core/azure_openai_agents_core
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|evals|vyomi/promptflow|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0) and not p0.startswith("/identities/") and not re.match(r"^/[a-z0-9-]+_[A-Za-z0-9]+/", p0):   # /identities/oauth2/token is AgentCore GetResourceOauth2Token; /{poolId}/oauth2/* is the Cognito hosted UI (core/identity_core)
