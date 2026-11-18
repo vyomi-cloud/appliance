@@ -14,7 +14,8 @@ def claims(token):
 
 def _idp(ctx, op, body):
     """Identity Platform / Firebase Auth REST (identitytoolkit v1). It has no Google client library for end-user sign-in: the documented client is this REST API."""
-    r = requests.post(f"{ctx.endpoint}/v1/accounts:{op}", params={"key": "vyomi-local"}, json=body, timeout=30)
+    r = requests.post(f"{ctx.endpoint}/v1/accounts:{op}", params={"key": "vyomi-local"}, json=body, timeout=30,
+                      headers={"x-goog-user-project": NAMES["users"]})        # the Identity Platform project (tenant of users) the sign-in belongs to
     if r.status_code in (404, 405):
         raise Blocked(LANE["identity"], f"Identity Platform accounts:{op} is not served (HTTP {r.status_code})")
     if r.status_code != 200:
@@ -39,6 +40,17 @@ def sign_in(ctx):
     ctx.step("identity platform: accounts:signUp + signInWithPassword -> ID token", signup, lane=LANE["identity"])
     if "jwt" not in ctx.state:
         ctx.state["user"] = "anonymous (no identity provider yet)"
+
+    def verify():
+        """What the app's backend does: verify the Firebase / Identity Platform ID token with google-auth against the project's public certs."""
+        from google.auth.transport import requests as gr
+        from google.oauth2 import id_token
+        c = id_token.verify_token(ctx.state["jwt"], gr.Request(), audience=NAMES["users"],
+                                  certs_url=f"{ctx.endpoint}/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com")
+        assert c["iss"] == ISSUER and c["email"] == USER, c
+        return f"google.oauth2.id_token.verify_token ok: iss={c['iss']} aud={c['aud']} email={c['email']}"
+    if ctx.state.get("jwt"):
+        ctx.step("google-auth: verify the ID token signature, audience and issuer against the project certs", verify, lane=LANE["identity"])
 
     def sa_token():
         from google.cloud import iam_credentials_v1 as ic
@@ -73,9 +85,11 @@ def _openapi(backend):
     import yaml
     return yaml.safe_dump({
         "swagger": "2.0", "info": {"title": "facilities-api", "version": "1.0.0"}, "schemes": ["https"], "produces": ["application/json"],
-        "paths": {"/search": {"post": {"operationId": "search", "x-google-backend": {"address": backend}, "security": [{"firebase": []}],
+        "paths": {"/search": {"post": {"operationId": "search", "x-google-backend": {"address": backend, "path_translation": "CONSTANT_ADDRESS"}, "security": [{"firebase": []}, {"google_id_token": []}],
                                        "responses": {"200": {"description": "ok"}}}}},
-        "securityDefinitions": {"firebase": {"authorizationUrl": "", "flow": "implicit", "type": "oauth2", "x-google-issuer": ISSUER,
+        "securityDefinitions": {"google_id_token": {"authorizationUrl": "", "flow": "implicit", "type": "oauth2", "x-google-issuer": "https://accounts.google.com",
+                                                    "x-google-jwks_uri": "https://www.googleapis.com/oauth2/v3/certs", "x-google-audiences": "https://facilities.example.com"},
+                                "firebase": {"authorizationUrl": "", "flow": "implicit", "type": "oauth2", "x-google-issuer": ISSUER,
                                              "x-google-jwks_uri": "https://www.googleapis.com/service_accounts/v1/metadata/x509/securetoken@system.gserviceaccount.com",
                                              "x-google-audiences": NAMES["users"]}}})
 
@@ -84,6 +98,8 @@ def edge(ctx):
     """API Gateway -> kb-search function (read-only knowledge search); JWT validated at the gateway when an identity provider exists."""
     from google.cloud import apigateway_v1 as ag
     backend = ctx.state.get("kb_uri")
+    if backend:       # real Cloud Functions URL shape (https); the simulator routes it to its function runtime
+        backend = f"https://{ctx.loc}-{ctx.project}.cloudfunctions.net/facilities-kb-search"
     if not backend:
         ctx.step("api gateway: needs the kb-search function", lambda: (_ for _ in ()).throw(Blocked(LANE["sandbox"], "kb-search function was not deployed (component 7)")))
         return
