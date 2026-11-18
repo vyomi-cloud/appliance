@@ -126,7 +126,8 @@
     var url = typeof input === "string" ? input : (input && input.url) || "";
     var method = ((init && init.method) || (input && input.method) || "GET").toUpperCase();
     return of(input, init).then(function (res) {
-      if (res.status >= 500 && /\/api\//.test(url) && !/\/api\/(issues|issue-reporting)/.test(url)) {
+      var swDone = false; try { swDone = !!(res.headers && res.headers.get("X-Vyomi-Reported")); } catch (_) {}   // the service worker already reported this one
+      if (res.status >= 500 && !swDone && /\/api\//.test(url) && !/\/api\/(issues|issue-reporting)/.test(url)) {
         var svc = (url.match(/\/api\/(?:aws|gcp|azure)?\/?([a-z0-9\-]+)/i) || [])[1];
         res.clone().json().catch(function () { return {}; }).then(function (d) {
           send({ kind: "console-action", service: svc, action: method + " " + url.replace(/^https?:\/\/[^\/]+/, "").split("?")[0].split("/").slice(0, 4).join("/"),
