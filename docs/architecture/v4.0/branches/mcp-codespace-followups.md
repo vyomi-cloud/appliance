@@ -28,6 +28,11 @@ tunnel from listing or forwarding Vyomi's own containers, including the simulato
 | Staleness in `connect` text, not a new row key | a `stale` field | schema-1 rows have fixed keys (test-list-json contract) |
 | 20 s probe limit, no extra cache | a 60 s cache | the 10 s home cache exists; a longer cache would hide a forward the user just started |
 
+## Release
+vyomi-tunnel 1.3.0 went to npm `latest` from the trunk (tag on 1d4964df3, 2026-11-18 18:34 UTC) with the protection but without
+these fixes, so on 1.3.0 the MCP's Codespace hint points at a target the tunnel no longer forwards. This branch is **1.3.1**
+(all version stamps) with plugin **4.1.1** (the vyomi-mesh skill changed; 4.1.0 is on the marketplace).
+
 ## Open issues
 - [ ] Real-Codespace run of rc.4 (owner's Mac: `bash ~/Documents/specs/vyomi/codespace-check.sh`, which still uses the old
       target name until updated)
