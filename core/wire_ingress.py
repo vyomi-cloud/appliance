@@ -233,6 +233,11 @@ def appliance_router() -> AwsWireRouter:
     global _APPLIANCE_ROUTER
     if _APPLIANCE_ROUTER is None:
         _APPLIANCE_ROUTER = AwsWireRouter(stores=appliance_stores())
+        try:   # VYOMI_GCP_REAL_BACKENDS=1: real Pub/Sub + Firestore emulators behind the two GCP cores (no-op when off)
+            from core import gcp_real_backends
+            gcp_real_backends.install()
+        except Exception:
+            pass
     return _APPLIANCE_ROUTER
 
 
