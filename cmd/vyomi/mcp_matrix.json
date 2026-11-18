@@ -1168,17 +1168,17 @@
       "Secrets_Get",
       "Secrets_Put"
      ],
-     "capabilities": 15,
+     "capabilities": 16,
      "capability_service": "keyvaults",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit for keys, KV v2 for secrets",
      "id": "keyvault",
      "level_counts": {
       "nano": {
        "full": 6,
-       "limited": 9
+       "limited": 10
       },
       "offline": {
-       "full": 6,
+       "full": 7,
        "limited": 9
       }
      },
@@ -1658,16 +1658,16 @@
      "status": "v4"
     },
     {
-     "capabilities": 17,
+     "capabilities": 18,
      "id": "containerapps",
      "level_counts": {
       "nano": {
        "full": 8,
-       "limited": 9
+       "limited": 10
       },
       "offline": {
        "full": 8,
-       "limited": 9
+       "limited": 10
       }
      },
      "levels": {
