@@ -31,20 +31,36 @@ def main():
     from azure.mgmt.keyvault import KeyVaultManagementClient
     ResourceManagementClient(Cred(), SUB, base_url=tls).resource_groups.create_or_update("rg", {"location": "eastus"})
     kvm = KeyVaultManagementClient(Cred(), SUB, base_url=tls, polling_interval=0)
-    props = {"tenant_id": "00000000-0000-0000-0000-000000000000", "sku": {"family": "A", "name": "standard"}, "access_policies": []}
+    from azure.mgmt.keyvault.models import (VaultCreateOrUpdateParameters, VaultProperties, Sku, AccessPolicyEntry, Permissions, VaultAccessPolicyParameters,
+                                            VaultAccessPolicyProperties, KeyPermissions, SecretPermissions)
+    TEN = "00000000-0000-0000-0000-000000000000"
+
+    def vparams(rbac=False):
+        return VaultCreateOrUpdateParameters(location="eastus", properties=VaultProperties(tenant_id=TEN, sku=Sku(family="A", name="standard"),
+                                             access_policies=[], enable_rbac_authorization=rbac))
     S = {}
 
     def mk_vault():
-        v = kvm.vaults.begin_create_or_update("rg", "facilities-kv", {"location": "eastus", "properties": props}).result()
+        v = kvm.vaults.begin_create_or_update("rg", "facilities-kv", vparams()).result()
         assert v.name == "facilities-kv" and v.properties.vault_uri
         S["uri"] = v.properties.vault_uri
         return v.properties.vault_uri
     step("arm: vault create (azure-mgmt-keyvault)", mk_vault)
-    step("arm: vault get / list_by_resource_group / list", lambda: (kvm.vaults.get("rg", "facilities-kv").name == "facilities-kv"
-         and [v.name for v in kvm.vaults.list_by_resource_group("rg")] == ["facilities-kv"] and any(v.name == "facilities-kv" for v in kvm.vaults.list())) or (_ for _ in ()).throw(AssertionError("list")))
-    step("arm: vault update access policies", lambda: kvm.vaults.update_access_policy("rg", "facilities-kv", "add", {"properties": {"access_policies": [
-        {"tenant_id": props["tenant_id"], "object_id": "11111111-1111-1111-1111-111111111111", "permissions": {"keys": ["get", "wrapKey", "unwrapKey"], "secrets": ["get"]}}]}}).properties.access_policies)
-    step("arm: second vault + rbac flag", lambda: kvm.vaults.begin_create_or_update("rg", "other-kv", {"location": "eastus", "properties": {**props, "enable_rbac_authorization": True}}).result().properties.enable_rbac_authorization)
+
+    def listing():
+        assert kvm.vaults.get("rg", "facilities-kv").name == "facilities-kv"
+        assert [v.name for v in kvm.vaults.list_by_resource_group("rg")] == ["facilities-kv"]
+        assert any(v.name == "facilities-kv" for v in kvm.vaults.list())
+    step("arm: vault get / list_by_resource_group / list", listing)
+
+    def policies():
+        oid = "11111111-1111-1111-1111-111111111111"
+        r = kvm.vaults.update_access_policy("rg", "facilities-kv", "add", VaultAccessPolicyParameters(properties=VaultAccessPolicyProperties(access_policies=[
+            AccessPolicyEntry(tenant_id=TEN, object_id=oid, permissions={"keys": ["get", "wrapKey", "unwrapKey"], "secrets": ["get"]})])))
+        assert any(a.object_id == oid for a in r.properties.access_policies)
+        assert any(a.object_id == oid for a in kvm.vaults.get("rg", "facilities-kv").properties.access_policies)
+    step("arm: update_access_policy add (persisted on get)", policies)
+    step("arm: second vault with RBAC authorization", lambda: kvm.vaults.begin_create_or_update("rg", "other-kv", vparams(True)).result().properties.enable_rbac_authorization is True or (_ for _ in ()).throw(AssertionError("rbac flag lost")))
 
     from azure.keyvault.keys import KeyClient, KeyType, KeyCurveName, KeyRotationLifetimeAction, KeyRotationPolicyAction
     from azure.keyvault.keys.crypto import CryptographyClient, KeyWrapAlgorithm, EncryptionAlgorithm, SignatureAlgorithm
