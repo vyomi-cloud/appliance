@@ -1548,11 +1548,23 @@ async def _handle_cognitiveservices(request: Request, method: str, sub: str, rg:
     return resp
 
 
+def _decorate_app_urls(body, base: str) -> None:
+    """Container Apps: the app FQDN does not resolve on this machine, so each app resource also carries the URL the simulator serves
+    its ingress on (routes/azure_containerapps_ingress.py): properties.vyomiIngressUrl."""
+    if isinstance(body, dict):
+        if str(body.get("type", "")).lower() == "microsoft.app/containerapps" and isinstance(body.get("properties"), dict) and body.get("name"):
+            body["properties"]["vyomiIngressUrl"] = f"{base.rstrip('/')}/azure-data/containerapps/{body['name']}/"
+        for v in body.get("value", []) if isinstance(body.get("value"), list) else []:
+            _decorate_app_urls(v, base)
+
+
 async def _handle_app(request: Request, method: str, sub: str, rg: str | None, chain: list[str],
                       names: list[str], base: str) -> JSONResponse:
     from core import azure_app_core as _app
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     r = _app.dispatch(_state, method, sub, rg, chain, names, payload, dict(request.query_params))
+    if r.get("body") is not None and chain and chain[0].lower() == "containerapps":
+        _decorate_app_urls(r["body"], base)
     api_version = request.query_params.get("api-version") or _app.API_VERSION
     resp = JSONResponse(status_code=r["status"], content=r["body"]) if r["body"] is not None \
         else Response(status_code=r["status"])

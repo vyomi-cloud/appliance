@@ -171,5 +171,40 @@
   "limitations": ["The policy (content type, key size/exportable, lifetime actions) is validated like real Key Vault and stored/returned by Get/UpdateCertificatePolicy, but lifetime actions never fire (no auto-renew or e-mail), and generated certificates are self-signed with placeholder bytes."],
   "tests": ["tests/conformance/test_azure_keyvault_certificates_core.py"]
  },
- "azure.keyvaults.backup_restore": {"title": "Key and secret backup / restore", "level": {"nano": "full", "offline": "full"}, "limitations": ["Backup returns an opaque integrity-tagged blob containing every version (keys include their material) that restores into any vault of this simulator; a restore over an existing key/secret is a 409 Conflict. Certificate backup/restore and the soft-deleted-object recovery flow are not part of this entry."], "tests": ["tests/conformance/test_azure_keyvault_backup.py"]}
+ "azure.keyvaults.backup_restore": {"title": "Key and secret backup / restore", "level": {"nano": "full", "offline": "full"}, "limitations": ["Backup returns an opaque integrity-tagged blob containing every version (keys include their material) that restores into any vault of this simulator; a restore over an existing key/secret is a 409 Conflict. Certificate backup/restore and the soft-deleted-object recovery flow are not part of this entry."], "tests": ["tests/conformance/test_azure_keyvault_backup.py"]},
+ "azure.keyvaults.keys.sdk-crypto": {
+  "title": "Key Vault keys with the real azure-keyvault-keys client: create (RSA / EC / AES), versions, rotate + rotation policy, wrap/unwrap, encrypt/decrypt, sign/verify, backup/restore, soft delete",
+  "level": {
+   "nano": "limited",
+   "offline": "full"
+  },
+  "limitations": [
+   "The Azure SDK refuses bearer tokens over plain http, so the offline appliance needs its HTTPS listener (VYOMI_AZURE_TLS_PORT) with a trusted local CA; Nano has no TLS listener, so the unmodified Python SDK cannot reach it from the browser build.",
+   "The vault URL for CryptographyClient(key.id) and KeyClient.get_cryptography_client() must be host-only: the SDK rebuilds it from the key id as scheme://host:port and drops any path. Use https://<simulator-host>:<port> (no /azure-data/keyvault/<vault> prefix); the simulator then resolves the vault from the key/secret name (the vault that holds it, else the only vault). With several vaults holding the same key name the newest wins: use the path-form URL (or x-vyomi-vault) with KeyClient/SecretClient to be explicit. Inference applies to Azure SDK traffic only; header-less callers keep the legacy shared namespace.",
+   "Key material is real when the cryptography package is available (RSA 2048/3072/4096: RSA1_5, RSA-OAEP, RSA-OAEP-256, RS*/PS*; EC P-256/P-384/P-521/P-256K: ES*, raw r||s; oct-HSM AES 128/192/256: A*GCM, A*CBC(PAD), A*KW). Without it (Pyodide) keys fall back to the synthetic envelope cipher and EC / oct are not real. Import (BYOK), key release, managed HSM and Premium HSM backing are not simulated.",
+   "Rotation: POST /keys/{name}/rotate creates a new version with fresh material and the same attributes; the rotation policy is stored and returned (get/update), but no timer rotates keys automatically and no Event Grid notification fires."
+  ],
+  "api": [
+   "CreateKey",
+   "GetKey",
+   "GetKeyVersions",
+   "RotateKey",
+   "GetKeyRotationPolicy",
+   "UpdateKeyRotationPolicy",
+   "WrapKey",
+   "UnwrapKey",
+   "Encrypt",
+   "Decrypt",
+   "Sign",
+   "Verify",
+   "BackupKey",
+   "RestoreKey",
+   "DeleteKey",
+   "RecoverDeletedKey",
+   "PurgeDeletedKey"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_ref_vault_sdk.py"
+  ]
+ }
 }

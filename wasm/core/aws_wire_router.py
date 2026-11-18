@@ -2682,6 +2682,9 @@ class AwsWireRouter:
                 # keyvaults/api.js setActiveVault) so the Networking blade's publicNetworkAccess /
                 # networkAcls can actually be enforced (azure.keyvaults.networking).
                 vault = az_kvsec.vault_of(path, headers)
+                if not vault:    # CryptographyClient follow-ups carry only the host: resolve the vault holding the item
+                    vault = az_kvsec.infer_vault_for_request(self.az_arm.state, self.az_kvsec, self.az_kvkeys, self.az_kvcerts,
+                                                              {"az-kv-secrets": "secrets", "az-kv-keys": "keys", "az-kv-certs": "certificates"}[svc], path, headers)
                 if vault and not az_kvsec.vault_exists(self.az_arm.state, vault):
                     _nf = az_kvsec.vault_not_found(vault)
                     return {"status": _nf.status, "headers": {"content-type": "application/json"}, "body": _nf.body}

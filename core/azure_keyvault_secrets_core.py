@@ -166,7 +166,7 @@ _VAULT_SEP = "/"
 
 def vault_of(path: str = "", headers: dict | None = None) -> str:
     segs = [x for x in (path or "").split("?", 1)[0].split("/") if x]
-    if len(segs) >= 3 and segs[0] == "azure-data" and segs[1] == "keyvault":
+    if len(segs) >= 3 and segs[0] == "azure-data" and segs[1] == "keyvault" and segs[2] != "_":   # "_" = the root-path rewrite (no vault in the URL)
         return unquote(segs[2]).lower()
     lh = {str(k).lower(): v for k, v in (headers or {}).items()}
     v = str(lh.get("x-vyomi-vault") or "").strip()
@@ -175,7 +175,70 @@ def vault_of(path: str = "", headers: dict | None = None) -> str:
     host = str(lh.get("x-forwarded-host") or lh.get("host") or "").split(":")[0].lower()
     if host.endswith(".vault.azure.net") and host.count(".") >= 3:
         return host.split(".")[0]
+    if ".vault." in host and not host.startswith("."):      # <vault>.vault.localhost (or any /etc/hosts alias of the simulator)
+        return host.split(".vault.")[0].split(".")[-1]
     return ""
+
+
+def vault_names(arm_state) -> list:
+    """Names of the Key Vaults the control plane holds, oldest first."""
+    out = []
+    for rec in list((arm_state or {}).values()):
+        if isinstance(rec, dict) and str(rec.get("_type", "")).lower() == "microsoft.keyvault/vaults":
+            n = str(rec.get("id", "")).rstrip("/").rsplit("/", 1)[-1].lower()
+            if n and n not in out:
+                out.append(n)
+    return out
+
+
+def infer_vault_for_request(arm_state, sec_store, key_store, cert_store, kind: str, path: str, headers: dict | None = None) -> str:
+    """infer_vault() with the three Key Vault stores as the probe (`kind` = secrets|keys|certificates|deleted<kind>).
+    Only for Azure SDK traffic (x-ms-client-request-id / azsdk user agent): header-less substrate callers keep the legacy shared namespace."""
+    import re
+    lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+    if not ("x-ms-client-request-id" in lh or "azsdk" in str(lh.get("user-agent", "")).lower()):
+        return ""
+    try:
+        from core import azure_keyvault_keys_core as kvk
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_keyvault_keys_core as kvk  # type: ignore
+    segs = [x for x in str(path).split("?", 1)[0].split("/") if x]
+    name = segs[1] if len(segs) > 1 else ""
+    base = kind[len("deleted"):] if kind.startswith("deleted") else kind
+
+    def holds(v, k, n):
+        if base == "keys":
+            if not v:    # legacy shared namespace: ids without a vault prefix
+                return any("::" not in kid and (key_store.get_key(kid) or {}).get("name") == n for kid in key_store.key_ids())
+            return kvk._latest(kvk.scoped(key_store, v), n) is not None
+        st = sec_store if base == "secrets" else cert_store
+        if not v:
+            return any(n == str(x) for x in st.secrets)
+        return any(n in re.split(r"[/:]", str(x)) for x in scoped(st, v).secrets)
+    return infer_vault(arm_state, base, name, holds)
+
+
+def infer_vault(arm_state, kind: str, name: str, holds) -> str:
+    """The vault a request WITHOUT a vault identity belongs to.
+
+    The azure-keyvault-keys CryptographyClient (and KeyClient.get_cryptography_client) rebuild the vault URL from the key id as
+    scheme://host:port ONLY (a path prefix such as /azure-data/keyvault/{vault}/ is dropped), and the simulator's own host has no
+    `<vault>.vault.azure.net` name, so those follow-ups arrive with no vault. Resolution, in order:
+      1. the item already lives in the legacy shared (no-vault) namespace -> "" (unchanged behaviour);
+      2. the vault holding `name` (the newest when several do);
+      3. the only vault there is (create / list / unknown name);
+      4. "" (ambiguous: legacy behaviour).
+    `holds(vault, kind, name)` is the caller's probe of its store."""
+    names = vault_names(arm_state)
+    if not names:
+        return ""
+    if name and holds("", kind, name):
+        return ""
+    if name:
+        hits = [v for v in names if holds(v, kind, name)]
+        if hits:
+            return hits[-1]
+    return names[0] if len(names) == 1 else ""
 
 
 def vault_exists(arm_state, vault: str) -> bool:
