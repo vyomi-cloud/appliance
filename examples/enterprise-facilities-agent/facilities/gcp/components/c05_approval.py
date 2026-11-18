@@ -3,7 +3,7 @@ agent -> ledger row PENDING + message on the Pub/Sub request topic -> approver r
 checks and records APPROVED/REJECTED in the Firestore ledger -> the waiting caller polls the ledger -> create-work-order function runs only on APPROVED."""
 import json, threading, time
 from google.api_core import exceptions as gex
-from ..runtime import NAMES, LANE, Blocked, need_grpc
+from ..runtime import NAMES, LANE, Blocked, need_grpc, need_result
 from .. import deploy
 
 APPROVER = "duty.manager@example.com"
@@ -49,7 +49,10 @@ def run(ctx):
     res = ctx.state.get("result", {})
     ap = res.get("approval")
     if not ap:
-        ctx.step("agent produced an approval request", lambda: (_ for _ in ()).throw(AssertionError("the agent run did not submit a work order request")))
+        def _no_request():
+            need_result(ctx, "approve")
+            raise AssertionError("the agent run did not submit a work order request")
+        ctx.step("agent produced an approval request", _no_request)
         return
     rid = ap["request_id"]
     db = ctx.firestore()

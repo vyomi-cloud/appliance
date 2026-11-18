@@ -10,7 +10,7 @@ QUESTION = "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a 
 def package_dir():
     """Source package for Agent Engine: facilities/ (the LangGraph agents + GCP adapter) next to the engine entry module."""
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    d = tempfile.mkdtemp(prefix="facilities-engine-")
+    d = os.path.relpath(tempfile.mkdtemp(prefix="facilities-engine-", dir=os.path.realpath(os.getcwd())))     # the SDK requires source packages inside the project (cwd)
     shutil.copytree(os.path.join(root, "facilities"), os.path.join(d, "facilities"), ignore=shutil.ignore_patterns("__pycache__", "lambdas", "functions"))
     shutil.copy(os.path.join(root, "facilities", "gcp", "agent_engine_app.py"), os.path.join(d, "agent_engine_app.py"))
     with open(os.path.join(d, "requirements.txt"), "w") as f:
@@ -55,6 +55,11 @@ def run(ctx):
         ctx.step("agent engine: query runs the supervisor + Facilities/Maintenance/Analytics sub-agents in the hosted runtime", invoke, lane=LANE["engine"])
     if "result" not in ctx.state:       # hosted run unavailable: keep downstream components testable with the in-process graph
         def run_graph():
-            ctx.state["result"] = agents.ask(ctx, QUESTION, ctx.state.get("user", "anonymous"))
+            try:
+                ctx.state["result"] = agents.ask(ctx, QUESTION, ctx.state.get("user", "anonymous"))
+            except Exception as e:
+                ctx.state["agent_error"] = f"{type(e).__name__}: {str(e)[:160]}"
+                ctx.state["agent_blocked_by"] = ctx.blocked_lane(e, None) or LANE["sandbox"]
+                raise
             return "fallback: supervisor graph run client-side (hosted run unavailable); this does NOT count as the hosted runtime"
         ctx.step("langgraph: client-side fallback so later components can run", run_graph)

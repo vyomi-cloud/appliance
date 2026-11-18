@@ -1,7 +1,7 @@
 """C8: AgentOps: spans from the agent run -> Cloud Trace, structured Cloud Logging entries, Cloud Monitoring custom metric, then read them back."""
 import json, time, uuid
 from datetime import datetime, timezone
-from ..runtime import NAMES, LANE, Blocked, need_grpc
+from ..runtime import NAMES, LANE, Blocked, need_grpc, need_result, raw_log_entries
 
 
 def run(ctx):
@@ -20,6 +20,11 @@ def run(ctx):
         x.FromDatetime(datetime.fromtimestamp(t, timezone.utc))
         return x
 
+    def have_run():
+        need_result(ctx, "trace")
+        return f"{len(spans)} agent spans to export"
+    ctx.step("the agent run produced spans to export", have_run)
+
     def push():
         from google.cloud import trace_v2
         c = ctx.rest(trace_v2.TraceServiceClient)
@@ -28,7 +33,7 @@ def run(ctx):
         for s in spans:
             sid = uuid.uuid4().hex[:16]
             out.append(trace_v2.Span(name=f"{P}/traces/{tid}/spans/{sid}", span_id=sid, parent_span_id=root, display_name=trace_v2.TruncatableString(value=s["name"]),
-                                     start_time=ts(s["start"]), end_time=ts(s["end"]), attributes=trace_v2.Span.Attributes(attribute_map={"kind": trace_v2.AttributeValue(string_value=s["kind"])})))
+                                     start_time=ts(s["start"]), end_time=ts(s["end"]), attributes=trace_v2.Span.Attributes(attribute_map={"kind": trace_v2.AttributeValue(string_value=trace_v2.TruncatableString(value=s["kind"]))})))
         c.batch_write_spans(request={"name": P, "spans": out})
         return f"{len(out)} spans sent (trace {tid})"
     ctx.step("cloud trace v2: batch_write_spans (one span per agent / tool step)", push)
@@ -63,6 +68,8 @@ def run(ctx):
             if got:
                 break
             time.sleep(0.5)
+        if not got and raw_log_entries(ctx, f'logName="{P}/logs/facilities-agent"'):
+            raise Blocked(LANE["core"], "entries:list with the SDK's default timestamp>= filter returns nothing although the entry exists (raw entries:list shows it)")
         assert got and tid in json.dumps(got[0].payload), got
         return "structured agent log written with logger.log_struct and read back with list_entries; carries the trace id"
     ctx.step("cloud logging: log_struct + list_entries (structured, trace-correlated)", logs, lane=LANE["core"])

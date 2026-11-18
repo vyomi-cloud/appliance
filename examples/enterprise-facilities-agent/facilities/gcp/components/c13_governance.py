@@ -1,7 +1,7 @@
 """C13: governance and security: Cloud KMS envelope protection of the ledger payload (with AAD), Cloud Audit Logs read-back of the run."""
 import json, time
 from google.api_core import exceptions as gex
-from ..runtime import NAMES, LANE, Blocked
+from ..runtime import NAMES, LANE, Blocked, need_result, raw_log_entries
 
 
 def run(ctx):
@@ -63,11 +63,16 @@ def run(ctx):
             time.sleep(0.5)
         want = {"CreateCryptoKey", "CreateTopic"}
         seen = {w for w in want if any(w in (n or "") for n in names)}
+        if seen != want and not names - {None}:
+            raw = {e.get("protoPayload", {}).get("methodName") for e in raw_log_entries(ctx, f'logName="{P}/logs/cloudaudit.googleapis.com%2Factivity"')}
+            if raw - {None}:
+                raise Blocked(LANE["core"], f"entries:list with the SDK's default timestamp filter returns nothing although {len(raw)} audit entries exist ({sorted(x for x in raw if x)[:3]})")
         assert seen == want, f"audit methods seen: {sorted(x for x in names if x)}"
         return "admin-activity audit has " + ", ".join(sorted(n.rsplit('.', 1)[-1] for n in names if n))[:150]
     ctx.step("cloud audit logs: admin-activity entries for the run (CreateCryptoKey, CreateTopic ...)", audit, lane=LANE["core"])
 
     def ledger():
+        need_result(ctx, "audit")
         rows = [d.to_dict() for d in ctx.firestore().collection(NAMES["ledger"]).stream()]
         st = {r["status"] for r in rows}
         assert {"EXECUTED"} <= st, st

@@ -32,6 +32,12 @@ _GRPC_DOWN = ("failed parsing http/2", "trying to connect an http1.x server", "f
               "statuscode.unavailable", "deadline exceeded", "stream removed", "connection reset", "handshake failed")
 
 
+# error texts the simulator is known to produce for gaps another lane owns (see the lane briefs); anything else stays a FAIL
+_HINTS = (("failed to parse spanid", "core"), ("cannot parse the openapi", "identity"), ("jwt verification fails", "identity"),
+          ("tools.retrieval is not supported", "core"), ("notificationconfigs", "core"), ("name 'print' is not defined", "core"),
+          ("does not run pickle", "engine"), ("agentengineoperation", "engine"))
+
+
 def classify(e, lane):
     """The lane that owes the missing capability, or None when the app or the simulator is simply wrong (FAIL)."""
     low = f"{type(e).__name__}: {e}".lower()
@@ -39,6 +45,9 @@ def classify(e, lane):
         return LANE["model"]
     if "is not available in the function sandbox" in low or "function sandbox" in low:
         return LANE["sandbox"]
+    for needle, owner in _HINTS:
+        if needle in low:
+            return LANE[owner]
     name = type(e).__name__
     if name in ("ServiceUnavailable", "DeadlineExceeded", "RetryError", "TransportError") and any(x in low for x in _GRPC_DOWN):
         return LANE["real"]          # a gRPC channel to the simulator cannot be opened: no gRPC data plane yet
@@ -59,6 +68,7 @@ class GcpCtx(Ctx):
         self.state["notes"] = []
         self._io = None
         self._creds = None
+        self.local_functions = False      # DEV ONLY, set by run_e2e.py --dev-local-functions
         self.pubsub_host = os.environ.get("PUBSUB_EMULATOR_HOST") or urlparse(endpoint).netloc
         self.firestore_host = os.environ.get("FIRESTORE_EMULATOR_HOST") or urlparse(endpoint).netloc
         self.real_backends = os.environ.get("VYOMI_GCP_REAL_BACKENDS") == "1"
@@ -182,3 +192,16 @@ def need_grpc(ctx, what):
                      f"(VYOMI_GCP_REAL_BACKENDS=1, lane realbackend) or PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST pointing at emulators.")
     if ctx.state[key]:
         raise Blocked(LANE["real"], ctx.state[key])
+
+
+def need_result(ctx, who):
+    """Components that consume the agent run report BLOCKED (not FAIL) when the run itself could not happen because an upstream capability is missing."""
+    if not ctx.state.get("result"):
+        raise Blocked(ctx.state.get("agent_blocked_by", LANE["sandbox"]), f"no agent run to {who}: {ctx.state.get('agent_error', 'the agent could not run (tools unavailable)')}")
+    return ctx.state["result"]
+
+
+def raw_log_entries(ctx, flt):
+    """Diagnostic read of Cloud Logging entries:list without the SDK's default timestamp filter (used to tell a simulator filter bug from an app bug)."""
+    r = ctx.api("POST", "/v2/entries:list", {"resourceNames": [f"projects/{ctx.project}"], "filter": flt, "pageSize": 200})
+    return r.get("entries", [])

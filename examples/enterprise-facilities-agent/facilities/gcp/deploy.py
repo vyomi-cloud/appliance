@@ -46,11 +46,42 @@ def deploy_function(ctx, name, module, extra_env=None, event_trigger=None):
         res = fc.update_function(request={"function": fn}).result(timeout=120)
     except gex.NotFound:
         res = fc.create_function(request={"parent": ctx.parent, "function": fn, "function_id": name}).result(timeout=120)
-    return res.service_config.uri or f"{ctx.endpoint}/gcf/{ctx.project}/{ctx.loc}/{name}"
+    uri = res.service_config.uri or f"{ctx.endpoint}/gcf/{ctx.project}/{ctx.loc}/{name}"
+    ctx.state.setdefault("_fn_module", {})[uri] = (module, function_env(ctx, extra_env))
+    return uri
+
+
+class _Req:
+    """Minimal Flask-style request for the DEV local-function mode."""
+    def __init__(self, body):
+        self._b, self.headers = body, {}
+
+    def get_json(self, silent=False):
+        return self._b
+
+
+def _call_local(ctx, uri, payload):
+    """DEV ONLY (run_e2e.py --dev-local-functions): run the function's handler in THIS process instead of in the simulator's function sandbox, so the rest of the
+    app logic can be exercised before the sandbox lane lands. A run in this mode is never a conformance result."""
+    module, env = ctx.state["_fn_module"][uri]
+    old = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    try:
+        ns = {"__name__": "function_main"}
+        exec(compile(main_py(module), module + ".py", "exec"), ns)
+        return ns["handler"](_Req(payload))
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
 
 
 def call_function(ctx, uri, payload, timeout=120):
     """HTTPS call to a function (google-auth AuthorizedSession; on real GCP the credential is an ID token for the function's audience)."""
+    if getattr(ctx, "local_functions", False):
+        return _call_local(ctx, uri, payload)
     r = ctx.authed_session().post(uri, json=payload, timeout=timeout)
     if r.status_code != 200:
         raise RuntimeError(f"function {uri.rsplit('/', 1)[-1]} HTTP {r.status_code}: {r.text[:400]}")

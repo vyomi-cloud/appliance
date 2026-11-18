@@ -40,6 +40,8 @@ def main():
     ap.add_argument("--only", help="comma list of component numbers")
     ap.add_argument("--start-emulators", action="store_true", help="gcp dev helper: start the real Pub/Sub + Firestore emulators in Docker (local image only) and set "
                     "PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST; stands in for VYOMI_GCP_REAL_BACKENDS=1 until the simulator does it")
+    ap.add_argument("--dev-local-functions", action="store_true", help="gcp DEV ONLY: run the Cloud Run function handlers in this process instead of the simulator's "
+                    "function sandbox, to exercise the rest of the app before the sandbox lane lands. Never a conformance result: exit code is forced non-zero")
     ap.add_argument("--llm-stub", action="store_true", help="start the deterministic TEST STUB llm (tools/llm_stub) and point the simulator at it "
                     "(VYOMI_LLM_ENDPOINT). Model-dependent PASSes are then STUB-BACKED, not a real model.")
     a = ap.parse_args()
@@ -69,6 +71,9 @@ def main():
     else:
         ctx = Ctx(endpoint, a.region or "us-east-1", out)
     COMPONENTS = ctx.COMPONENTS
+    if a.dev_local_functions:
+        ctx.local_functions = True
+        ctx.note("DEV RUN: function handlers ran in the harness process (--dev-local-functions), NOT in the simulator's function sandbox. Not a conformance result.")
     out(f"Facilities agent e2e ({a.cloud.upper()})   endpoint={endpoint}   {time.strftime('%Y-%m-%d %H:%M:%S')}")
     out("=" * 100)
     seen = set()
@@ -123,7 +128,7 @@ def main():
     out(f"wrote {a.out}/{pre}e2e-result.json and {pre}report.html")
     if emu:
         emu.stop()
-    sys.exit(0 if tot[PASS] == len(table) else 1)
+    sys.exit(0 if tot[PASS] == len(table) and not a.dev_local_functions else 1)
 
 
 if __name__ == "__main__":

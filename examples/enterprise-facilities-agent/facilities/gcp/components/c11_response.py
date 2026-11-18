@@ -1,5 +1,5 @@
 """C11: response generation: grounded, cited answer; output guardrail (Model Armor sanitizeModelResponse); generateContent grounded on the RAG corpus."""
-from ..runtime import NAMES, LANE, Blocked, is_model_missing
+from ..runtime import NAMES, LANE, Blocked, is_model_missing, need_result
 from ..io import MODEL
 
 
@@ -7,6 +7,7 @@ def run(ctx):
     res = ctx.state.get("result", {})
 
     def cites():
+        need_result(ctx, "ground")
         assert res.get("citations"), "the agent returned no citations"
         assert res["answer"].strip(), "empty answer"
         srcs = {x["source"] for x in res["citations"]}
@@ -15,7 +16,9 @@ def run(ctx):
         return f"answer grounded in {len(srcs)} cited sources; first: {sorted(srcs)[0]}"
     ctx.step("answer is grounded in retrieved documents and cites them", cites)
     tpl = ctx.state.get("armor_template")
-    if tpl:
+    if tpl and res.get("answer") is None:
+        ctx.step("model armor sanitizeModelResponse on the agent answer", lambda: need_result(ctx, "guard"))
+    elif tpl:
         from google.cloud import modelarmor_v1 as ma
         c = ctx.rest(ma.ModelArmorClient)
 
