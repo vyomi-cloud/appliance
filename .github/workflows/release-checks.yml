@@ -313,8 +313,84 @@ jobs:
             out-summary.md
             tests/conformance/hourly/out/results-nano-${{ matrix.cloud }}.json
 
+  # The native-SDK conformance suites (Python boto3 / azure / google, Go, Java: kinds sdk, sdk-python, sdk-go, sdk-java in
+  # tests/conformance/hourly/suites.json) against the PUBLISHED release images, one job per cloud. They feed the SDK pass rate
+  # (the `sdk-pass-rate` marker the report writes; the portal's "SDK pass rate" / "SDK failure rate" tiles read it). Same
+  # suites and runner the hourly conformance agent uses; a failing suite lowers the rate and never blocks the report.
+  sdk-checks:
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix: { cloud: [aws, gcp, azure] }
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VER: ${{ needs.resolve.outputs.ver }}
+      TAG: ${{ needs.resolve.outputs.tag }}
+      VYOMI_BASE_URL: http://localhost:9000
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ needs.resolve.outputs.tag }}' }
+      - name: Use the trunk's checks (main for v1-v3, v4-on-main for v4+) (they test this release, so they can be newer than it)
+        run: |
+          git fetch -q origin ${{ needs.resolve.outputs.checks_ref }}
+          git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- tests/conformance
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.22', cache: false }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17', cache: maven }
+      - name: Test tooling
+        run: pip install --quiet requests pytest boto3 azure-storage-blob pyyaml cryptography
+      - name: Wait for this release's Docker images
+        run: |
+          for i in $(seq 1 90); do
+            if docker manifest inspect "vyomi/appliance:$VER" >/dev/null 2>&1 && docker manifest inspect "vyomi/cloudsim:$VER" >/dev/null 2>&1; then exit 0; fi
+            sleep 50
+          done
+          echo "::error::images for $VER not published after 75 min"; exit 1
+      - name: Boot the release like `vyomi up`
+        run: |
+          gh release download "$TAG" -p "vyomi-$VER.tar.gz" -D /tmp/rel
+          mkdir -p /tmp/bundle && tar -xzf "/tmp/rel/vyomi-$VER.tar.gz" -C /tmp/bundle --strip-components=1
+          cd /tmp/bundle
+          export VYOMI_SIMULATOR_IMAGE="vyomi/appliance:$VER" VYOMI_CLOUDSIM_IMAGE="vyomi/cloudsim:$VER" VYOMI_NO_TELEMETRY=1
+          printf 'services:\n  simulator:\n    environment:\n      CLOUDLEARN_TIER_ENFORCE: "0"\n' > all-tiers.yml
+          C="-f docker-compose.cloudlite.yml -f all-tiers.yml -p vyomi"
+          docker compose $C pull --quiet && docker compose $C up -d && docker compose $C --profile full up -d
+          for _ in $(seq 1 120); do curl -fs "$VYOMI_BASE_URL/healthz" >/dev/null && break; sleep 2; done
+          curl -fs "$VYOMI_BASE_URL/healthz"
+      - name: SDK suites — ${{ matrix.cloud }} (Python, Go, Java)
+        run: |
+          IDS=$(python3 - <<'PY'
+          import json
+          S = json.load(open("tests/conformance/hourly/suites.json"))["suites"]
+          print(",".join(s["id"] for s in S if s["target"] == "offline" and s.get("cloud") == "${{ matrix.cloud }}"
+                         and s.get("kind") in ("sdk", "sdk-python", "sdk-go", "sdk-java")))
+          PY
+          )
+          echo "suites: $IDS"
+          [ -n "$IDS" ] || { echo "::error::no SDK suites for ${{ matrix.cloud }} in suites.json"; exit 1; }
+          python3 tests/conformance/hourly/run_suites.py --target offline --cloud ${{ matrix.cloud }} --only "$IDS"
+      - name: Job summary
+        if: always()
+        run: |
+          python3 tests/conformance/hourly/release_ui_summary.py "SDK suites — ${{ matrix.cloud }}" tests/conformance/hourly/out/results-offline-${{ matrix.cloud }}.json > out-summary.md || true
+          cat out-summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checks-sdk-${{ matrix.cloud }}
+          path: |
+            out-summary.md
+            tests/conformance/hourly/out/results-offline-${{ matrix.cloud }}.json
+            tests/conformance/hourly/out/logs/
+
   report:
-    needs: [resolve, deb, rpm, brew, cli, nano-cli, console-ui, nano-ui]
+    needs: [resolve, deb, rpm, brew, cli, nano-cli, console-ui, nano-ui, sdk-checks]
     if: always() && needs.resolve.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -407,6 +483,19 @@ jobs:
             [ -f ext/windows-e2e/startup-check/summary.md ] && { echo "## Windows E2E"; echo; cat ext/windows-e2e/startup-check/summary.md; echo; }
           } > /tmp/RELEASE-CHECKS.md
           cat /tmp/RELEASE-CHECKS.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The SDK pass rate: totals from the sdk-checks jobs, appended as its own section + the one machine-readable
+      # `sdk-pass-rate` line the portal reads. No SDK result = no marker (the tiles stay "collecting"; nothing is estimated).
+      - name: SDK pass rate (Python, Go, Java)
+        run: |
+          if [ ! -f scripts/release_checks_sdk_rate.py ]; then
+            git fetch -q origin ${{ needs.resolve.outputs.checks_ref }} && git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- scripts/release_checks_sdk_rate.py || true
+          fi
+          if [ -f scripts/release_checks_sdk_rate.py ]; then
+            python3 scripts/release_checks_sdk_rate.py arts > /tmp/sdk-section.md || { echo "::warning::sdk rate aggregation failed"; : > /tmp/sdk-section.md; }
+            if [ -s /tmp/sdk-section.md ]; then { echo; cat /tmp/sdk-section.md; } >> /tmp/RELEASE-CHECKS.md; cat /tmp/sdk-section.md >> "$GITHUB_STEP_SUMMARY"; fi
+          fi
+          grep -c 'sdk-pass-rate' /tmp/RELEASE-CHECKS.md || true
 
       - name: Commit to release/v${{ needs.resolve.outputs.ver }}
         run: |
