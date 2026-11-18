@@ -1,0 +1,93 @@
+name: Endurance release gate
+# Installing: lives in ci/v4/ because the integrator token cannot push under .github/workflows; the owner moves it to .github/workflows/ (activates from the next release).
+# Every release must be all green on the vyomi-endurance checks. Runs after each "Release" workflow (tag vX.Y.Z), on
+# demand, and on PRs that touch the simulator cores / estate. A red run opens (or comments on) a GitHub issue labelled
+# `release-gate` so the failure is never silent.
+#   fast   : the pure-Python endurance regression suites (tests/conformance/test_endurance_*_core.py), seconds, no Docker
+#   estate : AWS reference estate full cycle on a real server (tests/endurance/run_estate.sh):
+#            validate -> apply -> no-diff re-plan -> destroy -> rebuild -> final destroy
+# GCP / Azure estates join the matrix when their estate dirs land (tests/endurance/estate/<cloud>).
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
+  workflow_dispatch:
+  pull_request:
+    paths: ['core/**', 'routes/**', 'server.py', 'tests/endurance/**', 'tests/conformance/test_endurance_*']
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: endurance-gate-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fast:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.event.workflow_run.head_sha || github.sha }}' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -q -r requirements.txt
+      - name: Endurance regression suites
+        run: |
+          fail=0
+          for t in tests/conformance/test_endurance_*_core.py; do
+            echo "== $t"; PYTHONPATH=. python "$t" || fail=1
+          done
+          exit $fail
+      - name: Capability coverage map
+        run: python tests/endurance/coverage.py
+
+  estate-aws:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion != 'cancelled' && startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ github.event.workflow_run.head_sha || github.sha }}' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -q -r requirements.txt
+      - name: Start the simulator (own state dir)
+        run: |
+          mkdir -p "$RUNNER_TEMP/state"
+          VYOMI_COMPUTE_BACKEND=docker VYOMI_NO_TELEMETRY=1 CLOUDLEARN_TIER_ENFORCE=0 \
+            CLOUDLEARN_STATE_FILE="$RUNNER_TEMP/state/s.sqlite3" CLOUDLEARN_LEGACY_STATE_FILE="$RUNNER_TEMP/state/s.pkl" \
+            nohup python -m uvicorn server:app --host 0.0.0.0 --port 19100 > "$RUNNER_TEMP/server.log" 2>&1 &
+          for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:19100/ && break; sleep 3; done
+      - name: AWS estate full cycle
+        env:
+          VYOMI_PLUGIN_CACHE: ${{ runner.temp }}/plugin-cache
+        run: |
+          mkdir -p "$VYOMI_PLUGIN_CACHE"
+          # the OpenTofu container reaches the host simulator through the docker bridge gateway on a Linux runner
+          tests/endurance/run_estate.sh tests/endurance/estate/aws http://172.17.0.1:19100 "$RUNNER_TEMP/aws-estate-report.json"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: endurance-aws
+          path: |
+            ${{ runner.temp }}/aws-estate-report.json
+            ${{ runner.temp }}/server.log
+
+  notify:
+    needs: [fast, estate-aws]
+    if: always() && (needs.fast.result == 'failure' || needs.estate-aws.result == 'failure') && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env: { GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}' }
+    steps:
+      - name: Open / update the release-gate issue
+        run: |
+          REF="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          TITLE="Endurance release gate FAILED for $REF"
+          BODY="fast: ${{ needs.fast.result }}, estate-aws: ${{ needs.estate-aws.result }}. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh label create release-gate -R "${{ github.repository }}" --color B60205 2>/dev/null || true
+          N=$(gh issue list -R "${{ github.repository }}" --label release-gate --state open --search "\"$TITLE\" in:title" --json number -q '.[0].number')
+          if [ -n "$N" ]; then gh issue comment "$N" -R "${{ github.repository }}" --body "$BODY"
+          else gh issue create -R "${{ github.repository }}" --label release-gate --title "$TITLE" --body "$BODY"; fi
