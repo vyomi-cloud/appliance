@@ -1,0 +1,17 @@
+{
+ "$doc": "Vyomi capability registry — Identity Platform / Firebase Auth (identitytoolkit.googleapis.com, securetoken.googleapis.com). See kms.json for the contract.",
+ "gcp.identityplatform.email-password-signin": {
+  "title": "Identity Platform: email/password sign-up/sign-in, custom claims, Google-style ID tokens + JWKS/x509",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Real REST surface for accounts:signUp / signInWithPassword / lookup / update / delete / sendOobCode, the Admin accounts (create, update with customAttributes, lookup, batchGet, delete) and the securetoken refresh grant (POST /v1/token). Anonymous users are supported. ID tokens are real RS256 JWTs (iss https://securetoken.google.com/<project>, aud <project>, sub, email, firebase{identities, sign_in_provider}, custom claims at the top level) signed with the simulator's one public emulator key and published at /robot/v1/metadata/x509/securetoken@system.gserviceaccount.com (x509), /service_accounts/v1/jwk/securetoken@system.gserviceaccount.com and /oauth2/v3/certs (JWKS), so google.oauth2.id_token.verify_firebase_token, PyJWT and the gateway verify them offline. The project comes from the API key (API Keys v2) or the admin path.",
+   "Limits: email/password and anonymous only (no phone, OAuth/social providers, MFA, tenants, email-link or password-reset delivery; sendOobCode is accepted and delivers nothing). firebase_admin.auth.verify_id_token fetches certs from a hard-coded Google URL, so apps verify with google.oauth2.id_token.verify_firebase_token (patch id_token._GOOGLE_APIS_CERTS_URL to the simulator) or PyJWT with the JWKS URL; the Admin SDK user-management calls work against FIREBASE_AUTH_EMULATOR_HOST. No quota/abuse limits. Own code: the Firebase Auth emulator is not in the cloud-cli emulators image and signs nothing."
+  ],
+  "tests": [
+   "tests/conformance/test_gcp_identity_gateway_sdk.py"
+  ]
+ }
+}

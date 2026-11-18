@@ -60,6 +60,7 @@ from core import gcp_firestore_core as gcp_fs
 from core import gcp_datastore_core as gcp_ds
 from core import gcp_eventarc_core as gcp_eventarc
 from core import gcp_apigateway_core as gcp_apigw
+from core import gcp_identityplatform_core as gcp_idp
 from core import gcp_hub_core as gcp_hub
 from core import gcp_audit_core as gcp_audit
 from core.gcp_firestore_core import FirestoreStore
@@ -1280,6 +1281,8 @@ class AwsWireRouter:
             return "ecr-registry"   # docker push/pull against <acct>.dkr.ecr.<region>.<host> (AWS:<token> basic auth)
         if (lheaders.get("host", "").split(":", 1)[0].lower().endswith(".gateway.dev")) or path.startswith("/gcpgw/"):
             return "gcp-gateway-invoke"   # an API Gateway gateway's URL → the shared gateway engine (core/gcp_apigateway_gateway)
+        if gcp_idp.handles(path, body):
+            return "gcp-identityplatform"   # Identity Platform / Firebase Auth sign-in + the securetoken JWKS/x509 certs (core/gcp_identityplatform_core)
         gcp = _gcp_service(path)
         if gcp:
             return gcp
@@ -2517,7 +2520,7 @@ class AwsWireRouter:
             if self.STRICT_GCP_PROJECT and svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
                 body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
-                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-apigateway": (gcp_apigw, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-apigateway": (gcp_apigw, self.gcp_mon), "gcp-identityplatform": (gcp_idp, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
@@ -2546,7 +2549,12 @@ class AwsWireRouter:
                 "gcp-bigquery": (gcp_bigquery, self.gcs),
             }[svc]
             mod, store = _gcp_core
-            if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
+            if svc == "gcp-identityplatform":   # the API key names the project; certs also list the service-account key ids
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ctx={
+                    "default_project": gcp_proj.project_id(), "iamc_store": self.gcp_iamc,
+                    "project_for_key": lambda k: next((x["name"].split("/")[1] for x in gcp_apigw._coll(self.gcp_mon, "keys").values() if x.get("keyString") == k), None),
+                    "base": ((headers or {}).get("x-forwarded-proto") or "http") + "://" + str((headers or {}).get("host") or "")})
+            elif svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
             elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
