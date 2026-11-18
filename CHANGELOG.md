@@ -13,6 +13,12 @@ GCP reference architecture (13/13) on the real Google SDKs, with the supporting 
 - **[Nano + Mesh]** GCP reference app (`facilities/gcp/`, `run_e2e.py --cloud gcp`), Identity Platform sign-in, API Gateway token validation, Cloud Run function sandbox with SDK access, Vertex Model Armor on the model call, Agent Engine source hosting, Sessions events, GCS notifications.
 - **[Mesh]** Opt-in real Pub/Sub and Firestore emulator data plane (`VYOMI_GCP_REAL_BACKENDS=1`) and a gRPC front for the Logging and Monitoring clients.
 
+### Added (Nano consoles)
+
+- **[Nano]** A Nano `NotTranslatedYet` 501 and any adapter 5xx are now reported as an issue (one per `METHOD service collection [verb]` fingerprint; needs consent and sign-in). The dead adapter-5xx check ran after an early return and never fired; it now runs first. An `X-Vyomi-Reported: 1` header stops the page and the service worker reporting twice.
+- **[Nano]** Console view-time emitter `wasm/nano-usage.js` (enter/exit/duration per service view, posted to the portal `/api/usage/views`). Node-tested only; not exercised in a browser. The portal receiver must be live first (a 404 stops the emitter).
+- **[Nano]** Avatar menu gets a Dashboard item, linking to the portal `dashboard_url` from `/api/auth/me`.
+
 ### Fixes
 
 - Logging timestamp filters, Trace v1/v2 span ids, KMS additional authenticated data, event-function `print`, `models.get` for served ids.

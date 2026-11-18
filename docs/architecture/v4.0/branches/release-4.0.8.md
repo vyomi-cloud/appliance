@@ -1,16 +1,3 @@
-# v4/release-4.0.8
+# release-4.0.8 (`v4/release-4.0.8-final`)
 
-Release prep for v4.0.8 (GCP reference architecture, PR #659/#660), base `v4-on-main` 999940d18.
-
-## Changes
-- VERSION 4.0.8, CHANGELOG entry, `docs/releases/v4.0.8-gcp-reference.md`.
-- `wasm/build_cores.py` rebuild: `wasm/core/*` mirrors synced with `core/` (new `gcp_identityplatform_core.py`); `wasm/v4/gcp` bundle rebuilt.
-
-- `wasm/nano-boot.js`: add `gcp_identityplatform_core.py` to CORES. PR #659 added the core to the relay lists but not to nano-boot.js, so the browser boot would ImportError (found by the release checklist `nano-loaders-complete`; trunk has the bug, v4.0.7 and the live portal do not).
-- MCP knowledge (`cmd/vyomi/mcp_*`) regenerated; all three console bundles rebuilt (they embed the nano-boot.js hash).
-
-## Design decisions
-- Same cut recipe as 4.0.4: owner pushes the tag with `--no-verify`; portal synced with `wasm/vendor_to_portal.py`, not `portal-nano-sync.yml`.
-
-## Open issues
-- No Codespace run (budget 402). Azure reference app not started.
+Final integration for 4.0.8 from `origin/v4-on-main`: merged `v4/issue-report-501`, `v4/usage-view-events`, `v4/console-dashboard-link` (all clean, no conflicts). Docs: CHANGELOG [4.0.8], `docs/releases/v4.0.8-issue-reporting-usage-dashboard.md`. Cheap tests only; the emitter is Node-tested only.
