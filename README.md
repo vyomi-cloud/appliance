@@ -2,16 +2,20 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-18T20:13:09+00:00
+### Upstream watch — 2026-11-18T21:13:09+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**4 change(s), 0 actionable.**
-- · `announcement` AWS Lambda adds support for GPU instances on Lambda Managed Instances  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-gpu-managed-instances/))
-- · `announcement` AWS Lambda now supports customer-managed runtimes, giving platform teams centralized control over runtime contents and updates ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-customer-managed-runtimes/))
-- · `announcement` Amazon CloudFront Announces WebSocket and gRPC Support for Origin Mutual TLS ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudfront-origin-mtls-websockets-grpc/))
-- · `release` cli:aws: 2.41.0 → 2.41.1
+**8 change(s), 4 actionable.**
+- 🔧 `operation-changed` AWS iam: operation CreateLoginProfile changed
+- 🔧 `operation-changed` AWS iam: operation CreateRole changed
+- 🔧 `operation-changed` AWS iam: operation UpdateLoginProfile changed
+- 🔧 `operation-changed` AWS iam: operation UpdateRole changed
+- · `announcement` Amazon RDS for MySQL now supports MySQL major version 9.7 ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-mysql-974-available/))
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.115.0 → v1.116.0
+- · `release` pypi:boto3: 1.44.5 → 1.44.6
+- · `release` pypi:botocore: 1.44.5 → 1.44.6
 
-Sources that failed this run (5): maven/software.amazon.awssdk:s3: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
+Sources that failed this run (5): maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
 
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+Filed 4 backlog issue(s) labelled `upstream-drift`; 0 pending.
