@@ -21,6 +21,7 @@ capvenv/bin/pip install azure-core azure-identity azure-mgmt-loganalytics azure-
 # Google SDK tests (tests/conformance/test_gcp_ref_corefix_sdk.py): real client libraries against the in-process simulator
 capvenv/bin/pip install google-cloud-logging google-cloud-trace google-cloud-kms google-cloud-storage google-cloud-pubsub \
   google-cloud-functions google-cloud-aiplatform google-genai
+capvenv/bin/pip install google-cloud-functions google-cloud-secret-manager google-cloud-storage   # tests/conformance/test_gcp_function_sandbox_sdk.py
 # Nano AMQP test (Pyodide + Node): vendored Pyodide (15 MB, untracked/ignored) and the JS deps for the relay
 python3 wasm/fetch_pyodide.py && python3 wasm/build_cores.py
 mkdir sbnm && (cd sbnm && npm init -y && npm i ws @azure/service-bus)      # 31 MB

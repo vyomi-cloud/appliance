@@ -240,5 +240,18 @@
     ],
     "api": ["services.create", "services.patch", "revisions.get"],
     "tests": ["tests/conformance/test_gcp_run_networking.py"]
+  },
+  "gcp.functions.sandbox.sdk-access": {
+    "title": "Function runtime reaches the simulator with the real Google client libraries (HTTP, Pub/Sub and Cloud Storage event functions)",
+    "level": { "nano": "limited", "offline": "full" },
+    "limitations": [
+      "Offline / Mesh: a Python function runs in its own subprocess (core/gcp_function_runtime) with the standard Cloud Functions environment (GOOGLE_CLOUD_PROJECT, K_SERVICE, FUNCTION_TARGET, FUNCTION_SIGNATURE_TYPE, ...), application default credentials served by a per-function loopback metadata server (GCE_METADATA_HOST), STORAGE_EMULATOR_HOST and VYOMI_ENDPOINT pointing at the simulator, and the appliance's own pre-baked wheel set (google-cloud-firestore/pubsub/storage/secret-manager, google-auth, requests, grpcio, boto3, ...). requirements.txt is honoured only against that set (no internet to pip install): an unsatisfiable requirement fails the build with the list of available libraries.",
+      "Egress is limited to loopback and the simulator endpoint, files to the function's own directory (+ read-only interpreter and site-packages), and process spawning is denied. This is an interpreter-level guard (socket patches, grpc channel guard, PEP 578 audit hook), not a VM: native code that bypasses the interpreter is not contained.",
+      "Google clients that only speak gRPC (firestore.Client, default Pub/Sub transport) need the real Pub/Sub + Firestore emulators (VYOMI_GCP_REAL_BACKENDS); on the REST data plane use the gapic clients with transport=\"rest\" and api_endpoint=$VYOMI_ENDPOINT. Secret Manager, Storage, Pub/Sub and Firestore REST are proven.",
+      "Nano (in-browser Pyodide) runs the function in the same interpreter as the cores: computational standard library plus the flask / functions_framework shims only. There are no Google SDKs and no network there, so a function that imports google.cloud or urllib.request fails with an ImportError naming the sandbox.",
+      "Python only; Node/Go/Java functions are stored and validated, not executed. Cloud Run services with a container image are not executed."
+    ],
+    "api": ["functions.create", "functions.call", "services.create (Eventarc triggers deliver CloudEvents to the function)"],
+    "tests": ["tests/conformance/test_gcp_function_sandbox_sdk.py"]
   }
 }
