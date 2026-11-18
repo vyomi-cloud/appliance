@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-18T22:22:07+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (5): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T22:14:49+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,18 +3007,4 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.10 → v1.52.11
 - · `release` pypi:boto3: 1.43.125 → 1.43.126
 - · `release` pypi:botocore: 1.43.125 → 1.43.126
-
-Filed 2 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T20:08:10+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T19:08:13+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 

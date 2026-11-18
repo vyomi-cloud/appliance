@@ -1,54 +1,12 @@
 {
- "at": "2026-11-18T22:14:49+00:00",
+ "at": "2026-11-18T22:22:07+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Identity and Access Management",
-   "kind": "announcement",
-   "key": "feed:aws:f9ce7dfd0f8f",
-   "title": "Amazon OpenSearch Memory is now generally available",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-memory-generally-available/",
-   "detail": "Today, AWS announced the general availability of Amazon OpenSearch Memory, a new serverless capability in Amazon OpenSearch Service for adding persistent memory to AI agents. OpenSearch Memory stores agent interactions as searchable events, derives useful memories, and retrieves relevant context across sessions, so agents can recall prior decisions, earlier interactions, and user preferences without replaying the full conversation history to the model. Customers can give agents long-term memory without provisioning infrastructure or building separate extraction, indexing, consolidation, and re",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:e10ec83b5e00",
-   "title": "Amazon SageMaker AI now supports cross-Region inference routing",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-cross-region-routing/",
-   "detail": "Today, Amazon SageMaker AI announces cross-Region inference routing, which helps keep inference applications available when a region runs short of capacity by sending requests to endpoints deployed in other AWS Regions and AWS accounts. Models served on accelerated instances can reach capacity limits in a single Region, and an unhealthy endpoint can lead to throttling and errors for end users. Previously, teams had to build and maintain their own routing, health checks, and retry logic across Regions. With cross-Region inference routing in SageMaker AI, developers create an inference router, r",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, AWS IAM, Aurora, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:93c635481260",
-   "title": "Amazon Aurora DSQL now supports audit logging",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-dsql-audit-logging/",
-   "detail": "Amazon Aurora DSQL now supports database-internal audit logging, a fully managed capability that captures SQL statements executed on your cluster. Previously, AWS CloudTrail recorded who connected to a DSQL cluster, but not what they did once inside it. Now, financial institutions and regulated enterprises can meet production compliance requirements by capturing DDL, DML, DCL, and SELECT statements with full statement text, bind parameters, acting principal (both PostgreSQL role and AWS IAM identity), timestamp, table name, and transaction identifier. With audit logging, you can feed SIEM syst",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, DynamoDB, Kinesis",
-   "kind": "announcement",
-   "key": "feed:aws:8b3bf013c3f9",
-   "title": "Amazon OpenSearch Ingestion Service now supports next-generation time series collections",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-ingestion-service-nextgen-time-series-collections",
-   "detail": "Amazon OpenSearch Ingestion service now supports time series collections in the next generation of Amazon OpenSearch Serverless as a pipeline destination. You can stream logs, metrics, traces and event data into time series collections with fully managed pipelines. You don't have to run your own collectors or write custom ingestion code. OpenSearch Ingestion delivers data from the sources you already use, including OpenTelemetry, Amazon S3, Amazon Kinesis Data Streams, Amazon MSK, Amazon DynamoDB, and HTTP endpoints. Before indexing, pipelines can filter, enrich, transform, and route data with",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": [
   "maven/software.amazon.awssdk:s3: The read operation timed out",
   "maven/software.amazon.awssdk:sqs: The read operation timed out",
   "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
-  "maven/com.azure:azure-storage-blob: The read operation timed out",
   "maven/com.azure:azure-cosmos: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
  ]
 }
