@@ -20,7 +20,7 @@
     "#vy-md .md-panel{display:grid;grid-template-rows:0fr;background:var(--md-bg);transition:grid-template-rows .25s ease}" +
     "#vy-md.open .md-panel{grid-template-rows:1fr}" +
     "#vy-md .md-clip{overflow:hidden;min-height:0}" +
-    "#vy-md .md-body{box-sizing:border-box;max-width:1320px;margin:0 auto;padding:16px 24px 18px;max-height:min(56vh,calc(100vh - 220px));overflow:auto}" +
+    "#vy-md .md-body{box-sizing:border-box;max-width:calc(var(--md-cw,1272px) + 2 * var(--md-px,24px));margin:0 auto;padding:16px var(--md-px,24px) 18px;max-height:min(56vh,calc(100vh - 220px));overflow:auto}" +
     "#vy-md:not(.open) .md-body{visibility:hidden}" +
     "#vy-md .md-welcome{display:flex;gap:12px;align-items:flex-start;margin:0 0 14px;padding:12px 16px;background:var(--md-al-bg);border:var(--md-al-bw) solid var(--md-al-bd);border-radius:var(--md-al-r)}" +
     "#vy-md .md-welcome svg{flex:none;margin-top:2px;color:var(--md-accent)}" +
@@ -46,6 +46,13 @@
     "#vy-md.c-azure{--md-font:'Segoe UI','Segoe UI Web (West European)',-apple-system,BlinkMacSystemFont,Roboto,'Helvetica Neue',sans-serif;--md-fg:#242424;--md-line:#e0e0e0;--md-accent:#0f6cbd;--md-al-bg:#f5f5f5;--md-al-bd:#e0e0e0;--md-al-fg:#424242;--md-al-r:4px;--md-al-bw:1px;--md-shadow:none}" +
     "#vy-md.c-azure .md-welcome svg{color:#0f6cbd}#vy-md.c-azure .md-welcome b{font-weight:600}" +
     "#vy-md,#vy-md *{box-shadow:none!important;text-shadow:none!important}#vy-md{filter:none!important}" +
+    /* content column of each console, so the drawer lines up with the page below it: --md-cw = widest content, --md-px = side inset */
+    "#vy-md.c-aws{--md-cw:1280px;--md-px:24px}" +
+    "#vy-md.c-azure{--md-cw:1052px;--md-px:24px}" +
+    "#vy-md.c-gcp{--md-cw:996px;--md-px:72px}" +
+    "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
+    "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
+    "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +
     "@media(max-width:700px){#vy-md .md-tab{padding:0 12px}}";
 
   function header() { return document.querySelector(HEADER[CLOUD] || "header"); }
