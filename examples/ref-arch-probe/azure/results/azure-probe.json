@@ -1,0 +1,863 @@
+{
+ "cloud": "azure",
+ "generated": "2026-11-18T05:13:34",
+ "mode": "appliance server.py in-process, CLOUDLEARN_TIER_ENFORCE=0, no model",
+ "summary": {
+  "access": "FAIL",
+  "channels": "FAIL",
+  "runtime": "FAIL",
+  "gateway": "FAIL",
+  "approval": "FAIL",
+  "knowledge": "FAIL",
+  "tools": "FAIL",
+  "observability": "FAIL",
+  "memory": "FAIL",
+  "models": "BLOCKED",
+  "response": "FAIL",
+  "pipeline": "FAIL",
+  "governance": "BLOCKED"
+ },
+ "components": [
+  {
+   "component": 1,
+   "name": "access",
+   "title": "Access: Entra token + APIM validate-jwt + WAF",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Entra client-credentials token via /oauth2/v2.0/token (app + secret from Graph)",
+     "status": "PASS",
+     "evidence": "{\"token_prefix\": \"vyomi.39e0c3\"}",
+     "seconds": 0.02
+    },
+    {
+     "step": "access token is a JWT (so a policy can validate it)",
+     "status": "FAIL",
+     "error": "AssertionError: access_token is not a JWT (opaque, 2 segments): vyomi.39e0c3f6253e4d...",
+     "cause": "b",
+     "seconds": 0.0
+    },
+    {
+     "step": "azure-identity ClientSecretCredential can reach the token endpoint",
+     "status": "BLOCKED",
+     "error": "ValueError: 'http://127.0.0.1:58409' is an invalid authority. The value must be a TLS protected (https) URL.",
+     "cause": "d",
+     "blocked_reason": "azure-identity refuses a non-https authority; the probe serves plain http (not a simulator gap)",
+     "seconds": 0.06
+    },
+    {
+     "step": "OIDC signing keys endpoint (/discovery/v2.0/keys) for validate-jwt openid-config",
+     "status": "FAIL",
+     "error": "AssertionError: 404 <?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Mes",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "APIM: service, API, operation, validate-jwt policy, subscription (azure-mgmt-apimanagement)",
+     "status": "PASS",
+     "evidence": "apim service + api + op + validate-jwt policy + subscription",
+     "seconds": 0.17
+    },
+    {
+     "step": "APIM rejects a call with no subscription key",
+     "status": "PASS",
+     "evidence": "{\"statusCode\": 401, \"message\": \"Access denied due to missing subscription key. M",
+     "seconds": 0.02
+    },
+    {
+     "step": "APIM validate-jwt accepts a correctly signed HS256 JWT",
+     "status": "PASS",
+     "evidence": "HS256 JWT signed with the policy key -> 200",
+     "seconds": 0.0
+    },
+    {
+     "step": "APIM validate-jwt rejects a garbage token",
+     "status": "PASS",
+     "evidence": "garbage token -> 401",
+     "seconds": 0.0
+    },
+    {
+     "step": "APIM validate-jwt accepts the token Entra just issued (the real chain)",
+     "status": "FAIL",
+     "error": "AssertionError: Entra-issued token rejected by validate-jwt: 401 {\"statusCode\": 401, \"message\": \"Unauthorized. Access token is missing or invalid.\"}",
+     "cause": "b",
+     "seconds": 0.0
+    },
+    {
+     "step": "WAF policy on Front Door (azure-mgmt-frontdoor)",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceTypeNotSupported) Type 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies' is not simulated. Supported: Microsoft.ApiManagement/service, Microsoft.App/containerApps, Microsoft.App/jobs, Microsoft.App/managedEnvironments, Microsoft.AppConfiguration/configurationStores, Microsoft.Authorization/policyAssignments, Microsoft.Authorization/policyDefinitions, Microsoft.Authorization/roleAssignments, Microsoft.Authorization/roleDefinitions, Microsoft.Cache/redis, Microsoft.Cdn/profiles, Microsoft.CognitiveServices/accounts, Microsoft.Compute/disks, Microsoft.Compute/virtualMachines, Microsoft.ContainerRegistry/registries, Microsoft.ContainerService/managedClusters, Microsoft.DocumentDB/databaseAccounts, Microsoft.EventGrid/domains, Microsoft.EventGrid/namespaces, Microsoft.EventGrid/partnerConfigurations, Microsoft.EventGrid/partnerNamespaces, Microsoft.EventGrid/partnerRegistrations, Microsoft.EventGrid/partnerTopics, Microsoft.EventGrid/systemTopics, Microsoft.EventGrid/topics, Microsoft.Insights/metricAlerts, Microsoft.KeyVault/vaults, Microsoft.Kusto/clusters, Microsoft.ManagedIdentity/userAssignedIdentities, Microsoft.Network/applicationSecurityGroups, Microsoft.Network/azureFirewalls, Microsoft.Network/bastionHosts, Microsoft.Network/ddosProtectionPlans, Microsoft.Network/dnsZones, Microsoft.Network/firewallPolicies, Microsoft.Network/loadBalancers, Microsoft.Network/natGateways, Microsoft.Network/networkInterfaces, Microsoft.Network/netw...",
+     "cause": "a",
+     "seconds": 0.03
+    },
+    {
+     "step": "WAF policy on Application Gateway (azure-mgmt-network)",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceTypeNotSupported) Type 'Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies' is not simulated. Supported: Microsoft.ApiManagement/service, Microsoft.App/containerApps, Microsoft.App/jobs, Microsoft.App/managedEnvironments, Microsoft.AppConfiguration/configurationStores, Microsoft.Authorization/policyAssignments, Microsoft.Authorization/policyDefinitions, Microsoft.Authorization/roleAssignments, Microsoft.Authorization/roleDefinitions, Microsoft.Cache/redis, Microsoft.Cdn/profiles, Microsoft.CognitiveServices/accounts, Microsoft.Compute/disks, Microsoft.Compute/virtualMachines, Microsoft.ContainerRegistry/registries, Microsoft.ContainerService/managedClusters, Microsoft.DocumentDB/databaseAccounts, Microsoft.EventGrid/domains, Microsoft.EventGrid/namespaces, Microsoft.EventGrid/partnerConfigurations, Microsoft.EventGrid/partnerNamespaces, Microsoft.EventGrid/partnerRegistrations, Microsoft.EventGrid/partnerTopics, Microsoft.EventGrid/systemTopics, Microsoft.EventGrid/topics, Microsoft.Insights/metricAlerts, Microsoft.KeyVault/vaults, Microsoft.Kusto/clusters, Microsoft.ManagedIdentity/userAssignedIdentities, Microsoft.Network/applicationSecurityGroups, Microsoft.Network/azureFirewalls, Microsoft.Network/bastionHosts, Microsoft.Network/ddosProtectionPlans, Microsoft.Network/dnsZones, Microsoft.Network/firewallPolicies, Microsoft.Network/loadBalancers, Microsoft.Network/natGateways, Microsoft.Network/networkInterfaces, Microsoft.Net...",
+     "cause": "a",
+     "seconds": 0.23
+    }
+   ],
+   "seconds": 3.5
+  },
+  {
+   "component": 2,
+   "name": "channels",
+   "title": "Channels: input guardrail + approver inbox",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Content Safety analyze_text (azure-ai-contentsafety)",
+     "status": "FAIL",
+     "error": "DecodeError: JSON is invalid: Expecting value: line 1 column 1 (char 0)\nContent: <?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Resource>/contentsafety/text:analyze</Resource><RequestId>948E2D06661F4091</RequestId></Error>",
+     "cause": "a",
+     "seconds": 0.02
+    },
+    {
+     "step": "Azure OpenAI RAI (content filter) policy create via ARM (raiPolicies)",
+     "status": "PASS",
+     "evidence": "strict",
+     "seconds": 0.01
+    },
+    {
+     "step": "violent prompt refused by the input content filter before the model",
+     "status": "PASS",
+     "evidence": "400 code=content_filter",
+     "seconds": 0.43
+    },
+    {
+     "step": "Service Bus namespace + topic + subscription via ARM (azure-mgmt-servicebus)",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.08
+    },
+    {
+     "step": "an ARM-created topic is reachable over AMQP (azure-servicebus)",
+     "status": "FAIL",
+     "error": "MessagingEntityNotFoundError: The messaging entity 'amqps://localhost:58404/approvals' could not be found. Error condition: amqp:not-found.",
+     "cause": "a",
+     "seconds": 1.06
+    },
+    {
+     "step": "topic -> subscription: send, receive, complete over AMQP (entities seeded straight into the runtime store: harness shortcut)",
+     "status": "PASS",
+     "evidence": "{\"request_id\":\"r1\",\"amount\":900}",
+     "seconds": 5.05
+    }
+   ],
+   "seconds": 9.7
+  },
+  {
+   "component": 3,
+   "name": "runtime",
+   "title": "Runtime: Assistants agent/thread/run + Container Apps host",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Assistants: create agent with function tool (openai AzureOpenAI beta.assistants)",
+     "status": "PASS",
+     "evidence": "asst_b17003f88b654b34b50d1a7f",
+     "seconds": 0.79
+    },
+    {
+     "step": "Assistants: create thread + message + run",
+     "status": "PASS",
+     "evidence": "{\"thread\": \"thread_b07aa486bfad4c8ca78b2ce6\", \"run\": \"run_c819e31ad75b4ca68ddb318b\", \"status\": \"failed\"}",
+     "seconds": 0.02
+    },
+    {
+     "step": "run reaches completed / requires_action (needs a model; 503 from the LLM seam without one)",
+     "status": "BLOCKED",
+     "error": "AssertionError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_L",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.0
+    },
+    {
+     "step": "GET thread / GET run / list messages (read-back after the run)",
+     "status": "FAIL",
+     "error": "NotFoundError: Error code: 404",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "Foundry Agents SDK (azure-ai-agents) at a project endpoint",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: Operation returned an invalid status 'Not Found'\nContent: {\"detail\":\"Not found\"}",
+     "cause": "a",
+     "seconds": 0.03
+    },
+    {
+     "step": "Container Apps: environment + container app via ARM (azure-mgmt-appcontainers)",
+     "status": "PASS",
+     "evidence": "{\"fqdn\": \"agent-app.5f7a8d-41ef6073.eastus.azurecontainerapps.io\", \"state\": \"ContainerAppProvisioningState.SUCCEEDED\"}",
+     "seconds": 0.09
+    },
+    {
+     "step": "Container App ingress answers HTTP (does the host run the container?)",
+     "status": "FAIL",
+     "error": "ConnectionError: HTTPConnectionPool(host='agent-app.5f7a8d-41ef6073.eastus.azurecontainerapps.io', port=80): Max retries exceeded with url: / (Caused by NameResolutionError(\"HTTPConnection(host='agent-app.5f7a8d-41ef6073.eastus.azurecontainerapps.io', port=80): Failed to resolve 'agent-app.5f7a8d-41ef6073.eastus.azurecontainerapps.io' ([Errno 8] nodename nor servname provided, or not known)\"))",
+     "cause": "a",
+     "seconds": 0.04
+    }
+   ],
+   "seconds": 4.1
+  },
+  {
+   "component": 4,
+   "name": "gateway",
+   "title": "Gateway: APIM tool catalog + subscription key + policies + MCP",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "APIM service + 'tools' API + 3 operations (the tool catalog) via azure-mgmt-apimanagement",
+     "status": "PASS",
+     "evidence": "[\"create_work_order\", \"lookup_asset\", \"get_policy\"]",
+     "seconds": 0.24
+    },
+    {
+     "step": "subscription key required and checked at the gateway",
+     "status": "PASS",
+     "evidence": "401 without / with wrong key",
+     "seconds": 0.03
+    },
+    {
+     "step": "operation policy: rate-limit + set-header + return-response executed",
+     "status": "PASS",
+     "evidence": "200,200,429",
+     "seconds": 0.03
+    },
+    {
+     "step": "conditional deny via choose/when with an @(...) expression (Cedar substitute)",
+     "status": "FAIL",
+     "error": "AssertionError: choose/when @(...) not evaluated: allow=200 deny=200 skipped=choose",
+     "cause": "a",
+     "seconds": 0.06
+    },
+    {
+     "step": "MCP exposure: APIM api type=mcp + JSON-RPC tools/list through the gateway",
+     "status": "FAIL",
+     "error": "AssertionError: (404, '{\"statusCode\": 404, \"message\": \"Resource not found\"}')",
+     "cause": "a",
+     "seconds": 0.02
+    },
+    {
+     "step": "Cedar-like policy engine on Azure",
+     "status": "PASS",
+     "evidence": "does not exist natively (the doc agrees); APIM policy expressions are the substitute. Not a simulator gap."
+    }
+   ],
+   "seconds": 3.4
+  },
+  {
+   "component": 5,
+   "name": "approval",
+   "title": "Approval: Service Bus inbox + Function + Table/Cosmos ledger",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Function can import azure-data-tables (SDK deps available to function code)",
+     "status": "FAIL",
+     "error": "AssertionError: 500 module>\n    rv = fn(_r)\n  File \"/var/folders/ls/m88_d41j5sz14pg5skbfr4980000gn/T/cl-fn-mpkj0glh/main.py\", line 3, in main\n    import azure.data.tables\nModuleNotFoundError: No module named 'azure.data'",
+     "cause": "a",
+     "seconds": 0.18
+    },
+    {
+     "step": "Function App + zipdeploy of an approve() function that writes the ledger over the Table REST wire (urllib)",
+     "status": "PASS",
+     "evidence": "function app + zipdeploy of approve()",
+     "seconds": 0.06
+    },
+    {
+     "step": "Table ledger: create table + entity, read back (azure-data-tables)",
+     "status": "PASS",
+     "evidence": "create_table + create_entity + get_entity",
+     "seconds": 0.05
+    },
+    {
+     "step": "Table: replace-mode update + upsert (PUT)",
+     "status": "PASS",
+     "evidence": "update_entity(REPLACE) + upsert_entity(REPLACE)",
+     "seconds": 0.01
+    },
+    {
+     "step": "Table: merge-mode update (PATCH)",
+     "status": "FAIL",
+     "error": "HttpResponseError: Unsupported method PATCH.\nErrorCode:UnsupportedHttpVerb\nContent: {\"odata.error\": {\"code\": \"UnsupportedHttpVerb\", \"message\": {\"lang\": \"en-us\", \"value\": \"Unsupported method PATCH.\"}}}",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "Table: OData $filter query",
+     "status": "FAIL",
+     "error": "HttpResponseError: Malformed entity key.\nErrorCode:InvalidInput\nContent: {\"odata.error\": {\"code\": \"InvalidInput\", \"message\": {\"lang\": \"en-us\", \"value\": \"Malformed entity key.\"}}}",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "Table: ETag optimistic concurrency (If-Match) accepted/rejected",
+     "status": "FAIL",
+     "error": "AssertionError: stale etag was accepted (optimistic concurrency not enforced)",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "FULL LOOP: request -> Service Bus (AMQP) -> approver -> Function -> Table -> caller sees 'approved'",
+     "status": "PASS",
+     "evidence": "caller saw 'approved' after 3.1s (function replied (200, '{\"ok\": true, \"request_id\": \"req-867271\"}'))",
+     "seconds": 4.12
+    },
+    {
+     "step": "Service Bus: an already-attached receiver is handed a message sent later (live delivery)",
+     "status": "FAIL",
+     "error": "AssertionError: waiting receiver got 0 messages within 10 s of the send",
+     "cause": "a",
+     "seconds": 11.61
+    },
+    {
+     "step": "Cosmos ledger (azure-cosmos): upsert/read/replace-with-etag/SQL query",
+     "status": "FAIL",
+     "error": "AssertionError: stale etag accepted",
+     "cause": "a",
+     "seconds": 0.21
+    },
+    {
+     "step": "Cosmos ledger: replace_item(item dict) via the returned _self link",
+     "status": "FAIL",
+     "error": "CosmosResourceNotFoundError: (NotFound) Database '5c58b11b934f475c' not found.\nCode: NotFound\nMessage: Database '5c58b11b934f475c' not found.",
+     "cause": "a",
+     "seconds": 0.02
+    },
+    {
+     "step": "Cosmos ledger: patch_item",
+     "status": "FAIL",
+     "error": "CosmosHttpResponseError: Status code: 405\n{\"detail\":\"Method Not Allowed\"}\nContent: {\"detail\":\"Method Not Allowed\"}",
+     "cause": "a",
+     "seconds": 0.02
+    },
+    {
+     "step": "Table storage is backed by a real engine (Azurite) as REFERENCE-ARCH doc proposes",
+     "status": "FAIL",
+     "error": "AssertionError: Table data is held in Vyomi's own state slots, NOT in Azurite: Blob containers and bytes are held in the appliance state slot and mirrored to Azurite when CLOUDLEARN_AZURITE_URL is reachable (older Azurite-only blobs are adopted lazily). Queue and Table data are held in Vyomi's own persisted ",
+     "cause": "a",
+     "seconds": 0.0
+    }
+   ],
+   "seconds": 18.7
+  },
+  {
+   "component": 6,
+   "name": "knowledge",
+   "title": "Knowledge: AI Search BM25 + vector + hybrid + semantic",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "AI Search service + admin key via ARM (azure-mgmt-search)",
+     "status": "PASS",
+     "evidence": "{\"advertised_endpoint\": \"https://srch1.search.windows.net/\"}",
+     "seconds": 0.03
+    },
+    {
+     "step": "endpoint advertised by ARM (https://<svc>.search.windows.net) is served by the simulator",
+     "status": "FAIL",
+     "error": "AssertionError: ARM advertises https://srch1.search.windows.net/, which is not served by the simulator (data plane lives under an ARM-extension path instead)",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "SearchIndexClient.create_index (vector + semantic config) at the ARM-extension endpoint",
+     "status": "PASS",
+     "evidence": "kb",
+     "seconds": 0.06
+    },
+    {
+     "step": "SearchIndexClient.create_or_update_index (PUT indexes('name'))",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceNotFound) Unknown search service operation 'indexes('kb2')'.\nCode: ResourceNotFound\nMessage: Unknown search service operation 'indexes('kb2')'.",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "SearchClient.upload_documents",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceNotFound) Unknown search service operation 'indexes('kb')'.\nCode: ResourceNotFound\nMessage: Unknown search service operation 'indexes('kb')'.",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "SearchClient.search BM25",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceNotFound) Unknown search service operation 'indexes('kb')'.\nCode: ResourceNotFound\nMessage: Unknown search service operation 'indexes('kb')'.",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "SearchClient.search vector (VectorizedQuery)",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceNotFound) Unknown search service operation 'indexes('kb')'.\nCode: ResourceNotFound\nMessage: Unknown search service operation 'indexes('kb')'.",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "SearchClient.search hybrid (text + vector)",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceNotFound) Unknown search service operation 'indexes('kb')'.\nCode: ResourceNotFound\nMessage: Unknown search service operation 'indexes('kb')'.",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "SearchClient.search semantic ranker (reranker score)",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (ResourceNotFound) Unknown search service operation 'indexes('kb')'.\nCode: ResourceNotFound\nMessage: Unknown search service operation 'indexes('kb')'.",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "ENGINE-LEVEL raw REST (ARM-extension path): index + docs",
+     "status": "PASS",
+     "evidence": "index + 3 docs via /indexes/{name}/docs/index",
+     "seconds": 0.01
+    },
+    {
+     "step": "engine BM25",
+     "status": "PASS",
+     "evidence": "[[\"1\", 1.021651]]",
+     "seconds": 0.0
+    },
+    {
+     "step": "engine vector",
+     "status": "PASS",
+     "evidence": "[[\"2\", 1.0], [\"1\", 0.0]]",
+     "seconds": 0.0
+    },
+    {
+     "step": "engine hybrid (RRF)",
+     "status": "PASS",
+     "evidence": "[[\"2\", 0.032787], [\"1\", 0.016129]]",
+     "seconds": 0.0
+    },
+    {
+     "step": "engine semantic ranker (@search.rerankerScore)",
+     "status": "PASS",
+     "evidence": "[[\"1\", 1.9696]]",
+     "seconds": 0.01
+    }
+   ],
+   "seconds": 2.5
+  },
+  {
+   "component": 7,
+   "name": "tools",
+   "title": "Tools: Function App function + Cosmos DB",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Cosmos: account (ARM) + database + container + upsert items (azure-cosmos)",
+     "status": "PASS",
+     "evidence": "db + container (pk /site) + 3 items",
+     "seconds": 0.14
+    },
+    {
+     "step": "Cosmos: read_item, SQL query with ORDER BY, delete, read_all",
+     "status": "PASS",
+     "evidence": "read_item, parameter-free SQL with ORDER BY, delete_item, read_all_items",
+     "seconds": 0.02
+    },
+    {
+     "step": "Cosmos: parameterised SQL cross-partition query",
+     "status": "FAIL",
+     "error": "AssertionError: []",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "Cosmos: SELECT VALUE COUNT(1) aggregate",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.0
+    },
+    {
+     "step": "Function App + HTTP function (azure.functions v1 model, calls Cosmos) deployed by zipdeploy",
+     "status": "PASS",
+     "evidence": "function app + zipdeploy",
+     "seconds": 0.11
+    },
+    {
+     "step": "ARM list_functions shows the deployed function",
+     "status": "FAIL",
+     "error": "AssertionError: ARM list_functions after zipdeploy shows []",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "invoke function: POST JSON body",
+     "status": "PASS",
+     "evidence": "{\"asset\": \"a1\", \"floor\": 1}",
+     "seconds": 0.05
+    },
+    {
+     "step": "invoke function: GET with query string",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.06
+    },
+    {
+     "step": "invoke on the real hostname form <app>.azurewebsites.net/api/<fn>",
+     "status": "FAIL",
+     "error": "AssertionError: (404, '{\"detail\":\"Not found\"}')",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "ARM list_function_keys",
+     "status": "FAIL",
+     "error": "ResourceNotFoundError: (NotFound) Function 'lookup_asset' not found.\nCode: NotFound\nMessage: Function 'lookup_asset' not found.",
+     "cause": "a",
+     "seconds": 0.0
+    }
+   ],
+   "seconds": 2.8
+  },
+  {
+   "component": 8,
+   "name": "observability",
+   "title": "Observability: App Insights + Log Analytics + Monitor metrics",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Log Analytics workspace + Application Insights component (workspace-based) via ARM",
+     "status": "PASS",
+     "evidence": "InstrumentationKey=3081f81c-1da3-4fcd-930f-ebbc915513ad;IngestionEndpoint=/_obs/;LiveEndpoint=/_obs/",
+     "seconds": 0.11
+    },
+    {
+     "step": "ingest a span with azure-monitor-opentelemetry-exporter",
+     "status": "PASS",
+     "evidence": "span exported without error",
+     "seconds": 0.17
+    },
+    {
+     "step": "ingest a MessageData item at /v2/track (App Insights wire)",
+     "status": "FAIL",
+     "error": "AssertionError: (405, '<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed a')",
+     "cause": "a",
+     "seconds": 0.14
+    },
+    {
+     "step": "read App Insights telemetry back with KQL (AppTraces)",
+     "status": "FAIL",
+     "error": "AssertionError: (400, '{\"error\":{\"code\":\"SemanticError\",\"message\":\"\\'AppTraces\\' : Failed to resolve table or column expression named \\'AppTraces\\'\"}}')",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "Log Analytics custom-table ingest (Data Collector) + KQL where read-back",
+     "status": "PASS",
+     "evidence": "{\"cols\": [\"TimeGenerated\", \"run_s\", \"tool_s\", \"ms_d\"], \"rows\": 1}",
+     "seconds": 0.01
+    },
+    {
+     "step": "KQL summarize count() by",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.0
+    },
+    {
+     "step": "KQL extend + ago() + avg() + order by",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.0
+    },
+    {
+     "step": "azure-monitor-query LogsQueryClient (api.loganalytics.io host form)",
+     "status": "BLOCKED",
+     "error": "ServiceRequestError: Bearer token authentication is not permitted for non-TLS protected (non-https) URLs.",
+     "cause": "d",
+     "blocked_reason": "SDK refuses bearer auth over non-TLS; also the api.loganalytics.io host is documented as not modelled",
+     "seconds": 0.01
+    },
+    {
+     "step": "Azure Monitor metrics.list on a storage account (azure-mgmt-monitor)",
+     "status": "PASS",
+     "evidence": "[\"Transactions\"]",
+     "seconds": 0.09
+    },
+    {
+     "step": "OTLP/HTTP ingest at /_obs/v1/traces",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.0
+    }
+   ],
+   "seconds": 3.8
+  },
+  {
+   "component": 9,
+   "name": "memory",
+   "title": "Memory: Assistants threads (short-term); no managed long-term",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "create thread with metadata + messages (short-term memory)",
+     "status": "PASS",
+     "evidence": "thread_c06c8295d7a2439c8ad86cab",
+     "seconds": 0.48
+    },
+    {
+     "step": "GET messages (history read-back)",
+     "status": "FAIL",
+     "error": "NotFoundError: Error code: 404",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "update thread metadata",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.01
+    },
+    {
+     "step": "recall across turns via a run (needs a model)",
+     "status": "BLOCKED",
+     "error": "AssertionError: run failed",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.02
+    },
+    {
+     "step": "delete thread",
+     "status": "FAIL",
+     "error": "NotFoundError: Error code: 404",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "confirm NO managed long-term memory API exists (expected absent)",
+     "status": "PASS",
+     "evidence": "no managed long-term memory route (status [404, 404]); long-term memory is an app pattern on Cosmos/AI Search",
+     "seconds": 0.01
+    }
+   ],
+   "seconds": 2.9
+  },
+  {
+   "component": 10,
+   "name": "models",
+   "title": "Models: Azure OpenAI chat + embeddings",
+   "status": "BLOCKED",
+   "steps": [
+    {
+     "step": "ARM deployments (chat gpt-4o, embed text-embedding-3-small) list",
+     "status": "PASS",
+     "evidence": "[\"chat\", \"embed\"]",
+     "seconds": 0.0
+    },
+    {
+     "step": "embeddings.create: 2 inputs, 1536 dims",
+     "status": "PASS",
+     "evidence": "2 x 1536",
+     "seconds": 0.04
+    },
+    {
+     "step": "embeddings with dimensions=256 (text-embedding-3 feature)",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.06
+    },
+    {
+     "step": "chat.completions (needs a model)",
+     "status": "BLOCKED",
+     "error": "InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.02
+    },
+    {
+     "step": "chat.completions with tools (needs a model)",
+     "status": "BLOCKED",
+     "error": "InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.01
+    },
+    {
+     "step": "chat.completions stream=True (needs a model)",
+     "status": "BLOCKED",
+     "error": "InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.01
+    },
+    {
+     "step": "responses.create (needs a model)",
+     "status": "BLOCKED",
+     "error": "InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.03
+    },
+    {
+     "step": "unknown deployment -> 404 DeploymentNotFound",
+     "status": "PASS",
+     "evidence": "404 DeploymentNotFound",
+     "seconds": 0.0
+    }
+   ],
+   "seconds": 2.7
+  },
+  {
+   "component": 11,
+   "name": "response",
+   "title": "Response: grounded cited answer + output filter",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "vector store + file upload + file attach (openai SDK)",
+     "status": "PASS",
+     "evidence": "vs_c2561a016bfa4c9b9ea45d72",
+     "seconds": 0.53
+    },
+    {
+     "step": "vector store file list",
+     "status": "FAIL",
+     "error": "NotFoundError: Error code: 404",
+     "cause": "a",
+     "seconds": 0.0
+    },
+    {
+     "step": "assistant with file_search runs against the vector store (needs a model)",
+     "status": "BLOCKED",
+     "error": "AssertionError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or s",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.24
+    },
+    {
+     "step": "assistant message carries file_citation annotations (needs a model)",
+     "status": "BLOCKED",
+     "error": "NotFoundError: Error code: 404",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.01
+    },
+    {
+     "step": "run steps list shows retrieval step (needs a model)",
+     "status": "BLOCKED",
+     "error": "NotFoundError: Error code: 404",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.01
+    },
+    {
+     "step": "chat completions On Your Data (azure_search data source) (needs a model)",
+     "status": "BLOCKED",
+     "error": "InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm start`) or set VYOMI_LLM_ENDPOINT.",
+     "cause": "c",
+     "blocked_reason": "no model",
+     "seconds": 0.01
+    },
+    {
+     "step": "output (Completion-source) content filter policy accepted by ARM",
+     "status": "PASS",
+     "evidence": "output-source policy accepted; enforcement on a completion needs a model",
+     "seconds": 0.01
+    }
+   ],
+   "seconds": 3.2
+  },
+  {
+   "component": 12,
+   "name": "pipeline",
+   "title": "Pipeline: Blob -> Event Grid -> Function -> AI Search indexer",
+   "status": "FAIL",
+   "steps": [
+    {
+     "step": "Blob upload + download (azure-storage-blob)",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.12
+    },
+    {
+     "step": "Function App with a blob-event handler (zipdeploy)",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.11
+    },
+    {
+     "step": "Event Grid system topic + WebHook subscription to the function (azure-mgmt-eventgrid)",
+     "status": "PASS",
+     "evidence": "Succeeded",
+     "seconds": 0.15
+    },
+    {
+     "step": "blob upload raises BlobCreated and it is delivered to the function",
+     "status": "FAIL",
+     "error": "AssertionError: no observable BlobCreated delivery: checked subscription list only (1 subs); see delivery log step",
+     "cause": "a",
+     "seconds": 3.04
+    },
+    {
+     "step": "AI Search data source + indexer + run (REST, ARM-extension path)",
+     "status": "PASS",
+     "evidence": "transientFailure",
+     "seconds": 2.06
+    },
+    {
+     "step": "indexer populated the index from the Blob container",
+     "status": "FAIL",
+     "error": "AssertionError: {'value': []}",
+     "cause": "a",
+     "seconds": 0.01
+    },
+    {
+     "step": "SearchIndexerClient (azure-search-documents) against the same service",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.07
+    }
+   ],
+   "seconds": 7.9
+  },
+  {
+   "component": 13,
+   "name": "governance",
+   "title": "Governance: Key Vault envelope + Activity Log",
+   "status": "BLOCKED",
+   "steps": [
+    {
+     "step": "Key Vault via ARM (azure-mgmt-keyvault)",
+     "status": "PASS",
+     "evidence": "http://127.0.0.1:58814/azure-data/keyvault/kv-probe1/",
+     "seconds": 0.07
+    },
+    {
+     "step": "KeyClient.create_rsa_key (azure-keyvault-keys SDK)",
+     "status": "BLOCKED",
+     "error": "ServiceRequestError: Bearer token authentication is not permitted for non-TLS protected (non-https) URLs.",
+     "cause": "d",
+     "blocked_reason": "azure-keyvault SDK refuses bearer auth over non-TLS even with a transport shim; probe serves plain http (not a simulator gap)",
+     "seconds": 0.07
+    },
+    {
+     "step": "envelope encryption over the Key Vault REST wire: create key, wrapkey, unwrapkey",
+     "status": "PASS",
+     "evidence": "REST wrapkey/unwrapkey round-trip",
+     "seconds": 0.23
+    },
+    {
+     "step": "Activity Log lists the run's control-plane operations (azure-mgmt-monitor activity_logs)",
+     "status": "PASS",
+     "evidence": "2",
+     "seconds": 0.03
+    },
+    {
+     "step": "Activity Log filtered by resource group",
+     "status": "PASS",
+     "evidence": "null",
+     "seconds": 0.01
+    }
+   ],
+   "seconds": 3.7
+  }
+ ]
+}
