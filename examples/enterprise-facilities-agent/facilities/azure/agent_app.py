@@ -16,6 +16,8 @@ def ctx():
     if _ctx is None:
         from facilities.azure.runtime import AzCtx
         _ctx = AzCtx(os.environ["VYOMI_ENDPOINT"], out=lambda *_: None, http_endpoint=os.environ.get("VYOMI_HTTP_ENDPOINT"), amqp_port=os.environ.get("VYOMI_AMQP_PORT"))
+        if os.environ.get("FUNC_KEY"):
+            _ctx.state["func_key"] = os.environ["FUNC_KEY"]
         if os.environ.get("APIM_KEY"):
             _ctx.state.update(apim_key=os.environ["APIM_KEY"], gateway_tools_ok=os.environ.get("GATEWAY_TOOLS_OK") == "1", apim_mcp_ok=os.environ.get("APIM_MCP_OK") == "1",
                               mcp_tools=set(json.loads(os.environ.get("MCP_TOOLS", "[]"))))
@@ -34,3 +36,8 @@ def query(body: dict):
     out = {k: st.get(k) for k in ("answer", "route", "citations", "analytics", "approval", "llm_used", "tools", "spans")}
     out["pid"] = os.getpid()
     return out
+
+
+if __name__ == "__main__":          # the Container Apps entrypoint: listen on $PORT (the simulator's runtime sets it)
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("PORT", "8080")))

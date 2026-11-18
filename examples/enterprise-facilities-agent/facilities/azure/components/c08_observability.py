@@ -87,7 +87,7 @@ def run(ctx):
 
     def kql():
         from azure.monitor.query import LogsQueryClient
-        c = LogsQueryClient(ctx.cred(), endpoint=ctx.endpoint)
+        c = LogsQueryClient(ctx.cred(), endpoint=ctx.endpoint + "/azure-data/loganalytics")
 
         def q(text):
             r = c.query_workspace(ctx.state["workspace_id"], text, timespan=timedelta(hours=2))
@@ -109,7 +109,7 @@ def run(ctx):
 
     def kql_metric():
         from azure.monitor.query import LogsQueryClient
-        c = LogsQueryClient(ctx.cred(), endpoint=ctx.endpoint)
+        c = LogsQueryClient(ctx.cred(), endpoint=ctx.endpoint + "/azure-data/loganalytics")
         r = c.query_workspace(ctx.state["workspace_id"], "AppMetrics | where Name == 'facilities.tool_calls' | summarize total=sum(Sum)", timespan=timedelta(hours=2))
         rows = r.tables[0].rows
         assert rows and rows[0][0] == ctx.state["tool_calls"], rows
@@ -124,7 +124,7 @@ def run(ctx):
         r = requests.post(f"{ctx.endpoint}{ctx.rid('Microsoft.OperationalInsights', 'workspaces', NAMES['workspace'])}/api/logs", headers={"Log-Type": "AgentRun"},
                           json=[{"run": tid, "tool": t["tool"], "via": t["via"]} for t in res.get("tools", [])] or [{"run": tid, "tool": "none", "via": "none"}], timeout=20)
         assert r.status_code in (200, 202), f"HTTP {r.status_code}: {r.text[:120]}"
-        c = LogsQueryClient(ctx.cred(), endpoint=ctx.endpoint)
+        c = LogsQueryClient(ctx.cred(), endpoint=ctx.endpoint + "/azure-data/loganalytics")
         rows = c.query_workspace(ctx.state["workspace_id"], f"AgentRun_CL | where run_s == '{tid}' | summarize n=count() by tool_s", timespan=timedelta(hours=2)).tables[0].rows
         assert rows, "ingested rows not returned"
         return f"AgentRun_CL: {len(rows)} tool group(s) read back with summarize"

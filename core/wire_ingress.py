@@ -660,6 +660,13 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
                 pass
         if not vault0:
             vault0 = _kv_infer_vault(r, arm_st, kvs, kvk, kind, p, headers)
+            if vault0 and not kvs.vault_exists(arm_st, vault0):     # inferred from the provider's ARM state (where a vault created over ARM lives)
+                try:
+                    from providers import azure_services as _azp
+                    if kvs.vault_exists(_azp._state, vault0):
+                        arm_st = _azp._state
+                except Exception:
+                    pass
         if vault0 and not kvs.vault_exists(arm_st, vault0):
             resp404 = kvs.vault_not_found(vault0)
             return {"status": resp404.status, "headers": {"content-type": "application/json"}, "body": resp404.body}

@@ -74,3 +74,20 @@ def seed_table(ctx, table, rows, pk, key):
     t = ctx.table(table)
     for r in rows:
         t.upsert_entity(dict(r, PartitionKey=pk, RowKey=str(r[key])))
+
+
+def agent_bundle():
+    """base64 zip of the supervisor app for a Container App (`VYOMI_APP_SOURCE_B64`): app.py (the entrypoint) + the facilities package (agents, runtime, azure IO)."""
+    import base64
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.write(os.path.join(root, "facilities", "azure", "agent_app.py"), "app.py")
+        for base in ("facilities",):
+            for d, dirs, files in os.walk(os.path.join(root, base)):
+                dirs[:] = [x for x in dirs if x not in ("__pycache__", "gcp", "lambdas", "components", "functions")]
+                for f in files:
+                    if f.endswith(".py"):
+                        full = os.path.join(d, f)
+                        z.write(full, os.path.relpath(full, root))
+    return base64.b64encode(buf.getvalue()).decode()

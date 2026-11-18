@@ -8,16 +8,17 @@ def run(ctx):
 
     def vault():
         from azure.mgmt.keyvault import KeyVaultManagementClient
-        v = ctx.arm(KeyVaultManagementClient).vaults.begin_create_or_update(RG, NAMES["vault"], {"location": LOC, "properties": {
-            "tenant_id": "00000000-0000-0000-0000-000000000000", "sku": {"family": "A", "name": "standard"}, "access_policies": []}}).result()
+        from azure.mgmt.keyvault.models import Sku, SkuFamily, SkuName, VaultCreateOrUpdateParameters, VaultProperties
+        v = ctx.arm(KeyVaultManagementClient).vaults.begin_create_or_update(RG, NAMES["vault"], VaultCreateOrUpdateParameters(location=LOC, properties=VaultProperties(
+            tenant_id="00000000-0000-0000-0000-000000000000", sku=Sku(family=SkuFamily.A, name=SkuName.STANDARD), access_policies=[]))).result()
         S["uri"] = v.properties.vault_uri
         return S["uri"]
     ctx.step("key vault: create facilities-kv through ARM (azure-mgmt-keyvault)", vault, lane=LANE["runtime"])
     if "uri" in S:
         uri = S["uri"]
-        if ctx.tls and uri.startswith("http://"):
-            uri = "https://" + uri[len("http://"):]
-            ctx.note("Key Vault: the vault URI from ARM is http://, the SDK needs https: used the same host over the simulator's TLS port.")
+        if ctx.tls:
+            uri = ctx.endpoint      # host-only https URL: the SDK rebuilds the vault URL from a key id as scheme://host:port; the simulator infers the vault from the key name
+            ctx.note("Key Vault: KeyClient uses the simulator's https host (not properties.vault_uri, which stays the console path form).")
         if not ctx.tls:
             ctx.step("key vault: the azure-keyvault-keys SDK needs an https vault URI", lambda: (_ for _ in ()).throw(Blocked("https endpoint", "azure-keyvault-keys refuses bearer auth over plain http; run against https://")))
         else:
@@ -38,7 +39,7 @@ def _keys(ctx, uri, S):
 
     def crypto():
         from azure.keyvault.keys.crypto import CryptographyClient
-        return CryptographyClient(S["kc"].get_key(NAMES["key"]), ctx.cred(), verify_challenge_resource=False)
+        return CryptographyClient(S["kc"].get_key(NAMES["key"]).id, ctx.cred(), verify_challenge_resource=False)
 
     def envelope():
         from azure.keyvault.keys.crypto import KeyWrapAlgorithm

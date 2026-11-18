@@ -3,6 +3,7 @@ ASSEMBLED, not native: Azure has no hosted-agent runtime like AgentCore Runtime 
 import time
 from ..runtime import NAMES, LANE, Blocked, RG, LOC
 from ... import agents
+from .. import deploy
 
 QUESTION = "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?"
 TOOL_DEFS = [{"type": "function", "function": {"name": "kb_search", "description": "Search the facilities knowledge base (read-only).",
@@ -55,22 +56,24 @@ def run(ctx):
         c.managed_environments.begin_create_or_update(RG, NAMES["capp_env"], {"location": LOC, "properties": {}}).result()
         env = ctx.rid("Microsoft.App", "managedEnvironments", NAMES["capp_env"])
         app = c.container_apps.begin_create_or_update(RG, NAMES["capp"], {"location": LOC, "properties": {"managedEnvironmentId": env, "configuration": {"ingress": {"external": True, "targetPort": 8080}},
-            "template": {"containers": [{"name": "supervisor", "image": "mcr.microsoft.com/k8se/quickstart:latest", "env": [
-                {"name": "VYOMI_ENDPOINT", "value": ctx.endpoint}, {"name": "VYOMI_HTTP_ENDPOINT", "value": ctx.http}, {"name": "VYOMI_AMQP_PORT", "value": str(ctx.amqp_port)}]}]}}}).result()
+            "template": {"containers": [{"name": "supervisor", "image": "vyomi/python-app:latest", "env": [
+                {"name": "VYOMI_APP_SOURCE_B64", "value": deploy.agent_bundle()}, {"name": "VYOMI_ENDPOINT", "value": ctx.http}, {"name": "VYOMI_HTTP_ENDPOINT", "value": ctx.http},
+                {"name": "VYOMI_AMQP_PORT", "value": str(ctx.amqp_port)}, {"name": "FUNC_KEY", "value": ctx.state.get("func_key", "")}]}]}}}).result()
         ctx.state["capp"] = app
         return f"container app {app.name} fqdn={app.latest_revision_fqdn} state={app.provisioning_state}"
     ctx.step("container apps: environment + facilities-supervisor app via ARM (azure-mgmt-appcontainers)", host)
 
     def ingress():
         import requests
-        app = ctx.state["capp"]
-        fqdn = app.latest_revision_fqdn or (app.configuration.ingress.fqdn if app.configuration and app.configuration.ingress else "")
-        assert fqdn, "the container app has no ingress FQDN"
-        base = fqdn if fqdn.startswith("http") else f"https://{fqdn}"
+        from azure.mgmt.appcontainers import ContainerAppsAPIClient
+        raw = ctx.arm(ContainerAppsAPIClient).container_apps.get(RG, NAMES["capp"], cls=lambda resp, des, hdr: resp.http_response.json())   # vendor property: not in the SDK model
+        base = (raw.get("properties") or {}).get("vyomiIngressUrl") or ""
+        if not base:
+            raise Blocked(LANE["host"], "ARM container app carries no properties.vyomiIngressUrl (Container Apps hosting not served)")
         try:
             r = requests.post(base + "/query", json={"prompt": QUESTION, "user": ctx.state.get("user", "anonymous")}, timeout=60)
         except Exception as e:
-            raise Blocked(LANE["host"], f"the simulator does not run the container image or expose a reachable ingress ({type(e).__name__}: {str(e)[:100]})")
+            raise Blocked(LANE["host"], f"ingress unreachable ({type(e).__name__}: {str(e)[:100]})")
         assert r.status_code == 200, f"HTTP {r.status_code}: {r.text[:200]}"
         out = r.json()
         names = {s["name"] for s in out["spans"]}

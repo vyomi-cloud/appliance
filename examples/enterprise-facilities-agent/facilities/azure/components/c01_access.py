@@ -65,6 +65,9 @@ def sign_in(ctx):
 
     def user_token():
         from azure.identity import UsernamePasswordCredential
+        import msal.authority as _ma       # msal drops the port from the ROPC user-realm URL (see the gateway lane doc): the simulator is not a federated realm, skip that probe for its host
+        _d = _ma.Authority._domains_without_user_realm_discovery
+        (_d.add if hasattr(_d, "add") else _d.append)(ctx.host)
         cred = UsernamePasswordCredential(ctx.state["app_id"], USER, PW, tenant_id=TENANT, authority=ctx.endpoint, disable_instance_discovery=True)
         tok = cred.get_token(API_URI + "/.default")
         c = claims(tok.token)
@@ -170,8 +173,9 @@ def edge(ctx):
     def waf_appgw():
         from azure.mgmt.network import NetworkManagementClient
         n = ctx.arm(NetworkManagementClient)
-        n.web_application_firewall_policies.create_or_update(RG, NAMES["waf"] + "gw", {"location": LOC, "policy_settings": {"state": "Enabled", "mode": "Prevention"},
-            "managed_rules": {"managed_rule_sets": [{"rule_set_type": "OWASP", "rule_set_version": "3.2"}]}})
+        from azure.mgmt.network.models import (ManagedRulesDefinition, ManagedRuleSet, PolicySettings, WebApplicationFirewallPolicy)
+        n.web_application_firewall_policies.create_or_update(RG, NAMES["waf"] + "gw", WebApplicationFirewallPolicy(location=LOC,
+            policy_settings=PolicySettings(state="Enabled", mode="Prevention"), managed_rules=ManagedRulesDefinition(managed_rule_sets=[ManagedRuleSet(rule_set_type="OWASP", rule_set_version="3.2")])))
         got = n.web_application_firewall_policies.get(RG, NAMES["waf"] + "gw")
         assert str(getattr(got.policy_settings.mode, "value", got.policy_settings.mode)) == "Prevention", got.policy_settings
         return f"Application Gateway WAF policy {got.name} (OWASP 3.2, Prevention)"
