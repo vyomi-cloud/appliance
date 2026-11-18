@@ -373,8 +373,15 @@ def _azure_service(path, lheaders, query):
     if path.startswith("/v1.0/") or path.startswith("/beta/"):
         return "az-graph"
     p0 = path.split("?", 1)[0]
+    if re.match(r"^/api/projects/[^/]+(/|$)", p0):
+        return "az-openai"   # Foundry project endpoint (azure-ai-projects / azure-ai-agents) -> core/azure_openai_agents_core
+    if path.split("?", 1)[0].startswith("/contentsafety/"):
+        return "az-contentsafety"   # Azure AI Content Safety data plane -> core/ai_models_core.azure_contentsafety_dispatch
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|evals|vyomi/promptflow|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
+    if re.match(r"^/(?![a-z0-9-]+_[A-Za-z0-9]+/)[^/]+/(v2\.0/\.well-known/openid-configuration|\.well-known/openid-configuration|discovery/(v2\.0/)?keys|discovery/instance)$", p0) \
+            or p0 in ("/discovery/v2.0/keys", "/discovery/keys") or p0.startswith("/common/userrealm/"):
+        return "az-graph"   # Entra OIDC discovery + JWKS (core/azure_entra_tokens_core); Cognito pool ids are excluded (identity_core serves those)
     if re.search(r"/oauth2(/v2\.0)?/(token|authorize)$", p0) and not p0.startswith("/identities/") and not re.match(r"^/[a-z0-9-]+_[A-Za-z0-9]+/", p0):   # /identities/oauth2/token is AgentCore GetResourceOauth2Token; /{poolId}/oauth2/* is the Cognito hosted UI (core/identity_core)
         return "az-graph"
     p = path
@@ -433,7 +440,7 @@ def _azure_service(path, lheaders, query):
     # queue name (lowercase-only) can look like it.
     accept = lheaders["accept"] if "accept" in lheaders else ""
     tsegs = [s for s in p.split("/") if s]
-    if "odata" in accept.lower() or (tsegs and (tsegs[0] == "Tables" or tsegs[0].startswith("Tables(") or "(" in tsegs[0])):
+    if "odata" in accept.lower() or (tsegs and (tsegs[0] == "Tables" or tsegs[0].startswith("Tables(") or "(" in tsegs[0] or tsegs[-1] == "$batch")):
         return "az-table"
     # Queue / Table SERVICE-level requests (service properties, stats, CORS preflight) share the root path with Blob: a
     # distinct host (<acct>.queue|table.core.windows.net) or x-vyomi-service tells them apart.
@@ -866,6 +873,8 @@ class AwsWireRouter:
                 setattr(self.az_arm, _attr, _store)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
+        if getattr(self.az_arm, "sb_store", None) is None:
+            self.az_arm.sb_store = self.az_sb   # ARM-created queues/topics/subscriptions/rules are the entities the wire (and AMQP) serve
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         self.az_arm.graph_store = self.az_graph   # IMDS token issue -> Entra Managed identity sign-ins row
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
@@ -2189,6 +2198,10 @@ class AwsWireRouter:
             from core import gcp_agentengine_core
             return gcp_agentengine_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
+        if svc == "az-contentsafety":
+            from core import ai_models_core
+            return ai_models_core.azure_contentsafety_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
         if svc == "az-openai":
             from core import ai_models_core
             try:
@@ -2669,6 +2682,9 @@ class AwsWireRouter:
                 # keyvaults/api.js setActiveVault) so the Networking blade's publicNetworkAccess /
                 # networkAcls can actually be enforced (azure.keyvaults.networking).
                 vault = az_kvsec.vault_of(path, headers)
+                if not vault:    # CryptographyClient follow-ups carry only the host: resolve the vault holding the item
+                    vault = az_kvsec.infer_vault_for_request(self.az_arm.state, self.az_kvsec, self.az_kvkeys, self.az_kvcerts,
+                                                              {"az-kv-secrets": "secrets", "az-kv-keys": "keys", "az-kv-certs": "certificates"}[svc], path, headers)
                 if vault and not az_kvsec.vault_exists(self.az_arm.state, vault):
                     _nf = az_kvsec.vault_not_found(vault)
                     return {"status": _nf.status, "headers": {"content-type": "application/json"}, "body": _nf.body}

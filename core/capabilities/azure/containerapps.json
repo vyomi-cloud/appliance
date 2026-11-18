@@ -155,5 +155,30 @@
   ],
   "api": ["RoleAssignments_ListForScope (resource-scoped)", "RoleDefinitions_List"],
   "tests": ["tests/conformance/test_azure_arm_core.py"]
+ },
+ "azure.containerapps.ingress.sandbox-runtime": {
+  "title": "A Container App runs and answers on its ingress (azure-mgmt-appcontainers create, then HTTP to the app)",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "Offline: image vyomi/python-app (or any container with a VYOMI_APP_SOURCE_B64 source bundle: base64 zip or one .py, entry app.py|main.py|server.py|VYOMI_APP_ENTRY, or a python -c / -m / script command) runs as a REAL but SANDBOXED PYTHON PROCESS, not a container: same interpreter guard as the Cloud Functions runtime (scrubbed environment, sockets only to loopback and the simulator, files confined to the app directory, no subprocess). No image layers, no cgroup limits, no exec; it is a guard-rail for trusted reference apps, not hostile-code isolation. Any other image runs as a Docker container when Docker is available on a Pro/Max appliance (existing runtime; the command/args passthrough added here is not covered by the SDK test).",
+   "The app FQDN does not resolve locally, so the same ingress is served at <simulator>/azure-data/containerapps/<app>/... (returned as properties.vyomiIngressUrl on the app resource), at <app>--<revision> to pin a revision, and by Host header <app>.<domain>.azurecontainerapps.io. In multiple-revision mode the ingress traffic weights pick the revision per request. The process listens on $PORT (the ingress targetPort when it is free, else a free port).",
+   "env values and secretRef (resolved from configuration.secrets) reach the process; scale rules/replicas are records only (one replica per active revision, no scale-to-zero cold start, no autoscaling); TLS termination on the FQDN, custom domains/certificates, IP restrictions, CORS, Easy Auth (authConfigs), session affinity, system logs to Log Analytics and internal-only ingress isolation are not simulated (an internal ingress is served like an external one).",
+   "Nano (browser) has no process runtime and no HTTP listener: the control plane (environments, apps, revisions, traffic) works, the app is not executed and the ingress URL is not served."
+  ],
+  "api": [
+   "ContainerApps_CreateOrUpdate",
+   "ContainerApps_Get",
+   "ContainerApps_Stop",
+   "ContainerApps_Start",
+   "ContainerApps_Delete",
+   "ContainerAppsRevisions_List",
+   "ContainerAppsRevisionReplicas_ListReplicas"
+  ],
+  "tests": [
+   "tests/conformance/test_azure_ref_containerapps_sdk.py"
+  ]
  }
 }

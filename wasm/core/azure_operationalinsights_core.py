@@ -82,6 +82,20 @@ BASE_TABLES = {
     "Usage": ["TimeGenerated", "DataType", "Quantity", "IsBillable", "Solution"],
     "AzureDiagnostics": ["TimeGenerated", "ResourceId", "Category", "OperationName", "ResultType"],
 }
+# Application Insights telemetry of workspace-based components lands in these tables (ingest: ingest_appinsights, the /v2/track wire).
+_APP_COMMON = ["TimeGenerated", "OperationName", "OperationId", "ParentId", "AppRoleName", "AppRoleInstance", "ClientIP", "SDKVersion", "AppVersion", "ItemId",
+               "Properties", "Measurements", "Type", "_ResourceId"]
+APP_TABLES = {
+    "AppTraces": ["TimeGenerated", "Message", "SeverityLevel"] + _APP_COMMON[1:],
+    "AppRequests": ["TimeGenerated", "Id", "Source", "Name", "Url", "Success", "ResultCode", "DurationMs"] + _APP_COMMON[1:],
+    "AppDependencies": ["TimeGenerated", "Id", "Target", "DependencyType", "Name", "Data", "Success", "ResultCode", "DurationMs"] + _APP_COMMON[1:],
+    "AppExceptions": ["TimeGenerated", "ExceptionType", "OuterMessage", "InnermostMessage", "SeverityLevel", "ProblemId", "Details"] + _APP_COMMON[1:],
+    "AppMetrics": ["TimeGenerated", "Name", "Sum", "ItemCount", "Min", "Max"] + _APP_COMMON[1:],
+    "AppEvents": ["TimeGenerated", "Name"] + _APP_COMMON[1:],
+    "AppPageViews": ["TimeGenerated", "Id", "Name", "Url", "DurationMs"] + _APP_COMMON[1:],
+    "AppAvailabilityResults": ["TimeGenerated", "Id", "Name", "Success", "DurationMs", "Location", "Message"] + _APP_COMMON[1:],
+}
+BASE_TABLES.update(APP_TABLES)
 BASE_TABLES_LOWER = {n.lower(): n for n in BASE_TABLES}
 # ARM table-schema column type → the KQL/Log Analytics Query API type name for the same value.
 _ARM_TO_KQL_TYPE = {"string": "string", "int": "int", "long": "long", "real": "real", "boolean": "bool",
@@ -1308,7 +1322,8 @@ def _cmp(val, op, rhs):
 
 
 def _coltype(v):
-    return "bool" if isinstance(v, bool) else "long" if isinstance(v, int) else "real" if isinstance(v, float) else "string"
+    return ("bool" if isinstance(v, bool) else "long" if isinstance(v, int) else "real" if isinstance(v, float)
+            else "dynamic" if isinstance(v, (dict, list)) else "string")
 
 
 def _resolve_col(cols, name):
@@ -1401,7 +1416,8 @@ def _compile_expr(text):
         raise KqlError(f"Failed to parse expression '{text}'")
     for node in _ast.walk(tree):
         if not isinstance(node, (_ast.Expression, _ast.BinOp, _ast.UnaryOp, _ast.Constant, _ast.Name, _ast.Call, _ast.Compare,
-                                 _ast.BoolOp, _ast.IfExp, _ast.Load, _ast.operator, _ast.unaryop, _ast.cmpop, _ast.boolop)):
+                                 _ast.BoolOp, _ast.IfExp, _ast.Load, _ast.operator, _ast.unaryop, _ast.cmpop, _ast.boolop,
+                                 _ast.Attribute, _ast.Subscript)):
             raise KqlError(f"Unsupported expression '{text}'")
         if isinstance(node, _ast.Call) and not (isinstance(node.func, _ast.Name) and node.func.id.lower() in _KQL_FUNCS and not node.keywords):
             raise KqlError(f"Unknown function in '{text}'", semantic=True)
@@ -1413,6 +1429,16 @@ def _eval_node(node, row, cols):
         return node.value
     if isinstance(node, _ast.Name):
         return row.get(_resolve_col(cols, node.id))
+    if isinstance(node, _ast.Attribute):       # dynamic column member: Properties.key
+        v = _eval_node(node.value, row, cols)
+        return v.get(node.attr) if isinstance(v, dict) else None
+    if isinstance(node, _ast.Subscript):       # Properties["key"] / Details[0]
+        v = _eval_node(node.value, row, cols)
+        k = _eval_node(node.slice, row, cols)
+        try:
+            return v[k] if isinstance(v, (dict, list)) else None
+        except (KeyError, IndexError, TypeError):
+            return None
     if isinstance(node, _ast.UnaryOp):
         v = _eval_node(node.operand, row, cols)
         return (not v) if isinstance(node.op, _ast.Not) else (None if v is None else (-v if isinstance(node.op, _ast.USub) else +v))
@@ -1633,3 +1659,104 @@ def run_kql(rec, query, extra=None):
         types["TimeGenerated"] = "datetime"
     return {"tables": [{"name": "PrimaryResult", "columns": [{"name": c, "type": types[c]} for c in cols],
                         "rows": [[r.get(c) for c in cols] for r in rows]}]}
+
+
+# ═══════════════════ Application Insights ingest (the /v2/track + /v2.1/track wire) ═══════════════════
+_APP_TYPES = {"MessageData": "AppTraces", "RequestData": "AppRequests", "RemoteDependencyData": "AppDependencies", "ExceptionData": "AppExceptions",
+              "MetricData": "AppMetrics", "EventData": "AppEvents", "PageViewData": "AppPageViews", "AvailabilityData": "AppAvailabilityResults"}
+_SEV = {"verbose": 0, "information": 1, "warning": 2, "error": 3, "critical": 4}
+
+
+def _ai_duration_ms(v):
+    """'d.hh:mm:ss.fffffff' timespan (or a number of ms) -> milliseconds."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    m = re.fullmatch(r"(?:(\d+)\.)?(\d+):(\d+):(\d+(?:\.\d+)?)", str(v or ""))
+    if not m:
+        return 0.0
+    d, h, mi, sec = m.groups()
+    return round((int(d or 0) * 86400 + int(h) * 3600 + int(mi) * 60 + float(sec)) * 1000, 3)
+
+
+def _ai_sev(v):
+    if isinstance(v, str):
+        return _SEV.get(v.lower(), 1)
+    return int(v) if isinstance(v, (int, float)) else None
+
+
+def _ai_components(state):
+    return [r for r in state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == "microsoft.insights/components"]
+
+
+def _ai_rows(it):
+    """One telemetry envelope -> (table, [row dicts])."""
+    data = it.get("data") or {}
+    bt = data.get("baseType") or ""
+    if bt not in _APP_TYPES:                       # derive from the envelope name: Microsoft.ApplicationInsights.<ikey>.Message
+        short = str(it.get("name", "")).rsplit(".", 1)[-1]
+        bt = {"Message": "MessageData", "Request": "RequestData", "RemoteDependency": "RemoteDependencyData", "Exception": "ExceptionData",
+              "Metric": "MetricData", "Event": "EventData", "PageView": "PageViewData", "Availability": "AvailabilityData"}.get(short, bt)
+    table = _APP_TYPES.get(bt)
+    if not table:
+        return None, []
+    bd = data.get("baseData") or {}
+    tags = it.get("tags") or {}
+    t = it.get("time") or _now()
+    base = {"TimeGenerated": t, "OperationName": tags.get("ai.operation.name"), "OperationId": tags.get("ai.operation.id"), "ParentId": tags.get("ai.operation.parentId"),
+            "AppRoleName": tags.get("ai.cloud.role"), "AppRoleInstance": tags.get("ai.cloud.roleInstance"), "ClientIP": tags.get("ai.location.ip"),
+            "SDKVersion": tags.get("ai.internal.sdkVersion"), "AppVersion": tags.get("ai.application.ver"), "ItemId": str(uuid.uuid4()),
+            "Properties": dict(bd.get("properties") or {}), "Measurements": bd.get("measurements"), "Type": table}
+    if table == "AppTraces":
+        return table, [dict(base, Message=bd.get("message"), SeverityLevel=_ai_sev(bd.get("severityLevel")))]
+    if table == "AppRequests":
+        return table, [dict(base, Id=bd.get("id"), Name=bd.get("name"), Url=bd.get("url"), Source=bd.get("source"), Success=bool(bd.get("success", True)),
+                            ResultCode=str(bd.get("responseCode", "")), DurationMs=_ai_duration_ms(bd.get("duration")))]
+    if table == "AppDependencies":
+        return table, [dict(base, Id=bd.get("id"), Name=bd.get("name"), Data=bd.get("data"), Target=bd.get("target"), DependencyType=bd.get("type"),
+                            Success=bool(bd.get("success", True)), ResultCode=str(bd.get("resultCode", "")), DurationMs=_ai_duration_ms(bd.get("duration")))]
+    if table == "AppExceptions":
+        ex = bd.get("exceptions") or []
+        first = ex[0] if ex else {}
+        return table, [dict(base, ExceptionType=first.get("typeName"), OuterMessage=first.get("message"), InnermostMessage=(ex[-1] if ex else {}).get("message"),
+                            SeverityLevel=_ai_sev(bd.get("severityLevel")), ProblemId=bd.get("problemId"), Details=ex)]
+    if table == "AppMetrics":
+        return table, [dict(base, Name=m.get("name"), Sum=m.get("value"), ItemCount=int(m.get("count") or 1), Min=m.get("min", m.get("value")), Max=m.get("max", m.get("value")))
+                       for m in (bd.get("metrics") or [])]
+    if table == "AppEvents":
+        return table, [dict(base, Name=bd.get("name"))]
+    if table == "AppPageViews":
+        return table, [dict(base, Id=bd.get("id"), Name=bd.get("name"), Url=bd.get("url"), DurationMs=_ai_duration_ms(bd.get("duration")))]
+    return table, [dict(base, Id=bd.get("id"), Name=bd.get("name"), Success=bool(bd.get("success", True)), DurationMs=_ai_duration_ms(bd.get("duration")),
+                        Location=bd.get("runLocation"), Message=bd.get("message"))]
+
+
+def ingest_appinsights(state, items):
+    """Application Insights track API: `items` = telemetry envelopes (the JSON array POSTed to /v2/track or /v2.1/track). Each goes to the
+    App* table of the Log Analytics workspace its component (matched by iKey) is linked to, readable with KQL / LogsQueryClient.
+    -> (status, {"itemsReceived", "itemsAccepted", "errors": [...]}): 200 all accepted, 206 partial, like the real endpoint."""
+    comps = {}
+    for c in _ai_components(state):
+        comps[str((c.get("properties") or {}).get("InstrumentationKey", "")).lower()] = c
+    accepted, errors = 0, []
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            errors.append({"index": i, "statusCode": 400, "message": "Invalid envelope"})
+            continue
+        comp = comps.get(str(it.get("iKey", "")).lower())
+        if comp is None:
+            errors.append({"index": i, "statusCode": 400, "message": "Invalid instrumentation key"})
+            continue
+        table, rows = _ai_rows(it)
+        if table is None:
+            errors.append({"index": i, "statusCode": 400, "message": "Unsupported telemetry type"})
+            continue
+        ws = state.get(str((comp.get("properties") or {}).get("WorkspaceResourceId", "")).lower())
+        for r in rows:
+            r["_ResourceId"] = comp["id"]
+        if ws is not None and "_tables" in ws:
+            _store(ws, table, rows)
+        else:
+            comp.setdefault("_aiRows", {}).setdefault(table, []).extend(rows)      # classic component: kept on the component, no workspace to query
+        accepted += 1
+    st = 200 if not errors else (206 if accepted else 400)
+    return st, {"itemsReceived": len(items), "itemsAccepted": accepted, "errors": errors}

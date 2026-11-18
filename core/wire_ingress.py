@@ -238,6 +238,11 @@ def appliance_router() -> AwsWireRouter:
             gcp_real_backends.install()
         except Exception:
             pass
+        try:   # VYOMI_AZURE_REAL_BACKENDS=1: real Azurite behind the Azure Table + Queue wires (no-op when off)
+            from core import azure_real_backends
+            azure_real_backends.install()
+        except Exception:
+            pass
     return _APPLIANCE_ROUTER
 
 
@@ -360,6 +365,8 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         tok = _ctx.REQUEST_PROVIDER.set("azure")
         try:
             arm_state = _ctx.azure_arm_state
+            if hasattr(arm_state, "_target"):    # the Azure space's concrete dict: blob events are delivered from a thread that outlives this provider scope
+                arm_state = arm_state._target()
         finally:
             _ctx.REQUEST_PROVIDER.reset(tok)
         resp = azure_blob_core.dispatch(st, method, path, query, headers, body, account=account,
@@ -572,6 +579,16 @@ def kv_core_path(path: str) -> str:
     return path.split("?", 1)[0]
 
 
+def _kv_infer_vault(r, arm_st, kvs, kvk, kind: str, p: str, headers=None) -> str:
+    """A Key Vault request that names no vault (the host is the simulator's own, e.g. a CryptographyClient built from a key id)."""
+    try:
+        from providers import azure_services as _azp
+        arm_st = _azp._state if kvs.vault_names(_azp._state) else arm_st
+    except Exception:
+        pass
+    return kvs.infer_vault_for_request(arm_st, r.az_kvsec, r.az_kvkeys, r.az_kvcerts, kind, p, headers)
+
+
 def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, query: dict,
                     headers: dict, body: bytes) -> dict:
     """Key Vault / ACR data planes. The state is Azure's: the request is bound to the Azure
@@ -641,6 +658,15 @@ def _dispatch_azure(service: str, r: AwsWireRouter, method: str, path: str, quer
                     arm_st = _azp._state
             except Exception:
                 pass
+        if not vault0:
+            vault0 = _kv_infer_vault(r, arm_st, kvs, kvk, kind, p, headers)
+            if vault0 and not kvs.vault_exists(arm_st, vault0):     # inferred from the provider's ARM state (where a vault created over ARM lives)
+                try:
+                    from providers import azure_services as _azp
+                    if kvs.vault_exists(_azp._state, vault0):
+                        arm_st = _azp._state
+                except Exception:
+                    pass
         if vault0 and not kvs.vault_exists(arm_st, vault0):
             resp404 = kvs.vault_not_found(vault0)
             return {"status": resp404.status, "headers": {"content-type": "application/json"}, "body": resp404.body}

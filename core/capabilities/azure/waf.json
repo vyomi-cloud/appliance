@@ -1,0 +1,30 @@
+{
+ "$doc": "Vyomi capability registry — Azure WAF policies. See aws/s3.json for the contract.",
+ "azure.waf.policies.crud": {
+  "title": "WAF policies (Front Door, Application Gateway, CDN) — create, get, list, delete with custom rules, managed rule sets and policy settings",
+  "level": {
+   "nano": "full",
+   "offline": "full"
+  },
+  "limitations": [
+   "Microsoft.Network/FrontDoorWebApplicationFirewallPolicies, Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies and Microsoft.Cdn/cdnWebApplicationFirewallPolicies are ARM resources stored exactly as sent (policySettings, customRules, managedRules, exclusions); proven with azure-mgmt-frontdoor, azure-mgmt-network and azure-mgmt-cdn. Associating a policy with a Front Door security policy / Application Gateway is stored but has no data-plane effect (no Front Door or Application Gateway data plane is simulated); see azure.waf.customrules.eval for what is evaluated. Managed rule sets (OWASP, Microsoft_DefaultRuleSet, bot manager) are stored only: there is no managed-rule engine."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_ref_gateway_sdk.py"
+  ]
+ },
+ "azure.waf.customrules.eval": {
+  "title": "WAF custom rules evaluated in front of the APIM gateway",
+  "level": {
+   "nano": "limited",
+   "offline": "limited"
+  },
+  "limitations": [
+   "An APIM service whose tag `vyomi-waf-policy` names a WAF policy (resource id or name) has that policy's custom rules evaluated before routing, authentication and policies (a Vyomi association: real APIM sits behind Front Door / Application Gateway, which are not simulated). Rules run in priority order; MatchRule (all conditions) and RateLimitRule (threshold per duration per client IP); variables RemoteAddr/SocketAddr, RequestMethod, QueryString, RequestUri, RequestHeader(s), RequestBody, PostArgs, Cookies; operators Any, IPMatch (address/CIDR), Equal, Contains, BeginsWith, EndsWith, RegEx, Wildcard, Less/Greater(OrEqual); negation and Lowercase/Uppercase/Trim/UrlDecode transforms; both the Front Door/CDN and the Application Gateway rule shapes. Actions Allow (stops evaluation), Block (403 or customBlockResponseStatusCode/Body, header x-vyomi-waf-rule), Log (continue), Redirect (302); AnomalyScoring/JSChallenge/CAPTCHA behave as Log. Detection mode lets the request through and reports x-vyomi-apim-warning: waf-detected:<rule>; a disabled policy is skipped. Client IP is X-Forwarded-For else 127.0.0.1. GeoMatch is not evaluated (no geo database); rate-limit windows are per APIM service in memory.",
+   "Nothing else is evaluated: no managed rule sets, no bot protection, no WAF logs/diagnostics rows."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_ref_gateway_sdk.py"
+  ]
+ }
+}

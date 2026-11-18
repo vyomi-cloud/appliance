@@ -42,6 +42,10 @@ services:
       PUBSUB_EMULATOR_HOST: ${VYOMI_GCP_PUBSUB_EMULATOR_HOST:-}
       FIRESTORE_EMULATOR_HOST: ${VYOMI_GCP_FIRESTORE_EMULATOR_HOST:-}
       VYOMI_GCP_GRPC_PORT: ${VYOMI_GCP_GRPC_PORT:-}
+      # Azure real backends (profile "azure-real", off by default): VYOMI_AZURE_REAL_BACKENDS=1 + VYOMI_AZURE_AZURITE_ENDPOINT=http://azure-azurite
+      # makes the Azurite below the Azure Table + Storage Queue data plane (core/azure_real_backends.py).
+      VYOMI_AZURE_REAL_BACKENDS: ${VYOMI_AZURE_REAL_BACKENDS:-}
+      VYOMI_AZURE_AZURITE_ENDPOINT: ${VYOMI_AZURE_AZURITE_ENDPOINT:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - mesh-data:/data
@@ -64,6 +68,17 @@ services:
     restart: unless-stopped
     command: ["gcloud", "beta", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080"]
     ports: ["127.0.0.1:8080:8080"]
+  # ---- Azure real backends (profile "azure-real") ----------------------------------------------------------------------------
+  # Azurite (official), Table :10002 + Queue :10001 (+ Blob :10000), loopback-bound like the GCP emulators. Start with:
+  #   VYOMI_AZURE_REAL_BACKENDS=1 VYOMI_AZURE_AZURITE_ENDPOINT=http://azure-azurite \
+  #     docker compose -f docker-compose.mesh.yml --profile azure-real up -d azure-azurite simulator
+  azure-azurite:
+    image: ${VYOMI_AZURITE_IMAGE:-mcr.microsoft.com/azure-storage/azurite:latest}
+    profiles: ["azure-real"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    command: ["azurite", "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--loose", "--skipApiVersionCheck"]
+    ports: ["127.0.0.1:10000:10000", "127.0.0.1:10001:10001", "127.0.0.1:10002:10002"]
   # ---- AI pack (profile "ai"; boot-mesh.sh starts it only after the simulator ADMITS the models) -------------------------
   # Two llama.cpp servers (one model per process) behind a tiny OpenAI-compatible gateway. Models are pulled on first start
   # by llama-server's -hf into the ai-models volume (cached across stop/resume of the same Codespace). No published ports.

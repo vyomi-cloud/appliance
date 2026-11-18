@@ -33,6 +33,7 @@ VYOMI_UNIFIED_INGRESS_SERVICES without azure_keyvault / azure_acr (or VYOMI_LEGA
 """
 from __future__ import annotations
 
+import re
 from urllib.parse import parse_qs
 
 from fastapi import Request
@@ -79,6 +80,14 @@ def sb_path(path: str, headers: dict, exists) -> bool:
     return len(segs) == 1 or segs[1] in ("messages", "$deadletterqueue", "subscriptions")
 
 
+def search_root_path(path: str, query_string: bytes, headers: dict) -> bool:
+    """Azure AI Search OData root (`/indexes('kb')/docs/search.post.search?api-version=`): api-version plus an api-key / bearer header
+    (S3 and the rest of the appliance never send both), so a bucket called `indexes` is not stolen."""
+    from core import azure_search_core as _sc
+    q = {"api-version": "1"} if b"api-version=" in (query_string or b"") else {}
+    return _sc.wire_owns(path, q) and ("api-key" in headers or str(headers.get("authorization", "")).lower().startswith("bearer "))
+
+
 def kv_root_path(path: str, query_string: bytes) -> bool:
     p = path.split("?", 1)[0]
     head = p.lstrip("/").split("/", 1)[0]
@@ -89,14 +98,23 @@ class AzureDataPlaneRewrite:
     """`/secrets…?api-version` → `/azure-data/keyvault/_/secrets…`; registry shapes →
     `/azure-data/acr/…` (the native path is restored for the core in the handlers)."""
 
-    def __init__(self, app, kv: bool, acr: bool, sb: bool = False):
-        self.app, self.kv, self.acr, self.sb = app, kv, acr, sb
+    def __init__(self, app, kv: bool, acr: bool, sb: bool = False, search: bool = False):
+        self.app, self.kv, self.acr, self.sb, self.search = app, kv, acr, sb, search
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") == "http":
             path = scope.get("path") or ""
             new = None
-            if self.kv and kv_root_path(path, scope.get("query_string") or b""):
+            if self.search and not path.startswith(("/azure-data", "/_wire", "/api/")):
+                hdrs = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers") or []}
+                hm = re.match(r"^([a-z0-9][a-z0-9-]*)\.search\.", hdrs.get("host", "").split(":")[0].lower())
+                if hm:                                             # <service>.search.windows.net (or *.search.localtest.me)
+                    new = f"/azure-data/search/{hm.group(1)}{path}"
+                elif search_root_path(path, scope.get("query_string") or b"", hdrs):
+                    new = "/azure-data/search/_" + path          # SDK pointed straight at the simulator: the only service answers
+            if new is not None:
+                pass
+            elif self.kv and kv_root_path(path, scope.get("query_string") or b""):
                 new = "/azure-data/keyvault/_" + path
             elif self.acr and acr_path(path):
                 new = "/azure-data/acr" + path
@@ -168,7 +186,32 @@ async def _sb(request: Request):
                                                 _query(request), dict(request.headers), body))
 
 
+async def _search(request: Request):
+    from urllib.parse import unquote
+    from fastapi.responses import JSONResponse, Response
+    from core import app_context as _ctx
+    from core import azure_search_core as sc
+    from providers.azure_services import core_arm
+    body = await request.body()
+    tail = _raw(request)[len("/azure-data/search/"):]
+    svc, _, rest = tail.partition("/")
+    tok = _ctx.REQUEST_PROVIDER.set("azure")        # the search service records live in the AZURE space
+    try:
+        arm = core_arm()
+        r = sc.wire_dispatch(arm.state, unquote(svc), request.method, unquote("/" + rest), _query(request), dict(request.headers), body,
+                             blob_store=getattr(arm, "blob_store", None), cosmos_store=getattr(arm, "cosmos_store", None),
+                             sql_store=getattr(arm, "sql_store", None))
+    finally:
+        _ctx.REQUEST_PROVIDER.reset(tok)
+    if r.get("text") is not None:
+        return Response(r["text"], status_code=r["status"], media_type="text/plain")
+    if r.get("body") is None:
+        return Response(status_code=r["status"])
+    return JSONResponse(r["body"], status_code=r["status"])
+
+
 def register(app) -> None:
+    app.add_route("/azure-data/search/{svc}/{rest:path}", _search, methods=_METHODS)
     kv, acr = _wi.is_unified("azure_keyvault"), _wi.is_unified("azure_acr")
     sb = _wi.is_unified("azure_servicebus")
     if sb:
@@ -178,5 +221,4 @@ def register(app) -> None:
     if acr:
         app.add_route("/azure-data/acr/{rest:path}", _acr, methods=_METHODS)
         app.add_route("/azure-data/acr", _acr, methods=_METHODS)
-    if kv or acr or sb:
-        app.add_middleware(AzureDataPlaneRewrite, kv=kv, acr=acr, sb=sb)
+    app.add_middleware(AzureDataPlaneRewrite, kv=kv, acr=acr, sb=sb, search=True)

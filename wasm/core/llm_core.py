@@ -269,6 +269,8 @@ def _http(path: str, payload: dict | None, timeout: float = 120.0, role: str | N
     ep = role_endpoint(role) or _endpoint()
     if role and role_endpoint(role):
         timeout = max(timeout, float(os.environ.get("VYOMI_LLM_ROLE_TIMEOUT", "300")))   # a CPU vision/reasoning call on 2 vCPUs can take minutes
+    if payload is not None and os.environ.get("VYOMI_LLM_TIMEOUT"):
+        timeout = max(timeout, float(os.environ["VYOMI_LLM_TIMEOUT"]))   # opt-in: a grounded prompt on a CPU-only model can exceed the 120 s default
     if not ep:
         raise LlmUnavailable(_no_backend_msg())
     req = urllib.request.Request(ep + path, data=None if payload is None else json.dumps(payload).encode(),

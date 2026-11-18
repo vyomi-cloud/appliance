@@ -416,7 +416,10 @@ def _sync_runtime(app):
             port = ((app["properties"].get("configuration") or {}).get("ingress") or {}).get("targetPort")
             kw = {"command": list(c.get("command") or []) + list(c.get("args") or [])} if getattr(st, "wants_command", False) else {}
             try:
-                h = st(app["id"], name, c["image"], {e.get("name"): e.get("value") for e in c.get("env", []) if e.get("name")}, port, **kw)
+                secrets = app.get("_secrets") or {}
+                env = {e.get("name"): (secrets.get(e.get("secretRef")) if e.get("secretRef") else e.get("value"))      # secretRef -> the secret's value, as the platform injects it
+                       for e in c.get("env", []) if e.get("name")}
+                h = st(app["id"], name, c["image"], env, port, **kw)
             except Exception:
                 h = None
             if h and h.get("error"):                  # runtime is on but the container did not start: say so
@@ -427,7 +430,8 @@ def _sync_runtime(app):
                 _ev(app, "ContainerStarted", f"Container for revision '{name}' started from image {c['image']}")
                 if h.get("port"):                     # real published loopback endpoint (honest, works from the host)
                     app["properties"]["vyomiEndpoint"] = f"http://{h.get('host', '127.0.0.1')}:{h['port']}"
-                    app["properties"]["vyomiRuntime"] = {k: v for k, v in {"backend": "docker", "container": h.get("id"), "network": h.get("network")}.items() if v is not None}
+                    app["properties"]["vyomiRuntime"] = {k: v for k, v in {"backend": "sandbox-process" if h.get("kind") == "sandbox" else "docker",
+                                                                           "container": h.get("id"), "network": h.get("network")}.items() if v is not None}
         elif not want and name in handles and stp:
             _ev(app, "ContainerStopped", f"Container for revision '{name}' stopped")
             try:

@@ -29,6 +29,9 @@ def register(app: FastAPI) -> None:
             return None
 
     async def serve(request: Request, rest: str = "") -> Response:
+        if request.method == "POST" and rest.strip("/") in ("v2/track", "v2.1/track"):    # IngestionEndpoint=<base>/_obs/ -> Application Insights track API
+            from providers import azure_loganalytics_routes as _la
+            return await _la.track_response(request)
         body = await request.body()
         r = obs.dispatch(obs.default_store(), request.method, request.url.path, dict(request.query_params),
                          dict(request.headers), body, cw_store=get_store(), mon_store=_mon_store())

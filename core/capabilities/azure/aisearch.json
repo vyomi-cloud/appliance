@@ -7,12 +7,13 @@
       "offline": "limited"
     },
     "limitations": [
-      "Keyword ranking is Okapi BM25 (SQLite FTS5) with phrases, negation, $filter, orderby, facets and count. Vector fields are Collection(Edm.Single) scanned exactly (no HNSW graph); vectorQueries of kind vector or text (text is embedded by the field profile's vectorizer, which is the local embedding model, not the Azure OpenAI deployment it names), per-query weight, and hybrid = BM25 + vector reciprocal rank fusion (k=60). queryType semantic with a semanticConfiguration returns @search.rerankerScore (0-4), @search.captions and @search.answers, but the ranker is an approximation (embedding similarity + query-term coverage over the configured title/content fields), NOT Microsoft's L2 cross-encoder, so scores and order will differ from Azure. No scoring profiles, suggesters, synonym maps, geo or Lucene parser."
+      "Keyword ranking is Okapi BM25 (SQLite FTS5) with phrases, negation, $filter, orderby, facets and count. Vector fields are Collection(Edm.Single) scanned exactly (no HNSW graph); vectorQueries of kind vector or text (text is embedded by the field profile's vectorizer, which is the local embedding model, not the Azure OpenAI deployment it names), per-query weight, and hybrid = BM25 + vector reciprocal rank fusion (k=60). queryType semantic with a semanticConfiguration returns @search.rerankerScore (0-4), @search.captions and @search.answers, but the ranker is an approximation (embedding similarity + query-term coverage over the configured title/content fields), NOT Microsoft's L2 cross-encoder, so scores and order will differ from Azure. Suggesters (suggest + autocomplete oneTerm/twoTerms/oneTermWithContext, prefix on source field words, no fuzzy) and searchFields / searchMode=all are supported. Synonym maps and aliases are stored (CRUD) but synonyms are not applied at query time. No scoring profiles, geo or Lucene parser."
     ],
     "tests": [
       "tests/conformance/test_azure_search_limvector.py",
       "tests/conformance/test_azure_search_core.py",
-      "tests/conformance/test_azure_search_vector_core.py"
+      "tests/conformance/test_azure_search_vector_core.py",
+      "tests/conformance/test_azure_ref_ai_search_sdk.py"
     ]
   },
   "azure.aisearch.indexers": {
@@ -28,6 +29,32 @@
       "tests/conformance/test_azure_search_limvector.py",
       "tests/conformance/test_azure_search_vector_core.py",
       "tests/conformance/test_azure_search_core.py"
+    ]
+  },
+  "azure.aisearch.wire": {
+    "title": "Native data-plane wire for the azure-search-documents clients (SearchIndexClient, SearchClient, SearchIndexerClient)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "limited"
+    },
+    "limitations": [
+      "The appliance serves the OData wire the unmodified clients send (azure-search-documents 12.1.0): `indexes('x')`, `docs/search.post.search|suggest|autocomplete`, `docs/search.index`, `docs('key')`, `docs/$count`, `search.stats`, datasources/indexers (`search.run|status|reset`)/skillsets/synonymmaps/aliases, `servicestats`. Three ways to reach a service: the root endpoint (the only search service in the space answers), `<host>/azure-data/search/<service>`, or a `<service>.search.*` Host header. api-key: admin keys do everything, query keys only read documents and run queries (403 otherwise); a bearer token is accepted. The service resolves from the ARM Search records of the Azure space, whose advertised `properties.endpoint` (`https://<name>.search.windows.net/`) is not resolvable locally: use one of the three forms. Offline appliance only: the Nano shared router does not route this wire yet. Indexer triggering from Event Grid is separate."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_ai_search_sdk.py"
+    ]
+  },
+  "azure.aisearch.indexer.blob-fill": {
+    "title": "Indexer over an Azure Blob data source (account connection string or UseDevelopmentStorage=true) fills the target index; re-run picks up new blobs",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Proven with blobs uploaded by azure-storage-blob and the service/admin key from azure-mgmt-search, driving the ARM-extension data-plane path; the native SearchIndexerClient wire is the az-ref-ai lane's. Skillset embedding skills need the local model seam (BLOCKED without a model); text/JSON/CSV parsing, field mappings, change tracking and Cosmos/SQL sources are covered by test_azure_search_core.py."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_search_indexer.py"
     ]
   }
 }

@@ -12,6 +12,7 @@ Opt-out: VYOMI_UNIFIED_INGRESS_SERVICES without azure_graph / azure_cosmos / azu
 """
 from __future__ import annotations
 
+from starlette.convertors import Convertor, register_url_convertor
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -20,10 +21,23 @@ from core import wire_ingress as _wi
 _METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 
 
+class _EntraTenant(Convertor):
+    """A tenant path segment that is not a Cognito user-pool id (``us-east-1_AbC123``)."""
+    regex = r"(?![a-z0-9-]+_[A-Za-z0-9]+$)(?!v1\.0$|beta$|azure-data$|api$)[^/]+"
+
+    def convert(self, value: str) -> str:
+        return value
+
+    def to_string(self, value: str) -> str:
+        return value
+
+
 async def _serve(service: str, request: Request):
     body = await request.body()
+    hdrs_in = dict(request.headers)
+    hdrs_in.setdefault("x-forwarded-proto", request.url.scheme)   # the OIDC discovery document must advertise https on the TLS front
     out = _wi.dispatch_service(service, request.method, request.url.path,
-                               dict(request.query_params), dict(request.headers), body)
+                               dict(request.query_params), hdrs_in, body)
     hdrs = {k: v for k, v in out["headers"].items() if k.lower() != "content-length"}
     return Response(content=out["body"], status_code=out["status"], headers=hdrs)
 
@@ -52,6 +66,8 @@ def table_path(path: str, headers: dict) -> bool:
     segs = [x for x in path.split("?", 1)[0].split("/") if x]
     if not segs or segs[0] in _NOT_TABLE or segs[0].startswith("$"):
         return False
+    if "api-key" in headers and segs[0].split("(", 1)[0] in ("indexes", "datasources", "indexers", "skillsets", "synonymmaps", "aliases", "servicestats"):
+        return False       # Azure AI Search OData (`indexes('kb')`): core/azure_search_core.wire_dispatch via routes/azure_dataplane_unified
     if segs[0] == "Tables" or segs[0].startswith("Tables(") or "(" in segs[0]:
         return True
     return len(segs) == 1 and "odata" in str(headers.get("accept") or "").lower()
@@ -101,6 +117,16 @@ def register(app) -> list:
         # validates it and logs the sign-in), the endpoint Nano's router claims by path shape too.
         for tok in ("/{tenant}/oauth2/v2.0/token", "/{tenant}/oauth2/token", "/{tenant}/oauth2/v2.0/authorize"):
             app.add_route(tok, _graph, methods=["POST"])
+        # Entra OIDC discovery + JWKS (core/azure_entra_tokens_core): what msal / PyJWT.PyJWKClient / APIM validate-jwt fetch. The v1-style
+        # `/{tenant}/.well-known/openid-configuration` uses a convertor that skips Cognito pool ids (`us-east-1_abc`), which the AWS router serves.
+        try:
+            register_url_convertor("entra", _EntraTenant())
+        except Exception:
+            pass
+        for tok in ("/{tenant:entra}/v2.0/.well-known/openid-configuration", "/{tenant:entra}/.well-known/openid-configuration",
+                    "/{tenant:entra}/discovery/v2.0/keys", "/{tenant:entra}/discovery/keys", "/discovery/v2.0/keys", "/discovery/keys",
+                    "/{tenant:entra}/discovery/instance", "/common/userrealm/{upn}"):
+            app.add_route(tok, _graph, methods=["GET"])
         mounted.append("azure_graph")
     if _wi.is_unified("azure_cosmos"):
         app.add_route("/dbs", _cosmos, methods=_METHODS + ["OPTIONS"])   # OPTIONS: the CORS preflight (account properties.cors)

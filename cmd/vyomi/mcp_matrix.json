@@ -1001,16 +1001,16 @@
      "status": "released"
     },
     {
-     "capabilities": 14,
+     "capabilities": 15,
      "capability_service": "cognitiveservices",
      "id": "cognitiveservices",
      "level_counts": {
       "nano": {
-       "full": 5,
+       "full": 6,
        "limited": 9
       },
       "offline": {
-       "full": 6,
+       "full": 7,
        "limited": 8
       }
      },
@@ -1035,18 +1035,18 @@
       "Docs_Create",
       "Docs_Query"
      ],
-     "capabilities": 22,
+     "capabilities": 23,
      "capability_service": "cosmos",
      "data_plane": "in-process SQL API subset under /azure-data/cosmos/{account}/dbs/{db}/colls/{coll}/docs",
      "id": "cosmos",
      "level_counts": {
       "nano": {
        "full": 4,
-       "limited": 18
+       "limited": 19
       },
       "offline": {
        "full": 4,
-       "limited": 18
+       "limited": 19
       }
      },
      "levels": {
@@ -1092,17 +1092,17 @@
       "EventSubscriptions_CreateOrUpdate",
       "Events_Publish"
      ],
-     "capabilities": 23,
+     "capabilities": 24,
      "capability_service": "eventgrid",
      "data_plane": "NATS (cloudlearn-nats:4222) — events publish to azure.eventgrid.<topic> subjects",
      "id": "eventgrid",
      "level_counts": {
       "nano": {
        "full": 12,
-       "limited": 11
+       "limited": 12
       },
       "offline": {
-       "full": 12,
+       "full": 13,
        "limited": 11
       }
      },
@@ -1128,17 +1128,17 @@
       "WebApps_ListFunctions",
       "WebApps_CreateOrUpdateSlot"
      ],
-     "capabilities": 39,
+     "capabilities": 40,
      "capability_service": "functionapp",
      "data_plane": "metadata only (function exec not yet wired; see post-MVP roadmap)",
      "id": "functionapp",
      "level_counts": {
       "nano": {
        "full": 7,
-       "limited": 32
+       "limited": 33
       },
       "offline": {
-       "full": 7,
+       "full": 8,
        "limited": 32
       }
      },
@@ -1168,17 +1168,17 @@
       "Secrets_Get",
       "Secrets_Put"
      ],
-     "capabilities": 15,
+     "capabilities": 16,
      "capability_service": "keyvaults",
      "data_plane": "HashiCorp Vault (cloudlearn-vault:8200) — transit for keys, KV v2 for secrets",
      "id": "keyvault",
      "level_counts": {
       "nano": {
        "full": 6,
-       "limited": 9
+       "limited": 10
       },
       "offline": {
-       "full": 6,
+       "full": 7,
        "limited": 9
       }
      },
@@ -1193,23 +1193,24 @@
      "status": "released"
     },
     {
-     "capabilities": 38,
+     "capabilities": 39,
      "capability_service": "monitor",
      "id": "monitor",
      "level_counts": {
       "nano": {
        "config_only": 1,
        "full": 13,
-       "limited": 24
+       "limited": 24,
+       "not_simulated": 1
       },
       "offline": {
        "config_only": 1,
-       "full": 13,
+       "full": 14,
        "limited": 24
       }
      },
      "levels": {
-      "nano": "config_only",
+      "nano": "not_simulated",
       "offline": "config_only"
      },
      "name": "Monitor alerts",
@@ -1305,17 +1306,17 @@
       "Topics_CreateOrUpdate",
       "Subscriptions_CreateOrUpdate"
      ],
-     "capabilities": 27,
+     "capabilities": 29,
      "capability_service": "servicebus",
      "data_plane": "in-process broker under /azure-data/servicebus/{namespace}/{entity}/messages",
      "id": "servicebus",
      "level_counts": {
       "nano": {
-       "full": 12,
+       "full": 14,
        "limited": 15
       },
       "offline": {
-       "full": 12,
+       "full": 14,
        "limited": 15
       }
      },
@@ -1382,22 +1383,23 @@
       "Blob_Get",
       "Blob_Delete"
      ],
-     "capabilities": 52,
+     "capabilities": 54,
      "capability_service": "storage",
      "data_plane": "fake-gcs-server (Blob bytes shared with GCP storage layer)",
      "id": "storage",
      "level_counts": {
       "nano": {
        "full": 9,
-       "limited": 43
+       "limited": 44,
+       "not_simulated": 1
       },
       "offline": {
        "full": 9,
-       "limited": 43
+       "limited": 45
       }
      },
      "levels": {
-      "nano": "limited",
+      "nano": "not_simulated",
       "offline": "limited"
      },
      "name": "Storage accounts",
@@ -1592,18 +1594,21 @@
      "status": "v4"
     },
     {
-     "capabilities": 2,
+     "capabilities": 4,
      "id": "aisearch",
      "level_counts": {
       "nano": {
-       "limited": 2
+       "full": 1,
+       "limited": 2,
+       "not_simulated": 1
       },
       "offline": {
-       "limited": 2
+       "full": 1,
+       "limited": 3
       }
      },
      "levels": {
-      "nano": "limited",
+      "nano": "not_simulated",
       "offline": "limited"
      },
      "name": "aisearch",
@@ -1658,16 +1663,16 @@
      "status": "v4"
     },
     {
-     "capabilities": 17,
+     "capabilities": 18,
      "id": "containerapps",
      "level_counts": {
       "nano": {
        "full": 8,
-       "limited": 9
+       "limited": 10
       },
       "offline": {
        "full": 8,
-       "limited": 9
+       "limited": 10
       }
      },
      "levels": {
@@ -1747,15 +1752,15 @@
      "tier": "pro"
     },
     {
-     "capabilities": 18,
+     "capabilities": 19,
      "id": "entra",
      "level_counts": {
       "nano": {
        "full": 9,
-       "limited": 9
+       "limited": 10
       },
       "offline": {
-       "full": 9,
+       "full": 10,
        "limited": 9
       }
      },
@@ -1767,14 +1772,14 @@
      "status": "v4"
     },
     {
-     "capabilities": 6,
+     "capabilities": 8,
      "id": "foundry",
      "level_counts": {
       "nano": {
-       "limited": 6
+       "limited": 8
       },
       "offline": {
-       "limited": 6
+       "limited": 8
       }
      },
      "levels": {
@@ -1858,6 +1863,26 @@
       "offline": "limited"
      },
      "name": "Stream Analytics jobs",
+     "status": "v4"
+    },
+    {
+     "capabilities": 2,
+     "id": "waf",
+     "level_counts": {
+      "nano": {
+       "full": 1,
+       "limited": 1
+      },
+      "offline": {
+       "full": 1,
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "waf",
      "status": "v4"
     }
    ],
@@ -3183,7 +3208,8 @@
   ],
   "vyomi-azurite": [
    "10000:10000",
-   "10001:10001"
+   "10001:10001",
+   "10002:10002"
   ],
   "vyomi-dynamodb": [
    "8000:8000"

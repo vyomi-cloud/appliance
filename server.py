@@ -205,6 +205,11 @@ try:
 except Exception as _e:   # never let this break appliance boot — legacy stays
     print(f"[wire_ingress] Key Vault / ACR / Service Bus core mount skipped: {_e}")
 try:
+    from routes import azure_containerapps_ingress as _azca_ingress   # Container Apps ingress: /azure-data/containerapps/<app>/... -> the running replica
+    _azca_ingress.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure] Container Apps ingress mount skipped: {_e}")
+try:
     from routes import azure_servicebus_amqp as _azsb_amqp   # Service Bus AMQP 1.0 listener (:5672 / :5671, ws path /$servicebus/websocket)
     _azsb_amqp.register(app)
 except Exception as _e:   # never let this break appliance boot
@@ -245,6 +250,11 @@ try:
     _gcp_real.install()
 except Exception as _e:   # never let this break appliance boot
     print(f"[gcp_real_backends] skipped: {_e}")
+try:   # VYOMI_AZURE_REAL_BACKENDS=1 + VYOMI_AZURE_AZURITE_ENDPOINT: real Azurite behind the Azure Table + Queue wires (core/azure_real_backends.py)
+    from core import azure_real_backends as _az_real
+    _az_real.install()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure_real_backends] skipped: {_e}")
 try:   # VYOMI_GCP_GRPC_PORT=<port>: gRPC front door for the REST-less Google clients (Monitoring, gapic Logging); core/gcp_grpc_front.py
     from core import gcp_grpc_front as _gcp_grpc
     _gcp_grpc.maybe_start()
@@ -25518,11 +25528,28 @@ except Exception as _e:   # never let this break appliance boot
 
 # ── AMQP 1.0 listener for Azure Service Bus emulation (Phase B) ─────
 try:
-    from core.servicebus_amqp import mount as _mount_amqp_servicebus
-    _mount_amqp_servicebus(app)
+    # Two Service Bus AMQP stacks exist (V4.0.0-KNOWN-ISSUES AZ-11). The default listener is the full engine in
+    # routes/azure_servicebus_amqp.py (core/azure_servicebus_amqp.py: queues + topics, live delivery to attached
+    # receivers, sessions, scheduled messages, rules, $management) on the SAME store as ARM + the REST wire + the console.
+    # The older single-connection "lease" stack mounts only with VYOMI_SB_AMQP_STACK=lease.
+    if os.environ.get("VYOMI_SB_AMQP_STACK", "").strip().lower() == "lease":
+        from core.servicebus_amqp import mount as _mount_amqp_servicebus
+        _mount_amqp_servicebus(app)
 except Exception as _e:
     print(f"[servicebus_amqp] AMQP mount skipped: {_e}")
 
+
+# HTTPS listener for the Azure clients that refuse plain http (azure-identity/msal authority, Key Vault, Search): core/azure_tls_front.py.
+# Off unless VYOMI_AZURE_TLS_PORT / VYOMI_AZURE_TLS / VYOMI_AZURE_REAL_BACKENDS is set.
+try:
+    from core import azure_tls_front as _az_tls
+
+    @app.get("/_vyomi/azure-tls")
+    def _az_tls_discovery():   # where a remote app (Mesh) finds the https endpoint + its CA
+        return _az_tls.discovery()
+    _az_tls.maybe_start(app)
+except Exception as _e:
+    print(f"[azure_tls_front] skipped: {_e}")
 
 
 if __name__ == "__main__":

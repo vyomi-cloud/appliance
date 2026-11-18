@@ -1941,14 +1941,14 @@ def _az_fin(r_or_ev):
     return "tool_calls" if r_or_ev["tool_calls"] else ("length" if r_or_ev["finish_reason"] == "length" else "stop")
 
 
-def _az_stream(cid, now, model, it, include_usage):
+def _az_stream(cid, now, model, it, include_usage, context=None):
     def chunk(delta, fin=None, usage=None):
         d = {"id": cid, "object": "chat.completion.chunk", "created": now, "model": model,
              "choices": [] if usage else [{"index": 0, "delta": delta, "finish_reason": fin}]}
         if usage:
             d["usage"] = usage
         return "data: " + json.dumps(d) + "\n\n"
-    yield chunk({"role": "assistant", "content": ""})
+    yield chunk({"role": "assistant", "content": "", **({"context": context} if context else {})})
     try:
         for ev in it:
             if ev["type"] == "text":
@@ -2282,7 +2282,136 @@ def _az_block_output(acct, dep, text):
     return _az_filtered(r["assessment"]) if r["blocked"] else None
 
 
+def _foundry_project(arm_state, method, path, query, headers, body, net_state):
+    """Foundry project endpoint (`/api/projects/<p>/...`, azure-ai-projects + azure-ai-agents): the classic agents surface is the
+    Assistants/files/vector-store core under the project prefix; project-only routes (agents v2, connections, deployments, conversations)
+    live in azure_openai_agents_core.project_dispatch."""
+    rest = re.sub(r"^/api/projects/[^/]+", "", path) or "/"
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    if not (lh.get("api-key") or lh.get("authorization")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    ag = _azure_agents()
+    m = re.match(r"^/agents/[^/]+/endpoint/protocols/openai(/.*)$", rest)     # hosted-agent OpenAI endpoint
+    if m:
+        rest = "/openai/v1" + m.group(1)
+    if re.match(r"^/(assistants|threads|files|vector_stores|responses|evals|fine_tuning)(/|$)", rest):
+        rest = "/openai" + rest
+    if rest.startswith("/openai/"):
+        if rest.startswith("/openai/v1/conversations"):
+            p0 = _body(body)
+            if p0 is None:
+                return _a_err(400, "BadRequest", "Invalid JSON body.")
+            return ag.project_dispatch(arm_state, method, rest, query or {}, p0) or _a_err(404, "404", "Resource not found")
+        return azure_openai_dispatch(arm_state, method, rest, query, headers, body, net_state)
+    p0 = _body(body)
+    if p0 is None:
+        return _a_err(400, "BadRequest", "Invalid JSON body.")
+    return ag.project_dispatch(arm_state, method, rest, query or {}, p0) or _a_err(404, "404", "Resource not found")
+
+
+# ── Azure OpenAI "On Your Data": chat.completions + extra_body.data_sources[azure_search] grounded on the simulator's AI Search core ──────
+# Retrieval reuses core/azure_search_core.search() (same BM25 / filter / vector / semantic engine the native search data plane runs);
+# the grounding prompt carries numbered [docN] sources and the answer comes from the same local-LLM seam as plain chat. The response has
+# the real shape: message.context = {citations:[{content,title,url,filepath,chunk_id}], intent:'["rewritten query"]'}; [docN] stays in the text.
+_ODY_UNSUPPORTED = ("cosmos_db", "elasticsearch", "azure_ml_index", "mongo_db", "pinecone")
+
+
+def _ody_service(arm_state, endpoint):
+    try:
+        from core import azure_search_core as sc
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_search_core as sc  # type: ignore
+    from urllib.parse import urlparse
+    u = urlparse(str(endpoint or ""))
+    m = re.search(r"/searchServices/([^/]+)", u.path) or re.search(r"/azure-data/search/([^/]+)", u.path)
+    hint = m.group(1) if m else None
+    if hint is None and u.hostname and ".search." in u.hostname:
+        hint = u.hostname.split(".")[0]
+    svcs = sc._services(arm_state)
+    if hint:
+        svc = next((r for r in svcs if r["name"].lower() == hint.lower()), None)
+    else:
+        svc = svcs[0] if len(svcs) == 1 else None
+    return sc, svc
+
+
+def _az_on_your_data(arm_state, p, msgs):
+    """-> (messages with the grounding system prompt, context) or an error response."""
+    ds_all = p.get("data_sources")
+    if not isinstance(ds_all, list) or not ds_all:
+        return _a_err(400, "BadRequest", "'data_sources' must be a non-empty array.", "data_sources")
+    user_q = next((m["content"] for m in reversed(msgs) if m.get("role") == "user" and isinstance(m.get("content"), str)), "")
+    citations = []
+    for ds in ds_all:
+        typ = ds.get("type") if isinstance(ds, dict) else None
+        if typ != "azure_search":
+            return _a_err(400, "BadRequest", f"The data source type '{typ}' is not supported by this simulator; only 'azure_search' is "
+                          f"(unsupported: {', '.join(_ODY_UNSUPPORTED)}).", "data_sources")
+        pr = ds.get("parameters") or {}
+        sc, svc = _ody_service(arm_state, pr.get("endpoint"))
+        if svc is None:
+            return _a_err(400, "BadRequest", f"Azure Search service for endpoint '{pr.get('endpoint')}' was not found in this simulator.", "data_sources")
+        au = pr.get("authentication") or {}
+        if au.get("type") == "api_key":
+            if au.get("key") not in (svc["_admin"]["primary"], svc["_admin"]["secondary"]) and au.get("key") not in svc["_query"]:
+                return _a_err(400, "BadRequest", "Authentication to the Azure Search data source failed: invalid api-key.", "data_sources")
+        elif au.get("type") not in ("access_token", "system_assigned_managed_identity", "user_assigned_managed_identity"):
+            return _a_err(400, "BadRequest", "authentication.type must be api_key, access_token or a managed identity type.", "data_sources")
+        ix = svc["_indexes"].get(pr.get("index_name"))
+        if ix is None:
+            return _a_err(400, "BadRequest", f"Azure Search index '{pr.get('index_name')}' was not found.", "data_sources")
+        idx = ix["_def"]
+        strs = [f["name"] for f in idx["fields"] if f["type"] == "Edm.String"]
+        fmap = pr.get("fields_mapping") or {}
+        cf = fmap.get("content_fields") or [next((n for n in ("content", "chunk", "text") if n in strs), next((n for n in strs if n not in (fmap.get("title_field"),)), None))]
+        cf = [c for c in cf if c]
+        tf, uf, pf = fmap.get("title_field"), fmap.get("url_field"), fmap.get("filepath_field")
+        tf = tf or next((n for n in ("title", "name") if n in strs), None)
+        sel = list(dict.fromkeys(cf + [x for x in (tf, uf, pf) if x]))
+        qt = str(pr.get("query_type") or "simple").lower()
+        if qt not in ("simple", "semantic", "vector", "vector_simple_hybrid", "vector_semantic_hybrid"):
+            return _a_err(400, "BadRequest", f"Unsupported query_type '{qt}'.", "data_sources")
+        top = int(pr.get("top_n_documents") or 5)
+        sp = {"search": user_q or "*", "top": top, "select": ",".join(sel), "queryType": "simple"}
+        if pr.get("filter"):
+            sp["filter"] = pr["filter"]
+        if qt in ("semantic", "vector_semantic_hybrid"):
+            sp["queryType"] = "semantic"
+            if pr.get("semantic_configuration"):
+                sp["semanticConfiguration"] = pr["semantic_configuration"]
+        if qt.startswith("vector"):
+            vf = fmap.get("vector_fields") or [f["name"] for f in idx["fields"] if f["type"] == "Collection(Edm.Single)"]
+            if not vf:
+                return _a_err(400, "BadRequest", f"query_type '{qt}' needs a vector field in index '{pr.get('index_name')}'.", "data_sources")
+            dims = {f["name"]: f.get("dimensions") for f in idx["fields"]}
+            try:
+                e = llm.embed([user_q or " "])["vectors"][0]
+            except llm.LlmUnavailable as ex:
+                return _a_err(503, "ServiceUnavailable", f"{ex}")
+            sp["vectorQueries"] = [{"kind": "vector", "vector": llm._renorm(_fit_dims(e, dims[v] or len(e))), "fields": v, "k": top} for v in vf]
+            if qt == "vector":
+                sp["search"] = "*"
+        r = sc.search(ix, sp)
+        if r["status"] != 200:
+            return _a_err(400, "BadRequest", ((r["body"] or {}).get("error") or {}).get("message", "Azure Search query failed."), "data_sources")
+        for row in r["body"]["value"][:top]:
+            citations.append({"content": "\n".join(str(row.get(c) or "") for c in cf), "title": row.get(tf) if tf else None,
+                              "url": row.get(uf) if uf else None, "filepath": row.get(pf) if pf else None, "chunk_id": str(len(citations))})
+    if p.get("data_sources") and all((d.get("parameters") or {}).get("in_scope", True) is not False for d in ds_all):
+        rule = "Answer ONLY from the retrieved documents below; if they do not contain the answer, say the requested information is not in the data."
+    else:
+        rule = "Prefer the retrieved documents below; you may use general knowledge if they do not contain the answer."
+    block = "\n\n".join(f"[doc{i + 1}]: {c['content']}" for i, c in enumerate(citations)) or "(no documents were retrieved)"
+    sysmsg = (f"You are an AI assistant that helps people find information. {rule} Cite sources inline as [doc1], [doc2] matching the numbered "
+              f"documents.\n\n## Retrieved documents\n{block}")
+    first = msgs[0] if msgs and msgs[0].get("role") == "system" and isinstance(msgs[0].get("content"), str) else None
+    new = [{"role": "system", "content": (first["content"] + "\n\n" if first else "") + sysmsg}] + (msgs[1:] if first else list(msgs))
+    return new, {"citations": citations, "intent": json.dumps([user_q])}
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
+    if path.startswith("/api/projects/"):
+        return _foundry_project(arm_state, method, path, query, headers, body, net_state)
     if re.match(r"^/openai(/v1)?/(files|fine_tuning)(/|$)", path):
         return _azure_files_ft(method, path, query, {k.lower(): v for k, v in (headers or {}).items()}, body)
     if re.match(r"^/openai(/v1)?/vyomi/custom-models(/|$)", path):
@@ -2298,6 +2427,8 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         p0 = _body(body)
         if p0 is None:
             return _a_err(400, "BadRequest", "Invalid JSON body.")
+        if re.match(r"^/openai(/v1)?/conversations(/|$)", path):
+            return ag.project_dispatch(arm_state, method, re.sub(r"^/openai(/v1)?", "/openai/v1", path), query or {}, p0) or _a_err(404, "404", "Resource not found")
         rm = re.match(r"^/openai/(?:v1/)?responses/([^/]+)$", path)
         if rm:
             return ag.responses_other(method.upper(), rm.group(1))
@@ -2308,6 +2439,11 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
     p = _body(body)
     if p is None:
         return _a_err(400, "BadRequest", "Invalid JSON body.")
+    if mt.group(2) == "responses" and (p.get("agent_reference") or p.get("agent")):      # Foundry v2 agent invoked through Responses
+        try:
+            p = ag.resolve_agent_ref(p)
+        except ag.Bad as e:
+            return ag._err(e)
     dep_name, op = mt.group(1) or p.get("model"), mt.group(2)
     if not dep_name:
         return _a_err(400, "BadRequest", "Missing required parameter: 'model'.", "model")
@@ -2374,6 +2510,12 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         req = _az_chat_request(p)
         if len(req) == 2:
             return _a_err(400, "BadRequest", req[1], req[0])
+    ody = None
+    if op == "chat/completions" and p.get("data_sources") is not None:
+        g = _az_on_your_data(arm_state, p, req[0])
+        if not isinstance(g, tuple) or len(g) != 2 or isinstance(g[0], int):
+            return g
+        req, ody = (g[0],) + tuple(req[1:]), g[1]
     req = (req[0], req[1], req[2], req[3], req[4], _with_role("azure", model, dict(req[5], model=model)))
     blocked_in = _az_block_input(acct, dep, req)      # a user-managed content filter on the deployment (Foundry > Guardrails + controls)
     if blocked_in is not None:
@@ -2393,7 +2535,7 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         return _a_err(400, "BadRequest", str(e))
     if stream:
         return _stream_out(200, {"x-vyomi-local-model": llm.resolve_model(model)},
-                           _az_stream(cid, now, model, it, bool((p.get("stream_options") or {}).get("include_usage"))), "text/event-stream")
+                           _az_stream(cid, now, model, it, bool((p.get("stream_options") or {}).get("include_usage")), ody), "text/event-stream")
     fin = "length" if r["finish_reason"] == "length" else "stop"
     usage = {"prompt_tokens": r["input_tokens"], "completion_tokens": r["output_tokens"], "total_tokens": r["input_tokens"] + r["output_tokens"]}
     hh = {"x-vyomi-local-model": r["model"]}
@@ -2407,6 +2549,112 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         return _j(200, {"id": cid, "object": "text_completion", "created": now, "model": model,
                         "choices": [{"text": r["text"], "index": 0, "finish_reason": fin, "logprobs": None}], "usage": usage}, hh)
     return _j(200, {"id": cid, "object": "chat.completion", "created": now, "model": model,
-                    "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": _az_msg(r)}],
+                    "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": dict(_az_msg(r), **({"context": ody} if ody else {}))}],
                     "usage": usage, "system_fingerprint": "fp_vyomi_local",
                     **({"vyomiImported": True, "vyomiTrained": True} if _imported().is_import_id(model) else {})}, hh)
+
+
+# ── Azure AI Content Safety data plane (azure-ai-contentsafety): /contentsafety/text:analyze, :shieldPrompt, text/blocklists ────────────
+# Severities come from the SAME content-filter engine the Azure OpenAI RAI policy uses (core/bedrock_guardrails_core.evaluate): the engine's
+# per-category confidence LOW / MEDIUM / HIGH maps to severity 2 / 4 / 6 (no signal = 0; FourSeverityLevels and EightSeverityLevels both
+# use these values). SelfHarm is not modelled by that engine, so a small phrase list of its own answers it. Prompt shields use the
+# engine's PROMPT_ATTACK filter. Blocklists are an in-process dict (not persisted across restarts).
+_CS_CATS = (("Hate", "HATE"), ("SelfHarm", None), ("Sexual", "SEXUAL"), ("Violence", "VIOLENCE"))
+_CS_SELFHARM = ("kill myself", "suicide", "end my life", "hurt myself", "self harm", "self-harm", "cut myself", "want to die")
+_CS_SEV = {"LOW": 2, "MEDIUM": 4, "HIGH": 6}
+_CS_BLOCKLISTS: dict = {}
+
+
+def _cs_conf(text, gtype):
+    pol = {"contentPolicyConfig": {"filtersConfig": [{"type": gtype, "inputStrength": "HIGH", "outputStrength": "HIGH"}]}, "blockedInputMessaging": "", "blockedOutputsMessaging": ""}
+    flt = ((_guardrails().evaluate(pol, text, "INPUT").get("assessment") or {}).get("contentPolicy") or {}).get("filters") or []
+    return flt[0]["confidence"] if flt else None
+
+
+def _cs_severity(text, cat, gtype):
+    if gtype is None:
+        hits = sum(1 for w in _CS_SELFHARM if w in text.lower())
+        return 0 if not hits else (6 if hits >= 3 else 4 if hits == 2 else 2)
+    return _CS_SEV.get(_cs_conf(text, gtype), 0)
+
+
+def azure_contentsafety_dispatch(method, path, query, headers, body):
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    if not (lh.get("ocp-apim-subscription-key") or lh.get("authorization") or lh.get("api-key")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    p = path.split("?", 1)[0]
+    p = p[len("/contentsafety"):] if p.startswith("/contentsafety") else p
+    try:
+        req = json.loads(body) if body else {}
+    except Exception:
+        return _a_err(400, "InvalidRequestBody", "The request body is not valid JSON.")
+    if not isinstance(req, dict):
+        req = {}
+    m = method.upper()
+    if p == "/text:analyze" and m == "POST":
+        text = req.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return _a_err(400, "InvalidRequestBody", "The text field is required and must not be empty.")
+        if len(text) > 10000:
+            return _a_err(400, "InvalidRequestBody", "The text exceeds the 10,000 character limit.")
+        want = req.get("categories") or [c for c, _ in _CS_CATS]
+        known = {c.lower(): (c, g) for c, g in _CS_CATS}
+        bad = [c for c in want if str(c).lower() not in known]
+        if bad:
+            return _a_err(400, "InvalidRequestBody", f"Unsupported category: {bad[0]}.")
+        analysis = [{"category": known[str(c).lower()][0], "severity": _cs_severity(text, *known[str(c).lower()])} for c in want]
+        matches = []
+        for bn in req.get("blocklistNames") or []:
+            bl = _CS_BLOCKLISTS.get(bn)
+            if bl is None:
+                return _a_err(404, "BlocklistNotFound", f"Blocklist '{bn}' was not found.")
+            for iid, it in bl["items"].items():
+                if it["text"].lower() in text.lower():
+                    matches.append({"blocklistName": bn, "blocklistItemId": iid, "blocklistItemText": it["text"]})
+        if req.get("haltOnBlocklistHit") and matches:
+            analysis = []
+        return _j(200, {"blocklistsMatch": matches, "categoriesAnalysis": analysis})
+    if p == "/text:shieldPrompt" and m == "POST":
+        up = req.get("userPrompt")
+        if up is None and not req.get("documents"):
+            return _a_err(400, "InvalidRequestBody", "userPrompt or documents is required.")
+        att = lambda t: _cs_conf(str(t or ""), "PROMPT_ATTACK") is not None   # noqa: E731
+        return _j(200, {"userPromptAnalysis": {"attackDetected": att(up)},
+                        "documentsAnalysis": [{"attackDetected": att(d)} for d in (req.get("documents") or [])]})
+    mb = re.match(r"^/text/blocklists(?:/([^/:]+))?(?::(addOrUpdateBlocklistItems|removeBlocklistItems))?(/blocklistItems(?:/([^/]+))?)?$", p)
+    if mb:
+        name, action, items_path, item_id = mb.group(1), mb.group(2), mb.group(3), mb.group(4)
+        if name is None:
+            return _j(200, {"value": [{"blocklistName": n, "description": b["description"]} for n, b in _CS_BLOCKLISTS.items()]}) if m == "GET" else _a_err(405, "MethodNotAllowed", "Method not allowed.")
+        bl = _CS_BLOCKLISTS.get(name)
+        if action is None and not items_path:
+            if m == "PATCH":
+                bl = _CS_BLOCKLISTS.setdefault(name, {"description": "", "items": {}})
+                bl["description"] = req.get("description", bl["description"])
+                return _j(201 if False else 200, {"blocklistName": name, "description": bl["description"]})
+            if bl is None:
+                return _a_err(404, "BlocklistNotFound", f"Blocklist '{name}' was not found.")
+            if m == "GET":
+                return _j(200, {"blocklistName": name, "description": bl["description"]})
+            if m == "DELETE":
+                _CS_BLOCKLISTS.pop(name, None)
+                return {"status": 204, "headers": {}, "body": b""}
+        if bl is None:
+            return _a_err(404, "BlocklistNotFound", f"Blocklist '{name}' was not found.")
+        if action == "addOrUpdateBlocklistItems" and m == "POST":
+            out = []
+            for it in req.get("blocklistItems") or []:
+                iid = next((k for k, v in bl["items"].items() if v["text"] == it.get("text")), None) or uuid.uuid4().hex
+                bl["items"][iid] = {"text": it.get("text", ""), "description": it.get("description", "")}
+                out.append({"blocklistItemId": iid, "description": bl["items"][iid]["description"], "text": bl["items"][iid]["text"]})
+            return _j(200, {"blocklistItems": out})
+        if action == "removeBlocklistItems" and m == "POST":
+            for iid in req.get("blocklistItemIds") or []:
+                bl["items"].pop(iid, None)
+            return {"status": 204, "headers": {}, "body": b""}
+        if items_path and item_id is None and m == "GET":
+            return _j(200, {"value": [{"blocklistItemId": k, "description": v["description"], "text": v["text"]} for k, v in bl["items"].items()]})
+        if items_path and item_id and m == "GET":
+            v = bl["items"].get(item_id)
+            return _j(200, {"blocklistItemId": item_id, "description": v["description"], "text": v["text"]}) if v else _a_err(404, "BlocklistItemNotFound", "Item not found.")
+    return _a_err(404, "404", "Resource not found")

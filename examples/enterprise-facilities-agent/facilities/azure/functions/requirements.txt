@@ -1,0 +1,4 @@
+azure-functions
+azure-data-tables
+azure-search-documents
+azure-core

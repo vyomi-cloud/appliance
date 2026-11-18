@@ -264,6 +264,11 @@ def _resp_stream(rid, model, p, it, chat_msgs, store):
 def responses_create(arm_find, p, model, stream_ok=True):
     am = _am()
     hist = []
+    cid = (p.get("conversation") if isinstance(p.get("conversation"), str) else (p.get("conversation") or {}).get("id")) if p.get("conversation") else None
+    if cid:
+        if cid not in _CONV:
+            raise Bad(f"Conversation with id '{cid}' not found.", "conversation", 404, "invalid_value")
+        hist = [dict(m) for m in _CONV[cid]["messages"]]
     if p.get("previous_response_id"):
         prev = _RESP.get(p["previous_response_id"])
         if not prev:
@@ -279,6 +284,9 @@ def responses_create(arm_find, p, model, stream_ok=True):
     doc = _resp_doc(rid, model, p, r)
     if store:
         _RESP[rid] = {"doc": doc, "messages": body["messages"] + [_hist_msg(r)]}
+    if cid:
+        _conv_append(cid, p, body["messages"] + [_hist_msg(r)], doc)
+        doc["conversation"] = {"id": cid}
     return am._j(200, doc, {"x-vyomi-local-model": r["model"]})
 
 
@@ -293,6 +301,246 @@ def responses_other(method, rid):
         del _RESP[rid]
         return am._j(200, {"id": rid, "object": "response", "deleted": True})
     return am._a_err(405, "MethodNotAllowed", "Method not allowed.")
+
+
+# ───────────────────────────── Foundry project surface (azure-ai-projects / azure-ai-agents) ─────────────────────────────
+# `https://<acct>.services.ai.azure.com/api/projects/<project>/...` is served by the SAME state as /openai/*: the classic agents surface
+# (assistants/threads/runs/files/vector_stores, azure-ai-agents AgentsClient) is the Assistants core under another prefix; the v2 surface
+# (agents + versions, conversations, connections, deployments) is the thin layer below. No new backend.
+_AGENTS: dict[str, dict] = {}     # name -> {"name", "versions": [AgentVersionDetails...]}
+_CONV: dict[str, dict] = {}       # conversation id -> {"obj", "items", "messages"}
+
+
+def _conv_view(c):
+    return dict(c["obj"])
+
+
+def _in_items(p):
+    inp = p.get("input")
+    if isinstance(inp, str):
+        return [{"type": "message", "id": _id("msg_"), "status": "completed", "role": "user", "content": [{"type": "input_text", "text": inp}]}]
+    out = []
+    for it in inp or []:
+        if isinstance(it, dict):
+            it = dict(it)
+            it.setdefault("type", "message")
+            it.setdefault("id", _id("msg_"))
+            if it["type"] == "message" and isinstance(it.get("content"), str):
+                it["content"] = [{"type": "input_text" if it.get("role") != "assistant" else "output_text", "text": it["content"]}]
+            out.append(it)
+    return out
+
+
+def _conv_append(cid, p, messages, doc):
+    c = _CONV[cid]
+    c["items"] += _in_items(p) + [dict(o) for o in doc.get("output", [])]
+    c["messages"] = messages
+
+
+def _conv_dispatch(method, path, query, p):
+    am = _am()
+    J = am._j
+    if path == "/conversations" and method == "POST":
+        cid = _id("conv_", 40)
+        c = {"obj": {"id": cid, "object": "conversation", "created_at": int(time.time()), "metadata": p.get("metadata") or {}}, "items": [], "messages": []}
+        for it in p.get("items") or []:
+            c["items"] += _in_items({"input": [it]})
+            c["messages"].append({"role": it.get("role", "user"), "content": _text_of(it.get("content"))})
+        _CONV[cid] = c
+        return J(200, _conv_view(c))
+    m = re.match(r"^/conversations/([^/]+)(?:/items(?:/([^/]+))?)?$", path)
+    if not m:
+        return None
+    c = _CONV.get(m.group(1))
+    if not c:
+        return am._a_err(404, "not_found", f"Conversation with id '{m.group(1)}' not found.")
+    sub = path.split(m.group(1), 1)[1]
+    if sub == "":
+        if method == "GET":
+            return J(200, _conv_view(c))
+        if method == "POST":
+            c["obj"]["metadata"] = p.get("metadata", c["obj"]["metadata"])
+            return J(200, _conv_view(c))
+        if method == "DELETE":
+            del _CONV[c["obj"]["id"]]
+            return J(200, {"id": c["obj"]["id"], "object": "conversation.deleted", "deleted": True})
+    elif m.group(2) is None and sub == "/items":
+        if method == "POST":
+            new = []
+            for it in p.get("items") or []:
+                new += _in_items({"input": [it]})
+                c["messages"].append({"role": it.get("role", "user"), "content": _text_of(it.get("content"))})
+            c["items"] += new
+            return J(200, {"object": "list", "data": new, "first_id": new[0]["id"] if new else None, "last_id": new[-1]["id"] if new else None, "has_more": False})
+        if method == "GET":
+            items = list(c["items"])
+            if (query or {}).get("order", "desc") == "desc":
+                items = items[::-1]
+            lim = int((query or {}).get("limit") or 20)
+            return J(200, {"object": "list", "data": items[:lim], "first_id": items[0]["id"] if items else None,
+                           "last_id": items[:lim][-1]["id"] if items else None, "has_more": len(items) > lim})
+    elif m.group(2):
+        it = next((x for x in c["items"] if x["id"] == m.group(2)), None)
+        if not it:
+            return am._a_err(404, "not_found", f"Item with id '{m.group(2)}' not found.")
+        if method == "GET":
+            return J(200, it)
+        if method == "DELETE":
+            c["items"].remove(it)
+            return J(200, c["obj"])
+    return None
+
+
+def _agent_ver(name, definition, p, n):
+    return {"object": "agent.version", "id": f"{name}:{n}", "name": name, "version": str(n), "description": p.get("description"),
+            "created_at": int(time.time()), "metadata": p.get("metadata") or {}, "definition": definition, "status": "active"}
+
+
+def _agent_view(a):
+    v = a["versions"][-1]
+    return {"object": "agent", "id": a["name"], "name": a["name"], "versions": {"latest": v}}
+
+
+def resolve_agent_ref(p):
+    """A Responses body naming a v2 agent (`agent_reference` / `agent` -> {name, version}): fold the agent definition into the body."""
+    ref = p.get("agent_reference") or p.get("agent")
+    if not isinstance(ref, dict) or not ref.get("name"):
+        return p
+    a = _AGENTS.get(ref["name"])
+    if not a:
+        raise Bad(f"Agent '{ref['name']}' not found.", "agent_reference", 404, "not_found")
+    v = next((x for x in a["versions"] if x["version"] == str(ref.get("version"))), None) if ref.get("version") else a["versions"][-1]
+    if not v:
+        raise Bad(f"Agent '{ref['name']}' version '{ref.get('version')}' not found.", "agent_reference", 404, "not_found")
+    d = v["definition"]
+    q = dict(p)
+    q.setdefault("model", d.get("model"))
+    if d.get("instructions") and not q.get("instructions"):
+        q["instructions"] = d["instructions"]
+    if d.get("tools") and not q.get("tools"):
+        q["tools"] = [t_ for t_ in d["tools"] if isinstance(t_, dict) and t_.get("type") == "function"]
+    return q
+
+
+def _connections(arm_state):
+    out = []
+    for rid, rec in (arm_state or {}).items():
+        ty = str(rec.get("_type", "")).lower()
+        if ty == "microsoft.cognitiveservices/accounts" and rec.get("kind") in ("OpenAI", "AIServices"):
+            nm = rec.get("name") or rid.rsplit("/", 1)[-1]
+            out.append({"name": nm, "id": rid, "type": "AzureOpenAI", "target": f"https://{nm}.openai.azure.com/", "isDefault": not out,
+                        "credentials": {"type": "ApiKey", "key": "vyomi-local-key"}, "metadata": {}})
+        elif ty == "microsoft.search/searchservices":
+            nm = rec.get("name") or rid.rsplit("/", 1)[-1]
+            out.append({"name": nm, "id": rid, "type": "CognitiveSearch", "target": f"https://{nm}.search.windows.net/", "isDefault": True,
+                        "credentials": {"type": "ApiKey", "key": "vyomi-local-key"}, "metadata": {}})
+    return out
+
+
+def _deployments(arm_state):
+    out = []
+    for rec in (arm_state or {}).values():
+        if str(rec.get("_type", "")).lower() == "microsoft.cognitiveservices/accounts" and rec.get("kind") in ("OpenAI", "AIServices"):
+            for nm, d in (rec.get("_deployments") or {}).items():
+                pr = d.get("properties") or {}
+                mo = pr.get("model") or {}
+                sku = d.get("sku") or {}
+                out.append({"type": "ModelDeployment", "name": d.get("name") or nm, "modelName": mo.get("name", ""), "modelVersion": mo.get("version", ""),
+                            "modelPublisher": mo.get("format", "OpenAI"), "capabilities": pr.get("capabilities") or {},
+                            "sku": {"name": sku.get("name", "Standard"), "capacity": sku.get("capacity", 1), "family": "", "size": "", "tier": ""},
+                            "connectionName": rec.get("name", "")})
+    return out
+
+
+def _plist(items):
+    return {"data": items, "first_id": (items[0].get("id") or items[0].get("name")) if items else None,
+            "last_id": None, "has_more": False}   # azure-ai-projects pages on last_id: null ends the listing
+
+
+def project_dispatch(arm_state, method, path, query, p):
+    """Project-only routes (path is relative to /api/projects/<p>): agents v2, connections, deployments, datasets, indexes, conversations."""
+    am = _am()
+    J = am._j
+    method = method.upper()
+
+    def nf(what, i):
+        return am._a_err(404, "not_found", f"{what} '{i}' not found.")
+    try:
+        r = _conv_dispatch(method, re.sub(r"^/openai/v1", "", path), query, p) if re.match(r"^/openai/v1/conversations", path) else None
+        if r is not None:
+            return r
+        if path == "/connections" and method == "GET":
+            cs = _connections(arm_state)
+            if (query or {}).get("connectionType"):
+                cs = [c for c in cs if c["type"] == query["connectionType"]]
+            if str((query or {}).get("defaultConnection", "")).lower() == "true":
+                cs = [c for c in cs if c["isDefault"]]
+            return J(200, {"value": [{k: v for k, v in c.items() if k != "credentials"} for c in cs]})
+        m = re.match(r"^/connections/([^/]+)(/getConnectionWithCredentials)?$", path)
+        if m:
+            c = next((x for x in _connections(arm_state) if x["name"] == m.group(1)), None)
+            if not c:
+                return nf("Connection", m.group(1))
+            if m.group(2) and method in ("GET", "POST"):
+                return J(200, c)
+            if method == "GET":
+                return J(200, {k: v for k, v in c.items() if k != "credentials"})
+        if path == "/deployments" and method == "GET":
+            ds = _deployments(arm_state)
+            return J(200, {"value": ds})
+        m = re.match(r"^/deployments/([^/]+)$", path)
+        if m and method == "GET":
+            d = next((x for x in _deployments(arm_state) if x["name"] == m.group(1)), None)
+            return J(200, d) if d else nf("Deployment", m.group(1))
+        if path in ("/datasets", "/indexes", "/evaluators", "/redTeams", "/memory_stores") and method == "GET":
+            return J(200, {"value": [], "data": [], "has_more": False})
+        if path == "/agents" and method == "GET":
+            return J(200, _plist([_agent_view(a) for a in _AGENTS.values()]))
+        if path == "/agents" and method == "POST":           # preview shape: create agent + first version in one call
+            nm = p.get("name")
+            if not nm:
+                raise Bad("Missing required parameter: 'name'.", "name")
+            if nm in _AGENTS:
+                raise Bad(f"Agent '{nm}' already exists.", "name", 409, "conflict")
+            _AGENTS[nm] = {"name": nm, "versions": [_agent_ver(nm, p.get("definition") or {}, p, 1)]}
+            return J(200, _agent_view(_AGENTS[nm]))
+        m = re.match(r"^/agents/([^/]+)(?:/versions(?:/([^/]+))?)?$", path)
+        if m:
+            nm, ver = m.group(1), m.group(2)
+            sub = path[len("/agents/" + nm):]
+            a = _AGENTS.get(nm)
+            if sub == "/versions" and method == "POST":
+                d = p.get("definition")
+                if not isinstance(d, dict) or not d.get("model") and d.get("kind", "prompt") == "prompt":
+                    raise Bad("definition.model is required for a prompt agent.", "definition")
+                if a is None:
+                    a = _AGENTS[nm] = {"name": nm, "versions": []}
+                v = _agent_ver(nm, d, p, len(a["versions"]) + 1)
+                a["versions"].append(v)
+                return J(200, v)
+            if a is None:
+                return nf("Agent", nm)
+            if sub == "" and method == "GET":
+                return J(200, _agent_view(a))
+            if sub == "" and method == "DELETE":
+                del _AGENTS[nm]
+                return J(200, {"object": "agent.deleted", "name": nm, "deleted": True})
+            if sub == "/versions" and method == "GET":
+                return J(200, _plist(list(reversed(a["versions"]))))
+            if ver:
+                v = next((x for x in a["versions"] if x["version"] == ver), None)
+                if not v:
+                    return nf("Agent version", ver)
+                if method == "GET":
+                    return J(200, v)
+                if method == "DELETE":
+                    a["versions"].remove(v)
+                    if not a["versions"]:
+                        del _AGENTS[nm]
+                    return J(200, {"object": "agent.version.deleted", "name": nm, "version": ver, "deleted": True})
+        return None
+    except Bad as e:
+        return _err(e)
 
 
 # ───────────────────────────── Assistants API ─────────────────────────────
@@ -446,6 +694,9 @@ def _vector_stores_dispatch(method, path, query, p):
             return J(200, _vs_view(_new_vs(p.get("name"), p.get("file_ids") or [], p.get("metadata"))))
         if method == "GET":
             return J(200, _page([_vs_view(v) for v in _VS.values()], query))
+    ex = _vs_extra(method, path, query, p)
+    if ex is not None:
+        return ex
     m = re.match(r"^/vector_stores/([^/]+)(?:/(files|file_batches)(?:/([^/]+))?)?$", path)
     if not m:
         return None
@@ -478,6 +729,10 @@ def _vector_stores_dispatch(method, path, query, p):
                 return nf("vector store file", oid)
             if method == "GET":
                 return J(200, f)
+            if method == "POST":                          # update attributes
+                if "attributes" in p:
+                    f["attributes"] = p["attributes"]
+                return J(200, f)
             if method == "DELETE":
                 del v["_files"][oid]
                 v["_chunks"] = [c for c in v["_chunks"] if c["file_id"] != oid]
@@ -492,17 +747,42 @@ def _vector_stores_dispatch(method, path, query, p):
                 if fid not in v["_files"]:
                     _vs_add(v, fid)
             bid = _id("vsfb_", 24)
-            b = {"id": bid, "object": "vector_store.files_batch", "created_at": int(time.time()), "vector_store_id": v["id"], "status": "completed",
+            b = {"_file_ids": list(ids), "id": bid, "object": "vector_store.files_batch", "created_at": int(time.time()), "vector_store_id": v["id"], "status": "completed",
                  "file_counts": dict(v["file_counts"])}
             v.setdefault("_batches", {})[bid] = b
-            return J(200, b)
+            return J(200, _vs_view(b))
         b = (v.get("_batches") or {}).get(oid or "")
         if oid and not b:
             return nf("file batch", oid)
         if oid and method == "GET":
+            return J(200, _vs_view(b))
+    return None
+
+
+def _vs_extra(method, path, query, p):
+    """/vector_stores/{id}/file_batches/{b}/(files|cancel), /vector_stores/{id}/search, /vector_stores/{id}/files/{f}/content."""
+    am = _am()
+    J = am._j
+    m = re.match(r"^/vector_stores/([^/]+)/file_batches/([^/]+)/(files|cancel)$", path)
+    if m:
+        v = _VS.get(m.group(1))
+        b = ((v or {}).get("_batches") or {}).get(m.group(2))
+        if not b:
+            return am._a_err(404, "invalid_request_error", f"No file batch found with id '{m.group(2)}'.")
+        if m.group(3) == "cancel" and method == "POST":
             return J(200, b)
-        if oid and method == "POST":
-            return J(200, b)
+        if m.group(3) == "files" and method == "GET":
+            return J(200, _page([f for f in v["_files"].values() if f["id"] in (b.get("_file_ids") or v["_files"])], query))
+    m = re.match(r"^/vector_stores/([^/]+)/search$", path)
+    if m and method == "POST":
+        v = _VS.get(m.group(1))
+        if not v:
+            return am._a_err(404, "invalid_request_error", f"No vector store found with id '{m.group(1)}'.")
+        q = p.get("query") or ""
+        q = " ".join(q) if isinstance(q, list) else q
+        hits = _retrieve([v["id"]], q, int(p.get("max_num_results") or 10))
+        data = [{"file_id": h["file_id"], "filename": h["filename"], "score": h["score"], "attributes": {}, "content": [{"type": "text", "text": h["text"]}]} for h in hits]
+        return J(200, {"object": "vector_store.search_results.page", "search_query": [q], "data": data, "has_more": False, "next_page": None})
     return None
 
 
@@ -586,6 +866,9 @@ def _execute_run(arm_find, t, run, asst):
             for h in hits:
                 seen.setdefault(h["file_id"], h["filename"])
             cites = list(seen.items())
+            _step(run, "tool_calls", {"type": "tool_calls", "tool_calls": [{"id": _id("call_"), "type": "file_search", "file_search": {
+                "ranking_options": {"ranker": "auto", "score_threshold": 0.0},
+                "results": [{"file_id": h["file_id"], "file_name": h["filename"], "score": h["score"], "content": [{"type": "text", "text": h["text"]}]} for h in hits]}}]})
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     saved_all = []
     for _round in range(_MAX_CI_STEPS + 1):
@@ -783,12 +1066,12 @@ def assistants_dispatch(arm_find, method, path, query, p):
             if method == "DELETE":
                 del _THR[t["id"]]
                 return J(200, {"id": t["id"], "object": "thread.deleted", "deleted": True})
-        m = re.match(r"^/threads/([^/]+)/(messages|runs)(?:/([^/]+))?(?:/(submit_tool_outputs|cancel|steps))?$", path)
+        m = re.match(r"^/threads/([^/]+)/(messages|runs)(?:/([^/]+))?(?:/(submit_tool_outputs|cancel|steps))?(?:/([^/]+))?$", path)
         if m:
             t = _THR.get(m.group(1))
             if not t:
                 return nf("thread", m.group(1))
-            kind, oid, sub = m.group(2), m.group(3), m.group(4)
+            kind, oid, sub, sid = m.group(2), m.group(3), m.group(4), m.group(5)
             if kind == "messages":
                 if oid is None and method == "POST":
                     return J(200, _add_message(t, p))
@@ -800,6 +1083,16 @@ def assistants_dispatch(arm_find, method, path, query, p):
                 if oid and method == "GET":
                     mm = next((x for x in t["_msgs"] if x["id"] == oid), None)
                     return J(200, mm) if mm else nf("message", oid)
+                if oid and method in ("POST", "DELETE"):
+                    mm = next((x for x in t["_msgs"] if x["id"] == oid), None)
+                    if not mm:
+                        return nf("message", oid)
+                    if method == "DELETE":
+                        t["_msgs"].remove(mm)
+                        return J(200, {"id": oid, "object": "thread.message.deleted", "deleted": True})
+                    if "metadata" in p:
+                        mm["metadata"] = p["metadata"] or {}
+                    return J(200, mm)
             else:
                 if oid is None and method == "POST":
                     asst = _ASST.get(p.get("assistant_id"))
@@ -813,6 +1106,13 @@ def assistants_dispatch(arm_find, method, path, query, p):
                     return nf("run", oid)
                 if oid and sub is None and method == "GET":
                     return J(200, _run_view(run))
+                if oid and sub is None and method == "POST":
+                    if "metadata" in p:
+                        run["metadata"] = p["metadata"] or {}
+                    return J(200, _run_view(run))
+                if sub == "steps" and sid and method == "GET":
+                    stp = next((x for x in (run.get("_steps") or []) if x["id"] == sid), None)
+                    return J(200, stp) if stp else nf("run step", sid)
                 if sub == "steps" and method == "GET":
                     return J(200, _page(list(run.get("_steps") or []), query))
                 if sub == "cancel" and method == "POST":
@@ -1369,4 +1669,4 @@ def pf_dispatch(arm_find, method, path, query, p):
 
 
 def handles(path: str) -> bool:
-    return bool(re.match(r"^/openai(/v1)?/(assistants|threads|responses|vector_stores|evals)(/|$)", path) or re.match(r"^/openai(/v1)?/vyomi/promptflow(/|$)", path))
+    return bool(re.match(r"^/openai(/v1)?/(assistants|threads|responses|vector_stores|evals|conversations)(/|$)", path) or re.match(r"^/openai(/v1)?/vyomi/promptflow(/|$)", path))

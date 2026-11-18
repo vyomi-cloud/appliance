@@ -485,7 +485,8 @@
    "Backup and restore: ARM policy and restorable-account timeline are modelled, but a restored account gets databases and containers without documents",
    "Power BI export: real OData v4 / CSV / JSON / Parquet over container data; Parquet is offline only",
    "Dedicated gateway cache is an in-memory per-process cache with 1000 entries per account",
-   "Customer-managed-key encryption is envelope encryption through Vyomi's Key Vault core with a keystream-XOR plus HMAC-SHA256 cipher (core/azure_cmk_core.py), not an AES-GCM implementation"
+   "Customer-managed-key encryption is envelope encryption through Vyomi's Key Vault core with a keystream-XOR plus HMAC-SHA256 cipher (core/azure_cmk_core.py), not an AES-GCM implementation",
+   "Item wire: ETag/If-Match 412, patch_item, continuation paging and transactional batch are implemented in Vyomi's own core; stored procedures, triggers and UDFs are not"
   ],
   "notInScope": [
    "Power BI service (connector, publish, workspace)",
@@ -497,7 +498,8 @@
    "core/appliance_stores.py: AppStateCosmosStore",
    "core/console_azure_cosmos.py",
    "core/capabilities/azure/cosmos.json",
-   "core/capabilities/azure/panels.json"
+   "core/capabilities/azure/panels.json",
+   "tests/conformance/test_azure_cosmos_wire_sdk.py"
   ]
  },
  "cost": {
@@ -1525,7 +1527,7 @@
  },
  "storage": {
   "title": "Azure Storage",
-  "summary": "Vyomi's own Blob, Queue, Table and Files cores speak the native Azure wires; offline, Blob bytes are also mirrored into Azurite.",
+  "summary": "Vyomi's own Blob, Queue, Table and Files cores speak the native Azure wires; offline, Blob bytes are also mirrored into Azurite, and with VYOMI_AZURE_REAL_BACKENDS=1 the Table and Queue data planes are served by the real Azurite.",
   "wire": [
    "ARM REST (Microsoft.* resource provider, Azure api-versions) (Microsoft.Storage: accounts, keys, blob/file/queue/table services, replication policies)",
    "Blob REST (azure-storage-blob SDK, az storage blob)",
@@ -1539,7 +1541,7 @@
     "Azurite (mcr.microsoft.com/azure-storage/azurite)",
     "Python cores (azure_blob_core, azure_queue_core, azure_table_core, azure_files_core)"
    ],
-   "notes": "Blob containers and bytes are held in the appliance state slot and mirrored to Azurite when CLOUDLEARN_AZURITE_URL is reachable (older Azurite-only blobs are adopted lazily). Queue and Table data are held in Vyomi's own persisted state slots, not in Azurite, on the v4 wire path; a separate Azurite-backed queue store exists for the pre-v4 handler and was not verified as the live path. Azure Files are ARM records plus content kept in Vyomi's store, not an SMB/NFS server."
+   "notes": "Blob containers and bytes are held in the appliance state slot and mirrored to Azurite when CLOUDLEARN_AZURITE_URL is reachable (older Azurite-only blobs are adopted lazily). Queue and Table data are held in Vyomi's own persisted state slots by default; with VYOMI_AZURE_REAL_BACKENDS=1 + VYOMI_AZURE_AZURITE_ENDPOINT (opt-in, offline/Mesh only) the simulator forwards the Table and Queue REST wire to the real Azurite (core/azure_real_backends.py) so the data lives in Azurite and is also reachable directly with the devstoreaccount1 connection string; a separate Azurite-backed queue store exists for the pre-v4 handler and was not verified as the live path. Azure Files are ARM records plus content kept in Vyomi's store, not an SMB/NFS server."
   },
   "nano": {
    "kind": "inhouse",
@@ -1559,7 +1561,8 @@
    "Network rules, private endpoints and bypass use a declared simulated caller, not a real client network",
    "Inventory runs on demand; static website is served at a synthetic path rather than a distinct host",
    "Azure Files shares: quotas, tiers, snapshots and soft delete are enforced at the ARM and content level, but there is no SMB or NFS protocol",
-   "Metrics are real per-account counters for the Vyomi data plane; Storage Analytics logs and metrics are an in-memory ring, not the $logs container"
+   "Metrics are real per-account counters for the Vyomi data plane; Storage Analytics logs and metrics are an in-memory ring, not the $logs container",
+   "Real-Azurite mode (opt-in): Table service properties/CORS/metrics, ARM table/queue records and simulator features that read the in-process queue store directly (Event Grid storage-queue destination) stay on the simulator's own state, not in Azurite"
   ],
   "notInScope": [
    "Azure Data Box (physical device)",
@@ -1577,7 +1580,10 @@
    "core/appliance_stores.py: AppStateAzureBlobStore, AppStateTableStore, AppStateAzureQueueStore",
    "docker-compose.yml: vyomi-azurite",
    "docker-compose.appliance.yml: vyomi-azurite",
-   "core/capabilities/azure/storage.json"
+   "core/capabilities/azure/storage.json",
+   "core/azure_real_backends.py",
+   "tests/conformance/test_azure_real_backends.py",
+   "tests/conformance/test_azure_table_wire_sdk.py"
   ]
  },
  "streamanalytics": {

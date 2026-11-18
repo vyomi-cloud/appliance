@@ -28,7 +28,45 @@ def _find(ws: str):
     return None
 
 
+def _all_state() -> dict:
+    """Every ARM record across all spaces by lower-cased id (the track endpoint carries no provider/space context, only an iKey)."""
+    from core import azure_eventgrid_delivery as egd
+    return {str(r.get("id", "")).lower(): r for r in egd._all_arm_resources() if r.get("id")}
+
+
+async def track_response(request: Request) -> Response:
+    """Application Insights track API: POST {IngestionEndpoint}/v2/track | /v2.1/track (JSON array, newline-delimited JSON, optionally gzip).
+    azure-monitor-opentelemetry-exporter, opencensus-ext-azure and the Application Insights SDKs all speak it."""
+    import gzip
+    raw = await request.body()
+    if raw[:2] == b"\x1f\x8b" or "gzip" in (request.headers.get("content-encoding") or "").lower():
+        try:
+            raw = gzip.decompress(raw)
+        except Exception:
+            return JSONResponse(status_code=400, content={"itemsReceived": 0, "itemsAccepted": 0, "errors": [{"index": 0, "statusCode": 400, "message": "Invalid gzip body"}]})
+    text = raw.decode("utf-8", "replace").strip()
+    try:
+        items = json.loads(text)
+    except ValueError:
+        items = []
+        for ln in text.splitlines():
+            if ln.strip():
+                try:
+                    items.append(json.loads(ln))
+                except ValueError:
+                    items.append(None)
+    if isinstance(items, dict):
+        items = [items]
+    if not isinstance(items, list):
+        items = []
+    st, out = oi.ingest_appinsights(_all_state(), items)
+    return JSONResponse(status_code=st, content=out)
+
+
 def register(app) -> None:
+    for pth in ("/v2/track", "/v2.1/track", "//v2/track", "//v2.1/track"):
+        app.add_api_route(pth, track_response, methods=["POST"], include_in_schema=False)
+
     async def route(ws: str, rest: str, request: Request):
         parts = [p for p in rest.split("/") if p]
         if ws == "v1":                       # endpoint=<base>/azure-data/loganalytics -> /v1/workspaces/{id}/query

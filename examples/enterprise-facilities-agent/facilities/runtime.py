@@ -77,7 +77,7 @@ class Ctx:
             if bl:
                 status, detail = BLOCKED, f"waiting for {bl}: {type(e).__name__}: {str(e)[:140]}"
             else:
-                status, detail = FAIL, f"{type(e).__name__}: {str(e)[:220]}"
+                status, detail = FAIL, f"{type(e).__name__}: {str(e)[:int(os.environ.get('FACILITIES_DETAIL', '220'))]}"
                 if os.environ.get("E2E_TRACE"):
                     traceback.print_exc()
         rec = dict(component=self.current, name=name, status=status, detail=detail, secs=round(time.time() - t0, 2))

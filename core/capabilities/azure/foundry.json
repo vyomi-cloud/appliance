@@ -7,10 +7,12 @@
       "offline": "limited"
     },
     "limitations": [
-      "Agents are Assistants API assistants over a model deployment (the small local model, so quality is toy-grade). Runs execute synchronously inside the create call. Tools: function calling (submit_tool_outputs), code_interpreter (real Python in a restricted sandbox, not a VM: input files from tool_resources, stdout in run steps, written files saved with file_path annotations, no image output) and file_search (real retrieval over vector stores: files are parsed, chunked and embedded with the local embedding model and ranked by exact cosine; answers carry file_citation annotations). Not available: Bing grounding, Azure AI Search, OpenAPI, Logic Apps, Azure Functions and MCP tools, expiry policies, a chunking_strategy other than the default, and file_search ranking options. State is process-local."
+      "Agents are Assistants API assistants over a model deployment (the small local model, so quality is toy-grade). Runs execute synchronously inside the create call. Tools: function calling (submit_tool_outputs), code_interpreter (real Python in a restricted sandbox, not a VM: input files from tool_resources, stdout in run steps, written files saved with file_path annotations, no image output) and file_search (real retrieval over vector stores: files are parsed, chunked and embedded with the local embedding model and ranked by exact cosine; answers carry file_citation annotations). Not available: Bing grounding, Azure AI Search, OpenAPI, Logic Apps, Azure Functions and MCP tools, expiry policies, a chunking_strategy other than the default, and file_search ranking options. State is process-local. Served at both `/openai/*` (every verb: GET/POST/DELETE) and the Foundry project endpoint `/api/projects/<project>/` (azure-ai-agents 1.1.0 AgentsClient: assistants, threads, messages, runs, run steps, files, vector stores, vector store files and batches; run steps include the file_search tool_calls step)."
     ],
     "tests": [
-      "tests/conformance/test_ai_agent_lanes.py"
+      "tests/conformance/test_ai_agent_lanes.py",
+      "tests/conformance/test_azure_ref_ai_openai_sdk.py",
+      "tests/conformance/test_azure_ref_ai_foundry_sdk.py"
     ]
   },
   "azure.foundry.content-filters": {
@@ -76,6 +78,32 @@
     ],
     "tests": [
       "tests/conformance/test_model_import.py"
+    ]
+  },
+  "azure.foundry.project-endpoint": {
+    "title": "Foundry project endpoint (azure-ai-projects: agents v2 + versions, Responses with agent_reference, conversations, connections, deployments)",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "`<host>/api/projects/<project>` is served by the same Assistants/Responses core (no new backend). Verified with azure-ai-projects 2.11.0 AIProjectClient: connections.list/get/get_default (derived from the ARM Cognitive Services accounts and Search services; keys are placeholders), deployments.list/get (from ARM deployments), agents.create_version/get/list/list_versions/get_version/delete_version/delete (prompt agents; the definition is stored), get_openai_client() responses.create(conversation=..., extra_body={agent_reference}) which applies the agent's model, instructions and function tools, and conversations create/retrieve/delete + items create/list. NOT modelled: hosted/workflow agents, agent tools other than function calling (Bing, Azure AI Search, MCP, code interpreter in v2), datasets/indexes/evaluators/red teams (listings return empty), memory stores, telemetry. The SDK's BearerTokenCredentialPolicy refuses non-TLS endpoints, so a local plain-http endpoint needs a custom authentication_policy that adds the Authorization header (the simulator requires a bearer or api-key header). State is process-local."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_ai_foundry_sdk.py"
+    ]
+  },
+  "azure.foundry.on-your-data": {
+    "title": "Azure OpenAI On Your Data (chat completions grounded on an AI Search index: data_sources[azure_search])",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "chat/completions with extra_body.data_sources of type azure_search retrieves from the simulator's own AI Search index (same engine as the native search data plane; api_key / access_token / managed-identity auth values are accepted, only api_key is checked; endpoint forms: /azure-data/search/<service>, the ARM-extension path, <service>.search.* host, or the root when one service exists) and returns message.context {citations[{content,title,url,filepath,chunk_id}], intent} with [docN] markers; stream=true sends the context in the first delta. top_n_documents, filter, fields_mapping (content/title/url/filepath), in_scope and query_type simple/semantic/vector/vector_simple_hybrid/vector_semantic_hybrid work best-effort on the existing engine (vector query embeds the question with the local embedding model). strictness is accepted but not applied, citations carry no rerank_score and the intent is the user question verbatim (no query rewrite). Answer quality is the small local model's. Other data source types (cosmos_db, elasticsearch, azure_ml_index, mongo_db, pinecone) are rejected with 400 BadRequest. The same shared core serves Nano; it answers only while a WebLLM model is loaded (otherwise the native 503), and the Nano path was not separately browser-tested."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_openai_on_your_data.py"
     ]
   }
 }
