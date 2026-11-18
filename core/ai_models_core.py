@@ -2410,3 +2410,109 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
                     "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": _az_msg(r)}],
                     "usage": usage, "system_fingerprint": "fp_vyomi_local",
                     **({"vyomiImported": True, "vyomiTrained": True} if _imported().is_import_id(model) else {})}, hh)
+
+
+# ── Azure AI Content Safety data plane (azure-ai-contentsafety): /contentsafety/text:analyze, :shieldPrompt, text/blocklists ────────────
+# Severities come from the SAME content-filter engine the Azure OpenAI RAI policy uses (core/bedrock_guardrails_core.evaluate): the engine's
+# per-category confidence LOW / MEDIUM / HIGH maps to severity 2 / 4 / 6 (no signal = 0; FourSeverityLevels and EightSeverityLevels both
+# use these values). SelfHarm is not modelled by that engine, so a small phrase list of its own answers it. Prompt shields use the
+# engine's PROMPT_ATTACK filter. Blocklists are an in-process dict (not persisted across restarts).
+_CS_CATS = (("Hate", "HATE"), ("SelfHarm", None), ("Sexual", "SEXUAL"), ("Violence", "VIOLENCE"))
+_CS_SELFHARM = ("kill myself", "suicide", "end my life", "hurt myself", "self harm", "self-harm", "cut myself", "want to die")
+_CS_SEV = {"LOW": 2, "MEDIUM": 4, "HIGH": 6}
+_CS_BLOCKLISTS: dict = {}
+
+
+def _cs_conf(text, gtype):
+    pol = {"contentPolicyConfig": {"filtersConfig": [{"type": gtype, "inputStrength": "HIGH", "outputStrength": "HIGH"}]}, "blockedInputMessaging": "", "blockedOutputsMessaging": ""}
+    flt = ((_guardrails().evaluate(pol, text, "INPUT").get("assessment") or {}).get("contentPolicy") or {}).get("filters") or []
+    return flt[0]["confidence"] if flt else None
+
+
+def _cs_severity(text, cat, gtype):
+    if gtype is None:
+        hits = sum(1 for w in _CS_SELFHARM if w in text.lower())
+        return 0 if not hits else (6 if hits >= 3 else 4 if hits == 2 else 2)
+    return _CS_SEV.get(_cs_conf(text, gtype), 0)
+
+
+def azure_contentsafety_dispatch(method, path, query, headers, body):
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    if not (lh.get("ocp-apim-subscription-key") or lh.get("authorization") or lh.get("api-key")):
+        return _j(401, {"error": {"code": "401", "message": "Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API."}})
+    p = path.split("?", 1)[0]
+    p = p[len("/contentsafety"):] if p.startswith("/contentsafety") else p
+    try:
+        req = json.loads(body) if body else {}
+    except Exception:
+        return _a_err(400, "InvalidRequestBody", "The request body is not valid JSON.")
+    if not isinstance(req, dict):
+        req = {}
+    m = method.upper()
+    if p == "/text:analyze" and m == "POST":
+        text = req.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return _a_err(400, "InvalidRequestBody", "The text field is required and must not be empty.")
+        if len(text) > 10000:
+            return _a_err(400, "InvalidRequestBody", "The text exceeds the 10,000 character limit.")
+        want = req.get("categories") or [c for c, _ in _CS_CATS]
+        known = {c.lower(): (c, g) for c, g in _CS_CATS}
+        bad = [c for c in want if str(c).lower() not in known]
+        if bad:
+            return _a_err(400, "InvalidRequestBody", f"Unsupported category: {bad[0]}.")
+        analysis = [{"category": known[str(c).lower()][0], "severity": _cs_severity(text, *known[str(c).lower()])} for c in want]
+        matches = []
+        for bn in req.get("blocklistNames") or []:
+            bl = _CS_BLOCKLISTS.get(bn)
+            if bl is None:
+                return _a_err(404, "BlocklistNotFound", f"Blocklist '{bn}' was not found.")
+            for iid, it in bl["items"].items():
+                if it["text"].lower() in text.lower():
+                    matches.append({"blocklistName": bn, "blocklistItemId": iid, "blocklistItemText": it["text"]})
+        if req.get("haltOnBlocklistHit") and matches:
+            analysis = []
+        return _j(200, {"blocklistsMatch": matches, "categoriesAnalysis": analysis})
+    if p == "/text:shieldPrompt" and m == "POST":
+        up = req.get("userPrompt")
+        if up is None and not req.get("documents"):
+            return _a_err(400, "InvalidRequestBody", "userPrompt or documents is required.")
+        att = lambda t: _cs_conf(str(t or ""), "PROMPT_ATTACK") is not None   # noqa: E731
+        return _j(200, {"userPromptAnalysis": {"attackDetected": att(up)},
+                        "documentsAnalysis": [{"attackDetected": att(d)} for d in (req.get("documents") or [])]})
+    mb = re.match(r"^/text/blocklists(?:/([^/:]+))?(?::(addOrUpdateBlocklistItems|removeBlocklistItems))?(/blocklistItems(?:/([^/]+))?)?$", p)
+    if mb:
+        name, action, items_path, item_id = mb.group(1), mb.group(2), mb.group(3), mb.group(4)
+        if name is None:
+            return _j(200, {"value": [{"blocklistName": n, "description": b["description"]} for n, b in _CS_BLOCKLISTS.items()]}) if m == "GET" else _a_err(405, "MethodNotAllowed", "Method not allowed.")
+        bl = _CS_BLOCKLISTS.get(name)
+        if action is None and not items_path:
+            if m == "PATCH":
+                bl = _CS_BLOCKLISTS.setdefault(name, {"description": "", "items": {}})
+                bl["description"] = req.get("description", bl["description"])
+                return _j(201 if False else 200, {"blocklistName": name, "description": bl["description"]})
+            if bl is None:
+                return _a_err(404, "BlocklistNotFound", f"Blocklist '{name}' was not found.")
+            if m == "GET":
+                return _j(200, {"blocklistName": name, "description": bl["description"]})
+            if m == "DELETE":
+                _CS_BLOCKLISTS.pop(name, None)
+                return {"status": 204, "headers": {}, "body": b""}
+        if bl is None:
+            return _a_err(404, "BlocklistNotFound", f"Blocklist '{name}' was not found.")
+        if action == "addOrUpdateBlocklistItems" and m == "POST":
+            out = []
+            for it in req.get("blocklistItems") or []:
+                iid = next((k for k, v in bl["items"].items() if v["text"] == it.get("text")), None) or uuid.uuid4().hex
+                bl["items"][iid] = {"text": it.get("text", ""), "description": it.get("description", "")}
+                out.append({"blocklistItemId": iid, "description": bl["items"][iid]["description"], "text": bl["items"][iid]["text"]})
+            return _j(200, {"blocklistItems": out})
+        if action == "removeBlocklistItems" and m == "POST":
+            for iid in req.get("blocklistItemIds") or []:
+                bl["items"].pop(iid, None)
+            return {"status": 204, "headers": {}, "body": b""}
+        if items_path and item_id is None and m == "GET":
+            return _j(200, {"value": [{"blocklistItemId": k, "description": v["description"], "text": v["text"]} for k, v in bl["items"].items()]})
+        if items_path and item_id and m == "GET":
+            v = bl["items"].get(item_id)
+            return _j(200, {"blocklistItemId": item_id, "description": v["description"], "text": v["text"]}) if v else _a_err(404, "BlocklistItemNotFound", "Item not found.")
+    return _a_err(404, "404", "Resource not found")

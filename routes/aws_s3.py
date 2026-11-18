@@ -1225,6 +1225,8 @@ def _register_unified_s3(app: FastAPI) -> None:
             # (/apikeys, /usageplans, …): REST paths with no S3 meaning, told apart by SigV4 scope.
             return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request)
         path = request.scope.get("path") or request.url.path
+        if path.startswith("/contentsafety/"):
+            return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)
         if path.startswith("/openai/") and request.method == "POST":
             # Azure OpenAI data plane (deployments/{d}/chat/completions, /openai/v1/...) -> shared router -> core/ai_models_core
             return await _wi.serve(_wi.new_services_router() or _wi.appliance_router(), request, path=path)

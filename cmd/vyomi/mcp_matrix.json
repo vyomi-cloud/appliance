@@ -1001,16 +1001,16 @@
      "status": "released"
     },
     {
-     "capabilities": 14,
+     "capabilities": 15,
      "capability_service": "cognitiveservices",
      "id": "cognitiveservices",
      "level_counts": {
       "nano": {
-       "full": 5,
+       "full": 6,
        "limited": 9
       },
       "offline": {
-       "full": 6,
+       "full": 7,
        "limited": 8
       }
      },

@@ -34,3 +34,13 @@ Evidence: `docs/architecture/v4.0/REF-ARCH-PROBE-AZURE.md` (components 2, 5, 12)
 ### 4. AI Search indexer fill
 - The indexer engine (`core/azure_search_core.run_indexer`) already fills an index from Blob; the probe's "fills nothing" was a connection-string/account mismatch. Now `UseDevelopmentStorage=true` / `devstoreaccount1` resolves to the sole storage account holding a container of that name.
 - Test: `tests/conformance/test_azure_ref_search_indexer.py` (azure-storage-blob upload, azure-mgmt-search admin key, ARM-extension REST for the data plane until az-ref-ai lands the native wire). Embedding skills are BLOCKED(no model) here.
+
+### 5. Content Safety
+- `/contentsafety/text:analyze`, `/text:shieldPrompt` and `/text/blocklists*` are routed (`aws_wire_router` -> `az-contentsafety`, `routes/aws_s3.py` catch-all hand-off) to `core/ai_models_core.azure_contentsafety_dispatch`. No new core module (so the four core lists are unchanged).
+- Severities from the guardrail content-filter engine (`bedrock_guardrails_core.evaluate`, shared with the Azure OpenAI RAI policy): LOW/MEDIUM/HIGH -> 2/4/6; SelfHarm via a phrase list; shield via the PROMPT_ATTACK filter. Honest limits in the capability entry (not Microsoft's classifier; no image / groundedness; blocklists in memory).
+- Test: `tests/conformance/test_azure_ref_contentsafety_sdk.py` (ContentSafetyClient + BlocklistClient).
+
+## Open issues
+- Siftly's 5 auto-seeded topics are no longer created on the default AMQP listener.
+- `test_relay_cores_parity.py` fails on trunk for `azure_security_automations_core.py` (not this lane).
+- Embedding skills in indexers are BLOCKED(no model) in the sandbox.
