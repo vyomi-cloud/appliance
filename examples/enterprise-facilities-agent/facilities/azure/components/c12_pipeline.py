@@ -75,8 +75,11 @@ def run(ctx):
         from azure.mgmt.eventgrid import EventGridManagementClient
         c = ctx.arm(EventGridManagementClient)
         scope = ctx.rid("Microsoft.Storage", "storageAccounts", NAMES["docs_account"])
-        c.system_topics.begin_create_or_update(RG, "facilitiesdocs-topic", {"location": LOC, "source": scope, "topic_type": "Microsoft.Storage.StorageAccounts"}).result()
-        s = c.system_topic_event_subscriptions.begin_create_or_update(RG, "facilitiesdocs-topic", "blob-created", {"destination": {"endpoint_type": "AzureFunction", "properties": {"resource_id": ctx.rid("Microsoft.Web", "sites", INGEST_APP) + "/functions/on-blob"}}, "filter": {"included_event_types": ["Microsoft.Storage.BlobCreated"]}}).result()
+        from azure.mgmt.eventgrid.models import (AzureFunctionEventSubscriptionDestination, EventSubscription, EventSubscriptionFilter, SystemTopic)
+        c.system_topics.begin_create_or_update(RG, "facilitiesdocs-topic", SystemTopic(location=LOC, source=scope, topic_type="Microsoft.Storage.StorageAccounts")).result()
+        s = c.system_topic_event_subscriptions.begin_create_or_update(RG, "facilitiesdocs-topic", "blob-created", EventSubscription(
+            destination=AzureFunctionEventSubscriptionDestination(resource_id=ctx.rid("Microsoft.Web", "sites", INGEST_APP) + "/functions/on-blob"),
+            filter=EventSubscriptionFilter(included_event_types=["Microsoft.Storage.BlobCreated"]))).result()
         ctx.state["eg_ready"] = True
         return f"system topic on storage account {NAMES['docs_account']} + AzureFunction subscription blob-created -> function ({s.provisioning_state})"
     if ctx.state.get("search_ready"):
