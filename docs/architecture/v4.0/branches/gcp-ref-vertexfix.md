@@ -7,6 +7,7 @@ Lane 6 of round 2 of the GCP 13/13 build. Base: `origin/v4/gcp-ref-integ` 77b2a7
 - Agent Engine (`core/gcp_agentengine_core.py`, `core/gcp_function_runtime.py`): the vertexai SDK sends `spec` in snake_case; it is stored and returned in canonical lowerCamelCase (class_methods stay as sent) so create/get/list/update/delete validate in the SDK. `spec.sourceCodeSpec.inlineSource` (tar.gz) is kept server-side. `:query` / `:streamQuery` run the entrypoint object from the source package in the existing function sandbox (`run_agent_engine`), with the Cloud Run env contract (GOOGLE_CLOUD_PROJECT, VYOMI_ENDPOINT, STORAGE_EMULATOR_HOST, metadata-server identity). `:streamQuery` is newline-delimited JSON for the google-genai/vertexai SDK (what its parser reads) and the HttpBody JSON array for gapic clients (existing behaviour).
 - Sessions (`core/gcp_agentplatform_core.py`): `sessions/ID:appendEvent` plus ordered, timestamp-filterable events list with the SessionEvent shapes.
 - Model catalogue (`core/gcp_vertex_core.py`): `publishers/google/models/<id>` for every served id including legacy gemini-* aliases; google publisher list includes all catalogue ids; Model fields (version, token limits, generation methods) added.
+- generateContent / streamGenerateContent honour `modelArmorConfig` (`core/ai_models_core.py` calls `gcp_agentgov_core.armor_check`): MODEL_ARMOR block before the model; response template -> finishReason SAFETY.
 - Capability JSON entries updated (model-armor, agent-engine, sessions, model-garden).
 
 ## Design decisions
