@@ -1123,13 +1123,105 @@ def _record_op(store: ObjectStore, bucket: str, op_type: str) -> None:
 def _emit_object_event(store, bucket: str, name: str, event: str, entry: dict | None = None) -> None:
     """Tell Eventarc (Cloud Run triggers) about a real object change. `store.on_object_event` is
     linked by the wire router; None elsewhere so a bare store is unaffected. Never raises."""
+    view = _object_view(bucket, name, entry) if entry else {"bucket": bucket, "name": name}
     hook = getattr(store, "on_object_event", None)
-    if not callable(hook):
+    if callable(hook):
+        try:
+            hook(bucket, name, event, view)
+        except Exception:   # noqa: BLE001 — an event-delivery failure must never fail the storage call
+            pass
+    _publish_notifications(store, bucket, name, event, view)
+
+
+# ── bucket notificationConfigs (Pub/Sub notifications, JSON API v1) ──────────────────────
+# A config lives in the bucket's metadata; a real object event publishes one Pub/Sub message per matching
+# config with the attributes real GCS sets (eventType, bucketId, objectId, objectGeneration, payloadFormat,
+# notificationConfig, eventTime + custom_attributes) and, for JSON_API_V1, the object resource as data.
+# `store.publish_hook(topic_full, messages)` / `store.topic_exists(topic_full)` are linked by the wire router
+# (shared Pub/Sub core, so a normal subscription pull sees the message); None elsewhere.
+_NOTIF_EVENTS = {"finalized": "OBJECT_FINALIZE", "deleted": "OBJECT_DELETE", "archived": "OBJECT_ARCHIVE",
+                 "metadataUpdated": "OBJECT_METADATA_UPDATE"}
+_NOTIF_TYPES = tuple(_NOTIF_EVENTS.values())
+_TOPIC_RE = re.compile(r"^(?://pubsub\.googleapis\.com/)?(projects/[^/]+/topics/[^/]+)$")
+
+
+def _notif_view(bucket: str, nid: str, n: dict) -> dict:
+    out = {"kind": "storage#notification", "id": nid, "topic": n["topic"], "payload_format": n["payload_format"],
+           "etag": n["etag"], "selfLink": f"https://www.googleapis.com/storage/v1/b/{bucket}/notificationConfigs/{nid}"}
+    for k in ("event_types", "object_name_prefix", "custom_attributes"):
+        if n.get(k):
+            out[k] = n[k]
+    return out
+
+
+def _notification_configs(store, bucket, method, segs, body):
+    meta = store.buckets[bucket]
+    cfgs = meta.setdefault("notificationConfigs", {})
+    if len(segs) == 3:
+        if method == "GET":
+            return _json(200, {"kind": "storage#notifications", "items": [_notif_view(bucket, i, c) for i, c in sorted(cfgs.items(), key=lambda kv: int(kv[0]))]})
+        if method == "POST":
+            try:
+                req = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                return _err(400, "parseError", "Parse Error")
+            m = _TOPIC_RE.match(str(req.get("topic") or ""))
+            if not m:
+                return _err(400, "invalid", "Invalid argument: topic must be //pubsub.googleapis.com/projects/{project}/topics/{topic}.")
+            topic = m.group(1)
+            chk = getattr(store, "topic_exists", None)
+            if callable(chk) and not chk(topic):
+                return _err(400, "invalid", f"Invalid Pub/Sub topic: {topic} does not exist or the service account lacks publish permission.")
+            fmt = req.get("payload_format") or "JSON_API_V1"
+            if fmt not in ("JSON_API_V1", "NONE"):
+                return _err(400, "invalid", "payload_format must be JSON_API_V1 or NONE.")
+            evs = list(req.get("event_types") or [])
+            if any(e not in _NOTIF_TYPES for e in evs):
+                return _err(400, "invalid", f"event_types must be among {', '.join(_NOTIF_TYPES)}.")
+            if len(cfgs) >= 100:
+                return _err(400, "invalid", "Too many notification configurations on this bucket (max 100).")
+            nid = str(max([int(i) for i in cfgs] + [0]) + 1)
+            cfgs[nid] = {"topic": "//pubsub.googleapis.com/" + topic, "payload_format": fmt, "event_types": evs,
+                         "object_name_prefix": req.get("object_name_prefix") or "",
+                         "custom_attributes": dict(req.get("custom_attributes") or {}),
+                         "etag": base64.b64encode(uuid.uuid4().bytes[:6]).decode()}
+            store.persist()
+            return _json(200, _notif_view(bucket, nid, cfgs[nid]))
+        return _err(400, "invalid", f"Unsupported method {method} on notificationConfigs")
+    nid = unquote(segs[3])
+    c = cfgs.get(nid)
+    if c is None:
+        return _err(404, "notFound", f"Notification configuration {nid} does not exist.")
+    if method == "GET":
+        return _json(200, _notif_view(bucket, nid, c))
+    if method == "DELETE":
+        cfgs.pop(nid, None)
+        store.persist()
+        return GcsResponse(status=204, body=b"", media_type=None)
+    return _err(400, "invalid", f"Unsupported method {method} on a notification configuration")
+
+
+def _publish_notifications(store, bucket: str, name: str, event: str, view: dict) -> None:
+    hook = getattr(store, "publish_hook", None)
+    etype = _NOTIF_EVENTS.get(event)
+    cfgs = (store.buckets.get(bucket) or {}).get("notificationConfigs")
+    if not callable(hook) or not etype or not cfgs:
         return
-    try:
-        hook(bucket, name, event, _object_view(bucket, name, entry) if entry else {"bucket": bucket, "name": name})
-    except Exception:   # noqa: BLE001 — an event-delivery failure must never fail the storage call
-        pass
+    for nid, c in list(cfgs.items()):
+        if c.get("event_types") and etype not in c["event_types"]:
+            continue
+        if c.get("object_name_prefix") and not name.startswith(c["object_name_prefix"]):
+            continue
+        attrs = {"notificationConfig": f"projects/_/buckets/{bucket}/notificationConfigs/{nid}", "eventType": etype,
+                 "eventTime": _now(), "bucketId": bucket, "objectId": name, "payloadFormat": c["payload_format"]}
+        if view.get("generation"):
+            attrs["objectGeneration"] = str(view["generation"])
+        attrs.update({str(k): str(v) for k, v in (c.get("custom_attributes") or {}).items()})
+        data = base64.b64encode(json.dumps(view).encode()).decode() if c["payload_format"] == "JSON_API_V1" else ""
+        try:
+            hook(c["topic"].replace("//pubsub.googleapis.com/", ""), [{"data": data, "attributes": attrs}])
+        except Exception:   # noqa: BLE001 — a notification failure must never fail the storage call
+            pass
 
 
 def _record_request_metric(store: ObjectStore, bucket: str) -> None:
@@ -1609,6 +1701,12 @@ def _dispatch(store: ObjectStore, method: str, path: str,
         if method == "GET":
             return _json(200, _op_view(bucket, op_id, op))
         return _err(400, "invalid", f"Unsupported method {method} on a bucket operation")
+
+    # ---- Pub/Sub notifications: /b/{bucket}/notificationConfigs[/{id}] ----
+    if len(segs) >= 3 and segs[2] == "notificationConfigs" and len(segs) <= 4:
+        if not store.bucket_exists(bucket):
+            return _err(404, "notFound", "The specified bucket does not exist.")
+        return _notification_configs(store, bucket, method, segs, body)
 
     # ---- bucket IAM policy: /b/{bucket}/iam ----
     if len(segs) == 3 and segs[2] == "iam":

@@ -62,6 +62,7 @@ from core import gcp_firestore_core as gcp_fs
 from core import gcp_datastore_core as gcp_ds
 from core import gcp_eventarc_core as gcp_eventarc
 from core import gcp_apigateway_core as gcp_apigw
+from core import gcp_identityplatform_core as gcp_idp
 from core import gcp_hub_core as gcp_hub
 from core import gcp_audit_core as gcp_audit
 from core.gcp_firestore_core import FirestoreStore
@@ -825,6 +826,14 @@ class AwsWireRouter:
             self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcs, "on_object_event", None) is None:
             self.gcs.on_object_event = self._gcs_object_event   # Eventarc Cloud Storage triggers fire on real object finalize/delete
+        if getattr(self.gcs, "publish_hook", None) is None:
+            self.gcs.publish_hook = self._gcs_notify_publish    # bucket notificationConfigs publish into the shared Pub/Sub core
+            self.gcs.topic_exists = self._gcs_notify_topic_exists
+        try:   # the subprocess function runtime streams stdout/stderr into Cloud Logging
+            from core import gcp_function_runtime as _gfr
+            _gfr.LOG_SINK = self._fn_stream_log
+        except Exception:   # Nano: no subprocess runtime
+            pass
         if getattr(self.gcp_sql, "refs", None) is None:
             self.gcp_sql.refs = self._run_refs          # Cloud SQL CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcp_run, "refs", None) is None:   # a store already wired by its host (offline routes) keeps its own
@@ -1070,6 +1079,15 @@ class AwsWireRouter:
         }
         gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
 
+    def _fn_stream_log(self, project, location, service, revision, stream, lines):
+        """Function stdout/stderr -> run.googleapis.com/stdout|stderr entries on the cloud_run_revision resource."""
+        sev = "DEFAULT" if stream == "stdout" else "ERROR"
+        entries = [{"logName": "projects/%s/logs/run.googleapis.com%%2F%s" % (project, stream),
+                    "resource": {"type": "cloud_run_revision", "labels": {"project_id": project, "location": location, "service_name": service,
+                                                                           "revision_name": revision, "configuration_name": service}},
+                    "labels": {"instanceId": "vyomi-instance"}, "severity": sev, "textPayload": ln} for ln in lines]
+        gcp_logging.write_entries(self.gcp_logging, None, {"entries": entries})
+
     def hub_inputs(self, project):
         """Live facts for Cloud Hub + Privacy & Security (read from the real stores / Cloud Logging)."""
         def n(x):
@@ -1171,6 +1189,17 @@ class AwsWireRouter:
         finally:
             if tok is not None:
                 _ctx.REQUEST_PROVIDER.reset(tok)
+
+    def _gcs_notify_topic_exists(self, topic_full):
+        return bool(self.gcp_msg.get_topic(topic_full))
+
+    def _gcs_notify_publish(self, topic_full, messages):
+        # through gcp_ps.dispatch (looked up at call time) so VYOMI_GCP_REAL_BACKENDS=1 sends it to the real emulator
+        import json as _json
+        r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic_full, {}, {},
+                            _json.dumps({"messages": messages}).encode(), on_publish=self._eventarc_deliver)
+        if getattr(r, "status", 200) >= 300:
+            raise RuntimeError("notification publish failed: %s" % (getattr(r, "body", b"")[:200],))
 
     def _gcs_object_event(self, bucket, name, event, obj):
         gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
@@ -1276,6 +1305,8 @@ class AwsWireRouter:
             return "ecr-registry"   # docker push/pull against <acct>.dkr.ecr.<region>.<host> (AWS:<token> basic auth)
         if (lheaders.get("host", "").split(":", 1)[0].lower().endswith(".gateway.dev")) or path.startswith("/gcpgw/"):
             return "gcp-gateway-invoke"   # an API Gateway gateway's URL → the shared gateway engine (core/gcp_apigateway_gateway)
+        if gcp_idp.handles(path, body):
+            return "gcp-identityplatform"   # Identity Platform / Firebase Auth sign-in + the securetoken JWKS/x509 certs (core/gcp_identityplatform_core)
         gcp = _gcp_service(path)
         if gcp:
             return gcp
@@ -2144,7 +2175,7 @@ class AwsWireRouter:
 
         if svc == "gcp-aiplatform":
             from core import ai_models_core
-            return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), self.s3)
 
         if svc == "gcp-agentplatform":
             from core import gcp_agentplatform_core
@@ -2513,7 +2544,7 @@ class AwsWireRouter:
             if self.STRICT_GCP_PROJECT and svc != "gcp-gcs" and body[:1] in (b"{", b"["):   # object bytes are never rewritten
                 body = gcp_proj.rewrite_body(bytes(body), proj)
             _gcp_core = {
-                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-apigateway": (gcp_apigw, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
+                "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-apigateway": (gcp_apigw, self.gcp_mon), "gcp-identityplatform": (gcp_idp, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
                 "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
@@ -2542,7 +2573,12 @@ class AwsWireRouter:
                 "gcp-bigquery": (gcp_bigquery, self.gcs),
             }[svc]
             mod, store = _gcp_core
-            if svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
+            if svc == "gcp-identityplatform":   # the API key names the project; certs also list the service-account key ids
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ctx={
+                    "default_project": gcp_proj.project_id(), "iamc_store": self.gcp_iamc,
+                    "project_for_key": lambda k: next((x["name"].split("/")[1] for x in gcp_apigw._coll(self.gcp_mon, "keys").values() if x.get("keyString") == k), None),
+                    "base": ((headers or {}).get("x-forwarded-proto") or "http") + "://" + str((headers or {}).get("host") or "")})
+            elif svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
             elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)

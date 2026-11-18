@@ -768,6 +768,16 @@ _INVOKE_BUILTINS = {
 }
 
 
+class _Event(dict):
+    """The CloudEvent / HTTP event a function receives: still a dict (event["type"]) but, like the
+    functions-framework CloudEvent, also readable as attributes (event.data, event.type, event.source)."""
+    def __getattr__(self, k):
+        try:
+            return self[k]
+        except KeyError:
+            raise AttributeError(k)
+
+
 def _fn_runtime():
     """core/gcp_function_runtime when this substrate can spawn a process (offline appliance, Mesh, host tests); None on Nano."""
     try:
@@ -825,19 +835,22 @@ def _run_function_source(annotations, event, project=None, location=None, sid=No
     if "import " in source:   # sources that import (functions_framework / flask / json / math ...) run in the function sandbox with its shims
         try:
             from core import gcp_console_tabs as _T
-            r = _T.run_python_function(source, entry, event, {})
-            return {"ok": True, "result": r.get("result")} if r.get("status") == "SUCCESS" else {"ok": False, "error": r.get("error") or "function failed"}
+            r = _T.run_python_function(source, entry, _Event(event), {})
+            return {"ok": True, "result": r.get("result"), "logs": r.get("logs") or []} if r.get("status") == "SUCCESS" \
+                else {"ok": False, "error": r.get("error") or "function failed", "logs": r.get("logs") or []}
         except ImportError:
             pass
-    sandbox = {"__builtins__": dict(_INVOKE_BUILTINS), "json": json}
+    logs = []
+    bi = dict(_INVOKE_BUILTINS, print=lambda *a, **k: logs.append(" ".join(str(x) for x in a)))   # print -> function logs
+    sandbox = {"__builtins__": bi, "json": json}
     try:
         exec(compile(source, "<function:%s>" % entry, "exec"), sandbox)
         handler = sandbox.get(entry)
         if not callable(handler):
             raise RuntimeError("entry point %r is not defined" % entry)
-        return {"ok": True, "result": handler(event)}
+        return {"ok": True, "result": handler(_Event(event)), "logs": logs}
     except Exception as e:
-        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e)}
+        return {"ok": False, "error": "%s: %s" % (type(e).__name__, e), "logs": logs}
 
 
 def _pick_revision(svc):
@@ -874,7 +887,13 @@ def _record_observability(store, project, location, sid, revision, svc, out, lat
                          "labels": {"project_id": project, "service_name": sid, "revision_name": revision,
                                     "location": location, "configuration_name": sid}},
             "severity": "ERROR" if not ok else "INFO", "textPayload": msg,
-        }]})
+        }] + [{
+            "logName": "projects/%s/logs/run.googleapis.com%%2Fstdout" % project,
+            "resource": {"type": "cloud_run_revision",
+                         "labels": {"project_id": project, "service_name": sid, "revision_name": revision,
+                                    "location": location, "configuration_name": sid}},
+            "severity": "INFO", "textPayload": line,
+        } for line in (out.get("logs") or [])]})
     mon_store = getattr(store, "mon_store", None)
     if mon_store is not None:
         # Metric series are keyed to the service's CURRENT revision (not whichever revision

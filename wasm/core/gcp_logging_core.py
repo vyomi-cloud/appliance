@@ -286,6 +286,16 @@ def compile_log_filter(filt):
                 if lhs == "severity" and op in (">=", "<=", ">", "<"):
                     a, b = SEVERITIES.get(str(v), -1), SEVERITIES.get(rhs, 10 ** 9)
                     ok = {">=": a >= b, "<=": a <= b, ">": a > b, "<": a < b}[op]
+                elif lhs in ("timestamp", "receiveTimestamp") and op in (">=", "<=", ">", "<", "=", "!="):
+                    # real Logging compares timestamps as instants (RFC 3339, any offset/fraction), not strings
+                    try:
+                        a, b = _parse_ts(v), _parse_ts(rhs)
+                    except _E:
+                        a, b = None, None
+                    if a is None:
+                        ok = False
+                    else:
+                        ok = {">=": a >= b, "<=": a <= b, ">": a > b, "<": a < b, "=": a == b, "!=": a == b}[op]
                 elif op == "=~":
                     ok = re.search(rhs, str(v or "")) is not None
                 else:
