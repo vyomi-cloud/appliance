@@ -1,36 +1,51 @@
 {
- "at": "2026-11-18T19:13:08+00:00",
+ "at": "2026-11-18T20:13:09+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "Virtual Machines",
-   "kind": "announcement",
-   "key": "feed:azure:eec60a500255",
-   "title": "[Launched] Generally Available: Cross-subscription backup for Azure Virtual Machines in Azure Backup",
-   "link": "https://azure.microsoft.com/updates?id=581048",
-   "detail": "Azure Backup now supports cross-subscription backup for Azure Virtual Machines, enabling customers to protect VMs using a Recovery Services vault located in a different Azure subscription within the same tenant.This capability allows organizations to cent",
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.41.1",
+   "title": "cli:aws: 2.41.0 \u2192 2.41.1",
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "Azure SQL",
+   "cloud": "aws",
+   "service": "API Gateway",
    "kind": "announcement",
-   "key": "feed:azure:d7f236f5bd9d",
-   "title": "[In preview] Public Preview: AI-powered application and database modernization with Modernize CLI",
-   "link": "https://azure.microsoft.com/updates?id=579943",
-   "detail": "Modernize CLI brings application and database modernization together as one connected, agentic journey. It assesses application architecture, dependencies, and cloud readiness while discovering the databases the application relies on and invoking speciali",
+   "key": "feed:aws:abf9d9efa129",
+   "title": "Amazon CloudFront Announces WebSocket and gRPC Support for Origin Mutual TLS",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudfront-origin-mtls-websockets-grpc/",
+   "detail": "Amazon CloudFront (CF) now supports WebSocket and gRPC traffic to application origins in AWS regions, with mutual TLS authentication between CF and the application origin (origin mTLS). Customers can now use TLS certificates to authenticate requests from CloudFront while setting up WebSocket or gRPC connections to their origins. Origin mTLS protects internet facing applications that need persistent, bidirectional or streaming connections, such as chat platforms, collaborative editing tools or live dashboards from unauthenticated requests. Previously, customers serving WebSocket or gRPC traffic",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3, AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:165a2a09aa29",
+   "title": "AWS Lambda adds support for GPU instances on Lambda Managed Instances ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-gpu-managed-instances/",
+   "detail": "AWS Lambda now supports GPU-accelerated Event Functions on Lambda Managed Instances using EC2 G-series instances . You can now run GPU-accelerated workloads including AI inference, media processing, 3D rendering, scientific computing, and financial simulations on Lambda without managing GPU drivers, frameworks, or scaling. Lambda runs multiple invocations concurrently in each execution environment and scales responsively based on GPU utilization, CPU utilization, and concurrency to keep your GPUs busy and reduce costs. GPU-accelerated functions integrate with the same 200+ AWS event sources as",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:d40bc1de04db",
+   "title": "AWS Lambda now supports customer-managed runtimes, giving platform teams centralized control over runtime contents and updates",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-customer-managed-runtimes/",
+   "detail": "AWS Lambda now supports customer-managed runtimes for Lambda Event Functions (formerly Lambda functions). Customer-managed runtimes are a standalone resource type that fully decouples runtime management from function deployment. Platform teams gain centralized control over the runtime contents, updates, access, and lifecycle, including the ability to push updates to shared components without per-function redeployments. Application teams consume the runtime from their functions in the same way as a Lambda-managed runtime, preserving their familiar developer experience. Many organizations requir",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
-  "maven/software.amazon.awssdk:sqs: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
   "maven/com.google.cloud:google-cloud-firestore: The read operation timed out",
   "maven/com.azure:azure-cosmos: The read operation timed out",
   "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
  ]
 }
