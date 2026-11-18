@@ -58,6 +58,18 @@ if (RELAY_PORT !== 8090) {   // the bundle auto-detects :8090; point it at a rel
 const page = await context.newPage();
 page.on("pageerror", (e) => console.log("[nano pageerror]", e.message));
 await page.goto(base + "/clouds.html#spaces", { waitUntil: "domcontentloaded" });
+// The relay shared worker has no localStorage, so the page-level CI tier bypass above never reaches it: managed Kubernetes (GKE/AKS/EKS)
+// answered 403 "active tier is Free" for every gcloud container call through the tunnel. Seed the licence claim the worker reads
+// (nano-spaces/meta license_jwt, decode-only; CI on a loopback origin) with a Max tier so its gate matches the page's. (endurance F209)
+await page.evaluate(() => new Promise((res) => {
+  const b64 = (o) => btoa(JSON.stringify(o)).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+  const r = indexedDB.open("nano-spaces", 1);
+  r.onupgradeneeded = () => { const d = r.result;
+    if (!d.objectStoreNames.contains("spaces")) d.createObjectStore("spaces", { keyPath: "space_id" });
+    if (!d.objectStoreNames.contains("meta")) d.createObjectStore("meta", { keyPath: "k" }); };
+  r.onsuccess = () => { try { const t = r.result.transaction("meta", "readwrite"); t.objectStore("meta").put({ k: "license_jwt", v: b64({ alg: "none" }) + "." + b64({ tier: "max" }) + ".ci" }); t.oncomplete = () => res(); t.onerror = () => res(); } catch (_) { res(); } };
+  r.onerror = () => res();
+})).catch(() => {});
 await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller
   && document.querySelector("#nano-foot-toggle"), null, { timeout: 180000, polling: 500 });
 // Up to 6 min: the worker downloads Pyodide, PGlite and the cores before it registers.

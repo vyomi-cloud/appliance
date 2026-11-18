@@ -81,6 +81,18 @@ def run():
            and rg("GET", f"/resources/{arn}/tags")[1]["Tags"] == {"a": "b", "x": "y"}
            and rg("PATCH", f"/resources/{arn}/tags", Keys=["x"])[0] == 200 and rg("GET", f"/resources/{arn}/tags")[1]["Tags"] == {"a": "b"})
     _check("F205 DeleteGroup then 404", rg("POST", "/delete-group", Group="est")[0] == 200 and rg("POST", "/get-group", Group="est")[0] == 404)
+    # F206 tenant-level Resource Graph is routed as ARM (was the S3 default: 405 MethodNotAllowed)
+    from core import aws_wire_router as awr
+    _check("F206 /providers/Microsoft.ResourceGraph/resources is an ARM path", awr._is_arm_path("/providers/Microsoft.ResourceGraph/resources"))
+    _check("F206 ...and a bucket path still is not", not awr._is_arm_path("/providers/mybucket/key"))
+    # F207 the relay worker ships every core azure_security_core lazy-imports (Nano defender automations: ImportError -> HTTP 500)
+    import os, re
+    here = os.path.dirname(os.path.abspath(__file__))
+    relay = open(os.path.join(here, "..", "..", "wasm", "relay", "relay-shared-worker.js")).read()
+    _check("F207 relay-shared-worker CORES lists azure_security_automations_core.py", '"azure_security_automations_core.py"' in relay)
+    # F208 the local relay forwards account-addressed CORS preflights (Cosmos CORS allow-list) instead of a blanket 204
+    lr = open(os.path.join(here, "..", "..", "wasm", "relay", "local-relay.mjs")).read()
+    _check("F208 local-relay no longer swallows x-vyomi-account preflights", 'x-vyomi-account"] && !req.headers["x-vyomi-store"]' in lr)
     print("Endurance aws-observability regressions: ALL GREEN")
 
 

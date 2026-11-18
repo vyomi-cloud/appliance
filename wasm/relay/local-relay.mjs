@@ -120,7 +120,9 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   // Browser auto-detector: CORS/PNA preflight + the /health beacon. Kept ahead
   // of the proxy path so a real SDK request (which never sends these) is unaffected.
-  if (req.method === "OPTIONS" && req.headers["access-control-request-method"]) {
+  // A preflight addressed to a data-plane ACCOUNT (x-vyomi-account / x-vyomi-store) is the service's own CORS decision (Cosmos CORS
+  // allow-list): forward it to the tab instead of answering a blanket 204, or the allow-list is never enforced (endurance F208).
+  if (req.method === "OPTIONS" && req.headers["access-control-request-method"] && !req.headers["x-vyomi-account"] && !req.headers["x-vyomi-store"]) {
     cors(res, 204); return res.end();
   }
   if (url.pathname === "/health") {
