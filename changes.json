@@ -1,110 +1,20 @@
 {
- "at": "2026-11-18T00:12:42+00:00",
+ "at": "2026-11-18T01:12:46+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:2d3083767941",
-   "title": "Amazon EC2 C8gn instances are now available in AWS Israel (Tel Aviv) region",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-c8gn/",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) C8gn instances, powered by the latest-generation AWS Graviton4 processors, are available in the AWS Israel (Tel Aviv) region. The C8gn instances provide up to 30% better compute performance than Graviton3-based Amazon EC2 C7gn instances. Amazon EC2 C8gn instances feature the latest 6th generation AWS Nitro Cards, and offer up to 600 Gbps network bandwidth, the highest network bandwidth among network optimized EC2 instances. Take advantage of the enhanced networking capabilities of C8gn to scale performance and throughput, while optimizi",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:72860a6478bb",
-   "title": "Amazon EC2 C8ine instances are now available in AWS Europe (Ireland) region",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-c8ine",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) C8ine instances are available in the AWS Europe (Ireland) region. C8ine instances are powered by custom sixth generation Intel Xeon Scalable processors, available only on AWS. These instances feature the latest sixth generation AWS Nitro cards, delivering up to 43% higher performance compared to previous generation C6in instances. C8ine instances offer up to 2.5 times higher packet performance per vCPU versus prior generation network optimized instances, providing up to 2x higher network throughput for traffic going through Internet gat",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:49b475349104",
-   "title": "Amazon S3 adds post-quantum TLS key exchange support to additional S3 endpoints",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-post-quantum-tls-key-exchange-support/",
-   "detail": "Amazon S3 adds post-quantum TLS (PQ-TLS) key exchange support to S3 Vectors and AWS PrivateLink for Amazon S3 interface endpoints. This extends the post-quantum cryptography support already available on regional S3, S3 Tables, and S3 Express One Zone endpoints. S3 Vectors endpoints and PrivateLink interface endpoints now support Module-Lattice-Based Key-Encapsulation Mechanism (ML-KEM), one of the National Institute of Standards and Technology (NIST) standardized post-quantum cryptographic algorithms. PQ-TLS key exchange is available to all clients configured to use the ML-KEM key exchange alg",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:afcd11771589",
-   "title": "Amazon S3 now provides post-quantum TLS visibility in AWS CloudTrail",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-post-quantum-tls-aws-cloudtrail/",
-   "detail": "Amazon S3 now records the TLS key exchange algorithm in AWS CloudTrail for S3 requests, so you can see which requests and clients use post-quantum TLS (PQ-TLS). With this visibility, you can measure the share of your S3 traffic that is protected with post-quantum cryptography, and identify the applications, SDK versions, and IAM principals that still connect with classical key exchange and need to be upgraded. The new keyExchange value in the tlsDetails field of CloudTrail management and data events shows the key exchange negotiated on each TLS connection, such as the hybrid post-quantum algor",
-   "actionable": false
-  },
-  {
    "cloud": "azure",
    "service": "Virtual Machines",
    "kind": "announcement",
-   "key": "feed:azure:a862c9f664c8",
-   "title": "Generally Available: Cobalt 200 Arm-based Dplsv7, Dpsv7, Epsv7, Mpsv4, and Lpsv5-series Virtual Machines",
-   "link": "https://azure.microsoft.com/updates?id=581298",
-   "detail": "The general purpose Dpsv7 and Dplsv7, memory-optimized Epsv7, high-memory Mpsv4, and dense storage Lpsv5 VMs are now generally available. These virtual machines deliver significant enhancements over the previous generation Cobalt 100 VMs, offering improve",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Cosmos DB",
-   "kind": "announcement",
-   "key": "feed:azure:55b9731a12b7",
-   "title": "[Launched] Generally Available: Throughput buckets in Azure Cosmos DB ",
-   "link": "https://azure.microsoft.com/updates?id=571488",
-   "detail": "We're excited to announce the general availability of throughput buckets in Azure Cosmos DB. You can manage the resource consumption of multiple workloads using the same container by limiting the maximum throughput a workload can consume. You may need to",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Cosmos DB",
-   "kind": "announcement",
-   "key": "feed:azure:ec292a8f520f",
-   "title": "[Launched] Generally Available: Semantic Reranker in Azure Cosmos DB ",
-   "link": "https://azure.microsoft.com/updates?id=577520",
-   "detail": "Semantic Reranker in Azure Cosmos DB improves search relevance by reordering candidate results based on the meaning of the search text and surrounding context. It uses an AI model to evaluate candidate documents and promote the ones that best match the in",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Virtual Machines, Azure SQL, Cosmos DB",
-   "kind": "announcement",
-   "key": "feed:azure:1bac1adf4039",
-   "title": "[Launched] Generally Available: Database Hub real-time performance dashboards",
-   "link": "https://azure.microsoft.com/updates?id=579644",
-   "detail": "Database Hub in Microsoft Fabric gives you built-in, real-time performance dashboards for Microsoft SQL, Azure Database for PostgreSQL flexible server, and Azure Cosmos DB in one place. From the Performance page, you can track CPU, memory, storage, IO, co",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Virtual Machines",
-   "kind": "announcement",
-   "key": "feed:azure:e86ea1725f19",
-   "title": "[In development] Private Preview: Azure DH/EHasv8 VMs based on 6th Gen AMD EPYC\u2122 (\u201cVenice\u201d) processors ",
-   "link": "https://azure.microsoft.com/updates?id=581308",
-   "detail": "We are announcing the preview of the new Azure DHasv8, DHalsv8 and EHasv8-series virtual machines (VMs), powered by 6th Generation AMD EPYC\u2122 (\u201cVenice\u201d) processors. Designed for the next generation of cloud applications, these VMs deliver expanded compute",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Azure SQL",
-   "kind": "announcement",
-   "key": "feed:azure:8bb66fc23ae3",
-   "title": "[In preview] Public Preview: Azure SQL DB Hyperscale Cross Database Querying",
-   "link": "https://azure.microsoft.com/updates?id=579221",
-   "detail": "Native cross-database queries in Azure SQL Database Hyperscale let applications access and join data across databases in the same Hyperscale elastic pool on a logical server, using familiar T-SQL three-part names such as `database.schema.object`. This ena",
+   "key": "feed:azure:181ca8fff75d",
+   "title": "Announcing: Azure Boost observability for NVMe disks",
+   "link": "https://azure.microsoft.com/updates?id=581227",
+   "detail": "Azure Boost observability for NVMe disks is an open-source command-line tool that you run inside compatible Azure VMs. Backed by Azure Boost, the tool provides remote disk I/O and latency metrics and maps each disk inside your VM to the corresponding disk",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/software.amazon.awssdk:sqs: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
  ]
 }

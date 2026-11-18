@@ -1,3 +1,14 @@
+### Upstream watch — 2026-11-18T01:12:46+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` Announcing: Azure Boost observability for NVMe disks ([link](https://azure.microsoft.com/updates?id=581227))
+
+Sources that failed this run (2): maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T00:12:42+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,23 +3009,3 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
-### Upstream watch — 2026-11-05T18:07:44+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` IAM Roles Anywhere now supports automatic certificate revocation checking ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/iam-roles-anywhere-cdp/))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T17:07:42+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 1 actionable.**
-- 🔧 `lifecycle` API Gateway: Announcement (November 04, 2026) ([link](https://docs.cloud.google.com/release-notes#November_04_2026))
-- · `announcement` Compute Engine: Feature (November 02, 2026) ([link](https://docs.cloud.google.com/release-notes#November_02_2026))
-
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T16:07:32+00:00
