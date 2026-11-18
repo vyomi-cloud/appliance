@@ -178,14 +178,19 @@ def gcp_apigateway():
            f"      x-google-backend:\n        address: https://us-central1-{P}.cloudfunctions.net/{fn}\n      responses:\n        '200':\n          description: ok\n")
     s, c = jcall("POST", f"/v1/projects/{P}/locations/global/apis/{api}/configs?apiConfigId={cfg}",
                  {"openapiDocuments": [{"document": {"path": "openapi.yaml", "contents": base64.b64encode(doc.encode()).decode()}}]})
-    check(s < 300 and c.get("name", "").endswith(f"/apis/{api}/configs/{cfg}"), "native apiConfigs create is routed and keeps apiConfigId", f"{s} {str(c)[:200]}")
+    # real API Gateway create is a long-running operation; the resource is read back by the id we asked for
+    s2, c2 = jcall("GET", f"/v1/projects/{P}/locations/global/apis/{api}/configs/{cfg}")
+    check(s < 300 and "/operations/" in c.get("name", "") and s2 == 200 and c2.get("name", "").endswith(f"/apis/{api}/configs/{cfg}"),
+          "native apiConfigs create is routed (LRO) and keeps apiConfigId", f"{s} {str(c)[:120]} / {s2} {str(c2)[:120]}")
     s, g = jcall("POST", f"/v1/projects/{P}/locations/us-central1/gateways?gatewayId={gw}",
                  {"apiConfig": f"projects/{P}/locations/global/apis/{api}/configs/{cfg}"})
-    check(s < 300 and g.get("name", "").endswith(f"/gateways/{gw}"), "native gateway create keeps gatewayId as the name", f"{s} {str(g)[:200]}")
+    check(s < 300 and "/operations/" in g.get("name", ""), "native gateway create returns an LRO", f"{s} {str(g)[:200]}")
     s, g = jcall("GET", f"/v1/projects/{P}/locations/us-central1/gateways/{gw}")
     hn = g.get("defaultHostname", "")
-    check(s == 200 and bool(hn), "GET gateway by id", f"{s} {str(g)[:160]}")
-    st, body, _ = http("GET", "http://" + hn + "/hello")
+    check(s == 200 and g.get("name", "").endswith(f"/gateways/{gw}") and bool(hn), "GET gateway by id keeps gatewayId as the name", f"{s} {str(g)[:160]}")
+    # *.gateway.dev is a real public domain, so a sandbox has no DNS for the shown name: send the request to the
+    # appliance with that Host header, exactly what a resolver/hosts entry pointing the name at the appliance does.
+    st, body, _ = http("GET", BASE + "/hello", headers={"Host": hn})
     check(st == 200 and b"ok" in body, "GET http://<shown defaultHostname>/hello invokes the gateway", f"{st} {body[:120]}")
 
 
