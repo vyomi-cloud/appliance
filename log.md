@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-18T09:12:54+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (2): maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T08:12:50+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,22 +3007,4 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T02:07:51+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T01:07:49+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `announcement` AWS Lambda durable functions increases default execution and API quotas ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-functions-default-quotas/))
-- · `announcement` AWS Security Hub now provides an SBOM inventory for your compute resources ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/security-hub-sbom-inventory/))
 
