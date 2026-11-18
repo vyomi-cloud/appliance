@@ -1615,23 +1615,38 @@ def _record_arm_activity(rid: str, operation_name: str, sub: str) -> None:
         pass
 
 
-def _eventgrid_webhook_post(url: str, body: bytes, headers: dict) -> int:
-    """POST an Event Grid delivery to a WebHook — loopback / private-network targets only (the appliance never reaches the internet)."""
-    import ipaddress, socket, urllib.request
+def _eventgrid_webhook_exchange(url: str, body: bytes, headers: dict):
+    """POST an Event Grid delivery to a WebHook and return (status, response body) — loopback / private-network targets only
+    (the appliance never reaches the internet)."""
+    import ipaddress, socket, urllib.error, urllib.request
     from urllib.parse import urlsplit
     host = urlsplit(url).hostname or ""
     try:
         ip = ipaddress.ip_address(socket.gethostbyname(host))
     except Exception:
-        return 0
+        return 0, b""
     if not (ip.is_loopback or ip.is_private):
-        return 0
+        return 0, b""
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=3) as r:   # noqa: S310 - restricted above
-            return r.status
+        with urllib.request.urlopen(req, timeout=5) as r:   # noqa: S310 - restricted above
+            return r.status, r.read()
     except urllib.error.HTTPError as e:
-        return e.code
+        return e.code, b""
+
+
+def _eventgrid_webhook_post(url: str, body: bytes, headers: dict) -> int:
+    return _eventgrid_webhook_exchange(url, body, headers)[0]
+
+
+def _eventgrid_function_invoke(app: str, fn: str, method: str, batch) -> bool:
+    """Event Grid AzureFunction destination / EventGrid-trigger webhook: run the Function App's deployed code with the event batch
+    (the same executor the /azure-data/functions invoke route uses)."""
+    from core import azure_dataplane as _dp
+    out = _dp.run_function_sync(app, fn, method, batch) or {}
+    if "status" in out and isinstance(out["status"], int):
+        return 200 <= out["status"] < 300
+    return bool(out.get("ok", out.get("status") == "SUCCESS"))
 
 
 def core_arm():
@@ -1644,7 +1659,8 @@ def core_arm():
         from core import azure_cfgext_core as _cfgext, appliance_stores as _aps
         _cfgext.bind_key_store(_aps.az_kv_keys_store)
         from core import azure_eventgrid_core as _eg
-        _eg.bind_destinations(_aps.az_queue_store, _eventgrid_webhook_post)   # StorageQueue + WebHook event delivery
+        _eg.bind_destinations(_aps.az_queue_store, _eventgrid_webhook_post, sb_store=_aps.az_servicebus_store,
+                          function_invoke=_eventgrid_function_invoke, webhook_exchange=_eventgrid_webhook_exchange)   # StorageQueue + WebHook (+ handshake) + AzureFunction + Service Bus
     except Exception:
         pass
     arm.state = _state

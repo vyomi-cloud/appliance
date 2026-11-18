@@ -1092,17 +1092,17 @@
       "EventSubscriptions_CreateOrUpdate",
       "Events_Publish"
      ],
-     "capabilities": 23,
+     "capabilities": 24,
      "capability_service": "eventgrid",
      "data_plane": "NATS (cloudlearn-nats:4222) — events publish to azure.eventgrid.<topic> subjects",
      "id": "eventgrid",
      "level_counts": {
       "nano": {
        "full": 12,
-       "limited": 11
+       "limited": 12
       },
       "offline": {
-       "full": 12,
+       "full": 13,
        "limited": 11
       }
      },

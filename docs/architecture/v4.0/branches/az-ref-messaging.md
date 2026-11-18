@@ -23,3 +23,10 @@ Evidence: `docs/architecture/v4.0/REF-ARCH-PROBE-AZURE.md` (components 2, 5, 12)
 - `core/console_azure_servicebus.py` (legacy console facade) still syncs from the old runtime sqlite store; the v4 consoles use the wire.
 - Siftly's 5 canonical topics are no longer auto-created on the default listener (they were in the runtime store).
 - Pre-existing on trunk: `test_relay_cores_parity.py` fails on `azure_security_automations_core.py` missing from `wasm/relay/nano-endpoint.html` CORES (not this lane).
+
+### 3. Event Grid -> Function / Service Bus / Storage Queue (blob events)
+- `core/azure_blob_core` raises `Microsoft.Storage.BlobCreated` / `BlobDeleted` (PutBlob, DeleteBlob) on the storage account's ARM scope (`_emit_blob_event`, asynchronous); `core/azure_eventgrid_core.emit_system_event` now also reaches `Microsoft.EventGrid/systemTopics/*/eventSubscriptions` whose system topic `source` is that account.
+- Destinations: WebHook with the real `SubscriptionValidation` handshake (system-topic / scoped subscriptions; unanswered = `AwaitingManualAction`, no delivery), AzureFunction (resourceId -> `azure_dataplane.run_function_sync`, the function-invocation seam lane 6 owns), EventGrid-trigger webhook URL (`/runtime/webhooks/EventGrid?functionName=`), Service Bus queue/topic (shared store, no `sb_store` argument needed), Storage Queue. Seams: `bind_destinations(..., sb_store, function_invoke, webhook_exchange)`.
+- `wire_ingress` hands the blob core the concrete Azure-space ARM dict (the context proxy resolved wrongly in the delivery thread).
+- Test: `tests/conformance/test_azure_ref_eventgrid_sdk.py` (azure-mgmt-eventgrid + azure-storage-blob + azure-servicebus).
+- Contract for lane 6: the AzureFunction path calls `run_function_sync(app, fn, "POST", [event,...])` and treats HTTP 2xx / `ok` as delivered; the azure.functions shim's `req.headers` is case-sensitive (real is case-insensitive), so the handshake header `aeg-event-type` is only seen lower-case.
