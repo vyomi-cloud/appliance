@@ -244,7 +244,7 @@ def _annotations(m):
     bc = m["buildConfig"]
     sc = m["serviceConfig"]
     return {_ANN + "runtime": bc["runtime"], _ANN + "entry-point": bc["entryPoint"], _ANN + "source": m["code"],
-            _ANN + "gen": str(m["gen"]), _ANN + "signature": "cloudevent" if m.get("eventTrigger") else "http",
+            _ANN + "gen": str(m["gen"]), _ANN + "signature": "cloudevent" if (m.get("eventTrigger") or str(bc.get("environmentVariables", {}).get("GOOGLE_FUNCTION_SIGNATURE_TYPE", "")).lower() == "cloudevent") else "http",   # the buildpack env var picks the signature too
             _ANN + "env": json.dumps(sc["environmentVariables"]), _ANN + "timeout": str(sc["timeoutSeconds"]),
             _ANN + "service-account": sc["serviceAccountEmail"], _ANN + "version": m["versionId"],
             **({_ANN + "files": json.dumps(m["files"])} if m.get("files") else {})}

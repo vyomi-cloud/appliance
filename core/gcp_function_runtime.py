@@ -320,6 +320,9 @@ def libraries() -> dict:
     return out
 
 
+_PROVIDED = {"functions-framework"}   # the sandbox harness IS the functions framework (HTTP + CloudEvent signatures): always satisfied
+
+
 def check_requirements(text: str) -> list:
     """Honour requirements.txt without internet: every requirement must be satisfied by an installed distribution (the pre-baked
     wheel set, see libraries()). Returns the unsatisfied requirement lines, each with the reason."""
@@ -348,6 +351,8 @@ def check_requirements(text: str) -> list:
             missing.append("%s: not a valid requirement" % line)
             continue
         if req.marker is not None and not req.marker.evaluate():
+            continue
+        if req.name.lower().replace("_", "-") in _PROVIDED:
             continue
         try:
             have = metadata.version(req.name)
@@ -470,10 +475,10 @@ def _http_result(proc_out: dict) -> dict:
     if proc_out.get("status") != "SUCCESS":
         err = proc_out.get("error") or "execution failed"
         return {"ok": False, "status": 500, "headers": {"Content-Type": "text/plain"}, "body": ("Error: " + err).encode(),
-                "logs": proc_out.get("logs", ""), "error": err}
+                "logs": proc_out.get("logs", ""), "stderr": proc_out.get("stderr", ""), "error": err}
     r = proc_out.get("result") or {}
     return {"ok": True, "status": int(r.get("status", 200)), "headers": r.get("headers") or {},
-            "body": base64.b64decode(r.get("body_b64", "")), "logs": proc_out.get("logs", "")}
+            "body": base64.b64decode(r.get("body_b64", "")), "logs": proc_out.get("logs", ""), "stderr": proc_out.get("stderr", "")}
 
 
 def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry_files: dict | None = None, sandbox: dict | None = None) -> dict:
@@ -515,9 +520,9 @@ def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry
             return {"status": "ERROR", "error": f"Function timed out after {timeout}s", "logs": "", "result": None}
         if proc.returncode != 0:
             return {"status": "ERROR", "error": (proc.stderr or "execution failed").strip()[-2000:],
-                    "logs": (proc.stdout or "").strip()[:4000], "result": None}
+                    "logs": (proc.stdout or "").strip()[:4000], "stderr": (proc.stderr or "")[-8000:], "result": None}
         result, logs = _parse(proc.stdout or "")
-        return {"status": "SUCCESS", "result": result, "logs": logs[:4000]}
+        return {"status": "SUCCESS", "result": result, "logs": logs[:4000], "stderr": (proc.stderr or "")[-8000:]}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 
@@ -547,6 +552,23 @@ def execute_cloud_event(code: str, entry_point: str, runtime: str, event: dict, 
     return _http_result(_run_py_harness(code, {"mode": "event", "entry": entry_point or "handler", "event": event}, timeout, env, files, sandbox))
 
 
+LOG_SINK = None   # set by the wire router: callable(project, location, service, revision, stream, lines) -> Cloud Logging
+
+
+def _stream_logs(out: dict, project: str, location: str, service: str, revision: str) -> None:
+    """A deployed function's stdout/stderr go to Cloud Logging (`run.googleapis.com/stdout|stderr`, cloud_run_revision), as on Cloud Run."""
+    sink = LOG_SINK
+    if sink is None:
+        return
+    for stream, text in (("stdout", out.get("logs") or ""), ("stderr", out.get("stderr") or "")):
+        lines = [ln for ln in str(text).splitlines() if ln.strip()]
+        if lines:
+            try:
+                sink(project, location, service, revision, stream, lines)
+            except Exception:   # noqa: BLE001 - logging never fails an invocation
+                pass
+
+
 FUNCTION_TOKEN = "vyomi-local-function-token"   # what the sandbox's metadata server hands out as the access token
 
 
@@ -563,8 +585,11 @@ def run_deployed(*, project: str, project_number: str, location: str, service: s
                             "sub": project_number, "token": FUNCTION_TOKEN, "instance_id": "00" + project_number, "hostname": "%s.%s.run.app" % (service, location),
                             "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}}
     if mode == "http":
-        return execute_http(code, entry, runtime, payload, timeout=timeout, env=env, flavor=flavor, sandbox=sandbox, files=files)
+        out = execute_http(code, entry, runtime, payload, timeout=timeout, env=env, flavor=flavor, sandbox=sandbox, files=files)
+        _stream_logs(out, project, location, service, revision)
+        return out
     out = execute_cloud_event(code, entry, runtime, payload, timeout=timeout, env=env, sandbox=sandbox, files=files)
+    _stream_logs(out, project, location, service, revision)
     if out.get("ok"):
         try:
             out["result"] = json.loads((out.get("body") or b"null").decode("utf-8", "replace"))

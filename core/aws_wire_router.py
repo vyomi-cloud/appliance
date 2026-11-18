@@ -824,6 +824,11 @@ class AwsWireRouter:
         if getattr(self.gcs, "publish_hook", None) is None:
             self.gcs.publish_hook = self._gcs_notify_publish    # bucket notificationConfigs publish into the shared Pub/Sub core
             self.gcs.topic_exists = self._gcs_notify_topic_exists
+        try:   # the subprocess function runtime streams stdout/stderr into Cloud Logging
+            from core import gcp_function_runtime as _gfr
+            _gfr.LOG_SINK = self._fn_stream_log
+        except Exception:   # Nano: no subprocess runtime
+            pass
         if getattr(self.gcp_sql, "refs", None) is None:
             self.gcp_sql.refs = self._run_refs          # Cloud SQL CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcp_run, "refs", None) is None:   # a store already wired by its host (offline routes) keeps its own
@@ -1069,6 +1074,15 @@ class AwsWireRouter:
         }
         gcp_logging.write_entries(self.gcp_logging, None, {"entries": [entry]})
 
+    def _fn_stream_log(self, project, location, service, revision, stream, lines):
+        """Function stdout/stderr -> run.googleapis.com/stdout|stderr entries on the cloud_run_revision resource."""
+        sev = "DEFAULT" if stream == "stdout" else "ERROR"
+        entries = [{"logName": "projects/%s/logs/run.googleapis.com%%2F%s" % (project, stream),
+                    "resource": {"type": "cloud_run_revision", "labels": {"project_id": project, "location": location, "service_name": service,
+                                                                           "revision_name": revision, "configuration_name": service}},
+                    "labels": {"instanceId": "vyomi-instance"}, "severity": sev, "textPayload": ln} for ln in lines]
+        gcp_logging.write_entries(self.gcp_logging, None, {"entries": entries})
+
     def hub_inputs(self, project):
         """Live facts for Cloud Hub + Privacy & Security (read from the real stores / Cloud Logging)."""
         def n(x):
@@ -1175,7 +1189,12 @@ class AwsWireRouter:
         return bool(self.gcp_msg.get_topic(topic_full))
 
     def _gcs_notify_publish(self, topic_full, messages):
-        gcp_ps._publish(self.gcp_msg, topic_full, {"messages": messages}, on_publish=self._eventarc_deliver)
+        # through gcp_ps.dispatch (looked up at call time) so VYOMI_GCP_REAL_BACKENDS=1 sends it to the real emulator
+        import json as _json
+        r = gcp_ps.dispatch(self.gcp_msg, "POST", "/v1/%s:publish" % topic_full, {}, {},
+                            _json.dumps({"messages": messages}).encode(), on_publish=self._eventarc_deliver)
+        if getattr(r, "status", 200) >= 300:
+            raise RuntimeError("notification publish failed: %s" % (getattr(r, "body", b"")[:200],))
 
     def _gcs_object_event(self, bucket, name, event, obj):
         gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
