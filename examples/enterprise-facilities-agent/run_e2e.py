@@ -38,6 +38,8 @@ def main():
     ap.add_argument("--region", default=None, help="default us-east-1 (aws) / us-central1 (gcp)")
     ap.add_argument("--out", default=os.path.join(HERE, "results"))
     ap.add_argument("--only", help="comma list of component numbers")
+    ap.add_argument("--start-emulators", action="store_true", help="gcp dev helper: start the real Pub/Sub + Firestore emulators in Docker (local image only) and set "
+                    "PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST; stands in for VYOMI_GCP_REAL_BACKENDS=1 until the simulator does it")
     ap.add_argument("--llm-stub", action="store_true", help="start the deterministic TEST STUB llm (tools/llm_stub) and point the simulator at it "
                     "(VYOMI_LLM_ENDPOINT). Model-dependent PASSes are then STUB-BACKED, not a real model.")
     a = ap.parse_args()
@@ -46,6 +48,12 @@ def main():
         import stub_llm_server
         os.environ["VYOMI_LLM_ENDPOINT"] = stub_llm_server.start()
         print(f"[llm-stub] VYOMI_LLM_ENDPOINT={os.environ['VYOMI_LLM_ENDPOINT']}  (deterministic test stub, NOT a real model)", flush=True)
+    emu = None
+    if a.start_emulators:
+        from facilities.gcp.emulators import Emulators
+        from facilities.gcp.runtime import PROJECT
+        emu = Emulators(PROJECT).start()
+        print(f"[emulators] pubsub={os.environ['PUBSUB_EMULATOR_HOST']} firestore={os.environ['FIRESTORE_EMULATOR_HOST']} (real Google emulators, own containers {emu.names})", flush=True)
     endpoint = a.endpoint
     if not endpoint:
         from facilities.server import start_in_process
@@ -113,6 +121,8 @@ def main():
     with open(os.path.join(a.out, pre + "report.html"), "w") as f:
         f.write(render(doc))
     out(f"wrote {a.out}/{pre}e2e-result.json and {pre}report.html")
+    if emu:
+        emu.stop()
     sys.exit(0 if tot[PASS] == len(table) else 1)
 
 
