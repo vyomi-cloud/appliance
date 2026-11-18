@@ -973,6 +973,8 @@ def azure_function_env(*, app: str, resource_group: str, region: str, subscripti
                "QueueEndpoint=%s/azure-data/queue/%s") % (acct, base64_key(app), endpoint, acct, endpoint, acct, endpoint, acct)
     env = {"FUNCTIONS_WORKER_RUNTIME": "python", "FUNCTIONS_EXTENSION_VERSION": "~4", "AzureWebJobsStorage": storage}
     env.update({str(k): str(v) for k, v in (settings or {}).items()})
+    if "AccountKey=sim;" in env["AzureWebJobsStorage"] or not env["AzureWebJobsStorage"]:      # the ARM engine's seeded placeholder: use the simulator storage
+        env["AzureWebJobsStorage"] = storage
     for name, c in (conn_strings or {}).items():
         v = (c or {}).get("value", "") if isinstance(c, dict) else str(c)
         ty = str((c or {}).get("type", "Custom")) if isinstance(c, dict) else "Custom"

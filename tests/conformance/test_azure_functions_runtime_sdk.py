@@ -204,8 +204,8 @@ def main():
     pid = "/subscriptions/%s/resourceGroups/%s/providers/Microsoft.Web/serverfarms/plan1" % (SUB, RG)
 
     def create(name, settings):
-        w.web_apps.begin_create_or_update(RG, name, {"location": LOC, "kind": "functionapp", "server_farm_id": pid, "identity": {"type": "SystemAssigned"},
-                                                      "site_config": {"app_settings": [{"name": k, "value": v} for k, v in settings.items()]}}).result()
+        w.web_apps.begin_create_or_update(RG, name, {"location": LOC, "kind": "functionapp", "server_farm_id": pid, "identity": {"type": "SystemAssigned"}}).result()
+        w.web_apps.update_application_settings(RG, name, {"properties": settings})
 
     def deploy(name, files):
         r = requests.post("%s/azure-data/functions/%s/api/zipdeploy" % (base, name), data=make_zip(files), timeout=240)
@@ -236,11 +236,11 @@ def main():
 
     def arm_keys():
         fk = w.web_apps.list_function_keys(RG, app1, "lookup")
-        d = dict(getattr(fk, "additional_properties", None) or {})
-        d.update(getattr(fk, "properties", None) or {})
-        keys["fn"] = d.get("default")
+        d = fk.as_dict()
+        keys["fn"] = d.get("default") or (d.get("properties") or {}).get("default")
         hk = w.web_apps.list_host_keys(RG, app1)
         keys["master"], keys["host"] = hk.master_key, (hk.function_keys or {}).get("default")
+        keys["fn"] = keys["fn"] or None
         must(keys["fn"] and keys["master"] and keys["host"], (fk.as_dict(), hk.as_dict()))
         return "fn key, host key, master key"
     check("ARM list_function_keys + list_host_keys return the keys", arm_keys)
