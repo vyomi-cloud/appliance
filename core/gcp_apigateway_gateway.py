@@ -227,8 +227,12 @@ def plan(store, gateway, method, path, headers=None, query=None, body=b"", *, ve
     url = _target_url(b, path, params, {k: v for k, v in query.items() if not (state.get("consumer") and k == "key")})
     out_h = gc.strip_hop(headers)
     out_h["x-forwarded-for"] = source_ip
+    for k in [k for k in out_h if k.lower() in ("x-endpoint-api-userinfo", "x-apigateway-api-userinfo")]:
+        out_h.pop(k)        # a caller can never forge the identity headers
     if state.get("claims"):
-        out_h["x-endpoint-api-userinfo"] = base64.urlsafe_b64encode(json.dumps(state["claims"]).encode()).decode().rstrip("=")
+        ui = base64.urlsafe_b64encode(json.dumps(state["claims"]).encode()).decode().rstrip("=")
+        out_h["x-apigateway-api-userinfo"] = ui      # the real ESPv2 header (base64url JSON of the JWT claims)
+        out_h["x-endpoint-api-userinfo"] = ui        # the older name, kept for existing backends
     return Forward(method, url, out_h, body or b"", float(b.get("deadline") or 15))
 
 

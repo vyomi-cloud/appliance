@@ -72,10 +72,11 @@ def _view(r: dict, full: bool = False) -> dict:
 def _lro(project, location, verb, response=None, target=None):
     oid = "apigw-" + uuid.uuid4().hex[:16]
     now = _now()
+    kind = "Gateway" if "/gateways/" in (target or "") else "ApiConfig" if "/configs/" in (target or "") else "Api"   # typed Any: SDKs unpack it
     return {"name": "projects/%s/locations/%s/operations/%s" % (project, location, oid),
             "metadata": {"@type": "type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata", "createTime": now, "endTime": now,
                          "target": target or "", "verb": verb, "requestedCancellation": False, "apiVersion": "v1"},
-            "done": True, **({"response": {"@type": "type.googleapis.com/google.cloud.apigateway.v1.Resource", **(response or {})}} if verb != "delete" else
+            "done": True, **({"response": {"@type": "type.googleapis.com/google.cloud.apigateway.v1." + kind, **(response or {})}} if verb != "delete" else
                              {"response": {"@type": "type.googleapis.com/google.protobuf.Empty"}})}
 
 
@@ -103,6 +104,20 @@ def parse_openapi(text: str) -> dict:
             return d
     except ValueError:
         pass
+    try:   # real YAML (block or flow style, as PyYAML / any editor writes it); the subset parser below is the fallback where PyYAML is absent
+        import yaml
+        d = yaml.safe_load(str(text or ""))
+        if isinstance(d, dict):
+            return d
+        raise _E(400, "INVALID_ARGUMENT", "Cannot parse the OpenAPI document: the top level must be a mapping.")
+    except ImportError:
+        pass
+    except _E:
+        raise
+    except Exception as e:   # yaml.YAMLError
+        mark = getattr(e, "problem_mark", None)
+        raise _E(400, "INVALID_ARGUMENT", "Cannot parse the OpenAPI document%s: %s." % (
+            " at line %d" % (mark.line + 1) if mark else "", str(getattr(e, "problem", None) or e).splitlines()[0]))
     lines = [ln.rstrip() for ln in str(text or "").splitlines() if ln.strip() and not ln.lstrip().startswith("#")]
     root: dict = {}
     stack = [(-1, root)]

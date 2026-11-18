@@ -76,6 +76,10 @@ def _base(headers):
 def pre(router, method, path, query, headers, body):
     """Return a router response dict for APIs owned by a dedicated core here, else None."""
     p = path.split("?", 1)[0]
+    try:   # where the simulator itself is reachable: a deployed function's sandbox calls back through it (core/gcp_function_runtime.self_url)
+        router.gcp_run.self_base = _base(headers)
+    except Exception:
+        pass
     if not p.startswith(("/v1/", "/v2/", "/dns/", "/gcf", "/gcf-upload/")):
         return None
     from core import gcp_dns_core, gcp_functions_core, gcp_scc_v1_core

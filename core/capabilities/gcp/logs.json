@@ -6,13 +6,13 @@
    "nano": "full",
    "offline": "full"
   },
-  "limitations": [],
+  "limitations": ["Filters are AND-joined field comparisons, free text and severity/timestamp comparisons (timestamp >=, <=, >, <, =, != compare RFC 3339 instants with any offset or fraction); OR, grouping parentheses and the SEARCH()/regexp functions are not implemented. The Python SDK reaches it over REST only (logging.Client(_use_grpc=False)): the gapic LoggingServiceV2Client has no REST transport."],
   "api": [
    "entries.write",
    "entries.list"
   ],
   "tests": [
-   "tests/conformance/test_gcp_logging_core.py"
+   "tests/conformance/test_gcp_logging_core.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ]
  },
  "gcp.logs.analytics": {

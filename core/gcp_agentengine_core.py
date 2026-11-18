@@ -27,6 +27,7 @@ import base64
 import json
 import random
 import re
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -59,6 +60,15 @@ _SYNC_MODEL_CALLS = ("query", "async_query")
 class _Err(Exception):
     def __init__(self, status, st, msg):
         self.status, self.st, self.msg = status, st, msg
+
+
+_TL = threading.local()
+
+
+def _raw_stream():
+    """True for the google-genai / vertexai SDK: its streaming parser reads newline-delimited JSON events (the real REST gateway emits an HttpBody's
+    raw data per chunk), whereas the gapic REST client reads a JSON array of HttpBody messages."""
+    return bool(getattr(_TL, "raw", False))
 
 
 def _am():
@@ -97,6 +107,46 @@ def _body(raw):
     return p
 
 
+_FREEFORM = ("classMethods", "agentCard")          # OpenAPI / A2A structs: their keys are user data and are stored exactly as sent
+
+
+def _camel(k):
+    if "_" not in k or k.startswith("_"):
+        return k
+    h, *t = k.split("_")
+    return h + "".join(x[:1].upper() + x[1:] for x in t)
+
+
+def _camelize(o, free=False):
+    """The Google Python SDKs send ReasoningEngine.spec in snake_case (proto JSON accepts both spellings); the stored resource and every
+    response use the canonical lowerCamelCase the SDK models validate against. Free-form structs are left untouched."""
+    if free or not isinstance(o, (dict, list)):
+        return o
+    if isinstance(o, list):
+        return [_camelize(x) for x in o]
+    return {_camel(k): _camelize(v, _camel(k) in _FREEFORM) for k, v in o.items()}
+
+
+def _source(eng):
+    """(archive bytes, module, object) of a source-packaged engine, else None. Source arrives as spec.sourceCodeSpec.inlineSource.sourceArchive
+    (base64url tar.gz) + spec.sourceCodeSpec.pythonSpec.{entrypointModule, entrypointObject}."""
+    sc = (eng.get("spec") or {}).get("sourceCodeSpec") or {}
+    py = sc.get("pythonSpec") or {}
+    arc = eng.get("_archive")
+    if arc and py.get("entrypointModule") and py.get("entrypointObject"):
+        return arc, py["entrypointModule"], py["entrypointObject"]
+    return None
+
+
+def _public_spec(sp):
+    """The spec as returned to clients: the (large) inline archive is held server-side, not echoed."""
+    sp = json.loads(json.dumps(sp))
+    inl = (sp.get("sourceCodeSpec") or {}).get("inlineSource")
+    if isinstance(inl, dict):
+        inl.pop("sourceArchive", None)
+    return sp
+
+
 def spec_of(engine) -> dict | None:
     """The Vyomi agent spec carried by the engine (REST field or deploymentSpec.env), or None."""
     sp = engine.get("spec") or {}
@@ -119,7 +169,20 @@ def _validate_spec(engine):
 
 
 def _view(e):
-    return {k: v for k, v in e.items() if not k.startswith("_")}
+    out = {k: v for k, v in e.items() if not k.startswith("_")}
+    out["spec"] = _public_spec(out.get("spec") or {})
+    return out
+
+
+def _take_archive(eng):
+    inl = ((eng.get("spec") or {}).get("sourceCodeSpec") or {}).get("inlineSource") or {}
+    raw = inl.get("sourceArchive")
+    if raw:
+        try:
+            eng["_archive"] = base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+        except Exception:
+            raise _Err(400, "INVALID_ARGUMENT", "spec.source_code_spec.inline_source.source_archive is not valid base64.")
+        inl["sourceArchive"] = ""
 
 
 def _op(st, scope, kind, response=None, name=None, rname=None):
@@ -137,6 +200,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
     method = method.upper()
     path = path.split("?", 1)[0]
     q = query or {}
+    hv = " ".join(str(v) for k, v in (headers or {}).items() if str(k).lower() in ("x-goog-api-client", "user-agent")).lower()
+    _TL.raw = "google-genai-sdk" in hv or "vertexai-genai" in hv or "google_genai" in hv
     try:
         st = _state(store)
         if _ap.handles_child(path):      # memories / sessions (core/gcp_agentplatform_core)
@@ -197,19 +262,21 @@ def dispatch(store, method, path, query=None, headers=None, body=b""):
 
 
 def _create(st, parent, p):
+    p = dict(p, **{_camel(k): v for k, v in p.items() if k != "spec"})
     dn = p.get("displayName")
     if not dn or not isinstance(dn, str) or len(dn) > 128:
         raise _Err(400, "INVALID_ARGUMENT", "reasoning_engine.display_name: must be set and at most 128 characters.")
     eid = str(random.randint(10 ** 18, 10 ** 19 - 1))
     name = f"{parent}/reasoningEngines/{eid}"
     now = _iso()
-    sp = json.loads(json.dumps(p.get("spec") or {}))
-    if not sp.get("classMethods"):
+    sp = _camelize(json.loads(json.dumps(p.get("spec") or {})))
+    if not sp.get("classMethods") and not (sp.get("sourceCodeSpec") or sp.get("packageSpec")):
         sp["classMethods"] = json.loads(json.dumps(_METHODS))
     eng = {"name": name, "displayName": dn, "description": p.get("description", ""), "spec": sp, "createTime": now, "updateTime": now,
            "etag": uuid.uuid4().hex[:16], "_sessions": {}}
     if p.get("labels"):
         eng["labels"] = p["labels"]
+    _take_archive(eng)
     _validate_spec(eng)
     st["engines"][name] = eng
     return _am()._j(200, _op(st, name, "create", _view(eng)))
@@ -231,15 +298,17 @@ def _list(st, parent, q):
 
 
 def _update(st, eng, p, q):
-    mask = [m for m in str(q.get("updateMask", "")).split(",") if m] or [k for k in ("displayName", "description", "spec", "labels") if k in p]
+    mask = [_camel(m) for m in str(q.get("updateMask", "")).split(",") if m] or [k for k in ("displayName", "description", "spec", "labels") if k in p]
     for f in mask:
         top = f.split(".")[0]
         if top in ("displayName", "description", "labels"):
             eng[top] = p.get(top, eng.get(top))
         elif top == "spec":
-            eng["spec"] = json.loads(json.dumps(p.get("spec") or {}))
-            if not eng["spec"].get("classMethods"):
+            eng["spec"] = _camelize(json.loads(json.dumps(p.get("spec") or {})))
+            if not eng["spec"].get("classMethods") and not (eng["spec"].get("sourceCodeSpec") or eng["spec"].get("packageSpec")):
                 eng["spec"]["classMethods"] = json.loads(json.dumps(_METHODS))
+            eng.pop("_archive", None)
+            _take_archive(eng)
         else:
             raise _Err(400, "INVALID_ARGUMENT", f"Unsupported update_mask path: {f}")
     _validate_spec(eng)
@@ -298,6 +367,13 @@ def _query(st, eng, verb, p, q):
         inp = {}
     if not isinstance(inp, dict):
         raise _Err(400, "INVALID_ARGUMENT", "input must be an object.")
+    src = _source(eng)
+    if src:
+        return _query_source(eng, src, verb, cm, inp)
+    if (eng.get("spec") or {}).get("packageSpec") and not spec_of(eng):
+        raise _Err(400, "FAILED_PRECONDITION", "This Reasoning Engine was created from a pickled object (spec.packageSpec). The simulator runs source packages "
+                   "(spec.sourceCodeSpec: source_packages + entrypoint_module + entrypoint_object) and Vyomi agent specs, and never unpickles an object; "
+                   "redeploy with source_packages.")
     sess_r = _session_api(eng, cm, inp)
     if sess_r is not None:
         return _am()._j(200, {"output": sess_r}) if verb == "query" else _stream_http([sess_r])
@@ -326,6 +402,37 @@ def _query(st, eng, verb, p, q):
     return _stream_events(_chain(first, gen), sess, text, author, inv)
 
 
+def _query_source(eng, src, verb, cm, inp):
+    """Run the user's packaged agent: set_up() then the class method with `input` as keyword arguments, in the sandboxed function runtime."""
+    try:
+        from core import gcp_function_runtime as rt
+        usable = rt.enabled()
+    except ImportError:          # Pyodide flat layout: no process to spawn
+        usable = False
+    if not usable:
+        raise _Err(400, "FAILED_PRECONDITION", "Running a source-packaged agent needs the sandboxed subprocess runtime (offline appliance / Mesh); Nano's browser "
+                   "runtime cannot spawn Python processes. Use a Vyomi agent spec (spec.vyomiAgentSpec) on Nano.")
+    methods = {m.get("name"): m for m in (eng["spec"].get("classMethods") or []) if isinstance(m, dict)}
+    if cm not in methods:
+        raise _Err(400, "INVALID_ARGUMENT", f"Unknown class method `{cm}`. Available: {', '.join(methods) or '(none registered; pass class_methods at create)'}.")
+    streaming = (methods[cm].get("api_mode") or "") in ("stream", "async_stream")
+    if verb == "query" and streaming or verb == "streamQuery" and not streaming:
+        raise _Err(400, "INVALID_ARGUMENT", f"classMethod `{cm}` is {'a streaming' if streaming else 'a unary'} method; use {':streamQuery' if streaming else ':query'}.")
+    parts = eng["name"].split("/")
+    env = {e.get("name"): e.get("value", "") for e in ((eng["spec"].get("deploymentSpec") or {}).get("env") or []) if e.get("name")}
+    arc, mod, obj = src
+    try:
+        r = rt.run_agent_engine(archive=arc, module=mod, obj=obj, method=cm, input=inp, project=parts[1], project_number="000000000000", location=parts[3],
+                                engine_id=parts[5], user_env=env)
+    except ValueError as e:
+        raise _Err(400, "INVALID_ARGUMENT", str(e))
+    if r["status"] != "SUCCESS":
+        raise _Err(500, "INTERNAL", "The agent raised an error: " + r["error"][-1500:])
+    if verb == "query":
+        return _am()._j(200, {"output": r["value"]})
+    return _stream_http(r["value"] if r["kind"] == "stream" else [r["value"]])
+
+
 def _chain(first, gen):
     yield first
     yield from gen
@@ -333,7 +440,13 @@ def _chain(first, gen):
 
 def _stream_http(objs):
     """objs -> JSON-array-of-HttpBody (the aiplatform REST framing for a server-streaming HttpBody method)."""
+    raw = _raw_stream()
+
     def g():
+        if raw:
+            for o in objs:
+                yield json.dumps(o) + "\n"
+            return
         yield "["
         for i, o in enumerate(objs):
             yield ("," if i else "") + json.dumps({"contentType": "application/json", "data": base64.b64encode(json.dumps(o).encode()).decode()})
@@ -342,8 +455,11 @@ def _stream_http(objs):
 
 
 def _stream_events(steps, sess, text, author, inv):
+    raw = _raw_stream()
+
     def g():
-        yield "["
+        if not raw:
+            yield "["
         n = 0
         final = None
         for ev in steps:
@@ -357,11 +473,15 @@ def _stream_events(steps, sess, text, author, inv):
                 out = _step_event(ev, author, inv)
                 if out is None:
                     continue
-            yield ("," if n else "") + json.dumps({"contentType": "application/json", "data": base64.b64encode(json.dumps(out).encode()).decode()})
+            if raw:
+                yield json.dumps(out) + "\n"
+            else:
+                yield ("," if n else "") + json.dumps({"contentType": "application/json", "data": base64.b64encode(json.dumps(out).encode()).decode()})
             n += 1
         if final and sess:
             _remember(sess, text, final, author, inv)
-        yield "]"
+        if not raw:
+            yield "]"
     return _am()._stream_out(200, {}, g(), "application/json")
 
 

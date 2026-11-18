@@ -12,7 +12,7 @@ services:
     pull_policy: always
     user: "0:0"
     networks: [vyomi-net]
-    expose: ["9000"]
+    expose: ["9000", "50051"]
     environment:
       CLOUDLEARN_STATE_FILE: /data/cloudlearn_state.sqlite3
       CLOUDLEARN_DISTRIBUTION_MODE: developer
@@ -36,9 +36,34 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-test}
       AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
       VYOMI_MESH_AI_EMBED: ${VYOMI_MESH_AI_EMBED:-bge-small}
+      # GCP real backends (profile "gcp-real", off by default; mesh-up.sh/boot-mesh.sh do not start it): when VYOMI_GCP_REAL_BACKENDS=1 the
+      # simulator uses the two emulators below as its Pub/Sub + Firestore data plane (core/gcp_real_backends.py).
+      VYOMI_GCP_REAL_BACKENDS: ${VYOMI_GCP_REAL_BACKENDS:-}
+      PUBSUB_EMULATOR_HOST: ${VYOMI_GCP_PUBSUB_EMULATOR_HOST:-}
+      FIRESTORE_EMULATOR_HOST: ${VYOMI_GCP_FIRESTORE_EMULATOR_HOST:-}
+      VYOMI_GCP_GRPC_PORT: ${VYOMI_GCP_GRPC_PORT:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - mesh-data:/data
+  # ---- GCP real backends (profile "gcp-real") ---------------------------------------------------------------------------
+  # The official Google emulators, same image the offline appliance uses. Bound to the Codespace's loopback only, so the user's ssh
+  # forward (-L 8085/8080/50051) reaches them and nothing else does. Start with:
+  #   VYOMI_GCP_REAL_BACKENDS=1 VYOMI_GCP_PUBSUB_EMULATOR_HOST=gcp-pubsub:8085 VYOMI_GCP_FIRESTORE_EMULATOR_HOST=gcp-firestore:8080 \
+  #     docker compose -f docker-compose.mesh.yml --profile gcp-real up -d gcp-pubsub gcp-firestore simulator
+  gcp-pubsub:
+    image: ${VYOMI_GCP_EMULATOR_IMAGE:-gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators}
+    profiles: ["gcp-real"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    command: ["gcloud", "beta", "emulators", "pubsub", "start", "--host-port=0.0.0.0:8085"]
+    ports: ["127.0.0.1:8085:8085"]
+  gcp-firestore:
+    image: ${VYOMI_GCP_EMULATOR_IMAGE:-gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators}
+    profiles: ["gcp-real"]
+    networks: [vyomi-net]
+    restart: unless-stopped
+    command: ["gcloud", "beta", "emulators", "firestore", "start", "--host-port=0.0.0.0:8080"]
+    ports: ["127.0.0.1:8080:8080"]
   # ---- AI pack (profile "ai"; boot-mesh.sh starts it only after the simulator ADMITS the models) -------------------------
   # Two llama.cpp servers (one model per process) behind a tiny OpenAI-compatible gateway. Models are pulled on first start
   # by llama-server's -hf into the ai-models volume (cached across stop/resume of the same Codespace). No published ports.

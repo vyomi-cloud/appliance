@@ -270,5 +270,12 @@
   "tests": [
    "tests/conformance/test_gcp_storage_config.py"
   ]
- }
+ },
+  "gcp.storage.notifications": {
+    "title": "Pub/Sub notifications (bucket notificationConfigs insert, list, get, delete)",
+    "level": { "nano": "limited", "offline": "limited" },
+    "limitations": ["JSON API v1 notificationConfigs with Pub/Sub topic destinations: OBJECT_FINALIZE and OBJECT_DELETE publish a message (attributes eventType, bucketId, objectId, objectGeneration, payloadFormat, notificationConfig, eventTime plus custom_attributes; data = the object resource for JSON_API_V1) into the simulator's Pub/Sub topic, honouring event_types and object_name_prefix. OBJECT_ARCHIVE and OBJECT_METADATA_UPDATE are accepted in event_types but not emitted. The topic must exist (400 otherwise); the Pub/Sub publisher-permission check is not modelled."],
+    "api": ["notifications.insert", "notifications.list", "notifications.get", "notifications.delete"],
+    "tests": ["tests/conformance/test_gcp_ref_corefix_sdk.py"]
+  }
 }

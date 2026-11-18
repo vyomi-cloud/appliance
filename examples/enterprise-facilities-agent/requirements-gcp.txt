@@ -1,0 +1,21 @@
+-r requirements.txt
+google-cloud-aiplatform
+google-genai
+google-cloud-pubsub
+google-cloud-firestore
+google-cloud-storage
+google-cloud-kms
+google-cloud-logging
+google-cloud-monitoring
+google-cloud-trace
+google-cloud-functions
+google-cloud-eventarc
+google-cloud-api-gateway
+google-cloud-compute
+google-cloud-iam
+google-cloud-modelarmor
+google-cloud-discoveryengine
+google-auth
+pyyaml
+cryptography
+requests

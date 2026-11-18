@@ -266,6 +266,11 @@ services:
       FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
       CLOUDLEARN_PUBSUB_EMULATOR_HOST: cloudlearn-pubsub:8085
       CLOUDLEARN_FIRESTORE_EMULATOR_HOST: cloudlearn-firestore:8080
+      # VYOMI_GCP_REAL_BACKENDS=1 (default off): the two emulators above become the Pub/Sub + Firestore data plane
+      # (core/gcp_real_backends.py). VYOMI_GCP_GRPC_PORT=50051 starts the gRPC front door for Monitoring / gapic Logging
+      # (core/gcp_grpc_front.py); publish it with a compose override if you use it from the host.
+      VYOMI_GCP_REAL_BACKENDS: ${VYOMI_GCP_REAL_BACKENDS:-}
+      VYOMI_GCP_GRPC_PORT: ${VYOMI_GCP_GRPC_PORT:-}
       # MVP P0 backends — see compose service block above.
       # v2.0.3+: Vault now runs in prod mode. The root token is generated on
       # first boot by vault-init.sh and written to the shared volume mounted

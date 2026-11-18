@@ -1,8 +1,7 @@
-"""Test harness plumbing: boto3 client factory, step recorder, status model. No AWS logic lives here."""
+"""Test harness plumbing: step recorder and PASS/BLOCKED/FAIL status model (cloud-neutral), plus the AWS client factory.
+The status model, Blocked, Ctx.step and Ctx.verdict are shared by every cloud (the GCP context in facilities/gcp/runtime.py subclasses Ctx);
+boto3 is imported lazily so a GCP-only environment does not need it."""
 import json, os, time, traceback
-import boto3
-from botocore.config import Config
-from botocore.exceptions import ClientError, EndpointConnectionError
 
 PASS, BLOCKED, FAIL = "PASS", "BLOCKED", "FAIL"
 ACCOUNT = "123456789012"
@@ -29,6 +28,7 @@ class Blocked(Exception):
 
 def unsupported(e):
     """True when the simulator does not implement the API at all (as opposed to the app being wrong)."""
+    from botocore.exceptions import ClientError
     if isinstance(e, ClientError):
         code = e.response.get("Error", {}).get("Code", "")
         msg = str(e)
@@ -39,6 +39,8 @@ def unsupported(e):
 
 
 class Ctx:
+    COMPONENTS = COMPONENTS      # per-cloud subclasses replace the component titles
+
     def __init__(self, endpoint, region="us-east-1", out=print):
         self.endpoint, self.region, self.out = endpoint, region, out
         self._c = {}
@@ -49,11 +51,17 @@ class Ctx:
 
     def client(self, svc):
         if svc not in self._c:
+            import boto3
+            from botocore.config import Config
             self._c[svc] = boto3.client(svc, region_name=self.region, endpoint_url=self.endpoint,
                                         aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),
                                         aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
-                                        config=Config(retries={"max_attempts": 1}, connect_timeout=5, read_timeout=60))
+                                        config=Config(retries={"max_attempts": 1}, connect_timeout=5, read_timeout=int(__import__("os").environ.get("FACILITIES_READ_TIMEOUT", "60"))))
         return self._c[svc]
+
+    def blocked_lane(self, e, lane):
+        """The lane that owes the missing capability when the step failed because the simulator lacks the API, else None."""
+        return lane if lane and unsupported(e) else None
 
     def step(self, name, fn, lane=None):
         """Run one SDK-level step. Returns its value, or None when blocked/failed (recorded, never raised)."""
@@ -65,8 +73,9 @@ class Ctx:
         except Blocked as b:
             status, detail = BLOCKED, f"waiting for {b.lane}: {b.why}"
         except Exception as e:
-            if unsupported(e) and lane:
-                status, detail = BLOCKED, f"waiting for {lane}: {type(e).__name__}: {str(e)[:140]}"
+            bl = self.blocked_lane(e, lane)
+            if bl:
+                status, detail = BLOCKED, f"waiting for {bl}: {type(e).__name__}: {str(e)[:140]}"
             else:
                 status, detail = FAIL, f"{type(e).__name__}: {str(e)[:220]}"
                 if os.environ.get("E2E_TRACE"):
