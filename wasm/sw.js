@@ -998,13 +998,27 @@ async function reqLogLoad() {
 }
 // Automatic issue reporting (scrub + send only; the consent dialog lives on the page).
 try { importScripts("./issue-reporter.js"); } catch (_) {}
+// Shape of a request for the issue fingerprint: <service> <collection> [<verb>] — resource ids
+// and names are dropped (they are also scrubbed again before sending), so two different
+// unsimulated actions (e.g. POST ec2 instances start vs ec2 volumes attach) file separate issues.
+const _RF_VERBS = /^(start|stop|reboot|terminate|attach|detach|associate|disassociate|create|delete|modify|copy|restore|snapshot|tags|status|run|enable|disable|import|export|reset|resize|upload|download|invoke|publish|subscribe|purge|rotate|schedule|cancel|accept|reject|replace|release|allocate|authorize|revoke)$/;
+function _rfShape(path) {
+  let s = path.split("/").filter(Boolean);
+  if (s[0] === "api") s = s.slice(1);
+  if (/^(aws|gcp|azure)$/.test(s[0] || "")) s = s.slice(1);
+  const coll = s[1] && /^[a-z][a-z0-9\-]{0,30}$/.test(s[1]) ? s[1] : "";
+  const verb = s.slice(2).find((x) => _RF_VERBS.test(x)) || "";
+  return [coll, verb].filter(Boolean).join(" ");
+}
 function reportFailure(kind, path, method, status, message, code) {
   try {
-    const parts = path.split("/").filter(Boolean);              // /api/<cloud>/<service>/...
-    const cloud = /^(aws|gcp|azure)$/.test(parts[1] || "") ? parts[1] : "unknown";
-    const service = cloud === "unknown" ? (parts[1] || "platform") : (parts[2] || "platform");
+    const parts = path.split("/").filter(Boolean);              // /api/<cloud>/<service>/... or /api/<aws-service>/...
+    const c = classifyReq(path);
+    const cloud = c ? c[0] : "unknown";
+    const service = c ? c[1] : (parts[1] || "platform");
+    const shape = _rfShape(path);
     self.VyomiIssueReporter && self.VyomiIssueReporter.send({
-      kind, cloud, service, action: method + " " + service, status, code, message });
+      kind, cloud, service, action: (method + " " + service + (shape ? " " + shape : "")).trim(), status, code, message });
   } catch (_) {}
 }
 
@@ -1506,7 +1520,12 @@ self.addEventListener("fetch", (event) => {
       const query = Object.fromEntries(url.searchParams.entries());
       const r = await route(method, apiPath, body, query);
       if (r.response) return r.response;
-      if (r.miss) return json({ ok: false, code: "NotTranslatedYet", method, path: url.pathname }, 501);
+      if (r.miss) {
+        // Not simulated yet in Nano: report it (kind "http", status 501, code NotTranslatedYet) so
+        // each unsimulated action files one GitHub issue; fire-and-forget, never delays the response.
+        reportFailure("http", apiPath, method, 501, "Not simulated yet in Nano: " + method + " " + _rfShape(apiPath), "NotTranslatedYet");
+        return json({ ok: false, code: "NotTranslatedYet", method, path: url.pathname }, 501, { "X-Vyomi-Reported": "1" });
+      }
       const res = await runInPage(r.tuple);
       // Native ARM responses carry a raw HTTP envelope — honour its real status
       // code + headers (Azure-AsyncOperation/Location) and emit the body verbatim.
@@ -1516,13 +1535,17 @@ self.addEventListener("fetch", (event) => {
       }
       if (res && res.__http) {
         const h = res.__http;
-        return json(h.body === undefined ? null : h.body, h.status, h.headers);
+        if (h.status >= 500) {   // adapter answered 5xx: report before returning the response unchanged
+          const hb = (h.body && typeof h.body === "object") ? h.body : {};
+          reportFailure("http", apiPath, method, h.status, hb.message || hb.detail || "", hb.code);
+        }
+        return json(h.body === undefined ? null : h.body, h.status, h.status >= 500 ? Object.assign({}, h.headers, { "X-Vyomi-Reported": "1" }) : h.headers);
       }
       // The cores return console-shaped JSON ({buckets|tables|objects|items:[...]}),
       // so the adapter result is the response body verbatim.
-      if (res && res.__http && res.__http.status >= 500) {
-        const hb = res.__http.body || {};
-        reportFailure("http", apiPath, method, res.__http.status, hb.message || hb.detail || "", hb.code);
+      if (res && res.ok === false && res.http_status >= 500) {   // adapter-shaped failure with an explicit 5xx
+        reportFailure("http", apiPath, method, res.http_status, res.message || res.detail || res.error || "", res.code);
+        return json(res, res.http_status, { "X-Vyomi-Reported": "1" });
       }
       return json(res, res && res.ok === false ? (res.http_status || 404) : 200);
     } catch (e) {
