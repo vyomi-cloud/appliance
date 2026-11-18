@@ -616,7 +616,7 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
         return done(_body(404, "Resource not found"))
     api = best[1]
     ap = _props(api)
-    if str(ap.get("type", "")).lower() == "mcp":
+    if "mcp" in (str(ap.get("type", "")).lower(), str(ap.get("apiType", "")).lower()):   # ARM `type` (SDK api_type) or the console's `apiType`
         sub = None
         if ap.get("subscriptionRequired", True) is not False:
             sub, err = _auth(state, svc, api, hd.get("ocp-apim-subscription-key") or qd.get("subscription-key") or "")
@@ -646,6 +646,8 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
     ctx.resp_headers = {}
     ctx.set_body = None
     lv = [_parse(_policy_xml(state, sid)), _parse(_policy_xml(state, api["id"])), _parse(_policy_xml(state, op["id"]))]
+    if any(lv[i] is None and _policy_xml(state, rid) for i, rid in enumerate((sid, api["id"], op["id"]))):
+        return done(_body(500, "A policy document at this scope is not well-formed XML (attribute values containing quotes must use &quot;)."))
     bag = gw["rl"]
     resp = None
     try:
@@ -770,6 +772,8 @@ def _mcp(state, svc, api, sub, rem, method, qd, hd, body, can_fetch, now, ip, gw
     ctx = _Ctx(svc, api, None, sub, method, rem, {k: v for k, v in qd.items() if k != "subscription-key"}, dict(hd), body, ip)
     ctx.now = now
     lv = [_parse(_policy_xml(state, svc["id"])), _parse(_policy_xml(state, api["id"]))]
+    if any(lv[i] is None and _policy_xml(state, rid) for i, rid in enumerate((svc["id"], api["id"]))):
+        return _body(500, "A policy document at this scope is not well-formed XML (attribute values containing quotes must use &quot;).")
     try:
         _run(ctx, _compose(lv, "inbound"), state, gw["rl"], now, "inbound")
     except PolicyError as pe:

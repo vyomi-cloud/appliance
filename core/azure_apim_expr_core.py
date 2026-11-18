@@ -425,7 +425,9 @@ class _P:
     def new_expr(self):
         if self.peek()[0] != "ID":
             raise ExprError("'new' needs a type")
-        self.next()
+        ty = self.next()[1]
+        if ty not in ("string", "int", "long", "double", "bool", "object", "List", "String"):
+            raise ExprError(f"'new {ty}' is not supported (only arrays/lists of primitives)")
         if self.isop("<"):
             while not self.isop(">"):
                 self.next()
