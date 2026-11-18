@@ -1,8 +1,81 @@
 {
- "at": "2026-11-18T07:12:54+00:00",
+ "at": "2026-11-18T08:12:50+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "storage",
+   "kind": "spec-commit",
+   "key": "azure:storage:e0333a0c21",
+   "title": "Azure storage: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "sql",
+   "kind": "spec-commit",
+   "key": "azure:sql:e0333a0c21",
+   "title": "Azure sql: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "keyvault",
+   "kind": "spec-commit",
+   "key": "azure:keyvault:e0333a0c21",
+   "title": "Azure keyvault: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "servicebus",
+   "kind": "spec-commit",
+   "key": "azure:servicebus:e0333a0c21",
+   "title": "Azure servicebus: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "cosmos-db",
+   "kind": "spec-commit",
+   "key": "azure:cosmos-db:e0333a0c21",
+   "title": "Azure cosmos-db: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "network",
+   "kind": "spec-commit",
+   "key": "azure:network:f980ce180b",
+   "title": "Azure network: Release Network API Version 2026-05-01 (#48139)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/f980ce180b45eb0350b8b1f6215c8c1a201fbe3a",
+   "actionable": true
+  },
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:e0333a0c21",
+   "title": "Azure cognitiveservices: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "operationalinsights",
+   "kind": "spec-commit",
+   "key": "azure:operationalinsights:e0333a0c21",
+   "title": "Azure operationalinsights: Add config for provisioning-ts package (#48135)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e0333a0c217d2c3385261f305a9f9664b680b492",
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out"
+  "maven/software.amazon.awssdk:sqs: The read operation timed out"
  ]
 }
