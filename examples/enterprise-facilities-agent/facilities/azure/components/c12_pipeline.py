@@ -76,12 +76,11 @@ def run(ctx):
         c = ctx.arm(EventGridManagementClient)
         scope = ctx.rid("Microsoft.Storage", "storageAccounts", NAMES["docs_account"])
         c.system_topics.begin_create_or_update(RG, "facilitiesdocs-topic", {"location": LOC, "source": scope, "topic_type": "Microsoft.Storage.StorageAccounts"}).result()
-        s = c.system_topic_event_subscriptions.begin_create_or_update(RG, "facilitiesdocs-topic", "blob-created", {"destination": {"endpoint_type": "WebHook", "properties": {
-            "endpoint_url": f"{ctx.http}/azure-data/functions/{INGEST_APP}/api/on-blob"}}, "filter": {"included_event_types": ["Microsoft.Storage.BlobCreated"]}}).result()
+        s = c.system_topic_event_subscriptions.begin_create_or_update(RG, "facilitiesdocs-topic", "blob-created", {"destination": {"endpoint_type": "AzureFunction", "properties": {"resource_id": ctx.rid("Microsoft.Web", "sites", INGEST_APP) + "/functions/on-blob"}}, "filter": {"included_event_types": ["Microsoft.Storage.BlobCreated"]}}).result()
         ctx.state["eg_ready"] = True
-        return f"system topic on storage account {NAMES['docs_account']} + WebHook subscription blob-created -> function ({s.provisioning_state})"
+        return f"system topic on storage account {NAMES['docs_account']} + AzureFunction subscription blob-created -> function ({s.provisioning_state})"
     if ctx.state.get("search_ready"):
-        ctx.step("event grid: system topic on the storage account + WebHook subscription to the function (azure-mgmt-eventgrid)", subscribe, lane=LANE["messaging"])
+        ctx.step("event grid: system topic on the storage account + AzureFunction subscription to the function (azure-mgmt-eventgrid)", subscribe, lane=LANE["messaging"])
 
     def reingest():
         word = "zebrafish" + uuid.uuid4().hex[:6]

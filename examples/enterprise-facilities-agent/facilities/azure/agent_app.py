@@ -32,7 +32,11 @@ def healthz():
 @app.post("/query")
 def query(body: dict):
     from facilities import agents
-    st = agents.ask(ctx(), body["prompt"], body.get("user", "anonymous"))
+    try:
+        st = agents.ask(ctx(), body["prompt"], body.get("user", "anonymous"))
+    except Exception as e:                      # report the cause to the caller instead of a bare 500
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"error": f"{type(e).__name__}: {e}"[:600]})
     out = {k: st.get(k) for k in ("answer", "route", "citations", "analytics", "approval", "llm_used", "tools", "spans")}
     out["pid"] = os.getpid()
     return out

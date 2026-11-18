@@ -67,14 +67,16 @@ def run(ctx):
         import requests
         from azure.mgmt.appcontainers import ContainerAppsAPIClient
         raw = ctx.arm(ContainerAppsAPIClient).container_apps.get(RG, NAMES["capp"], cls=lambda resp, des, hdr: resp.http_response.json())   # vendor property: not in the SDK model
-        base = (raw.get("properties") or {}).get("vyomiIngressUrl") or ""
+        base = ((raw.get("properties") or {}).get("vyomiIngressUrl") or "").rstrip("/")
         if not base:
             raise Blocked(LANE["host"], "ARM container app carries no properties.vyomiIngressUrl (Container Apps hosting not served)")
         try:
             r = requests.post(base + "/query", json={"prompt": QUESTION, "user": ctx.state.get("user", "anonymous")}, timeout=60)
         except Exception as e:
             raise Blocked(LANE["host"], f"ingress unreachable ({type(e).__name__}: {str(e)[:100]})")
-        assert r.status_code == 200, f"HTTP {r.status_code}: {r.text[:200]}"
+        if r.status_code != 200 and ("Local LLM" in r.text or "LLM endpoint" in r.text):
+            raise Blocked(LANE["model"], f"the hosted supervisor ran but no model is reachable: {r.text[:140]}")
+        assert r.status_code == 200, f"HTTP {r.status_code}: {r.text[:300]}"
         out = r.json()
         names = {s["name"] for s in out["spans"]}
         assert {"supervisor.plan", "agent:facilities", "agent:maintenance", "agent:analytics", "supervisor.synthesize"} <= names, names
