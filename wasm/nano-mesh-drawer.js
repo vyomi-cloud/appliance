@@ -6,7 +6,7 @@
 (function () {
   "use strict";
   var me = document.currentScript, CLOUD = (me && me.getAttribute("data-cloud")) || "";
-  var KEY = "vyomi.meshDrawer." + CLOUD;
+  var KEY = "vyomi.meshDrawer2." + CLOUD;
   var HEADER = { aws: "#vyomi-top", gcp: "header", azure: "header.vy-top" };
   var WELCOME = {
     aws:   ["Welcome to the Vyomi AWS console", "Everything here runs against your local Vyomi simulator, using the same native APIs your SDKs and CLI call. Features Vyomi doesn’t simulate are marked."],
