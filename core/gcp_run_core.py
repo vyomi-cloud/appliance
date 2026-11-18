@@ -766,7 +766,48 @@ _INVOKE_BUILTINS = {
 }
 
 
-def _run_function_source(annotations, event):
+def _fn_runtime():
+    """core/gcp_function_runtime when this substrate can spawn a process (offline appliance, Mesh, host tests); None on Nano."""
+    try:
+        from core import gcp_function_runtime as F
+    except ImportError:
+        return None
+    return F if F.enabled() else None
+
+
+def _run_deployed_function(F, annotations, event, project, location, sid, base):
+    """A Cloud Functions-deployed service (annotations written by core/gcp_functions_core): run it in the sandboxed subprocess with
+    its identity/environment. cloudevent functions get a CloudEvent (a raw payload is wrapped as `data`), http functions a POST."""
+    ann = annotations or {}
+    pre = "vyomi.dev/function-"
+    try:
+        env = json.loads(ann.get(pre + "env") or "{}")
+        files = json.loads(ann.get(pre + "files") or "null") or None
+    except ValueError:
+        env, files = {}, None
+    common = dict(project=project, project_number=project_number(project), location=location, service=sid,
+                  revision="%s-%s" % (sid, str(ann.get(pre + "version") or "1").zfill(5)), entry=ann.get(pre + "entry-point") or "handler",
+                  runtime=ann.get(pre + "runtime") or "python312", code=ann.get(pre + "source") or "", user_env=env,
+                  timeout=int(ann.get(pre + "timeout") or 60), base=base, sa_email=ann.get(pre + "service-account") or "", files=files)
+    if ann.get(pre + "signature") == "cloudevent":
+        ev = event if isinstance(event, dict) and "specversion" in event else {
+            "specversion": "1.0", "type": "vyomi.invoke", "source": "//vyomi/run/%s" % sid, "id": _h("inv", sid, str(time.time()))[:12],
+            "time": _ts(), "data": event}
+        out = F.run_deployed(mode="event", payload=ev, **common)
+        return {"ok": bool(out.get("ok")), "result": out.get("result"), "error": out.get("error", ""), "logs": out.get("logs", "")}
+    body = json.dumps(event).encode()
+    out = F.run_deployed(mode="http", payload={"method": "POST", "path": "/", "query": "", "headers": {"content-type": "application/json"},
+                                                "body_b64": base64.b64encode(body).decode()}, **common)
+    ok = bool(out.get("ok")) and int(out.get("status", 200)) < 500
+    text = (out.get("body") or b"").decode("utf-8", "replace")
+    try:
+        res = json.loads(text)
+    except ValueError:
+        res = text
+    return {"ok": ok, "result": res, "error": out.get("error") or text[:500] if not ok else "", "logs": out.get("logs", "")}
+
+
+def _run_function_source(annotations, event, project=None, location=None, sid=None, base=""):
     """Actually execute the stored Python function source against `event` — the real
     workload, not a stored config echo. Non-Python runtimes have no interpreter here
     (Vyomi doesn't build/run arbitrary container images below the Pro compute tier); the
@@ -776,6 +817,9 @@ def _run_function_source(annotations, event):
         return {"ok": None}
     source = (annotations or {}).get(_FN_ANN_SOURCE) or ""
     entry = (annotations or {}).get(_FN_ANN_ENTRY) or "handler"
+    F = _fn_runtime()
+    if F is not None and source.strip() and project and "vyomi.dev/function-gen" in (annotations or {}):
+        return _run_deployed_function(F, annotations, event, project, location, sid, base)
     if "import " in source:   # sources that import (functions_framework / flask / json / math ...) run in the function sandbox with its shims
         try:
             from core import gcp_console_tabs as _T
@@ -869,7 +913,8 @@ def invoke_service(store, project, location, sid, event=None, headers=None, inte
         _check_invoker(store, full, headers)
     revision = _pick_revision(svc)
     t0 = time.perf_counter()
-    out = _run_function_source(svc.get("annotations"), event if isinstance(event, dict) else {"raw": event})
+    out = _run_function_source(svc.get("annotations"), event if isinstance(event, dict) else {"raw": event},
+                               project, location, sid, getattr(store, "self_base", ""))
     latency_ms = (time.perf_counter() - t0) * 1000
     svc["_requestCount"] = svc.get("_requestCount", 0) + 1
     svc["_lastInvokeTime"] = _ts()

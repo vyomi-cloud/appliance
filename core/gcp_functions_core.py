@@ -111,7 +111,9 @@ def _read_source(ctx, bucket, obj):
     return r.body
 
 
-def _unzip(blob, runtime, entry):
+def _unzip(blob, runtime, entry, extras=None):
+    """The entry module's text. `extras` (optional dict) receives the rest of a Python archive: other .py files under
+    "files" (importable next to main.py) and the text of requirements.txt under "requirements"."""
     try:
         z = zipfile.ZipFile(io.BytesIO(blob))
     except Exception:
@@ -121,6 +123,16 @@ def _unzip(blob, runtime, entry):
     pick = next((n for n in want if n in names), None)
     if want and pick is None:
         raise _E(400, "FAILED_PRECONDITION", "Build failed: the %s runtime needs %s at the root of the source archive." % (runtime, " or ".join(want)))
+    if extras is not None and runtime.startswith("python"):
+        files = {}
+        for n in names:
+            if n.endswith("/") or n == pick or n.startswith(("/", "..")) or ".." in n.split("/"):
+                continue
+            if n == "requirements.txt":
+                extras["requirements"] = z.read(n).decode("utf-8", "replace")
+            elif n.endswith((".py", ".json", ".txt", ".yaml", ".yml", ".csv")) and len(files) < 200:
+                files[n] = z.read(n).decode("utf-8", "replace")[:1_000_000]
+        extras["files"] = files
     return z.read(pick).decode("utf-8", "replace") if pick else ""
 
 
@@ -133,13 +145,13 @@ def _check_code(runtime, entry, code):
 
 
 # ── building / viewing a function ───────────────────────────────────────────────────────
-def _source_code(ctx, project, bs, runtime, entry):
+def _source_code(ctx, project, bs, runtime, entry, extras=None):
     ss = (bs.get("source") or {}).get("storageSource") or {}
     inline = bs.get("_inlineCode")
     if inline is not None:
         return inline, ss
     if ss.get("bucket") and ss.get("object"):
-        return _unzip(_read_source(ctx, ss["bucket"], ss["object"]), runtime, entry), ss
+        return _unzip(_read_source(ctx, ss["bucket"], ss["object"]), runtime, entry, extras), ss
     if (bs.get("source") or {}).get("repoSource"):
         return "", ss
     raise _E(400, "INVALID_ARGUMENT", "buildConfig.source is required (storageSource or repoSource).")
@@ -178,9 +190,17 @@ def _v2_to_meta(ctx, project, location, fid, body, gen=2, prior=None):
         raise _E(400, "INVALID_ARGUMENT", "Invalid runtime '%s'. Supported: %s." % (runtime, ", ".join(_RUNTIMES)))
     if not entry:
         raise _E(400, "INVALID_ARGUMENT", "buildConfig.entryPoint is required.")
-    code, ss = _source_code(ctx, project, bc, runtime, entry)
+    extras = {}
+    code, ss = _source_code(ctx, project, bc, runtime, entry, extras)
     if code or runtime.startswith(("python", "nodejs")):
         _check_code(runtime, entry, code)
+    reqs = extras.get("requirements", (prior or {}).get("requirements", "") if not ss else "")
+    rt = _fn_runtime()
+    if reqs and rt is not None:   # no internet to pip install: every requirement must be in the pre-baked wheel set
+        bad = rt.check_requirements(reqs)
+        if bad:
+            raise _E(400, "FAILED_PRECONDITION", "Build failed: could not install requirements.txt (%s). Available libraries: %s."
+                     % ("; ".join(bad), ", ".join(sorted(rt.libraries()))))
     mem = str(sc.get("availableMemory") or "256M")
     if mem not in _MEM:
         raise _E(400, "INVALID_ARGUMENT", "Invalid availableMemory '%s'. Use one of %s." % (mem, ", ".join(_MEM)))
@@ -215,15 +235,19 @@ def _v2_to_meta(ctx, project, location, fid, body, gen=2, prior=None):
                               # F318: the egress setting is reported only when a connector (or an explicit value) is present
                               **({"vpcConnectorEgressSettings": sc.get("vpcConnectorEgressSettings", "PRIVATE_RANGES_ONLY")}
                                  if (sc.get("vpcConnector") or sc.get("vpcConnectorEgressSettings")) else {})},
-            "eventTrigger": et, "code": code,
+            "eventTrigger": et, "code": code, "files": extras.get("files", {}), "requirements": reqs,
             "createTime": (prior or {}).get("createTime", now), "updateTime": now,
             "versionId": str(int((prior or {}).get("versionId", 0)) + 1)}
 
 
 def _annotations(m):
     bc = m["buildConfig"]
+    sc = m["serviceConfig"]
     return {_ANN + "runtime": bc["runtime"], _ANN + "entry-point": bc["entryPoint"], _ANN + "source": m["code"],
-            _ANN + "gen": str(m["gen"])}
+            _ANN + "gen": str(m["gen"]), _ANN + "signature": "cloudevent" if m.get("eventTrigger") else "http",
+            _ANN + "env": json.dumps(sc["environmentVariables"]), _ANN + "timeout": str(sc["timeoutSeconds"]),
+            _ANN + "service-account": sc["serviceAccountEmail"], _ANN + "version": m["versionId"],
+            **({_ANN + "files": json.dumps(m["files"])} if m.get("files") else {})}
 
 
 def _url(ctx, m):
@@ -481,6 +505,15 @@ def _download_url(ctx, project, location, fid):
     return {"downloadUrl": "%s/storage/v1/b/%s/o/%s?alt=media" % (ctx.get("base", ""), ss["bucket"], ss["object"].replace("/", "%2F"))}
 
 
+def _fn_runtime():
+    """core/gcp_function_runtime when this substrate can spawn a process (offline appliance, Mesh, host tests); None on Nano."""
+    try:
+        from core import gcp_function_runtime as F
+    except ImportError:
+        return None
+    return F if F.enabled() else None
+
+
 def _execute(ctx, m, mode, payload, headers=None, method="POST", path="/", query=""):
     """Run the function's real source. mode 'http' -> Flask-like request; 'event' -> handler(event)."""
     from core import gcp_console_tabs as T
@@ -488,8 +521,21 @@ def _execute(ctx, m, mode, payload, headers=None, method="POST", path="/", query
     env.update({"FUNCTION_TARGET": m["buildConfig"]["entryPoint"], "K_SERVICE": m["id"], "GCP_PROJECT": m["project"]})
     runtime = m["buildConfig"]["runtime"]
     t0 = time.perf_counter()
+    F = _fn_runtime()
     if not runtime.startswith("python"):
         out = {"ok": None, "status": 202, "body": b"", "logs": "", "error": "%s functions are stored and validated but not executed here (Python only)" % runtime}
+    elif F is not None:   # a real subprocess with the function's identity + environment, the simulator reachable, SDKs importable
+        svc = _svc(ctx, m["project"], m["location"], m["id"])[1] or {}
+        common = dict(project=m["project"], project_number=R.project_number(m["project"]), location=m["location"], service=m["id"],
+                      revision=(svc.get("latestReadyRevision") or "").rsplit("/", 1)[-1] or m["id"] + "-00001", entry=m["buildConfig"]["entryPoint"],
+                      runtime=runtime, code=m["code"], user_env=m["serviceConfig"]["environmentVariables"],
+                      timeout=int(m["serviceConfig"].get("timeoutSeconds") or 60), base=ctx.get("base", ""),
+                      sa_email=m["serviceConfig"].get("serviceAccountEmail", ""), files=m.get("files") or None)
+        if mode == "http":
+            out = F.run_deployed(mode="http", payload={"method": method, "path": path, "query": query or "", "headers": headers or {},
+                                                       "body_b64": base64.b64encode(payload or b"").decode(), "url": _url(ctx, m) + (path if path != "/" else "")}, **common)
+        else:
+            out = F.run_deployed(mode="event", payload=payload, **common)
     elif mode == "http":
         out = T.run_http_function(m["code"], m["buildConfig"]["entryPoint"], {"method": method, "path": path, "query": query, "headers": headers or {}, "body": payload or b""}, "gcp", env)
     else:

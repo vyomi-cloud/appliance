@@ -18,6 +18,7 @@ capvenv/bin/pip install azure-core azure-identity azure-mgmt-loganalytics azure-
   azure-mgmt-containerservice azure-mgmt-applicationinsights azure-mgmt-servicebus azure-mgmt-kubernetesconfiguration \
   azure-mgmt-cosmosdb azure-mgmt-cognitiveservices azure-mgmt-apimanagement azure-mgmt-eventgrid azure-servicebus \
   azure-cosmos azure-data-tables azure-appconfiguration azure-keyvault-keys azure-keyvault-secrets openai
+capvenv/bin/pip install google-cloud-functions google-cloud-secret-manager google-cloud-storage   # tests/conformance/test_gcp_function_sandbox_sdk.py
 # Nano AMQP test (Pyodide + Node): vendored Pyodide (15 MB, untracked/ignored) and the JS deps for the relay
 python3 wasm/fetch_pyodide.py && python3 wasm/build_cores.py
 mkdir sbnm && (cd sbnm && npm init -y && npm i ws @azure/service-bus)      # 31 MB

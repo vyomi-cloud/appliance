@@ -5,6 +5,9 @@ psycopg2-binary>=2.9.9
 PyMySQL>=1.1.0
 google-cloud-pubsub>=2.21.0
 google-cloud-firestore>=2.16.0
+google-cloud-storage>=2.16.0        # pre-baked for Cloud Functions / Cloud Run function sandboxes (core/gcp_function_runtime):
+google-cloud-secret-manager>=2.20.0  #   functions import the real Google clients and call the simulator; no internet to pip install
+requests>=2.31.0
 # MVP P0 backends.
 hvac>=2.1.0          # HashiCorp Vault client (transit KMS + KV secrets for all 3 providers)
 nats-py>=2.7.0       # NATS client (eventing broker for EventBridge + Eventarc + Event Grid)
