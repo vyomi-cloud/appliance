@@ -1,0 +1,748 @@
+{
+  "cloud": "gcp",
+  "llm_stub": false,
+  "notes": [
+    "Model Armor createTemplate through the SDK failed (enum-encoding=int is rejected by the simulator); later Model Armor steps use a template created with string enums over AuthorizedSession."
+  ],
+  "endpoint": "http://127.0.0.1:51144",
+  "when": "2026-11-18T15:42:20",
+  "totals": {
+    "PASS": 5,
+    "BLOCKED": 4,
+    "FAIL": 4
+  },
+  "components": [
+    {
+      "id": 1,
+      "name": "Access and perimeter security (Identity Platform, API Gateway, Cloud Armor)",
+      "status": "PASS",
+      "passed": 9,
+      "total": 9,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 1,
+          "name": "identity platform: accounts:signUp + signInWithPassword -> ID token",
+          "status": "PASS",
+          "detail": "signed in as maria.ops@example.com, JWT 904 chars, iss=https://securetoken.google.com/facilities-users",
+          "secs": 0.09
+        },
+        {
+          "component": 1,
+          "name": "google-auth: verify the ID token signature, audience and issuer against the project certs",
+          "status": "PASS",
+          "detail": "google.oauth2.id_token.verify_token ok: iss=https://securetoken.google.com/facilities-users aud=facilities-users email=maria.ops@example.com",
+          "secs": 0.06
+        },
+        {
+          "component": 1,
+          "name": "iamcredentials: service account + generateIdToken for the agent identity",
+          "status": "PASS",
+          "detail": "service-account ID token (iamcredentials generateIdToken) is a JWT",
+          "secs": 0.09
+        },
+        {
+          "component": 1,
+          "name": "cloud armor: compute securityPolicies insert + get (WAF rule)",
+          "status": "PASS",
+          "detail": "Cloud Armor policy facilities-armor with an XSS preconfigured-WAF rule",
+          "secs": 0.71
+        },
+        {
+          "component": 1,
+          "name": "api gateway: create API + config (OpenAPI YAML with x-google-backend + JWT security) + gateway",
+          "status": "PASS",
+          "detail": "gateway projects/vyomi-project/locations/us-central1/gateways/facilities-api-gw host facilities-api-gw-ad992370.uc.gateway.dev",
+          "secs": 0.03
+        },
+        {
+          "component": 1,
+          "name": "api gateway: create_api(...).result() decodes the long-running operation response",
+          "status": "PASS",
+          "detail": "create_api(...).result() returned the typed Api",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "api gateway: invoke /search with a valid ID token",
+          "status": "PASS",
+          "detail": "HTTP 200 via API Gateway with a user ID token; caller=anonymous",
+          "secs": 0.59
+        },
+        {
+          "component": 1,
+          "name": "api gateway: request without a token is rejected",
+          "status": "PASS",
+          "detail": "unauthenticated call rejected with HTTP 401",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "api gateway: an unsigned (alg=none) token is rejected",
+          "status": "PASS",
+          "detail": "unsigned token rejected with HTTP 401",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Channels and input guardrails (Model Armor), approver inbox (Pub/Sub)",
+      "status": "FAIL",
+      "passed": 5,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 2,
+          "name": "model armor: create template facilities-guardrail (prompt-injection, RAI, SDP)",
+          "status": "FAIL",
+          "detail": "BadRequest: 400 POST http://127.0.0.1:51144/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint: raiFilters.filterType must be one of ['DANGEROUS', 'HARASSMENT'",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "model armor: fallback template creation with string enums (not the SDK path)",
+          "status": "PASS",
+          "detail": "template created with string enums (fallback so the sanitize steps can run)",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "model armor sanitizeUserPrompt: benign question allowed",
+          "status": "PASS",
+          "detail": "benign question passes (NO_MATCH_FOUND)",
+          "secs": 0.01
+        },
+        {
+          "component": 2,
+          "name": "model armor sanitizeUserPrompt: prompt injection blocked",
+          "status": "PASS",
+          "detail": "prompt injection blocked (MATCH_FOUND)",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "pub/sub: approver-inbox subscription on the work-order-approval topic (SDK default gRPC)",
+          "status": "PASS",
+          "detail": "topic work-order-approval + subscription approver-inbox",
+          "secs": 0.15
+        },
+        {
+          "component": 2,
+          "name": "pub/sub: publish, pull and acknowledge in the approver inbox",
+          "status": "PASS",
+          "detail": "publish -> pull -> ack, attributes preserved, no redelivery",
+          "secs": 0.03
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Vertex Agent Engine: supervisor + 3 sub-agents",
+      "status": "BLOCKED",
+      "passed": 1,
+      "total": 2,
+      "blocked_by": [
+        "agent-engine-runtime (no lane yet)"
+      ],
+      "steps": [
+        {
+          "component": 3,
+          "name": "vertex agent engine: create from source (supervisor + sub-agents, entrypoint agent_engine_app.agent)",
+          "status": "BLOCKED",
+          "detail": "waiting for agent-engine-runtime (no lane yet): ValidationError: 1 validation error for AgentEngineOperation\nresponse.spec.class_methods\n  Extra inputs are not permitted [type=extra_forbidden, input_value=",
+          "secs": 1.21
+        },
+        {
+          "component": 3,
+          "name": "langgraph: client-side fallback so later components can run",
+          "status": "PASS",
+          "detail": "fallback: supervisor graph run client-side (hosted run unavailable); this does NOT count as the hosted runtime",
+          "secs": 1.47
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Agent gateway: MCP tool registry + Cedar agent policy",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 4,
+          "name": "agent registry: register the facilities MCP server (mcpServers)",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools",
+          "secs": 0.0
+        },
+        {
+          "component": 4,
+          "name": "agent gateway: create facilities-gateway and wait ACTIVE",
+          "status": "PASS",
+          "detail": "gateway ACTIVE, mcpEndpoint http://127.0.0.1:51144/gateways/gcp-facilities-gateway-p8lzwb07e2/mcp",
+          "secs": 1.03
+        },
+        {
+          "component": 4,
+          "name": "agent gateway: attach the MCP server",
+          "status": "PASS",
+          "detail": "MCP server attached: ['projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools']",
+          "secs": 0.0
+        },
+        {
+          "component": 4,
+          "name": "gateway data plane: MCP tools/list",
+          "status": "PASS",
+          "detail": "MCP tools/list through the gateway: ['facilities-tools___asset_status', 'facilities-tools___kb_search']",
+          "secs": 0.4
+        },
+        {
+          "component": 4,
+          "name": "gateway data plane: MCP tools/call",
+          "status": "PASS",
+          "detail": "MCP tools/call asset_status -> ok",
+          "secs": 0.59
+        },
+        {
+          "component": 4,
+          "name": "agent policy: Cedar permit for read-only tools, write tool denied, attached to the gateway",
+          "status": "PASS",
+          "detail": "Cedar: read tool ALLOW, write tool DENY; policy attached to the gateway in ENFORCE mode",
+          "secs": 0.02
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Actions and approval (Pub/Sub + Cloud Run function + Firestore ledger)",
+      "status": "PASS",
+      "passed": 9,
+      "total": 9,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 5,
+          "name": "approval path is wired: Pub/Sub topic + approver-inbox, decision and create-work-order functions, Firestore ledger",
+          "status": "PASS",
+          "detail": "topic work-order-approval -> subscription approver-inbox, decision + create-work-order functions, Firestore ledger approval-ledger",
+          "secs": 0.01
+        },
+        {
+          "component": 5,
+          "name": "agent write is parked: ledger PENDING (no work order yet)",
+          "status": "PASS",
+          "detail": "ledger PENDING for req-1e5093fa32, requester maria.ops@example.com",
+          "secs": 0.01
+        },
+        {
+          "component": 5,
+          "name": "no write happens before approval",
+          "status": "PASS",
+          "detail": "no work order exists before approval",
+          "secs": 0.0
+        },
+        {
+          "component": 5,
+          "name": "pub/sub: approver inbox receives the approval request",
+          "status": "PASS",
+          "detail": "approval request delivered to approver-inbox: Work order for B-12: Boiler B-12 is at 34 psi. What does the",
+          "secs": 0.0
+        },
+        {
+          "component": 5,
+          "name": "cloud run function: create-work-order refuses an unapproved request",
+          "status": "PASS",
+          "detail": "create-work-order refuses while the ledger is PENDING",
+          "secs": 0.28
+        },
+        {
+          "component": 5,
+          "name": "cloud run function: approval-decision rejects an unauthorised approver",
+          "status": "PASS",
+          "detail": "an unauthorised approver cannot decide; ledger still PENDING",
+          "secs": 0.28
+        },
+        {
+          "component": 5,
+          "name": "approver approves: function records APPROVED, waiting caller proceeds, work order created",
+          "status": "PASS",
+          "detail": "decision function -> ledger APPROVED -> caller saw it -> WO-93FA32 created, ledger EXECUTED",
+          "secs": 0.6
+        },
+        {
+          "component": 5,
+          "name": "create-work-order is idempotent on an EXECUTED request",
+          "status": "PASS",
+          "detail": "second create-work-order call is idempotent (one work order)",
+          "secs": 0.29
+        },
+        {
+          "component": 5,
+          "name": "approver rejects: ledger REJECTED, nothing is written",
+          "status": "PASS",
+          "detail": "REJECTED in the ledger, create-work-order refuses, no work order written",
+          "secs": 0.6
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Knowledge search (Vertex RAG Engine)",
+      "status": "PASS",
+      "passed": 4,
+      "total": 4,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 6,
+          "name": "vertex rag engine: retrieveContexts ranks the boiler SOP first",
+          "status": "PASS",
+          "detail": "top hit gs://facilities-docs/docs/boiler-sop.md score=0.232271",
+          "secs": 0.0
+        },
+        {
+          "component": 6,
+          "name": "vertex rag engine: retrieveContexts ranks the HVAC manual first for an AHU question",
+          "status": "PASS",
+          "detail": "top hit gs://facilities-docs/docs/hvac-maintenance-manual.md",
+          "secs": 0.0
+        },
+        {
+          "component": 6,
+          "name": "retrieved contexts carry source URIs (needed for citations)",
+          "status": "PASS",
+          "detail": "3 contexts each with text + gs:// source",
+          "secs": 0.0
+        },
+        {
+          "component": 6,
+          "name": "vertex ai search: data store + import + search over the same SOP",
+          "status": "PASS",
+          "detail": "Vertex AI Search (Discovery Engine) returned 1 result(s)",
+          "secs": 0.36
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Tools (Cloud Run functions + Firestore)",
+      "status": "PASS",
+      "passed": 4,
+      "total": 4,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 7,
+          "name": "firestore: seed fixture assets + work orders (firestore.Client)",
+          "status": "PASS",
+          "detail": "3 assets, 3 work orders in Firestore (SDK default gRPC)",
+          "secs": 0.58
+        },
+        {
+          "component": 7,
+          "name": "cloud functions gen2: generateUploadUrl + PUT zip + CreateFunction x5",
+          "status": "PASS",
+          "detail": "5 functions deployed (kb-search, asset-status, tools-mcp, approval-decision, create-work-order)",
+          "secs": 0.06
+        },
+        {
+          "component": 7,
+          "name": "cloud run function: kb-search tool (Vertex RAG retrieveContexts from inside the function)",
+          "status": "PASS",
+          "detail": "read-only knowledge tool returned 3 cited results (RAG client inside the function)",
+          "secs": 0.78
+        },
+        {
+          "component": 7,
+          "name": "cloud run function: asset-status tool (Firestore read from inside the function)",
+          "status": "PASS",
+          "detail": "B-12 status=RUNNING, open work orders=1",
+          "secs": 0.31
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "AgentOps and observability (Trace, Logging, Monitoring)",
+      "status": "BLOCKED",
+      "passed": 5,
+      "total": 6,
+      "blocked_by": [
+        "gcp-ref-realbackend"
+      ],
+      "steps": [
+        {
+          "component": 8,
+          "name": "the agent run produced spans to export",
+          "status": "PASS",
+          "detail": "7 agent spans to export",
+          "secs": 0.0
+        },
+        {
+          "component": 8,
+          "name": "cloud trace v2: batch_write_spans (one span per agent / tool step)",
+          "status": "PASS",
+          "detail": "8 spans sent (trace 09b1a95a107348a68585215b0197affd)",
+          "secs": 0.02
+        },
+        {
+          "component": 8,
+          "name": "cloud trace v1: get_trace reads the agent trace back",
+          "status": "PASS",
+          "detail": "v1 get_trace read back 8 spans",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "cloud trace v1: list_traces lists it",
+          "status": "PASS",
+          "detail": "trace listed by list_traces",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "cloud logging: log_struct + list_entries (structured, trace-correlated)",
+          "status": "PASS",
+          "detail": "structured agent log written with logger.log_struct and read back with list_entries; carries the trace id",
+          "secs": 0.1
+        },
+        {
+          "component": 8,
+          "name": "cloud monitoring: custom metric create + write + list (SDK default gRPC)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-realbackend: ServiceUnavailable: 503 failed to connect to all addresses; last error: INTERNAL: ipv4:127.0.0.1:51144: Failed parsing HTTP/2 (Expected SETTINGS frame as the fi",
+          "secs": 0.04
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Agent Platform Sessions + Memory Bank",
+      "status": "FAIL",
+      "passed": 3,
+      "total": 6,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 9,
+          "name": "agent platform: create the memory host engine facilities_memory",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/9639988094324427517",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "sessions: create a session for the user",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/9639988094324427517/sessions/192665633198884763",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "sessions: append events (user + agent turn)",
+          "status": "FAIL",
+          "detail": "ClientError: 405 METHOD_NOT_ALLOWED. {'error': {'code': 405, 'message': 'Unsupported.', 'status': 'METHOD_NOT_ALLOWED'}}",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "sessions: list events (session replay)",
+          "status": "FAIL",
+          "detail": "AssertionError: []",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "memory bank: create a fact + retrieve by similarity (long-term)",
+          "status": "PASS",
+          "detail": "1 long-term memory retrieved by similarity: 'Maria Ops prefers the boiler B-12 report on Monday'",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "memory bank: generate memories from a conversation (LLM fact extraction)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Foundation models (Gemini on Vertex)",
+      "status": "FAIL",
+      "passed": 2,
+      "total": 6,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 10,
+          "name": "vertex ai: list the model catalogue (models.list)",
+          "status": "PASS",
+          "detail": "1 models listed, e.g. ['publishers/google/models/gemma2-9b']",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: models.get resolves the Gemini id the app uses",
+          "status": "FAIL",
+          "detail": "ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'Publisher model publishers/google/models/gemini-2.0-flash not found.', 'status': 'NOT_FOUND'}}",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: generateContent (chat model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: generateContent needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: generateContent + Model Armor template blocks a prompt attack",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: generateContent with function declarations",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: needs a model (request with tools accepted up to the model call): 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: embedContent text-embedding-005 ranks a paraphrase above unrelated text",
+          "status": "PASS",
+          "detail": "embedContent dim 256, paraphrase cos 0.60 > unrelated 0.00",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Response generation (grounded, cited, Model Armor)",
+      "status": "BLOCKED",
+      "passed": 3,
+      "total": 4,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 11,
+          "name": "answer is grounded in retrieved documents and cites them",
+          "status": "PASS",
+          "detail": "answer grounded in 3 cited sources; first: gs://facilities-docs/docs/boiler-sop.md",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "model armor sanitizeModelResponse: sensitive data in the answer is flagged",
+          "status": "PASS",
+          "detail": "output guardrail flagged sensitive data (SSN) in the answer",
+          "secs": 0.01
+        },
+        {
+          "component": 11,
+          "name": "model armor sanitizeModelResponse: the agent answer passes the output filter",
+          "status": "PASS",
+          "detail": "the agent answer itself passes the output filter",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "vertex ai: generateContent with the RAG retrieval tool returns an answer + groundingMetadata",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError",
+          "secs": 0.01
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Knowledge processing pipeline (GCS, Eventarc, function, RAG import)",
+      "status": "FAIL",
+      "passed": 5,
+      "total": 7,
+      "blocked_by": [
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 12,
+          "name": "gcs: upload SOP and manual documents (google-cloud-storage)",
+          "status": "PASS",
+          "detail": "4 documents uploaded to gs://facilities-docs/docs/",
+          "secs": 0.02
+        },
+        {
+          "component": 12,
+          "name": "vertex ai: embedContent text-embedding-005 (google-genai)",
+          "status": "PASS",
+          "detail": "embedContent text-embedding-005: dim 256",
+          "secs": 0.18
+        },
+        {
+          "component": 12,
+          "name": "vertex rag engine: create corpus facilities-kb",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/ragCorpora/4529330403332857",
+          "secs": 0.0
+        },
+        {
+          "component": 12,
+          "name": "vertex rag engine: import_rag_files from gs://facilities-docs/docs/ + list_rag_files",
+          "status": "PASS",
+          "detail": "import_rag_files complete: 4 RAG files in the corpus",
+          "secs": 0.01
+        },
+        {
+          "component": 12,
+          "name": "gcs: bucket notification (OBJECT_FINALIZE -> Pub/Sub) on upload",
+          "status": "FAIL",
+          "detail": "AssertionError: no OBJECT_FINALIZE notification arrived on the Pub/Sub topic",
+          "secs": 146.63
+        },
+        {
+          "component": 12,
+          "name": "eventarc: object finalized -> Cloud Run function -> RAG import (event-driven re-index)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: the finalize event did not result in a RAG import (Eventarc -> function -> SDK call inside the function sandbox)",
+          "secs": 20.88
+        },
+        {
+          "component": 12,
+          "name": "vertex rag engine: re-upload a revised SOP and re-import: only the new version is served",
+          "status": "PASS",
+          "detail": "re-upload + re-import replaced the old version (only 25 psi served), fixture restored",
+          "secs": 0.31
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Governance and security (Cloud KMS, Cloud Audit Logs)",
+      "status": "BLOCKED",
+      "passed": 5,
+      "total": 6,
+      "blocked_by": [
+        "gcp-ref-realbackend"
+      ],
+      "steps": [
+        {
+          "component": 13,
+          "name": "kms: key ring facilities + ledger-key (ENCRYPT_DECRYPT, rotation)",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key with 90-day rotation",
+          "secs": 0.02
+        },
+        {
+          "component": 13,
+          "name": "kms: envelope-encrypt the approval record (data key wrapped by KMS with AAD)",
+          "status": "PASS",
+          "detail": "ledger record sealed with a KMS-wrapped data key; round trip ok",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "kms: decrypt with the wrong AAD is refused",
+          "status": "PASS",
+          "detail": "wrong additional_authenticated_data is refused",
+          "secs": 0.0
+        },
+        {
+          "component": 13,
+          "name": "cloud audit logs: admin-activity entries for the run (CreateKeyRing, CreateCryptoKey ...)",
+          "status": "PASS",
+          "detail": "admin-activity audit has CreateCryptoKey, CreateKeyRing, CreateServiceAccount, create",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "cloud audit logs: the approval topic creation is audited",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-realbackend: Pub/Sub CreateTopic is not audited when the real emulator is the data plane (the emulator emits no audit entries; methods seen: ['google.cloud.kms.v1.KeyManagementService.CreateCryptoKey', 'google.cloud.kms.v1.KeyManagementService.CreateKeyRing', 'google.iam.admin.v1.CreateServiceAccount', 'storage.buckets.create'])",
+          "secs": 0.0
+        },
+        {
+          "component": 13,
+          "name": "firestore: approval-ledger is the application-level audit record",
+          "status": "PASS",
+          "detail": "ledger rows: 2 (['EXECUTED', 'REJECTED'])",
+          "secs": 0.01
+        }
+      ]
+    }
+  ],
+  "transcript": "Facilities agent e2e (GCP)   endpoint=http://127.0.0.1:51144   2026-11-18 15:39:20\n====================================================================================================\n\n[01] Access and perimeter security (Identity Platform, API Gateway, Cloud Armor)\n    [PASS   ] identity platform: accounts:signUp + signInWithPassword -> ID token  - signed in as maria.ops@example.com, JWT 904 chars, iss=https://securetoken.google.com/facilities-users\n    [PASS   ] google-auth: verify the ID token signature, audience and issuer against the project certs  - google.oauth2.id_token.verify_token ok: iss=https://securetoken.google.com/facilities-users aud=facilities-users email=maria.ops@example.com\n    [PASS   ] iamcredentials: service account + generateIdToken for the agent identity  - service-account ID token (iamcredentials generateIdToken) is a JWT\n    [PASS   ] cloud armor: compute securityPolicies insert + get (WAF rule)  - Cloud Armor policy facilities-armor with an XSS preconfigured-WAF rule\n\n[02] Channels and input guardrails (Model Armor), approver inbox (Pub/Sub)\n    [FAIL   ] model armor: create template facilities-guardrail (prompt-injection, RAI, SDP)  - BadRequest: 400 POST http://127.0.0.1:51144/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint: raiFilters.filterType must be one of ['DANGEROUS', 'HARASSMENT'\n    [PASS   ] model armor: fallback template creation with string enums (not the SDK path)  - template created with string enums (fallback so the sanitize steps can run)\n    [PASS   ] model armor sanitizeUserPrompt: benign question allowed  - benign question passes (NO_MATCH_FOUND)\n    [PASS   ] model armor sanitizeUserPrompt: prompt injection blocked  - prompt injection blocked (MATCH_FOUND)\n    [PASS   ] pub/sub: approver-inbox subscription on the work-order-approval topic (SDK default gRPC)  - topic work-order-approval + subscription approver-inbox\n    [PASS   ] pub/sub: publish, pull and acknowledge in the approver inbox  - publish -> pull -> ack, attributes preserved, no redelivery\n\n[12] Knowledge processing pipeline (GCS, Eventarc, function, RAG import)\n    [PASS   ] gcs: upload SOP and manual documents (google-cloud-storage)  - 4 documents uploaded to gs://facilities-docs/docs/\n    [PASS   ] vertex ai: embedContent text-embedding-005 (google-genai)  - embedContent text-embedding-005: dim 256\n    [PASS   ] vertex rag engine: create corpus facilities-kb  - projects/vyomi-project/locations/us-central1/ragCorpora/4529330403332857\n    [PASS   ] vertex rag engine: import_rag_files from gs://facilities-docs/docs/ + list_rag_files  - import_rag_files complete: 4 RAG files in the corpus\n    [FAIL   ] gcs: bucket notification (OBJECT_FINALIZE -> Pub/Sub) on upload  - AssertionError: no OBJECT_FINALIZE notification arrived on the Pub/Sub topic\n    [BLOCKED] eventarc: object finalized -> Cloud Run function -> RAG import (event-driven re-index)  - waiting for gcp-ref-sandbox: the finalize event did not result in a RAG import (Eventarc -> function -> SDK call inside the function sandbox)\n    [PASS   ] vertex rag engine: re-upload a revised SOP and re-import: only the new version is served  - re-upload + re-import replaced the old version (only 25 psi served), fixture restored\n\n[06] Knowledge search (Vertex RAG Engine)\n    [PASS   ] vertex rag engine: retrieveContexts ranks the boiler SOP first  - top hit gs://facilities-docs/docs/boiler-sop.md score=0.232271\n    [PASS   ] vertex rag engine: retrieveContexts ranks the HVAC manual first for an AHU question  - top hit gs://facilities-docs/docs/hvac-maintenance-manual.md\n    [PASS   ] retrieved contexts carry source URIs (needed for citations)  - 3 contexts each with text + gs:// source\n    [PASS   ] vertex ai search: data store + import + search over the same SOP  - Vertex AI Search (Discovery Engine) returned 1 result(s)\n\n[07] Tools (Cloud Run functions + Firestore)\n    [PASS   ] firestore: seed fixture assets + work orders (firestore.Client)  - 3 assets, 3 work orders in Firestore (SDK default gRPC)\n    [PASS   ] cloud functions gen2: generateUploadUrl + PUT zip + CreateFunction x5  - 5 functions deployed (kb-search, asset-status, tools-mcp, approval-decision, create-work-order)\n    [PASS   ] cloud run function: kb-search tool (Vertex RAG retrieveContexts from inside the function)  - read-only knowledge tool returned 3 cited results (RAG client inside the function)\n    [PASS   ] cloud run function: asset-status tool (Firestore read from inside the function)  - B-12 status=RUNNING, open work orders=1\n    [PASS   ] api gateway: create API + config (OpenAPI YAML with x-google-backend + JWT security) + gateway  - gateway projects/vyomi-project/locations/us-central1/gateways/facilities-api-gw host facilities-api-gw-ad992370.uc.gateway.dev\n    [PASS   ] api gateway: create_api(...).result() decodes the long-running operation response  - create_api(...).result() returned the typed Api\n    [PASS   ] api gateway: invoke /search with a valid ID token  - HTTP 200 via API Gateway with a user ID token; caller=anonymous\n    [PASS   ] api gateway: request without a token is rejected  - unauthenticated call rejected with HTTP 401\n    [PASS   ] api gateway: an unsigned (alg=none) token is rejected  - unsigned token rejected with HTTP 401\n\n[04] Agent gateway: MCP tool registry + Cedar agent policy\n    [PASS   ] agent registry: register the facilities MCP server (mcpServers)  - projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\n    [PASS   ] agent gateway: create facilities-gateway and wait ACTIVE  - gateway ACTIVE, mcpEndpoint http://127.0.0.1:51144/gateways/gcp-facilities-gateway-p8lzwb07e2/mcp\n    [PASS   ] agent gateway: attach the MCP server  - MCP server attached: ['projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools']\n    [PASS   ] gateway data plane: MCP tools/list  - MCP tools/list through the gateway: ['facilities-tools___asset_status', 'facilities-tools___kb_search']\n    [PASS   ] gateway data plane: MCP tools/call  - MCP tools/call asset_status -> ok\n    [PASS   ] agent policy: Cedar permit for read-only tools, write tool denied, attached to the gateway  - Cedar: read tool ALLOW, write tool DENY; policy attached to the gateway in ENFORCE mode\n\n[05] Actions and approval (Pub/Sub + Cloud Run function + Firestore ledger)\n    [PASS   ] approval path is wired: Pub/Sub topic + approver-inbox, decision and create-work-order functions, Firestore ledger  - topic work-order-approval -> subscription approver-inbox, decision + create-work-order functions, Firestore ledger approval-ledger\n\n[03] Vertex Agent Engine: supervisor + 3 sub-agents\n    [BLOCKED] vertex agent engine: create from source (supervisor + sub-agents, entrypoint agent_engine_app.agent)  - waiting for agent-engine-runtime (no lane yet): ValidationError: 1 validation error for AgentEngineOperation\nresponse.spec.class_methods\n  Extra inputs are not permitted [type=extra_forbidden, input_value=\n    [PASS   ] langgraph: client-side fallback so later components can run  - fallback: supervisor graph run client-side (hosted run unavailable); this does NOT count as the hosted runtime\n\n[09] Agent Platform Sessions + Memory Bank\n    [PASS   ] agent platform: create the memory host engine facilities_memory  - projects/vyomi-project/locations/us-central1/reasoningEngines/9639988094324427517\n    [PASS   ] sessions: create a session for the user  - projects/vyomi-project/locations/us-central1/reasoningEngines/9639988094324427517/sessions/192665633198884763\n    [FAIL   ] sessions: append events (user + agent turn)  - ClientError: 405 METHOD_NOT_ALLOWED. {'error': {'code': 405, 'message': 'Unsupported.', 'status': 'METHOD_NOT_ALLOWED'}}\n    [FAIL   ] sessions: list events (session replay)  - AssertionError: []\n    [PASS   ] memory bank: create a fact + retrieve by similarity (long-term)  - 1 long-term memory retrieved by similarity: 'Maria Ops prefers the boiler B-12 report on Monday'\n    [BLOCKED] memory bank: generate memories from a conversation (LLM fact extraction)  - waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the\n    [PASS   ] agent write is parked: ledger PENDING (no work order yet)  - ledger PENDING for req-1e5093fa32, requester maria.ops@example.com\n    [PASS   ] no write happens before approval  - no work order exists before approval\n    [PASS   ] pub/sub: approver inbox receives the approval request  - approval request delivered to approver-inbox: Work order for B-12: Boiler B-12 is at 34 psi. What does the\n    [PASS   ] cloud run function: create-work-order refuses an unapproved request  - create-work-order refuses while the ledger is PENDING\n    [PASS   ] cloud run function: approval-decision rejects an unauthorised approver  - an unauthorised approver cannot decide; ledger still PENDING\n    [PASS   ] approver approves: function records APPROVED, waiting caller proceeds, work order created  - decision function -> ledger APPROVED -> caller saw it -> WO-93FA32 created, ledger EXECUTED\n    [PASS   ] create-work-order is idempotent on an EXECUTED request  - second create-work-order call is idempotent (one work order)\n    [PASS   ] approver rejects: ledger REJECTED, nothing is written  - REJECTED in the ledger, create-work-order refuses, no work order written\n\n[10] Foundation models (Gemini on Vertex)\n    [PASS   ] vertex ai: list the model catalogue (models.list)  - 1 models listed, e.g. ['publishers/google/models/gemma2-9b']\n    [FAIL   ] vertex ai: models.get resolves the Gemini id the app uses  - ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'Publisher model publishers/google/models/gemini-2.0-flash not found.', 'status': 'NOT_FOUND'}}\n    [BLOCKED] vertex ai: generateContent (chat model)  - waiting for local model: generateContent needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError\n    [BLOCKED] vertex ai: generateContent + Model Armor template blocks a prompt attack  - waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the\n    [BLOCKED] vertex ai: generateContent with function declarations  - waiting for local model: needs a model (request with tools accepted up to the model call): 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError\n    [PASS   ] vertex ai: embedContent text-embedding-005 ranks a paraphrase above unrelated text  - embedContent dim 256, paraphrase cos 0.60 > unrelated 0.00\n\n[11] Response generation (grounded, cited, Model Armor)\n    [PASS   ] answer is grounded in retrieved documents and cites them  - answer grounded in 3 cited sources; first: gs://facilities-docs/docs/boiler-sop.md\n    [PASS   ] model armor sanitizeModelResponse: sensitive data in the answer is flagged  - output guardrail flagged sensitive data (SSN) in the answer\n    [PASS   ] model armor sanitizeModelResponse: the agent answer passes the output filter  - the agent answer itself passes the output filter\n    [BLOCKED] vertex ai: generateContent with the RAG retrieval tool returns an answer + groundingMetadata  - waiting for local model: needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError\n\n[08] AgentOps and observability (Trace, Logging, Monitoring)\n    [PASS   ] the agent run produced spans to export  - 7 agent spans to export\n    [PASS   ] cloud trace v2: batch_write_spans (one span per agent / tool step)  - 8 spans sent (trace 09b1a95a107348a68585215b0197affd)\n    [PASS   ] cloud trace v1: get_trace reads the agent trace back  - v1 get_trace read back 8 spans\n    [PASS   ] cloud trace v1: list_traces lists it  - trace listed by list_traces\n    [PASS   ] cloud logging: log_struct + list_entries (structured, trace-correlated)  - structured agent log written with logger.log_struct and read back with list_entries; carries the trace id\n    [BLOCKED] cloud monitoring: custom metric create + write + list (SDK default gRPC)  - waiting for gcp-ref-realbackend: ServiceUnavailable: 503 failed to connect to all addresses; last error: INTERNAL: ipv4:127.0.0.1:51144: Failed parsing HTTP/2 (Expected SETTINGS frame as the fi\n\n[13] Governance and security (Cloud KMS, Cloud Audit Logs)\n    [PASS   ] kms: key ring facilities + ledger-key (ENCRYPT_DECRYPT, rotation)  - projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key with 90-day rotation\n    [PASS   ] kms: envelope-encrypt the approval record (data key wrapped by KMS with AAD)  - ledger record sealed with a KMS-wrapped data key; round trip ok\n    [PASS   ] kms: decrypt with the wrong AAD is refused  - wrong additional_authenticated_data is refused\n    [PASS   ] cloud audit logs: admin-activity entries for the run (CreateKeyRing, CreateCryptoKey ...)  - admin-activity audit has CreateCryptoKey, CreateKeyRing, CreateServiceAccount, create\n    [BLOCKED] cloud audit logs: the approval topic creation is audited  - waiting for gcp-ref-realbackend: Pub/Sub CreateTopic is not audited when the real emulator is the data plane (the emulator emits no audit entries; methods seen: ['google.cloud.kms.v1.KeyManagementService.CreateCryptoKey', 'google.cloud.kms.v1.KeyManagementService.CreateKeyRing', 'google.iam.admin.v1.CreateServiceAccount', 'storage.buckets.create'])\n    [PASS   ] firestore: approval-ledger is the application-level audit record  - ledger rows: 2 (['EXECUTED', 'REJECTED'])\n\n----------------------------------------------------------------------------------------------------\nAgent transcript\n  user      : maria.ops@example.com\n  question  : Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\n  route     : ['facilities', 'maintenance', 'analytics']  (routed by keyword rules; no model reachable)\n  tool      : kb_search          via agent-gateway\n  tool      : asset_status       via agent-gateway\n  tool      : create_work_order  via pubsub-approval\n  tool      : work_order_stats   via firestore\n  answer    : SOP-310 Fire safety and evacuation Fire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of t:  [1] Asset B-12 status RUNNING; open work orders: ['WO-000102 Quarterly PRV inspection']. Work orders: 3 total; by status/priority {\"CLOSED\": {\"P3\": 1}, \"OPEN\": {\"P2\": 2}}. A work order request (req-1e5093fa32) was submitted and is waiting for approval.\n  citation  : [1] gs://facilities-docs/docs/fire-safety-sop.md\n  citation  : [2] gs://facilities-docs/docs/boiler-sop.md\n  citation  : [3] gs://facilities-docs/docs/hvac-maintenance-manual.md\n  approval  : req-1e5093fa32 -> work order WO-93FA32\n\n====================================================================================================\nSUMMARY\n #  component                                                      status   steps\n 1  Access and perimeter security (Identity Platform, API Gateway, Cloud Armor) PASS     9/9\n 2  Channels and input guardrails (Model Armor), approver inbox (Pub/Sub) FAIL     5/6\n 3  Vertex Agent Engine: supervisor + 3 sub-agents                 BLOCKED  1/2   blocked by: agent-engine-runtime (no lane yet)\n 4  Agent gateway: MCP tool registry + Cedar agent policy          PASS     6/6\n 5  Actions and approval (Pub/Sub + Cloud Run function + Firestore ledger) PASS     9/9\n 6  Knowledge search (Vertex RAG Engine)                           PASS     4/4\n 7  Tools (Cloud Run functions + Firestore)                        PASS     4/4\n 8  AgentOps and observability (Trace, Logging, Monitoring)        BLOCKED  5/6   blocked by: gcp-ref-realbackend\n 9  Agent Platform Sessions + Memory Bank                          FAIL     3/6   blocked by: local model\n10  Foundation models (Gemini on Vertex)                           FAIL     2/6   blocked by: local model\n11  Response generation (grounded, cited, Model Armor)             BLOCKED  3/4   blocked by: local model\n12  Knowledge processing pipeline (GCS, Eventarc, function, RAG import) FAIL     5/7   blocked by: gcp-ref-sandbox\n13  Governance and security (Cloud KMS, Cloud Audit Logs)          BLOCKED  5/6   blocked by: gcp-ref-realbackend\n\n5 PASS, 4 BLOCKED, 4 FAIL of 13 components   (179.9s)",
+  "agent": {
+    "question": "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?",
+    "user": "maria.ops@example.com",
+    "route": [
+      "facilities",
+      "maintenance",
+      "analytics"
+    ],
+    "llm_used": false,
+    "tools": [
+      {
+        "tool": "kb_search",
+        "via": "agent-gateway",
+        "args": {
+          "query": "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?",
+          "top_k": 3
+        }
+      },
+      {
+        "tool": "asset_status",
+        "via": "agent-gateway",
+        "args": {
+          "asset_id": "B-12"
+        }
+      },
+      {
+        "tool": "create_work_order",
+        "via": "pubsub-approval",
+        "args": {
+          "request_id": "req-1e5093fa32"
+        }
+      },
+      {
+        "tool": "work_order_stats",
+        "via": "firestore",
+        "args": {}
+      }
+    ],
+    "answer": "SOP-310 Fire safety and evacuation Fire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of t:  [1] Asset B-12 status RUNNING; open work orders: ['WO-000102 Quarterly PRV inspection']. Work orders: 3 total; by status/priority {\"CLOSED\": {\"P3\": 1}, \"OPEN\": {\"P2\": 2}}. A work order request (req-1e5093fa32) was submitted and is waiting for approval.",
+    "citations": [
+      {
+        "n": 1,
+        "source": "gs://facilities-docs/docs/fire-safety-sop.md",
+        "text": "# SOP-310 Fire safety and evacuation Fire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of t"
+      },
+      {
+        "n": 2,
+        "source": "gs://facilities-docs/docs/boiler-sop.md",
+        "text": "# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 "
+      },
+      {
+        "n": 3,
+        "source": "gs://facilities-docs/docs/hvac-maintenance-manual.md",
+        "text": "# MM-220 HVAC air handling unit maintenance manual (AHU-7) Replace the AHU-7 filter every 60 days or when differential pressure exceeds 250 Pa. Inspect belts an"
+      }
+    ],
+    "approval": {
+      "request_id": "req-1e5093fa32",
+      "status": "PENDING_APPROVAL"
+    }
+  },
+  "work_order": "WO-93FA32"
+}

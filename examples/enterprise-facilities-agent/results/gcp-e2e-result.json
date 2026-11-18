@@ -1,0 +1,627 @@
+{
+  "cloud": "gcp",
+  "llm_stub": false,
+  "notes": [
+    "Model Armor createTemplate through the SDK failed (enum-encoding=int is rejected by the simulator); later Model Armor steps use a template created with string enums over AuthorizedSession."
+  ],
+  "endpoint": "http://127.0.0.1:51436",
+  "when": "2026-11-18T15:43:21",
+  "totals": {
+    "PASS": 1,
+    "BLOCKED": 8,
+    "FAIL": 4
+  },
+  "components": [
+    {
+      "id": 1,
+      "name": "Access and perimeter security (Identity Platform, API Gateway, Cloud Armor)",
+      "status": "FAIL",
+      "passed": 2,
+      "total": 5,
+      "blocked_by": [
+        "gcp-ref-identity"
+      ],
+      "steps": [
+        {
+          "component": 1,
+          "name": "identity platform: accounts:signUp + signInWithPassword -> ID token",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-identity: Identity Platform accounts:signUp is not served (HTTP 405)",
+          "secs": 0.2
+        },
+        {
+          "component": 1,
+          "name": "iamcredentials: service account + generateIdToken for the agent identity",
+          "status": "PASS",
+          "detail": "service-account ID token (iamcredentials generateIdToken) is a JWT",
+          "secs": 0.19
+        },
+        {
+          "component": 1,
+          "name": "cloud armor: compute securityPolicies insert + get (WAF rule)",
+          "status": "PASS",
+          "detail": "Cloud Armor policy facilities-armor with an XSS preconfigured-WAF rule",
+          "secs": 0.72
+        },
+        {
+          "component": 1,
+          "name": "api gateway: create API + config (OpenAPI YAML with x-google-backend + JWT security) + gateway",
+          "status": "FAIL",
+          "detail": "ParseError: Can not find message descriptor by type_url: type.googleapis.com/google.cloud.apigateway.v1.Resource at Operation.response",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "api gateway: create_api(...).result() decodes the long-running operation response",
+          "status": "FAIL",
+          "detail": "ParseError: Can not find message descriptor by type_url: type.googleapis.com/google.cloud.apigateway.v1.Resource at Operation.response",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Channels and input guardrails (Model Armor), approver inbox (Pub/Sub)",
+      "status": "FAIL",
+      "passed": 5,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 2,
+          "name": "model armor: create template facilities-guardrail (prompt-injection, RAI, SDP)",
+          "status": "FAIL",
+          "detail": "BadRequest: 400 POST http://127.0.0.1:51436/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint: raiFilters.filterType must be one of ['DANGEROUS', 'HARASSMENT'",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "model armor: fallback template creation with string enums (not the SDK path)",
+          "status": "PASS",
+          "detail": "template created with string enums (fallback so the sanitize steps can run)",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "model armor sanitizeUserPrompt: benign question allowed",
+          "status": "PASS",
+          "detail": "benign question passes (NO_MATCH_FOUND)",
+          "secs": 0.01
+        },
+        {
+          "component": 2,
+          "name": "model armor sanitizeUserPrompt: prompt injection blocked",
+          "status": "PASS",
+          "detail": "prompt injection blocked (MATCH_FOUND)",
+          "secs": 0.0
+        },
+        {
+          "component": 2,
+          "name": "pub/sub: approver-inbox subscription on the work-order-approval topic (SDK default gRPC)",
+          "status": "PASS",
+          "detail": "topic work-order-approval + subscription approver-inbox",
+          "secs": 0.21
+        },
+        {
+          "component": 2,
+          "name": "pub/sub: publish, pull and acknowledge in the approver inbox",
+          "status": "PASS",
+          "detail": "publish -> pull -> ack, attributes preserved, no redelivery",
+          "secs": 0.04
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Vertex Agent Engine: supervisor + 3 sub-agents",
+      "status": "BLOCKED",
+      "passed": 0,
+      "total": 2,
+      "blocked_by": [
+        "agent-engine-runtime (no lane yet)",
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 3,
+          "name": "vertex agent engine: create from source (supervisor + sub-agents, entrypoint agent_engine_app.agent)",
+          "status": "BLOCKED",
+          "detail": "waiting for agent-engine-runtime (no lane yet): ValidationError: 1 validation error for AgentEngineOperation\nresponse.spec.class_methods\n  Extra inputs are not permitted [type=extra_forbidden, input_value=",
+          "secs": 1.09
+        },
+        {
+          "component": 3,
+          "name": "langgraph: client-side fallback so later components can run",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.03
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Agent gateway: MCP tool registry + Cedar agent policy",
+      "status": "BLOCKED",
+      "passed": 5,
+      "total": 6,
+      "blocked_by": [
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 4,
+          "name": "agent registry: register the facilities MCP server (mcpServers)",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools",
+          "secs": 0.0
+        },
+        {
+          "component": 4,
+          "name": "agent gateway: create facilities-gateway and wait ACTIVE",
+          "status": "PASS",
+          "detail": "gateway ACTIVE, mcpEndpoint http://127.0.0.1:51436/gateways/gcp-facilities-gateway-4z4p87dnyy/mcp",
+          "secs": 1.03
+        },
+        {
+          "component": 4,
+          "name": "agent gateway: attach the MCP server",
+          "status": "PASS",
+          "detail": "MCP server attached: ['projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools']",
+          "secs": 0.01
+        },
+        {
+          "component": 4,
+          "name": "gateway data plane: MCP tools/list",
+          "status": "PASS",
+          "detail": "MCP tools/list through the gateway: ['facilities-tools___asset_status', 'facilities-tools___kb_search']",
+          "secs": 0.05
+        },
+        {
+          "component": 4,
+          "name": "gateway data plane: MCP tools/call",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: AssertionError: {'content': [{'type': 'text', 'text': \"ImportError: module 'google.cloud' is not available in the function sandbox\"}], 'isError': True}",
+          "secs": 0.03
+        },
+        {
+          "component": 4,
+          "name": "agent policy: Cedar permit for read-only tools, write tool denied, attached to the gateway",
+          "status": "PASS",
+          "detail": "Cedar: read tool ALLOW, write tool DENY; policy attached to the gateway in ENFORCE mode",
+          "secs": 0.04
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Actions and approval (Pub/Sub + Cloud Run function + Firestore ledger)",
+      "status": "BLOCKED",
+      "passed": 1,
+      "total": 2,
+      "blocked_by": [
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 5,
+          "name": "approval path is wired: Pub/Sub topic + approver-inbox, decision and create-work-order functions, Firestore ledger",
+          "status": "PASS",
+          "detail": "topic work-order-approval -> subscription approver-inbox, decision + create-work-order functions, Firestore ledger approval-ledger",
+          "secs": 0.01
+        },
+        {
+          "component": 5,
+          "name": "agent produced an approval request",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: no agent run to approve: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Knowledge search (Vertex RAG Engine)",
+      "status": "PASS",
+      "passed": 4,
+      "total": 4,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 6,
+          "name": "vertex rag engine: retrieveContexts ranks the boiler SOP first",
+          "status": "PASS",
+          "detail": "top hit gs://facilities-docs/docs/boiler-sop.md score=0.232271",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "vertex rag engine: retrieveContexts ranks the HVAC manual first for an AHU question",
+          "status": "PASS",
+          "detail": "top hit gs://facilities-docs/docs/hvac-maintenance-manual.md",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "retrieved contexts carry source URIs (needed for citations)",
+          "status": "PASS",
+          "detail": "3 contexts each with text + gs:// source",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "vertex ai search: data store + import + search over the same SOP",
+          "status": "PASS",
+          "detail": "Vertex AI Search (Discovery Engine) returned 1 result(s)",
+          "secs": 0.29
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Tools (Cloud Run functions + Firestore)",
+      "status": "BLOCKED",
+      "passed": 2,
+      "total": 4,
+      "blocked_by": [
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 7,
+          "name": "firestore: seed fixture assets + work orders (firestore.Client)",
+          "status": "PASS",
+          "detail": "3 assets, 3 work orders in Firestore (SDK default gRPC)",
+          "secs": 0.58
+        },
+        {
+          "component": 7,
+          "name": "cloud functions gen2: generateUploadUrl + PUT zip + CreateFunction x5",
+          "status": "PASS",
+          "detail": "5 functions deployed (kb-search, asset-status, tools-mcp, approval-decision, create-work-order)",
+          "secs": 0.05
+        },
+        {
+          "component": 7,
+          "name": "cloud run function: kb-search tool (Vertex RAG retrieveContexts from inside the function)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.01
+        },
+        {
+          "component": 7,
+          "name": "cloud run function: asset-status tool (Firestore read from inside the function)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: RuntimeError: function facilities-asset-status HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.01
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "AgentOps and observability (Trace, Logging, Monitoring)",
+      "status": "BLOCKED",
+      "passed": 2,
+      "total": 6,
+      "blocked_by": [
+        "gcp-ref-corefix",
+        "gcp-ref-realbackend",
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 8,
+          "name": "the agent run produced spans to export",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: no agent run to trace: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.0
+        },
+        {
+          "component": 8,
+          "name": "cloud trace v2: batch_write_spans (one span per agent / tool step)",
+          "status": "PASS",
+          "detail": "1 spans sent (trace 1f835b3fb05b42e289f20f4bed2cfb40)",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "cloud trace v1: get_trace reads the agent trace back",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: ParseError: Failed to parse spans field: Failed to parse spanId field: invalid literal for int() with base 10: 'a0160a7aa8fc4bcb'..",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "cloud trace v1: list_traces lists it",
+          "status": "PASS",
+          "detail": "trace listed by list_traces",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "cloud logging: log_struct + list_entries (structured, trace-correlated)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: entries:list with the SDK's default timestamp>= filter returns nothing although the entry exists (raw entries:list shows it)",
+          "secs": 5.22
+        },
+        {
+          "component": 8,
+          "name": "cloud monitoring: custom metric create + write + list (SDK default gRPC)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-realbackend: ServiceUnavailable: 503 failed to connect to all addresses; last error: INTERNAL: ipv4:127.0.0.1:51436: Failed parsing HTTP/2 (Expected SETTINGS frame as the fi",
+          "secs": 0.05
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Agent Platform Sessions + Memory Bank",
+      "status": "FAIL",
+      "passed": 3,
+      "total": 6,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 9,
+          "name": "agent platform: create the memory host engine facilities_memory",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/3674639633202689813",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "sessions: create a session for the user",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/reasoningEngines/3674639633202689813/sessions/410002778752204140",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "sessions: append events (user + agent turn)",
+          "status": "FAIL",
+          "detail": "ClientError: 405 METHOD_NOT_ALLOWED. {'error': {'code': 405, 'message': 'Unsupported.', 'status': 'METHOD_NOT_ALLOWED'}}",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "sessions: list events (session replay)",
+          "status": "FAIL",
+          "detail": "AssertionError: []",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "memory bank: create a fact + retrieve by similarity (long-term)",
+          "status": "PASS",
+          "detail": "1 long-term memory retrieved by similarity: 'Maria Ops prefers the boiler B-12 report on Monday'",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "memory bank: generate memories from a conversation (LLM fact extraction)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Foundation models (Gemini on Vertex)",
+      "status": "FAIL",
+      "passed": 2,
+      "total": 6,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 10,
+          "name": "vertex ai: list the model catalogue (models.list)",
+          "status": "PASS",
+          "detail": "1 models listed, e.g. ['publishers/google/models/gemma2-9b']",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: models.get resolves the Gemini id the app uses",
+          "status": "FAIL",
+          "detail": "ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'Publisher model publishers/google/models/gemini-2.0-flash not found.', 'status': 'NOT_FOUND'}}",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: generateContent (chat model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: generateContent needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: generateContent + Model Armor template blocks a prompt attack",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: generateContent with function declarations",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: needs a model (request with tools accepted up to the model call): 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "vertex ai: embedContent text-embedding-005 ranks a paraphrase above unrelated text",
+          "status": "PASS",
+          "detail": "embedContent dim 256, paraphrase cos 0.60 > unrelated 0.00",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Response generation (grounded, cited, Model Armor)",
+      "status": "BLOCKED",
+      "passed": 0,
+      "total": 3,
+      "blocked_by": [
+        "gcp-ref-corefix",
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 11,
+          "name": "answer is grounded in retrieved documents and cites them",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: no agent run to ground: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "model armor sanitizeModelResponse on the agent answer",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: no agent run to guard: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "vertex ai: generateContent with the RAG retrieval tool returns an answer + groundingMetadata",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'tools.retrieval is not supported by the local model (only functionDeclarations).',",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Knowledge processing pipeline (GCS, Eventarc, function, RAG import)",
+      "status": "BLOCKED",
+      "passed": 5,
+      "total": 7,
+      "blocked_by": [
+        "gcp-ref-corefix",
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 12,
+          "name": "gcs: upload SOP and manual documents (google-cloud-storage)",
+          "status": "PASS",
+          "detail": "4 documents uploaded to gs://facilities-docs/docs/",
+          "secs": 0.02
+        },
+        {
+          "component": 12,
+          "name": "vertex ai: embedContent text-embedding-005 (google-genai)",
+          "status": "PASS",
+          "detail": "embedContent text-embedding-005: dim 256",
+          "secs": 0.17
+        },
+        {
+          "component": 12,
+          "name": "vertex rag engine: create corpus facilities-kb",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/ragCorpora/1964133389799902",
+          "secs": 0.0
+        },
+        {
+          "component": 12,
+          "name": "vertex rag engine: import_rag_files from gs://facilities-docs/docs/ + list_rag_files",
+          "status": "PASS",
+          "detail": "import_rag_files complete: 4 RAG files in the corpus",
+          "secs": 0.01
+        },
+        {
+          "component": 12,
+          "name": "gcs: bucket notification (OBJECT_FINALIZE -> Pub/Sub) on upload",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: NotFound: 404 POST http://127.0.0.1:51436/storage/v1/b/facilities-docs/notificationConfigs?prettyPrint=false: Unknown path: /storage/v1/b/facilities-d",
+          "secs": 0.01
+        },
+        {
+          "component": 12,
+          "name": "eventarc: object finalized -> Cloud Run function -> RAG import (event-driven re-index)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: the finalize event did not result in a RAG import (Eventarc -> function -> SDK call inside the function sandbox)",
+          "secs": 20.61
+        },
+        {
+          "component": 12,
+          "name": "vertex rag engine: re-upload a revised SOP and re-import: only the new version is served",
+          "status": "PASS",
+          "detail": "re-upload + re-import replaced the old version (only 25 psi served), fixture restored",
+          "secs": 0.06
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Governance and security (Cloud KMS, Cloud Audit Logs)",
+      "status": "BLOCKED",
+      "passed": 2,
+      "total": 6,
+      "blocked_by": [
+        "gcp-ref-corefix",
+        "gcp-ref-sandbox"
+      ],
+      "steps": [
+        {
+          "component": 13,
+          "name": "kms: key ring facilities + ledger-key (ENCRYPT_DECRYPT, rotation)",
+          "status": "PASS",
+          "detail": "projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key with 90-day rotation",
+          "secs": 0.02
+        },
+        {
+          "component": 13,
+          "name": "kms: envelope-encrypt the approval record (data key wrapped by KMS with AAD)",
+          "status": "PASS",
+          "detail": "ledger record sealed with a KMS-wrapped data key; round trip ok",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "kms: decrypt with the wrong AAD is refused",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: decrypt succeeded with the wrong additional_authenticated_data (the simulator does not enforce AAD)",
+          "secs": 0.0
+        },
+        {
+          "component": 13,
+          "name": "cloud audit logs: admin-activity entries for the run (CreateKeyRing, CreateCryptoKey ...)",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: entries:list with the SDK's default timestamp filter returns nothing although 4 audit entries exist (['google.cloud.kms.v1.KeyManagementService.CreateCryptoKey', 'google.cloud.kms.v1.KeyManagementService.CreateKeyRing', 'google.iam.admin.v1.CreateServiceAccount'])",
+          "secs": 5.15
+        },
+        {
+          "component": 13,
+          "name": "cloud audit logs: the approval topic creation is audited",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-corefix: the audit log could not be read (previous step)",
+          "secs": 0.0
+        },
+        {
+          "component": 13,
+          "name": "firestore: approval-ledger is the application-level audit record",
+          "status": "BLOCKED",
+          "detail": "waiting for gcp-ref-sandbox: no agent run to audit: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox",
+          "secs": 0.0
+        }
+      ]
+    }
+  ],
+  "transcript": "Facilities agent e2e (GCP)   endpoint=http://127.0.0.1:51436   2026-11-18 15:42:44\n====================================================================================================\n\n[01] Access and perimeter security (Identity Platform, API Gateway, Cloud Armor)\n    [BLOCKED] identity platform: accounts:signUp + signInWithPassword -> ID token  - waiting for gcp-ref-identity: Identity Platform accounts:signUp is not served (HTTP 405)\n    [PASS   ] iamcredentials: service account + generateIdToken for the agent identity  - service-account ID token (iamcredentials generateIdToken) is a JWT\n    [PASS   ] cloud armor: compute securityPolicies insert + get (WAF rule)  - Cloud Armor policy facilities-armor with an XSS preconfigured-WAF rule\n\n[02] Channels and input guardrails (Model Armor), approver inbox (Pub/Sub)\n    [FAIL   ] model armor: create template facilities-guardrail (prompt-injection, RAI, SDP)  - BadRequest: 400 POST http://127.0.0.1:51436/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint: raiFilters.filterType must be one of ['DANGEROUS', 'HARASSMENT'\n    [PASS   ] model armor: fallback template creation with string enums (not the SDK path)  - template created with string enums (fallback so the sanitize steps can run)\n    [PASS   ] model armor sanitizeUserPrompt: benign question allowed  - benign question passes (NO_MATCH_FOUND)\n    [PASS   ] model armor sanitizeUserPrompt: prompt injection blocked  - prompt injection blocked (MATCH_FOUND)\n    [PASS   ] pub/sub: approver-inbox subscription on the work-order-approval topic (SDK default gRPC)  - topic work-order-approval + subscription approver-inbox\n    [PASS   ] pub/sub: publish, pull and acknowledge in the approver inbox  - publish -> pull -> ack, attributes preserved, no redelivery\n\n[12] Knowledge processing pipeline (GCS, Eventarc, function, RAG import)\n    [PASS   ] gcs: upload SOP and manual documents (google-cloud-storage)  - 4 documents uploaded to gs://facilities-docs/docs/\n    [PASS   ] vertex ai: embedContent text-embedding-005 (google-genai)  - embedContent text-embedding-005: dim 256\n    [PASS   ] vertex rag engine: create corpus facilities-kb  - projects/vyomi-project/locations/us-central1/ragCorpora/1964133389799902\n    [PASS   ] vertex rag engine: import_rag_files from gs://facilities-docs/docs/ + list_rag_files  - import_rag_files complete: 4 RAG files in the corpus\n    [BLOCKED] gcs: bucket notification (OBJECT_FINALIZE -> Pub/Sub) on upload  - waiting for gcp-ref-corefix: NotFound: 404 POST http://127.0.0.1:51436/storage/v1/b/facilities-docs/notificationConfigs?prettyPrint=false: Unknown path: /storage/v1/b/facilities-d\n    [BLOCKED] eventarc: object finalized -> Cloud Run function -> RAG import (event-driven re-index)  - waiting for gcp-ref-sandbox: the finalize event did not result in a RAG import (Eventarc -> function -> SDK call inside the function sandbox)\n    [PASS   ] vertex rag engine: re-upload a revised SOP and re-import: only the new version is served  - re-upload + re-import replaced the old version (only 25 psi served), fixture restored\n\n[06] Knowledge search (Vertex RAG Engine)\n    [PASS   ] vertex rag engine: retrieveContexts ranks the boiler SOP first  - top hit gs://facilities-docs/docs/boiler-sop.md score=0.232271\n    [PASS   ] vertex rag engine: retrieveContexts ranks the HVAC manual first for an AHU question  - top hit gs://facilities-docs/docs/hvac-maintenance-manual.md\n    [PASS   ] retrieved contexts carry source URIs (needed for citations)  - 3 contexts each with text + gs:// source\n    [PASS   ] vertex ai search: data store + import + search over the same SOP  - Vertex AI Search (Discovery Engine) returned 1 result(s)\n\n[07] Tools (Cloud Run functions + Firestore)\n    [PASS   ] firestore: seed fixture assets + work orders (firestore.Client)  - 3 assets, 3 work orders in Firestore (SDK default gRPC)\n    [PASS   ] cloud functions gen2: generateUploadUrl + PUT zip + CreateFunction x5  - 5 functions deployed (kb-search, asset-status, tools-mcp, approval-decision, create-work-order)\n    [BLOCKED] cloud run function: kb-search tool (Vertex RAG retrieveContexts from inside the function)  - waiting for gcp-ref-sandbox: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n    [BLOCKED] cloud run function: asset-status tool (Firestore read from inside the function)  - waiting for gcp-ref-sandbox: RuntimeError: function facilities-asset-status HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n    [FAIL   ] api gateway: create API + config (OpenAPI YAML with x-google-backend + JWT security) + gateway  - ParseError: Can not find message descriptor by type_url: type.googleapis.com/google.cloud.apigateway.v1.Resource at Operation.response\n    [FAIL   ] api gateway: create_api(...).result() decodes the long-running operation response  - ParseError: Can not find message descriptor by type_url: type.googleapis.com/google.cloud.apigateway.v1.Resource at Operation.response\n\n[04] Agent gateway: MCP tool registry + Cedar agent policy\n    [PASS   ] agent registry: register the facilities MCP server (mcpServers)  - projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\n    [PASS   ] agent gateway: create facilities-gateway and wait ACTIVE  - gateway ACTIVE, mcpEndpoint http://127.0.0.1:51436/gateways/gcp-facilities-gateway-4z4p87dnyy/mcp\n    [PASS   ] agent gateway: attach the MCP server  - MCP server attached: ['projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools']\n    [PASS   ] gateway data plane: MCP tools/list  - MCP tools/list through the gateway: ['facilities-tools___asset_status', 'facilities-tools___kb_search']\n    [BLOCKED] gateway data plane: MCP tools/call  - waiting for gcp-ref-sandbox: AssertionError: {'content': [{'type': 'text', 'text': \"ImportError: module 'google.cloud' is not available in the function sandbox\"}], 'isError': True}\n    [PASS   ] agent policy: Cedar permit for read-only tools, write tool denied, attached to the gateway  - Cedar: read tool ALLOW, write tool DENY; policy attached to the gateway in ENFORCE mode\n\n[05] Actions and approval (Pub/Sub + Cloud Run function + Firestore ledger)\n    [PASS   ] approval path is wired: Pub/Sub topic + approver-inbox, decision and create-work-order functions, Firestore ledger  - topic work-order-approval -> subscription approver-inbox, decision + create-work-order functions, Firestore ledger approval-ledger\n\n[03] Vertex Agent Engine: supervisor + 3 sub-agents\n    [BLOCKED] vertex agent engine: create from source (supervisor + sub-agents, entrypoint agent_engine_app.agent)  - waiting for agent-engine-runtime (no lane yet): ValidationError: 1 validation error for AgentEngineOperation\nresponse.spec.class_methods\n  Extra inputs are not permitted [type=extra_forbidden, input_value=\n    [BLOCKED] langgraph: client-side fallback so later components can run  - waiting for gcp-ref-sandbox: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n\n[09] Agent Platform Sessions + Memory Bank\n    [PASS   ] agent platform: create the memory host engine facilities_memory  - projects/vyomi-project/locations/us-central1/reasoningEngines/3674639633202689813\n    [PASS   ] sessions: create a session for the user  - projects/vyomi-project/locations/us-central1/reasoningEngines/3674639633202689813/sessions/410002778752204140\n    [FAIL   ] sessions: append events (user + agent turn)  - ClientError: 405 METHOD_NOT_ALLOWED. {'error': {'code': 405, 'message': 'Unsupported.', 'status': 'METHOD_NOT_ALLOWED'}}\n    [FAIL   ] sessions: list events (session replay)  - AssertionError: []\n    [PASS   ] memory bank: create a fact + retrieve by similarity (long-term)  - 1 long-term memory retrieved by similarity: 'Maria Ops prefers the boiler B-12 report on Monday'\n    [BLOCKED] memory bank: generate memories from a conversation (LLM fact extraction)  - waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the\n    [BLOCKED] agent produced an approval request  - waiting for gcp-ref-sandbox: no agent run to approve: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n\n[10] Foundation models (Gemini on Vertex)\n    [PASS   ] vertex ai: list the model catalogue (models.list)  - 1 models listed, e.g. ['publishers/google/models/gemma2-9b']\n    [FAIL   ] vertex ai: models.get resolves the Gemini id the app uses  - ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'Publisher model publishers/google/models/gemini-2.0-flash not found.', 'status': 'NOT_FOUND'}}\n    [BLOCKED] vertex ai: generateContent (chat model)  - waiting for local model: generateContent needs a model: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError\n    [BLOCKED] vertex ai: generateContent + Model Armor template blocks a prompt attack  - waiting for local model: ServerError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the\n    [BLOCKED] vertex ai: generateContent with function declarations  - waiting for local model: needs a model (request with tools accepted up to the model call): 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError\n    [PASS   ] vertex ai: embedContent text-embedding-005 ranks a paraphrase above unrelated text  - embedContent dim 256, paraphrase cos 0.60 > unrelated 0.00\n\n[11] Response generation (grounded, cited, Model Armor)\n    [BLOCKED] answer is grounded in retrieved documents and cites them  - waiting for gcp-ref-sandbox: no agent run to ground: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n    [BLOCKED] model armor sanitizeModelResponse on the agent answer  - waiting for gcp-ref-sandbox: no agent run to guard: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n    [BLOCKED] vertex ai: generateContent with the RAG retrieval tool returns an answer + groundingMetadata  - waiting for gcp-ref-corefix: ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'tools.retrieval is not supported by the local model (only functionDeclarations).',\n\n[08] AgentOps and observability (Trace, Logging, Monitoring)\n    [BLOCKED] the agent run produced spans to export  - waiting for gcp-ref-sandbox: no agent run to trace: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n    [PASS   ] cloud trace v2: batch_write_spans (one span per agent / tool step)  - 1 spans sent (trace 1f835b3fb05b42e289f20f4bed2cfb40)\n    [BLOCKED] cloud trace v1: get_trace reads the agent trace back  - waiting for gcp-ref-corefix: ParseError: Failed to parse spans field: Failed to parse spanId field: invalid literal for int() with base 10: 'a0160a7aa8fc4bcb'..\n    [PASS   ] cloud trace v1: list_traces lists it  - trace listed by list_traces\n    [BLOCKED] cloud logging: log_struct + list_entries (structured, trace-correlated)  - waiting for gcp-ref-corefix: entries:list with the SDK's default timestamp>= filter returns nothing although the entry exists (raw entries:list shows it)\n    [BLOCKED] cloud monitoring: custom metric create + write + list (SDK default gRPC)  - waiting for gcp-ref-realbackend: ServiceUnavailable: 503 failed to connect to all addresses; last error: INTERNAL: ipv4:127.0.0.1:51436: Failed parsing HTTP/2 (Expected SETTINGS frame as the fi\n\n[13] Governance and security (Cloud KMS, Cloud Audit Logs)\n    [PASS   ] kms: key ring facilities + ledger-key (ENCRYPT_DECRYPT, rotation)  - projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key with 90-day rotation\n    [PASS   ] kms: envelope-encrypt the approval record (data key wrapped by KMS with AAD)  - ledger record sealed with a KMS-wrapped data key; round trip ok\n    [BLOCKED] kms: decrypt with the wrong AAD is refused  - waiting for gcp-ref-corefix: decrypt succeeded with the wrong additional_authenticated_data (the simulator does not enforce AAD)\n    [BLOCKED] cloud audit logs: admin-activity entries for the run (CreateKeyRing, CreateCryptoKey ...)  - waiting for gcp-ref-corefix: entries:list with the SDK's default timestamp filter returns nothing although 4 audit entries exist (['google.cloud.kms.v1.KeyManagementService.CreateCryptoKey', 'google.cloud.kms.v1.KeyManagementService.CreateKeyRing', 'google.iam.admin.v1.CreateServiceAccount'])\n    [BLOCKED] cloud audit logs: the approval topic creation is audited  - waiting for gcp-ref-corefix: the audit log could not be read (previous step)\n    [BLOCKED] firestore: approval-ledger is the application-level audit record  - waiting for gcp-ref-sandbox: no agent run to audit: RuntimeError: function facilities-kb-search HTTP 500: Error: ImportError: module 'google.cloud' is not available in the function sandbox\n\n====================================================================================================\nSUMMARY\n #  component                                                      status   steps\n 1  Access and perimeter security (Identity Platform, API Gateway, Cloud Armor) FAIL     2/5   blocked by: gcp-ref-identity\n 2  Channels and input guardrails (Model Armor), approver inbox (Pub/Sub) FAIL     5/6\n 3  Vertex Agent Engine: supervisor + 3 sub-agents                 BLOCKED  0/2   blocked by: agent-engine-runtime (no lane yet), gcp-ref-sandbox\n 4  Agent gateway: MCP tool registry + Cedar agent policy          BLOCKED  5/6   blocked by: gcp-ref-sandbox\n 5  Actions and approval (Pub/Sub + Cloud Run function + Firestore ledger) BLOCKED  1/2   blocked by: gcp-ref-sandbox\n 6  Knowledge search (Vertex RAG Engine)                           PASS     4/4\n 7  Tools (Cloud Run functions + Firestore)                        BLOCKED  2/4   blocked by: gcp-ref-sandbox\n 8  AgentOps and observability (Trace, Logging, Monitoring)        BLOCKED  2/6   blocked by: gcp-ref-corefix, gcp-ref-realbackend, gcp-ref-sandbox\n 9  Agent Platform Sessions + Memory Bank                          FAIL     3/6   blocked by: local model\n10  Foundation models (Gemini on Vertex)                           FAIL     2/6   blocked by: local model\n11  Response generation (grounded, cited, Model Armor)             BLOCKED  0/3   blocked by: gcp-ref-corefix, gcp-ref-sandbox\n12  Knowledge processing pipeline (GCS, Eventarc, function, RAG import) BLOCKED  5/7   blocked by: gcp-ref-corefix, gcp-ref-sandbox\n13  Governance and security (Cloud KMS, Cloud Audit Logs)          BLOCKED  2/6   blocked by: gcp-ref-corefix, gcp-ref-sandbox\n\n1 PASS, 8 BLOCKED, 4 FAIL of 13 components   (37.1s)",
+  "agent": {
+    "question": null,
+    "user": null,
+    "route": null,
+    "llm_used": null,
+    "tools": null,
+    "answer": null,
+    "citations": null,
+    "approval": null
+  },
+  "work_order": null
+}
