@@ -116,7 +116,9 @@ def edge(ctx):
         for op, url in (("kb-search", "/kb-search"), ("asset-status", "/asset-status"), ("create-work-order", "/create-work-order")):
             apim.api_operation.create_or_update(RG, NAMES["apim"], "tools", op, {"display_name": op, "method": "POST", "url_template": url})
         apim.api_policy.create_or_update(RG, NAMES["apim"], "tools", "policy", {"value": _policy(ctx), "format": "xml"})
-        apim.subscription.create_or_update(RG, NAMES["apim"], "agent-sub", {"display_name": "facilities agent", "scope": "/apis/tools"})
+        from azure.mgmt.apimanagement.models import SubscriptionCreateParameters
+        apim.subscription.create_or_update(RG, NAMES["apim"], "agent-sub", SubscriptionCreateParameters(display_name="facilities agent",
+            scope=ctx.rid("Microsoft.ApiManagement", "service", NAMES["apim"]) + "/apis"))      # all APIs: the REST tools API and the MCP server API
         ctx.state["apim_key"] = apim.subscription.list_secrets(RG, NAMES["apim"], "agent-sub").primary_key
         return f"APIM {NAMES['apim']}: API tools (3 operations) -> Function App, validate-jwt + subscription key"
     ok = ctx.step("apim: service + API + operations + validate-jwt policy + subscription (azure-mgmt-apimanagement)", build)

@@ -47,8 +47,9 @@ def run(ctx):
     ctx.step("apim policy expression: the write tool is denied without an approval id (the Cedar substitute)", policy_write, lane=LANE["gateway"])
 
     def mcp():
-        apim.api.begin_create_or_update(RG, NAMES["apim"], "tools-mcp", {"display_name": "facilities-tools-mcp", "path": "mcp", "protocols": ["https"], "subscription_required": True,
-                                                                         "api_type": "mcp", "service_url": f"{ctx.http}/azure-data/functions/{NAMES['functions']}/api"}).result()
+        from azure.mgmt.apimanagement.models import ApiCreateOrUpdateParameter
+        apim.api.begin_create_or_update(RG, NAMES["apim"], "tools-mcp", ApiCreateOrUpdateParameter(display_name="facilities-tools-mcp", path="mcp", protocols=["https"], subscription_required=True,
+            api_type="mcp", source_api_id=ctx.rid("Microsoft.ApiManagement", "service", NAMES["apim"]) + "/apis/tools")).result()   # MCP tools = the operations of the REST API
         names = {t["name"] for t in apim_mcp(ctx, "tools/list")["tools"]}
         assert names, "tools/list returned no tools"
         ctx.state["mcp_tools"] = names
