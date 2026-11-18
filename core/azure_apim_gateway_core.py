@@ -41,8 +41,10 @@ import xml.etree.ElementTree as ET
 
 try:
     from core import gateway_common as gc
+    from core import azure_apim_expr_core as ex
 except ImportError:  # pragma: no cover - Pyodide flat layout
     import gateway_common as gc  # type: ignore
+    import azure_apim_expr_core as ex  # type: ignore
 
 APIM = "microsoft.apimanagement/service"
 LOG_MAX = 1000
@@ -122,24 +124,69 @@ class _Ctx:
         self.resp = None          # a short-circuit response
         self.warnings, self.skipped = [], []
         self.cors = None
+        self.vars, self.matched, self.out, self.last_error, self.now = {}, None, None, None, time.time()
+        self.request_id = hashlib.sha1(f"{path}{time.time()}".encode()).hexdigest()
+
+    def env(self):
+        """The ``context`` object the policy expressions see (rebuilt per evaluation so header/variable mutations are visible)."""
+        sp, ap, op = _props(self.sub), _props(self.api), _props(self.op)
+        q = dict(self.query)
+        surl = ap.get("serviceUrl") or ""
+        host = (self.headers.get("host") or "").split(":")[0]
+        qobj = ex.dict_obj({k: [v] for k, v in q.items()}, "Query")
+        qobj.methods["GetValueOrDefault"] = lambda a: q.get(a[0], a[1] if len(a) > 1 else None)
+        url = ex.Obj({"Path": self.path, "Host": host, "Port": 443, "Scheme": "https", "Query": qobj,
+                      "QueryString": ("?" + "&".join(f"{k}={v}" for k, v in q.items())) if q else ""}, {}, "Url")
+        req = ex.Obj({"Method": self.method, "Url": url, "OriginalUrl": url, "Headers": ex.headers_obj(self.headers), "Body": ex.body_obj(self.body),
+                      "IpAddress": self.ip, "MatchedParameters": ex.dict_obj(dict(self.matched or {}), "MatchedParameters"), "Certificate": None}, {}, "Request")
+        vars_ = self.vars
+        vobj = ex.Obj({"Count": len(vars_)}, {"GetValueOrDefault": lambda a: vars_.get(a[0], a[1] if len(a) > 1 else None),
+                                              "ContainsKey": lambda a: a[0] in vars_}, "Variables")
+
+        def vidx(k):
+            if k not in vars_:
+                raise ex.ExprError(f"The given key '{k}' was not present in the dictionary.")
+            return vars_[k]
+        vobj.index = vidx
+        user = None
+        if self.sub and sp.get("ownerId"):
+            user = ex.Obj({"Id": str(sp["ownerId"]).rsplit("/", 1)[-1], "Email": "", "FirstName": "", "LastName": "", "Groups": []}, {}, "User")
+        sub = None if not self.sub else ex.Obj({"Id": self.sub.get("name", ""), "Name": sp.get("displayName", ""), "Key": "", "CreatedDate": ex.CsDate(0)}, {}, "Subscription")
+        ctxo = {"Request": req, "Subscription": sub, "User": user,
+                "Api": ex.Obj({"Id": (self.api or {}).get("name", ""), "Name": ap.get("displayName", ""), "Path": ap.get("path", ""),
+                               "ServiceUrl": ex.Obj({"Host": surl.split("//")[-1].split("/")[0], "Path": "/" + surl.split("//")[-1].partition("/")[2],
+                                                     "Scheme": surl.split("://")[0] if "://" in surl else "", "Port": 0}, {}, "ServiceUrl"),
+                               "Version": ap.get("apiVersion"), "Revision": ap.get("apiRevision", "1"), "IsCurrentRevision": True}, {}, "Api"),
+                "Operation": ex.Obj({"Id": (self.op or {}).get("name", ""), "Name": op.get("displayName", ""), "Method": op.get("method", ""),
+                                     "UrlTemplate": op.get("urlTemplate", "")}, {}, "Operation"),
+                "Product": None, "Variables": vobj,
+                "Deployment": ex.Obj({"ServiceName": self.svc.get("name", ""), "Region": self.svc.get("location", ""), "ServiceId": self.svc.get("id", ""),
+                                      "Certificates": []}, {}, "Deployment"),
+                "RequestId": self.request_id, "Timestamp": ex.CsDate(self.now), "LastError": self.last_error}
+        if self.out is not None:
+            ctxo["Response"] = ex.Obj({"StatusCode": self.out["status"], "StatusReason": "", "Headers": ex.headers_obj(self.out.get("headers", {})),
+                                       "Body": ex.body_obj(self.out.get("body") or b"")}, {}, "Response")
+        else:
+            ctxo["Response"] = None
+        return {"context": ex.Obj(ctxo, {}, "context")}
 
     def expr(self, s):
-        s = (s or "").strip()
-        m = re.fullmatch(r"@\((.*)\)", s, re.S)
-        if not m:
+        """One policy attribute/text: a literal as-is, ``@(expr)`` / ``@{ statements }`` evaluated by core/azure_apim_expr_core and stringified like C#."""
+        if not ex.is_expression(s):
+            return (s or "").strip() if s is not None else ""
+        try:
+            return ex.cs_str(ex.evaluate(s, self.env()))
+        except ex.ExprError as e:
+            raise PolicyError(500, f"Expression evaluation failed: {e}")
+
+    def value(self, s):
+        """Like expr() but keeps the C# type (bool / number / list): what conditions need."""
+        if not ex.is_expression(s):
             return s
-        e = m.group(1).strip()
-        if re.fullmatch(r'"[^"]*"', e):
-            return e[1:-1]
-        table = {"context.Request.IpAddress": self.ip, "context.Request.Method": self.method, "context.Request.Url.Path": self.path,
-                 "context.Subscription.Id": (self.sub or {}).get("name", ""), "context.Subscription.Name": _props(self.sub).get("displayName", ""),
-                 "context.Api.Name": _props(self.api).get("displayName", ""), "context.Operation.Name": _props(self.op).get("displayName", "")}
-        if e in table:
-            return str(table[e])
-        m = re.fullmatch(r'context\.Request\.Headers\.GetValueOrDefault\("([^"]+)"\s*,\s*"([^"]*)"\)', e)
-        if m:
-            return self.headers.get(m.group(1).lower(), m.group(2))
-        raise PolicyError(500, f"Expression '{s}' is outside the supported subset.")
+        try:
+            return ex.evaluate(s, self.env())
+        except ex.ExprError as e:
+            raise PolicyError(500, f"Expression evaluation failed: {e}")
 
 
 def _a(e, name, default=None):
@@ -169,6 +216,31 @@ def _b64d(s):
 def _rs256_verifier():
     """The shared RS256/JWKS verifier (None on Nano / without `cryptography`); module-level so tests can substitute it."""
     return gc.make_rs256_verifier()
+
+
+def _entra():
+    try:
+        from core import azure_entra_tokens_core as m
+    except ImportError:
+        try:
+            import azure_entra_tokens_core as m  # type: ignore
+        except ImportError:
+            return None
+    return m
+
+
+def _entra_issuer_ok(oc_url, claims, fail):
+    """The openid-config URL names the tenant + endpoint version a token must come from (real APIM compares ``iss`` with the issuer in that document)."""
+    m = re.match(r"^https?://[^/]+/([^/]+?)(/v2\.0)?/\.well-known/openid-configuration/?$", oc_url or "")
+    if not m:
+        return
+    tenant, v2 = m.group(1), bool(m.group(2))
+    tid = str(claims.get("tid", ""))
+    if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{12}", tenant) and tenant.lower() != tid.lower():
+        raise fail("Unauthorized. Access token issuer is invalid.")
+    want = ("https://login.microsoftonline.com/%s/v2.0" if v2 else "https://sts.windows.net/%s/") % tid
+    if claims.get("iss") != want:
+        raise fail("Unauthorized. Access token issuer is invalid.")
 
 
 def _jwt(ctx, e, now):
@@ -207,11 +279,22 @@ def _jwt(ctx, e, now):
         oc = e.find("openid-config")
         oc_url = (oc.get("url") or "").strip() if oc is not None else ""
         iss0 = oc_url.split("/.well-known/")[0] if oc_url else next(((i.text or "").strip() for i in e.findall("issuers/issuer") if (i.text or "").strip()), "")
-        verify = _rs256_verifier() if (alg == "RS256" and iss0) else None
-        if verify is None:
-            ctx.warnings.append("jwt-signature-unverified")
-        elif not verify(tok, hdr, {"issuer": iss0}):
-            raise fail("Unauthorized. Access token signature is invalid.")
+        T = _entra()
+        if alg == "RS256" and T is not None and hdr.get("kid") == T.kid():
+            # a token this simulator's Entra endpoint issued: verified in pure Python against its own key, no network hop to the openid-config URL
+            if not T.verify(tok):
+                raise fail("Unauthorized. Access token signature is invalid.")
+            _entra_issuer_ok(oc_url, claims, fail)
+        else:
+            verify = _rs256_verifier() if (alg == "RS256" and iss0) else None
+            if verify is None:
+                ctx.warnings.append("jwt-signature-unverified")
+            elif not verify(tok, hdr, {"issuer": iss0}):
+                raise fail("Unauthorized. Access token signature is invalid.")
+    _check_claims(e, claims, now, fail)
+
+
+def _check_claims(e, claims, now, fail):
     skew = int(_a(e, "clock-skew", "0"))
     if "exp" in claims and now > float(claims["exp"]) + skew:
         raise fail("Unauthorized. Access token is expired.")
@@ -232,6 +315,77 @@ def _jwt(ctx, e, now):
         if (want and not ((set(map(str, have)) & set(want)) if c.get("match", "all") == "any" else set(want) <= set(map(str, have)))) \
                 or (not want and not have):
             raise fail("Unauthorized. Required claim is missing or does not match.")
+
+
+def _cond(ctx, text) -> bool:
+    v = ctx.value(text)
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, str) and v.strip().lower() in ("true", "false"):
+        return v.strip().lower() == "true"
+    raise PolicyError(500, f"Condition '{text}' did not evaluate to a boolean.")
+
+
+def _ip_filter(ctx, e):
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(ctx.ip)
+    except ValueError:
+        raise PolicyError(403, "Client IP address is not allowed.")
+    hit = False
+    for a in e.findall("address"):
+        try:
+            hit = hit or (ip in ipaddress.ip_network((a.text or "").strip(), strict=False))
+        except ValueError:
+            pass
+    for r in e.findall("address-range"):
+        try:
+            hit = hit or (ipaddress.ip_address(r.get("from", "")) <= ip <= ipaddress.ip_address(r.get("to", "")))
+        except ValueError:
+            pass
+    if hit != (_a(e, "action", "allow").lower() == "allow"):
+        raise PolicyError(403, "Client IP address is not allowed.")
+
+
+def _aad(ctx, e, now):
+    """validate-azure-ad-token: signature (the simulator's Entra key), tenant, client application ids, audiences, required claims."""
+    hn = _a(e, "header-name", "Authorization")
+    tok = ctx.headers.get(hn.lower(), "")
+    if hn.lower() == "authorization":
+        tok = tok[7:] if tok.lower().startswith("bearer ") else ""
+    fail = lambda msg="Unauthorized. Access token is missing or invalid.": PolicyError(  # noqa: E731
+        int(_a(e, "failed-validation-httpcode", "401")), _a(e, "failed-validation-error-message") or msg, {"WWW-Authenticate": 'Bearer error="invalid_token"'})
+    T = _entra()
+    dec = T.decode(tok) if (tok and T is not None) else None
+    if dec is None:
+        raise fail()
+    hdr, claims = dec
+    if hdr.get("alg") != "RS256" or not T.verify(tok):
+        raise fail("Unauthorized. Access token signature is invalid.")
+    tenant = ctx.expr(_a(e, "tenant-id", ""))
+    if tenant and re.fullmatch(r"[0-9a-zA-Z-]{36}", tenant) and tenant.lower() != str(claims.get("tid", "")).lower():
+        raise fail("Unauthorized. Access token tenant is invalid.")
+    ids = [(i.text or "").strip() for i in e.findall("client-application-ids/application-id")]
+    if ids and str(claims.get("azp") or claims.get("appid") or "") not in ids:
+        raise fail("Unauthorized. Access token client application is not allowed.")
+    _check_claims(e, claims, now, fail)
+    if _a(e, "output-token-variable-name"):
+        ctx.vars[_a(e, "output-token-variable-name")] = tok
+
+
+def _mi_token(ctx, e):
+    """authentication-managed-identity: attach a bearer token for ``resource`` minted for the service's managed identity (a real RS256 JWT)."""
+    T = _entra()
+    res = ctx.expr(_a(e, "resource", ""))
+    if T is None or not res:
+        raise PolicyError(500, "authentication-managed-identity needs a resource.")
+    ident = ctx.svc.get("identity") or {}
+    oid = ident.get("principalId") or hashlib.sha1(("mi/" + str(ctx.svc.get("id", ""))).encode()).hexdigest()[:8] + "-0000-0000-0000-000000000000"
+    tok, _ = T.access_token(tid=ident.get("tenantId") or "00000000-0000-0000-0000-cloudlearn01", v2=False, aud=res, client_id=ident.get("clientId") or oid, oid=oid)
+    if _a(e, "output-token-variable-name"):
+        ctx.vars[_a(e, "output-token-variable-name")] = tok
+    else:
+        ctx.headers["authorization"] = "Bearer " + tok
 
 
 def _run(ctx, els, state, bag, now, phase):
@@ -303,13 +457,40 @@ def _run(ctx, els, state, bag, now, phase):
             if not ok:
                 raise PolicyError(int(_a(e, "failed-check-httpcode", "401")), _a(e, "failed-check-error-message") or f"Header '{n}' is missing or has an invalid value.")
         elif t == "set-body":
-            ctx.set_body = ctx.expr(e.text or "")
+            nb = ctx.expr(e.text or "")
+            if phase == "outbound" and ctx.out is not None:
+                ctx.out["body"] = nb.encode()
+                ctx.out["headers"] = {k: v for k, v in ctx.out["headers"].items() if k.lower() != "content-length"}
+            else:
+                ctx.set_body = nb
+                ctx.body = nb.encode()
         elif t == "cors":
             ctx.cors = [(o.text or "").strip() for o in e.findall("allowed-origins/origin")]
         elif t == "forward-request":
             pass
+        elif t == "choose":
+            for br in e:
+                if br.tag == "when":
+                    if _cond(ctx, _a(br, "condition", "false")):
+                        _run(ctx, list(br), state, bag, now, phase)
+                        break
+                elif br.tag == "otherwise":
+                    _run(ctx, list(br), state, bag, now, phase)
+                    break
+        elif t == "set-variable":
+            ctx.vars[_a(e, "name", "")] = ctx.value(_a(e, "value", e.text or ""))
+        elif t == "set-method":
+            ctx.method = (e.text or "").strip().upper()
+        elif t == "ip-filter":
+            _ip_filter(ctx, e)
+        elif t == "validate-azure-ad-token":
+            _aad(ctx, e, now)
+        elif t == "authentication-managed-identity":
+            _mi_token(ctx, e)
         else:
-            ctx.skipped.append(t)
+            ctx.skipped.append(t)      # not evaluated: listed in x-vyomi-apim-skipped-policies, never silently passed
+        if ctx.resp is not None and phase != "outbound":
+            return                       # return-response / mock-response ends the section
 
 
 def _mock(ctx, e):
@@ -435,6 +616,14 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
         return done(_body(404, "Resource not found"))
     api = best[1]
     ap = _props(api)
+    if str(ap.get("type", "")).lower() == "mcp":
+        sub = None
+        if ap.get("subscriptionRequired", True) is not False:
+            sub, err = _auth(state, svc, api, hd.get("ocp-apim-subscription-key") or qd.get("subscription-key") or "")
+            if err:
+                return done(_body(401, err))
+        res = yield from _mcp(state, svc, api, sub, rem, method, qd, hd, body or b"", can_fetch, now, ip, gw)
+        return done(res)
     ops = list(_recs(state, api["id"] + "/operations", APIM + "/apis/operations"))
     mt = None
     for o in ops:
@@ -453,6 +642,7 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
         if err:
             return done(_body(401, err))
     ctx = _Ctx(svc, api, op, sub, method, path, {k: v for k, v in qd.items() if k != "subscription-key"}, dict(hd), body or b"", ip)
+    ctx.matched, ctx.now = mt, now
     ctx.resp_headers = {}
     ctx.set_body = None
     lv = [_parse(_policy_xml(state, sid)), _parse(_policy_xml(state, api["id"])), _parse(_policy_xml(state, op["id"]))]
@@ -486,7 +676,10 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
                 except Exception as e:  # noqa: BLE001
                     resp = _body(502, f"Bad Gateway: {type(e).__name__}: {e}")
         ctx.resp_headers = resp["headers"]
+        ctx.out, ctx.resp = resp, None
         _run(ctx, _compose(lv, "outbound"), state, bag, now, "outbound")
+        if ctx.resp is not None:      # return-response in the outbound section replaces the response
+            resp = {"status": ctx.resp["status"], "headers": dict(ctx.resp["headers"]), "body": ctx.resp["body"]}
         if ctx.cors is not None:
             origin = hd.get("origin")
             if origin and ("*" in ctx.cors or origin in ctx.cors):
@@ -496,6 +689,163 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
     skipped.extend(ctx.skipped)
     warns.extend(ctx.warnings)
     return done(resp)
+
+
+# ── MCP servers (API type "mcp") ─────────────────────────────────────────────────────────────────────────────
+MCP_PROTOCOL = "2025-03-26"
+
+
+def _rpc(id_, result=None, error=None):
+    o = {"jsonrpc": "2.0", "id": id_}
+    if error is not None:
+        o["error"] = error
+    else:
+        o["result"] = result
+    return o
+
+
+def _json_resp(obj, status=200, headers=None):
+    h = {"content-type": "application/json"}
+    h.update(headers or {})
+    return {"status": status, "headers": h, "body": json.dumps(obj).encode()}
+
+
+def _mcp_tools(state, svc, api):
+    """-> [(tool name, description, source api record, operation record)] for an MCP API: its ``mcpTools`` entries (operationId = an operation resource id or
+    name, resolved in the id's own /apis/{api}/ segment, else ``sourceApiId``, else this API), else every operation of ``sourceApiId`` (or of this API)."""
+    sid, ap = svc["id"], _props(api)
+
+    def api_rec(name):
+        return state.get(f"{sid}/apis/{name}".lower())
+    src = str(ap.get("sourceApiId") or "").rstrip("/").rsplit("/", 1)[-1]
+    out = []
+    if ap.get("mcpTools"):
+        for t in ap["mcpTools"]:
+            oid = str(t.get("operationId") or t.get("name") or "")
+            m = re.search(r"/apis/([^/]+)/operations/([^/]+)$", oid)
+            an, on = (m.group(1), m.group(2)) if m else (src or api["name"], oid.rsplit("/", 1)[-1])
+            a = api_rec(an)
+            op = state.get(f"{a['id']}/operations/{on}".lower()) if a else None
+            if op is None:
+                continue
+            p = _props(op)
+            out.append((t.get("name") or on, t.get("description") or p.get("description") or p.get("displayName") or on, a, op))
+        return out
+    a = api_rec(src) if src else api
+    a = a or api
+    for op in _recs(state, a["id"] + "/operations", APIM + "/apis/operations"):
+        p = _props(op)
+        out.append((re.sub(r"[^A-Za-z0-9_-]", "_", op.get("name") or p.get("displayName", "")), p.get("description") or p.get("displayName") or op.get("name"), a, op))
+    return out
+
+
+def _tool_schema(op):
+    p = _props(op)
+    props, req = {}, []
+    for t in re.findall(r"\{([^/}]+)\}", str(p.get("urlTemplate", ""))):
+        props[t] = {"type": "string", "description": f"path parameter {t}"}
+        req.append(t)
+    for tp in p.get("templateParameters") or []:
+        props.setdefault(tp.get("name"), {"type": tp.get("type") or "string", "description": tp.get("description") or ""})
+    for qp in ((p.get("request") or {}).get("queryParameters") or []):
+        props[qp.get("name")] = {"type": qp.get("type") or "string", "description": qp.get("description") or ""}
+        if qp.get("required"):
+            req.append(qp.get("name"))
+    if str(p.get("method", "")).upper() in ("POST", "PUT", "PATCH"):
+        props["body"] = {"type": "object", "description": "JSON request body"}
+    sch = {"type": "object", "properties": props}
+    if req:
+        sch["required"] = sorted(set(req))
+    return sch
+
+
+def _mcp(state, svc, api, sub, rem, method, qd, hd, body, can_fetch, now, ip, gw):
+    """Serve the MCP streamable-HTTP endpoint of an API with type=mcp: JSON-RPC ``initialize`` / ``ping`` / ``tools/list`` / ``tools/call``.
+    The MCP API's own (and the service-level) inbound policies run first (validate-jwt, rate-limit, ...); a ``tools/call`` is dispatched as an ordinary
+    gateway request to the source operation, so that operation's API/operation policies and backend apply. An MCP API with a serviceUrl and no tools is a
+    pass-through to a backend MCP server (the JSON-RPC body is forwarded unchanged)."""
+    ap = _props(api)
+    if rem.rstrip("/") not in ("", "/mcp", "mcp"):
+        return _body(404, "Resource not found")
+    ctx = _Ctx(svc, api, None, sub, method, rem, {k: v for k, v in qd.items() if k != "subscription-key"}, dict(hd), body, ip)
+    ctx.now = now
+    lv = [_parse(_policy_xml(state, svc["id"])), _parse(_policy_xml(state, api["id"]))]
+    try:
+        _run(ctx, _compose(lv, "inbound"), state, gw["rl"], now, "inbound")
+    except PolicyError as pe:
+        return _body(pe.status, pe.message, pe.headers)
+    if ctx.resp is not None:
+        return {"status": ctx.resp["status"], "headers": dict(ctx.resp["headers"]), "body": ctx.resp["body"]}
+    if method == "GET":
+        return _body(405, "This MCP server does not offer a server-initiated SSE stream; POST JSON-RPC to the endpoint.", {"Allow": "POST, DELETE"})
+    if method == "DELETE":
+        return {"status": 200, "headers": {}, "body": b""}
+    if method != "POST":
+        return _body(405, "Method not allowed.", {"Allow": "POST"})
+    try:
+        req = json.loads(body.decode("utf-8") or "null")
+    except ValueError:
+        return _json_resp(_rpc(None, error={"code": -32700, "message": "Parse error"}), 400)
+    tools = _mcp_tools(state, svc, api)
+    if not tools and ap.get("serviceUrl") and can_fetch and not ap.get("mcpTools"):
+        url = ap["serviceUrl"].rstrip("/") + ("/mcp" if rem.rstrip("/") in ("/mcp", "mcp") else "")
+        try:
+            st, rh, rb = yield gc.Fetch("POST", url, gc.strip_hop(ctx.headers, extra=("ocp-apim-subscription-key",)), body, 15.0)
+            return {"status": st, "headers": gc.strip_resp_hop(rh), "body": rb or b""}
+        except Exception as e:  # noqa: BLE001
+            return _body(502, f"Bad Gateway: {type(e).__name__}: {e}")
+    batch = isinstance(req, list)
+    outs = []
+    for r in (req if batch else [req]):
+        o = yield from _mcp_one(state, svc, api, tools, r, ctx, can_fetch, now, ip)
+        if o is not None:
+            outs.append(o)
+    if not outs:
+        return {"status": 202, "headers": {}, "body": b""}
+    return _json_resp(outs if batch else outs[0])
+
+
+def _mcp_one(state, svc, api, tools, r, ctx, can_fetch, now, ip):
+    if not isinstance(r, dict) or r.get("jsonrpc") != "2.0" or "method" not in r:
+        return _rpc(r.get("id") if isinstance(r, dict) else None, error={"code": -32600, "message": "Invalid Request"})
+    mid, m, prm = r.get("id"), r["method"], r.get("params") or {}
+    if "id" not in r:                       # a notification: no response
+        return None
+    if m == "initialize":
+        return _rpc(mid, {"protocolVersion": prm.get("protocolVersion") or MCP_PROTOCOL, "capabilities": {"tools": {"listChanged": False}},
+                          "serverInfo": {"name": _props(api).get("displayName") or api["name"], "version": "1.0.0"}})
+    if m == "ping":
+        return _rpc(mid, {})
+    if m == "tools/list":
+        return _rpc(mid, {"tools": [{"name": n, "description": d, "inputSchema": _tool_schema(op)} for n, d, a, op in tools]})
+    if m == "tools/call":
+        name, args = prm.get("name"), dict(prm.get("arguments") or {})
+        t = next((x for x in tools if x[0] == name), None)
+        if t is None:
+            return _rpc(mid, error={"code": -32602, "message": f"Unknown tool: {name}"})
+        sapi, op = t[2], t[3]
+        p = _props(op)
+        tpl = str(p.get("urlTemplate", "")).split("?", 1)[0]
+        missing = [x for x in re.findall(r"\{([^/}]+)\}", tpl) if x not in args]
+        if missing:
+            return _rpc(mid, error={"code": -32602, "message": f"Missing required argument(s): {', '.join(missing)}"})
+        path_ = re.sub(r"\{([^/}]+)\}", lambda mm: str(args.pop(mm.group(1))), tpl)
+        pre = "/" + str(_props(sapi).get("path", "")).strip("/")
+        mth = str(p.get("method", "GET")).upper()
+        bdata = b""
+        if mth in ("POST", "PUT", "PATCH"):
+            b = args.pop("body", None)
+            if b is None and args:
+                b, args = dict(args), {}
+            bdata = (b if isinstance(b, str) else json.dumps(b)).encode() if b is not None else b""
+        fh = {k: v for k, v in ctx.headers.items() if k in ("ocp-apim-subscription-key", "authorization", "x-forwarded-for")}
+        if bdata:
+            fh["content-type"] = "application/json"
+        res = yield from handle_steps(state, svc, mth, (pre if pre != "/" else "") + path_, {k: str(v) for k, v in args.items()}, fh, bdata,
+                                      can_fetch=can_fetch, now=now, ip=ip)
+        text = (res.get("body") or b"").decode("utf-8", "replace")
+        return _rpc(mid, {"content": [{"type": "text", "text": text}], "isError": res["status"] >= 400})
+    return _rpc(mid, error={"code": -32601, "message": f"Method not found: {m}"})
 
 
 # ── analytics ────────────────────────────────────────────────────────────────
