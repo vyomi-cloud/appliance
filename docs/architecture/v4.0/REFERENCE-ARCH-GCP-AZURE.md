@@ -1,6 +1,6 @@
 # Reference architecture on GCP and Azure: component mapping and scope
 
-Status: proposal, nothing built. Written 2026-11-18 against v4-on-main (v4.0.4 + later trunk commits).
+Status: proposal + probe results (step 1 done), nothing built. Written 2026-11-18 against v4-on-main (v4.0.4 + later trunk commits).
 
 ## Where we are
 `examples/enterprise-facilities-agent` implements the 13 components of "Agentic AI on AWS Bedrock" with boto3 only (13/13 end to end, Mac, real local model).
@@ -68,6 +68,30 @@ Same bar as AWS: exit 0 only if all 13 components PASS, real local model, unmodi
 - **Azure:** Service Bus on its real AMQP 1.0 data plane (our implementation of the real wire, verified with `azure-servicebus`), ledger in Azure Table storage on Azurite (real engine) instead of Cosmos, which has no real engine we can run cheaply.
 - **Nano:** no containers in the browser, so Nano keeps Vyomi's in-browser cores and the report states that. Mesh is the "real backend" run.
 - Added scope: about 2-3 days (GCP emulators as data plane 1-1.5 d, Azure Table ledger + AMQP flow 1-1.5 d), included in step 4 below as a floor.
+
+## Probe results (step 1, 2026-11-18) and corrections
+Probes: branches `v4/ref-arch-probe-gcp` (572cad779, `docs/architecture/v4.0/REF-ARCH-PROBE-GCP.md`) and `v4/ref-arch-probe-azure` (a089a3606, `REF-ARCH-PROBE-AZURE.md`). Real vendor SDK calls against the in-process appliance app; no model, so model steps are BLOCKED. macOS only; Nano and Mesh were not probed.
+
+**Result: the assembled approval loop PASSES end to end on both clouds** (GCP: Pub/Sub, function, Firestore ledger; Azure: Service Bus AMQP, Function, Table ledger, about 3 s), but Azure needed three workarounds. No component passes cleanly on the unmodified default clients: GCP 2 of 13 PASS (gateway, knowledge), Azure 0 of 13 PASS, the rest FAIL or BLOCKED(no model).
+
+Corrections to the mapping above:
+- **Cloud Armor** securityPolicies exist (create/get pass); "not found" was wrong. **Identity Platform** is absent (405).
+- **Azure Table is NOT real offline.** Table data, Service Bus and Cosmos are all Vyomi's own cores; only Blob bytes are mirrored to Azurite. The "Table on Azurite" real-backend proposal above does not hold today.
+- **GCP real emulators work but are not the data plane.** Docker is present, the local `google-cloud-cli:emulators` image runs real Pub/Sub and Firestore emulators, and the approval loop passes on them with the gRPC clients. Selecting them as the data plane is real build work (about 2.5 d).
+- **Azure Service Bus:** ARM/REST-created entities are invisible to AMQP, and an attached receiver never gets a later message (the probe re-attached every 2 s).
+- **Azure `/openai` GET/DELETE** fall through to S3 in the appliance, so thread/run/message reads 404; that also blocks components 9 and 11.
+
+### Gaps and estimates (probe lanes' figures, not independently verified)
+GCP: gRPC front door / real emulators 2.5 d; function sandbox has no network or SDKs (blocks 5, 7, 12) 2.5 d; Identity Platform 0.5 d (drop) to 2.5 d (build); API Gateway YAML + token check 1 d; four small core fixes (logging timestamp filter, trace v1 span id, KMS AAD, event-function print) 1.5 d; GCS notifications 1 d; generateContent with a RAG retrieval tool 1.5 d. GCP half about 18-21 d (floor about 14 d on REST transports and no Identity Platform).
+Azure: `/openai` routing + Foundry endpoint 2.5 d; Service Bus unification + live delivery 1.5 d; Table/Cosmos wire fixes (PATCH, $filter, ETag 412, patch_item) 2 d; AI Search native wire 2 d; Entra JWT + JWKS 1.5 d; WAF types 1 d; Content Safety 1 d; APIM expressions + MCP 2 d; Function shim + ARM list 1.5 d; App Insights ingest 1.5 d; Event Grid delivery + indexer 2 d. Gaps about 16.5 d; Azure half about 12-21 d.
+
+### Revised programme total
+Sequential about 33-45 working days (GCP 18-21 + Azure 12-21 + shared harness refactor 1.5 + docs/packaging 1.5). With two parallel lanes about 18-24 days. The earlier 13-18 d figure is withdrawn.
+
+### Options to cut scope
+1. **Fix the simulator gaps that real customers' SDK code hits first** (the "default client works" items: gRPC, `/openai` routing, Search wire, Entra JWT) and let the app use REST workarounds elsewhere, reported as BLOCKED rows. About 15-20 d total.
+2. **Ship one cloud first.** GCP is closer (4 of 13 close to green; the approval loop works), Azure needs more wire fixes.
+3. **Reduce the claim:** keep the AWS reference as the "13-component reference" and call GCP/Azure "agent app development on the services" (the current public wording), until the gaps close.
 
 ## Open questions for the owner
 1. Confirm "real backend" means this: real open-source engines behind the approval path on Mesh, Nano on in-browser cores? (If you meant every service in the app, say so; that is a much larger scope.)
