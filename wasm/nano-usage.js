@@ -10,7 +10,11 @@
  * so bucket/instance/user-typed names cannot leave the browser. No page titles, no query strings, no third-party calls.
  * OPT-OUT: nothing is sent when localStorage "vyomi.telemetry" === "off", navigator.doNotTrack is "1"/"yes", or window.VYOMI_NO_TELEMETRY is set.
  *
- * WIRE: POST same-origin /api/usage/views  {v:1, events:[{sid,cloud,view,service,enter,exit,dur}...]}  (<= 50 per request, expect 204).
+ * BROWSER ID (optional): each batch also carries `iid`, the SAME device fingerprint the Nano install ping (clouds.html -> /api/install/register)
+ * uses as install_id ("nano-fp-" + 24 hex of a SHA-256 over platform, cores, memory, screen, timezone, language, GPU name). It is computed
+ * the same way here and cached in localStorage "vyomi.nano.iid". The portal hashes it with a salt and only uses it to count distinct
+ * browsers per day (never to link people). Older builds omit it and the portal accepts that.
+ * WIRE: POST same-origin /api/usage/views  {v:1, iid?, events:[{sid,cloud,view,service,enter,exit,dur}...]}  (<= 50 per request, expect 204).
  * Failures are dropped silently (no retry storm, no storage queue, no console noise). Timers start only after "vyomi-nano-ready" (or the
  * page load + 3 s) so the Pyodide boot is never slowed.
  *
@@ -52,6 +56,30 @@
     try { sessionStorage.setItem(k, v); } catch (_) {}
     return v;
   })();
+
+  /* per-BROWSER id: the same device fingerprint as the Nano install ping (see header). Async; until it is known events go out without it. */
+  var IID = "";
+  var IID_KEY = "vyomi.nano.iid", IID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+  function loadIid() {
+    try { var c = localStorage.getItem(IID_KEY) || ""; if (IID_RE.test(c)) { IID = c; return; } } catch (_) {}
+    try {
+      var gpu = "";
+      try {
+        var cv = document.createElement("canvas"), gl = cv.getContext("webgl") || cv.getContext("experimental-webgl");
+        if (gl) { var ext = gl.getExtension("WEBGL_debug_renderer_info"); if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || ""; }
+      } catch (_) {}
+      var parts = [navigator.platform || "", navigator.hardwareConcurrency || "", navigator.deviceMemory || "",
+        screen.width + "x" + screen.height + "x" + screen.colorDepth,
+        (Intl.DateTimeFormat().resolvedOptions().timeZone) || "", navigator.language || "", gpu];
+      var subtle = window.crypto && window.crypto.subtle;
+      if (!subtle || typeof TextEncoder === "undefined") return;
+      subtle.digest("SHA-256", new TextEncoder().encode(parts.join("|"))).then(function (buf) {
+        var hex = Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("").slice(0, 24);
+        var id = "nano-fp-" + hex;
+        if (IID_RE.test(id)) { IID = id; try { localStorage.setItem(IID_KEY, id); } catch (_) {} }
+      }, function () {});
+    } catch (_) {}
+  }
 
   /* ---- view key = the matched ROUTE PATTERN, never the real path ---- */
   var table = null;   // [{segs:[...], key, params}] grouped by length
@@ -127,7 +155,8 @@
 
   /* ---- sending ---- */
   function send(events, unloading) {
-    var body = JSON.stringify({ v: 1, events: events });
+    var msg = { v: 1, events: events }; if (IID) msg.iid = IID;
+    var body = JSON.stringify(msg);
     if (unloading && navigator.sendBeacon) {
       try { if (navigator.sendBeacon(URL_PATH, new Blob([body], { type: "application/json" }))) return; } catch (_) {}
     }
@@ -156,6 +185,7 @@
     if (optedOut()) return;
     if (!table) build();
     started = true;
+    loadIid();
     var t = now(); lastInput = t; mark = t; visible = !document.hidden;
     if (visible) open(t);
     ["mousemove", "keydown", "scroll", "click", "touchstart", "wheel"].forEach(function (e) { addEventListener(e, safe(touch), { passive: true, capture: true }); });
