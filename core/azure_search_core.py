@@ -575,7 +575,7 @@ def _index_rows(svc, ix, idx_rec, ds, res, bname, rows, meta, path, seen):
     sk = svc.get("_skillsets", {}).get(ix.get("skillsetName") or "")
     for n, row in enumerate(rows):
         try:
-            mapped = apply_field_mappings(ix, row)
+            mapped = apply_field_mappings(ix, {**meta, **row})      # fieldMappings may name metadata_storage_* source fields
         except (ValueError, json.JSONDecodeError) as e:
             res["itemsFailed"] += 1
             res["errors"].append({"key": bname, "errorMessage": f"Field mapping failed: {e}"})

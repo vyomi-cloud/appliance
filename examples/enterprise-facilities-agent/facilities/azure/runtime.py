@@ -179,7 +179,7 @@ class AzCtx(Ctx):
             if adv and (urlparse(adv).hostname or "") in (self.host, "localhost", "127.0.0.1"):
                 self.state["search_endpoint"] = adv.rstrip("/")
             else:
-                self.state["search_endpoint"] = f"{self.endpoint}/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Search/searchServices/{NAMES['search']}"
+                self.state["search_endpoint"] = f"{self.endpoint}/azure-data/search/{NAMES['search']}"   # native OData wire (lane ai); the old ARM-extension path form is gone
                 if adv:
                     self.note(f"AI Search: ARM advertises {adv}, which this simulator does not serve; the SDKs use the simulator's ARM-extension path form instead.")
         return self.state["search_endpoint"]
