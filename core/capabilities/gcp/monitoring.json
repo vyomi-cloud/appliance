@@ -208,7 +208,7 @@
    "offline": "limited"
   },
   "limitations": [
-   "Spans are stored and queried for real: Cloud Trace v2 spans.batchWrite/createSpan and v1 patchTraces/traces.list/get (filter span:/root:/label:/latency:, view, orderBy, paging) with real validation. Vyomi does not auto-instrument workloads: no span appears unless your app (OpenTelemetry/Cloud Trace SDK) or a script writes it, and Log-trace correlation is not modeled. The Trace explorer shows measured root-span latency percentiles (p50/p90/p95/p99) and a time x latency heatmap computed from the stored spans."
+   "Spans are stored and queried for real: Cloud Trace v2 spans.batchWrite/createSpan and v1 patchTraces/traces.list/get (filter span:/root:/label:/latency:, view, orderBy, paging) with real validation. Vyomi does not auto-instrument workloads: no span appears unless your app (OpenTelemetry/Cloud Trace SDK) or a script writes it, and Log-trace correlation is not modeled. The Trace explorer shows measured root-span latency percentiles (p50/p90/p95/p99) and a time x latency heatmap computed from the stored spans. v1 and v2 share one span store: span ids are decimal uint64 strings on v1 and 16-hex on v2, so google-cloud-trace TraceServiceClient.get_trace/list_traces read spans written with batchWrite (the SDK REST transport sends view/spanKind as integer enums; those are accepted)."
   ],
   "api": [
    "spans.batchWrite",
@@ -218,7 +218,7 @@
    "projects.traces.get"
   ],
   "tests": [
-   "tests/conformance/test_gcp_trace.py"
+   "tests/conformance/test_gcp_trace.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ]
  },
  "gcp.monitoring.error-reporting": {
