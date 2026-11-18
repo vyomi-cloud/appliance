@@ -1035,18 +1035,18 @@
       "Docs_Create",
       "Docs_Query"
      ],
-     "capabilities": 22,
+     "capabilities": 23,
      "capability_service": "cosmos",
      "data_plane": "in-process SQL API subset under /azure-data/cosmos/{account}/dbs/{db}/colls/{coll}/docs",
      "id": "cosmos",
      "level_counts": {
       "nano": {
        "full": 4,
-       "limited": 18
+       "limited": 19
       },
       "offline": {
        "full": 4,
-       "limited": 18
+       "limited": 19
       }
      },
      "levels": {
@@ -1382,22 +1382,23 @@
       "Blob_Get",
       "Blob_Delete"
      ],
-     "capabilities": 52,
+     "capabilities": 54,
      "capability_service": "storage",
      "data_plane": "fake-gcs-server (Blob bytes shared with GCP storage layer)",
      "id": "storage",
      "level_counts": {
       "nano": {
        "full": 9,
-       "limited": 43
+       "limited": 44,
+       "not_simulated": 1
       },
       "offline": {
        "full": 9,
-       "limited": 43
+       "limited": 45
       }
      },
      "levels": {
-      "nano": "limited",
+      "nano": "not_simulated",
       "offline": "limited"
      },
      "name": "Storage accounts",
@@ -3183,7 +3184,8 @@
   ],
   "vyomi-azurite": [
    "10000:10000",
-   "10001:10001"
+   "10001:10001",
+   "10002:10002"
   ],
   "vyomi-dynamodb": [
    "8000:8000"
