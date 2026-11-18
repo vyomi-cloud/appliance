@@ -35,11 +35,18 @@ def run(ctx):
 
         def keys():
             from azure.mgmt.web import WebSiteManagementClient
-            k = ctx.arm(WebSiteManagementClient).web_apps.list_function_keys(RG, NAMES["functions"], "kb-search")
-            val = (k.additional_properties or {}).get("default") if hasattr(k, "additional_properties") else None
-            ctx.state["func_key"] = val or ""
-            return "function key listed through ARM" + ("" if val else " (none returned)")
-        ctx.step("function app: ARM list_function_keys", keys, lane=LANE["runtime"])
+            w = ctx.arm(WebSiteManagementClient)
+            try:
+                k = w.web_apps.list_host_keys(RG, NAMES["functions"])
+                val = (k.function_keys or {}).get("default") or k.master_key
+            except Exception:
+                k = w.web_apps.list_function_keys(RG, NAMES["functions"], "kb-search")
+                val = (k.additional_properties or {}).get("default")
+            if not val:
+                raise Blocked(LANE["runtime"], "ARM returned no function / host key for the function app")
+            ctx.state["func_key"] = val
+            return "host key listed through ARM (sent as x-functions-key)"
+        ctx.step("function app: ARM list_host_keys gives the key that authorises function calls", keys, lane=LANE["runtime"])
 
     def kb_tool():
         out = deploy.call_function(ctx, NAMES["functions"], "kb-search", {"query": "boiler pressure limit"})

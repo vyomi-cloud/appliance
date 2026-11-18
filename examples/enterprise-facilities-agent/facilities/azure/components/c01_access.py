@@ -92,6 +92,7 @@ def _policy(ctx):
     return ('<policies><inbound><base/>'
             '<validate-jwt header-name="Authorization" failed-validation-httpcode="401" failed-validation-error-message="Unauthorized. Access token is missing or invalid.">'
             f'<openid-config url="{cfg}"/><audiences><audience>{API_URI}</audience><audience>{ctx.state.get("app_id", "")}</audience></audiences></validate-jwt>'
+            + (f'<set-header name="x-functions-key" exists-action="override"><value>{ctx.state["func_key"]}</value></set-header>' if ctx.state.get("func_key") else '') +
             '<rate-limit-by-key calls="60" renewal-period="60" counter-key="@(context.Subscription.Id)"/>'
             '<set-header name="x-vyomi-caller" exists-action="override"><value>@(context.Request.Headers.GetValueOrDefault("Authorization","").AsJwt()?.Claims.GetValueOrDefault("appid","anonymous"))</value></set-header>'
             '</inbound><backend><base/></backend><outbound><base/></outbound><on-error><base/></on-error></policies>')
