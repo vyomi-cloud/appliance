@@ -682,6 +682,11 @@ def run_indexer(svc, ix_name, blob_store, account_lookup=None, cosmos_store=None
         cont = ds["container"]["name"]
         prefix = (ds["container"].get("query") or "")
         key = f"{acct}/{cont}" if acct and acct != "devstoreaccount1" else cont
+        if not blob_store.container_exists(key) and (not acct or acct == "devstoreaccount1"):
+            # "UseDevelopmentStorage=true" (no account name): the account is whichever one holds a container of that name (sole match)
+            hits = [k for k in list(getattr(blob_store, "containers", {}) or {}) if k.endswith("/" + cont)]
+            if len(hits) == 1:
+                key, acct = hits[0], hits[0].rsplit("/", 1)[0]
         if not blob_store.container_exists(key):
             res.update(status="transientFailure", errorMessage=f"The container '{cont}' does not exist in storage account '{acct}'.")
         else:

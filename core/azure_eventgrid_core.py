@@ -294,11 +294,66 @@ def _cloud_event(event: dict, props: dict) -> dict:
 # dead-lettered honestly). The offline hook only POSTs to loopback / private-network addresses (no outbound internet).
 QUEUE_STORE = None
 WEBHOOK_POST = None
+# Seams added for the Blob -> Event Grid -> Function pipeline (az-ref-messaging lane):
+#   SB_STORE()                               -> the Service Bus store (ServiceBusQueue/Topic destinations of events that have no ``sb_store`` argument, e.g. blob events)
+#   FUNCTION_INVOKE(app, fn, method, batch)  -> truthy when the Function App's deployed code ran the event batch (AzureFunction destination, and
+#                                               the EventGrid-trigger webhook URL /runtime/webhooks/EventGrid?functionName=fn: the Functions host answers the handshake itself)
+#   WEBHOOK_EXCHANGE(url, body, headers)     -> (status, response_bytes): lets the WebHook SubscriptionValidation handshake read the reply
+SB_STORE = None
+FUNCTION_INVOKE = None
+WEBHOOK_EXCHANGE = None
 
 
-def bind_destinations(queue_store=None, webhook_post=None) -> None:
-    global QUEUE_STORE, WEBHOOK_POST
+def bind_destinations(queue_store=None, webhook_post=None, sb_store=None, function_invoke=None, webhook_exchange=None) -> None:
+    global QUEUE_STORE, WEBHOOK_POST, SB_STORE, FUNCTION_INVOKE, WEBHOOK_EXCHANGE
     QUEUE_STORE, WEBHOOK_POST = queue_store, webhook_post
+    if sb_store is not None:
+        SB_STORE = sb_store
+    if function_invoke is not None:
+        FUNCTION_INVOKE = function_invoke
+    if webhook_exchange is not None:
+        WEBHOOK_EXCHANGE = webhook_exchange
+
+
+def _function_target(dprops: dict, url: str = ""):
+    """(app, function) of an AzureFunction destination (resourceId .../sites/{app}/functions/{fn}) or of an EventGrid-trigger
+    webhook URL (.../runtime/webhooks/EventGrid?functionName=fn on host {app}.azurewebsites.net or a sim /azure-data/functions/{app}/ path)."""
+    rid = str(dprops.get("resourceId") or "")
+    if "/functions/" in rid.lower():
+        i = rid.lower().rindex("/functions/")
+        return rid[:i].rsplit("/", 1)[-1], rid[i + len("/functions/"):].split("/")[0]
+    if url and "/runtime/webhooks/eventgrid" in url.lower():
+        from urllib.parse import urlsplit, parse_qs
+        u = urlsplit(url)
+        fn = (parse_qs(u.query).get("functionName") or parse_qs(u.query).get("functionname") or [""])[0]
+        host = (u.hostname or "")
+        app = host.split(".")[0]
+        if "/azure-data/functions/" in u.path.lower():
+            app = u.path.lower().split("/azure-data/functions/", 1)[1].split("/")[0]
+        return app, fn
+    return None
+
+
+def _validate_webhook(rec: dict, url: str, props: dict) -> bool:
+    """Real Event Grid WebHook handshake: POST a Microsoft.EventGrid.SubscriptionValidationEvent (aeg-event-type: SubscriptionValidation); the
+    endpoint must answer 2xx with {"validationResponse": <validationCode>}. Until validated a subscription delivers nothing
+    (provisioningState AwaitingManualAction). Only when the substrate bound an exchange seam that can read the reply."""
+    if rec.get("_validated") or WEBHOOK_EXCHANGE is None:
+        return True
+    code = uuid.uuid4().hex
+    ev = {"id": str(uuid.uuid4()), "topic": props.get("topic") or "", "subject": "", "eventType": "Microsoft.EventGrid.SubscriptionValidationEvent",
+          "eventTime": _now(), "metadataVersion": "1", "dataVersion": "2",
+          "data": {"validationCode": code, "validationUrl": f"https://rp.eventgrid.local/eventsubscriptions/{rec.get('name', '')}/validate?id={code}"}}
+    try:
+        st, body = WEBHOOK_EXCHANGE(url, json.dumps([ev]).encode(),
+                                    {"content-type": "application/json; charset=utf-8", "aeg-event-type": "SubscriptionValidation",
+                                     "aeg-subscription-name": str(rec.get("name", "")).upper()})
+        ok = 200 <= int(st) < 300 and (json.loads(body or b"{}") or {}).get("validationResponse") == code
+    except Exception:
+        ok = False
+    rec["_validated"] = ok
+    rec.setdefault("properties", {})["provisioningState"] = "Succeeded" if ok else "AwaitingManualAction"
+    return ok
 
 
 def _deliver_storage_queue(dprops: dict, event: dict, props: dict) -> bool:
@@ -339,7 +394,7 @@ def _deliver_webhook(dprops: dict, event: dict, props: dict) -> bool:
         return False
 
 
-def _attempt_delivery(rec: dict, event: dict, *, sb_store=None) -> str:
+def _attempt_delivery(rec: dict, event: dict, *, sb_store=None, validate=False) -> str:
     """Try to deliver ``event`` to one event subscription's destination. Returns
     'delivered', 'dead-lettered' or 'dropped' — never raises; an unreachable/unmodelled
     destination resolves straight to the terminal outcome (no retry scheduler, see the
@@ -349,7 +404,24 @@ def _attempt_delivery(rec: dict, event: dict, *, sb_store=None) -> str:
     etype = (dest.get("endpointType") or "").lower()
     dprops = dest.get("properties") or {}
 
+    if sb_store is None and SB_STORE is not None and etype in ("servicebusqueue", "servicebustopic"):
+        try:
+            sb_store = SB_STORE()
+        except Exception:
+            sb_store = None
+
     def _once() -> bool:
+        if etype == "azurefunction":
+            tgt = _function_target(dprops)
+            if tgt is None or FUNCTION_INVOKE is None:
+                return False
+            return bool(FUNCTION_INVOKE(tgt[0], tgt[1], "POST", [_cloud_event(event, props)]))
+        if etype == "webhook" and FUNCTION_INVOKE is not None and "/runtime/webhooks/eventgrid" in str(dprops.get("endpointUrl") or "").lower():
+            tgt = _function_target(dprops, str(dprops.get("endpointUrl")))
+            if tgt and tgt[1]:      # EventGrid-trigger function URL: the Functions host handles the handshake, then runs the function
+                return bool(FUNCTION_INVOKE(tgt[0], tgt[1], "POST", [_cloud_event(event, props)]))
+        if etype == "webhook" and validate and not _validate_webhook(rec, str(dprops.get("endpointUrl") or ""), props):
+            return False
         if etype in ("servicebusqueue", "servicebustopic") and sb_store is not None:
             entity = dprops.get("queueName") or dprops.get("topicName") or \
                 str(dprops.get("resourceId") or "").rsplit("/", 1)[-1]
@@ -554,12 +626,47 @@ def emit_system_event(state: dict, scope_rid: str, event_type: str, subject: str
     event = {"id": str(uuid.uuid4()), "eventType": event_type, "subject": subject, "eventTime": _now(),
              "data": data or {}, "dataVersion": "1", "metadataVersion": "1", "topic": scope_rid}
     outcomes = []
-    for rec in [r for r in state.values() if r.get("_parent") in targets]:
+    for rec in [r for r in state.values() if r.get("_parent") in targets] + _system_topic_subs(state, targets):
         exp = _parse_iso((rec.get("properties") or {}).get("expirationTimeUtc"))
         if exp is not None and exp <= datetime.datetime.now(datetime.timezone.utc):
             continue
         if not matches_filter(event, (rec.get("properties") or {}).get("filter") or {}):
             continue
         rec.setdefault("_delivery", {"matched": 0, "delivered": 0, "failed": 0, "deadLettered": 0, "dropped": 0})["matched"] += 1
-        outcomes.append({"subscription": rec["name"], "result": _attempt_delivery(rec, event, sb_store=sb_store)})
+        outcomes.append({"subscription": rec["name"], "result": _attempt_delivery(rec, event, sb_store=sb_store, validate=True)})
     return outcomes
+
+
+def _system_topic_subs(state: dict, targets: set) -> list:
+    """Event subscriptions of Microsoft.EventGrid/systemTopics whose ``properties.source`` is one of ``targets`` (lower-cased ids)."""
+    out = []
+    for r in list(state.values()):
+        if str(r.get("_type") or r.get("type") or "").lower() != "microsoft.eventgrid/systemtopics/eventsubscriptions":
+            continue
+        parent = state.get(str(r.get("id") or "").lower().split("/eventsubscriptions/")[0])
+        if parent and str((parent.get("properties") or {}).get("source") or "").lower() in targets:
+            out.append(r)
+    return out
+
+
+def has_system_subscribers(state: dict, scope_rid: str) -> bool:
+    """Cheap pre-check for hot paths (every blob upload): is anything subscribed to events raised on ``scope_rid``?"""
+    t = {scope_rid.lower()}
+    return any(r.get("_parent") in t for r in state.values()) or bool(_system_topic_subs(state, t))
+
+
+def emit_system_event_async(state: dict, scope_rid: str, event_type: str, subject: str, data: dict, *, sb_store=None) -> None:
+    """Fire-and-forget emit (real Event Grid delivery is asynchronous, and a WebHook / Function destination may be this very server, so a
+    delivery run inside the request that raised the event would deadlock). Falls back to inline where threads are unavailable (Pyodide)."""
+    def _run():
+        try:
+            emit_system_event(state, scope_rid, event_type, subject, data, sb_store=sb_store)
+        except Exception:
+            pass
+    try:
+        import contextvars
+        import threading
+        ctx = contextvars.copy_context()      # keeps the active space (the ARM state proxy is context-scoped)
+        threading.Thread(target=ctx.run, args=(_run,), daemon=True).start()
+    except Exception:
+        _run()

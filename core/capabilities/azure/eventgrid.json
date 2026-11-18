@@ -178,5 +178,21 @@
    "Storage, Key Vault, App Configuration and API Management do not yet emit their data-plane system events on their own (BlobCreated, SecretNewVersionCreated, KeyValueModified, …): those fire only from the console's 'Send test event' (simulateEvent) action. Delivery is real only to Service Bus queue/topic destinations on the offline appliance; WebHook, Storage Queue and Event Hub destinations (and every destination on Nano) are unreachable and resolve to dead-lettered/dropped, as for topic subscriptions."
   ],
   "tests": ["tests/conformance/test_azure_eventgrid_scoped_core.py"]
- }
+ },
+  "azure.eventgrid.blob-events.delivery": {
+    "title": "Storage blob events: Microsoft.Storage.BlobCreated / BlobDeleted from the real blob store reach system-topic and resource-scoped event subscriptions (WebHook incl. the SubscriptionValidation handshake, AzureFunction, Service Bus, Storage Queue)",
+    "level": {
+      "nano": "limited",
+      "offline": "full"
+    },
+    "limitations": [
+      "Offline: delivery is asynchronous (background thread); WebHook targets are loopback / private network only. Nano delivers to Service Bus and Storage Queue destinations; WebHook / AzureFunction need the host seams (offline appliance binds them).",
+      "The handshake applies to system-topic / resource-scoped subscriptions only (custom-topic webhooks are not validated, as before); a webhook that does not echo validationResponse stays AwaitingManualAction and receives nothing; manual validation via validationUrl is not served.",
+      "Function CODE execution is the Function App runtime's (core/azure_dataplane run_function_sync); an AzureFunction destination runs the app's single deployed entry module. BlobRenamed / Directory* events are not raised.",
+      "Proven with the unmodified azure-mgmt-eventgrid, azure-mgmt-storage, azure-storage-blob, azure-servicebus SDKs."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_eventgrid_sdk.py"
+    ]
+  }
 }

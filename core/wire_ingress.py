@@ -360,6 +360,8 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         tok = _ctx.REQUEST_PROVIDER.set("azure")
         try:
             arm_state = _ctx.azure_arm_state
+            if hasattr(arm_state, "_target"):    # the Azure space's concrete dict: blob events are delivered from a thread that outlives this provider scope
+                arm_state = arm_state._target()
         finally:
             _ctx.REQUEST_PROVIDER.reset(tok)
         resp = azure_blob_core.dispatch(st, method, path, query, headers, body, account=account,

@@ -307,7 +307,7 @@
     },
     "limitations": [
       "Proven with the UNCHANGED native SDKs: Python azure-servicebus 7.15 and JavaScript @azure/service-bus 7.10 (tests below), over raw AMQP and AMQP-over-WebSocket. Nano runs the same engine in Pyodide behind the relay's AMQP bridge (vyomi-tunnel / wasm/relay/local-relay.mjs): the local relay only - the Cloudflare cloud relay (relay.vyomi.cloud) does not carry AMQP yet.",
-      "Entities are created through the REST data plane / console (PUT on the namespace root, optional JSON body: lockDuration, maxDeliveryCount, requiresSession, requiresDuplicateDetection, deadLetteringOnMessageExpiration, defaultMessageTimeToLive) - ARM-created queues/topics are not mirrored into the data store, and the Service Bus management SDK (ServiceBusAdministrationClient, an ATOM/XML REST client) is not served. Entity names are global to the simulator (no per-namespace isolation), the same as the REST surface.",
+      "Entities are created through ARM (azure-mgmt-servicebus: queues, topics, subscriptions, rules are mirrored into the data store at once, see azure.servicebus.arm.entity-sync) or the REST data plane / console (PUT on the namespace root, optional JSON body: lockDuration, maxDeliveryCount, requiresSession, requiresDuplicateDetection, deadLetteringOnMessageExpiration, defaultMessageTimeToLive); the Service Bus data-plane management SDK (ServiceBusAdministrationClient, an ATOM/XML REST client) is not served. Entity names are global to the simulator (no per-namespace isolation), the same as the REST surface.",
       "Not modelled: partitioning (partition keys are preserved as annotations only), auto-forwarding, transactions (coordinator links are refused), message size limits per tier (a 700 KB multi-frame message works), delivery-count based ordering guarantees across link restarts, large-message/Premium limits, and the Basic-tier gates on AMQP entities. Sequence numbers are global to the store, not per entity."
     ],
     "tests": [
@@ -376,6 +376,34 @@
       "tests/conformance/test_azure_servicebus_amqp_python_sdk.py",
       "tests/conformance/test_azure_servicebus_amqp_js_sdk.py",
       "tests/conformance/test_azure_servicebus_amqp_nano.py"
+    ]
+  },
+  "azure.servicebus.arm.entity-sync": {
+    "title": "One entity store: queues, topics, subscriptions and rules created or deleted through ARM (azure-mgmt-servicebus) are immediately usable over AMQP 1.0 and the REST wire (and the reverse for REST-created entities)",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "ARM lockDuration / maxDeliveryCount / requiresSession / requiresDuplicateDetection / deadLetteringOnMessageExpiration / defaultMessageTimeToLive and SQL / correlation rule filters are applied to the broker; other ARM properties (partitioning, auto-forwarding, auto-delete-on-idle) round-trip through ARM only.",
+      "The store is shared by every namespace (entity names are global, as on the REST wire). An entity created over the REST wire or AMQP-side is not added to the ARM resource list (only ARM -> data plane is mirrored). The Siftly 'lease' AMQP stack (core/servicebus_amqp) is no longer the default listener (VYOMI_SB_AMQP_STACK=lease selects it; it keeps its own sqlite store).",
+      "There is no open-source Service Bus emulator Vyomi can run (Microsoft's is not viable): the broker is Vyomi's own core behind our pure-Python AMQP 1.0 wire, never a real Service Bus engine."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_servicebus_sdk.py"
+    ]
+  },
+  "azure.servicebus.amqp.live-delivery": {
+    "title": "Live delivery: an AMQP receiver already attached (receive_messages with max_wait_time, the iterator, the async iterator) is handed a message sent later; peek-lock renew/abandon/dead-letter, scheduled messages and sessions on ARM-created entities",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Proven with the unchanged Python azure-servicebus 7.15 sync and async clients against the real appliance app (plain AMQP, not TLS)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_servicebus_sdk.py"
     ]
   }
 }

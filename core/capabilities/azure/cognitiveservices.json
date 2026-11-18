@@ -117,5 +117,18 @@
   "tests": [
    "tests/conformance/test_ai_agent_lanes.py"
   ]
- }
+ },
+  "azure.contentsafety.analyze-text": {
+    "title": "Azure AI Content Safety data plane (azure-ai-contentsafety): analyze_text severities, text:shieldPrompt, text blocklists",
+    "level": {
+      "nano": "full",
+      "offline": "full"
+    },
+    "limitations": [
+      "Severities come from the same keyword + embedding content-filter engine the Azure OpenAI RAI policy uses (LOW/MEDIUM/HIGH -> 2/4/6), not Microsoft's classifier; SelfHarm uses a small phrase list. Image analysis, protected-material and groundedness detection are not served. Blocklists live in process memory (not persisted). shieldPrompt is plain REST (azure-ai-contentsafety 1.0.0 has no shield_prompt method)."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_ref_contentsafety_sdk.py"
+    ]
+  }
 }

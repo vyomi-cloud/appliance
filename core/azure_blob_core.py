@@ -461,6 +461,34 @@ def _replicate(store: AzureBlobStore, arm_state, acct: str, container: str, blob
     store.persist()
 
 
+def _emit_blob_event(arm_state, acct: str, container: str, blob: str, kind: str, entry: dict | None = None, api: str = "PutBlob") -> None:
+    """Raise Microsoft.Storage.BlobCreated / BlobDeleted on the storage account's ARM scope so Event Grid system-topic and
+    resource-scoped subscriptions (WebHook / AzureFunction / Service Bus / Storage Queue) receive it. Asynchronous; never fails the blob call."""
+    if not arm_state:
+        return
+    try:
+        try:
+            from core import azure_eventgrid_core as eg
+        except ImportError:  # Pyodide flat layout
+            import azure_eventgrid_core as eg  # type: ignore
+        want = f"/storageaccounts/{(acct or '').lower()}"
+        accts = [r for r in list(arm_state.values()) if str(r.get("_type") or r.get("type") or "").lower() == "microsoft.storage/storageaccounts"]
+        rid = next((r["id"] for r in accts if str(r["id"]).lower().endswith(want)), None)
+        if rid is None and len(accts) == 1 and (acct or "") in ("", "devstoreaccount1"):
+            rid = accts[0]["id"]          # the dev-storage alias addresses the sole account
+        if rid is None or not eg.has_system_subscribers(arm_state, rid):
+            return
+        name = rid.rsplit("/", 1)[-1]
+        e = entry or {}
+        data = {"api": api if kind == "BlobCreated" else "DeleteBlob", "clientRequestId": uuid.uuid4().hex, "requestId": uuid.uuid4().hex,
+                "eTag": e.get("etag", ""), "contentType": e.get("content_type", ""), "contentLength": e.get("size", 0),
+                "blobType": e.get("blob_type", "BlockBlob"), "url": f"https://{name}.blob.core.windows.net/{container}/{blob}",
+                "sequencer": uuid.uuid4().hex, "storageDiagnostics": {"batchId": uuid.uuid4().hex}}
+        eg.emit_system_event_async(arm_state, rid, "Microsoft.Storage." + kind, f"/blobServices/default/containers/{container}/blobs/{blob}", data)
+    except Exception:
+        pass
+
+
 def _feed(store: AzureBlobStore, acct: str, event: str, container: str, blob: str = "") -> None:
     lst = store.change_feed.setdefault(acct, [])
     lst.append({"time": _now_http(), "event": event, "container": container, "blob": blob})
@@ -968,6 +996,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         _reqlog(store, acct, "StorageWrite", "PutBlob", 201, f"/{display}/{blob}")
         if _changefeed_enabled(arm_state, acct):
             _feed(store, acct, "BlobCreated", display, blob)
+        _emit_blob_event(arm_state, acct, display, blob, "BlobCreated", entry)
         h = _base_headers()
         h["etag"] = entry["etag"]
         h["last-modified"] = entry["last_modified"]
@@ -1063,6 +1092,7 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
         _reqlog(store, acct, "StorageDelete", "DeleteBlob", 202, f"/{display}/{blob}")
         if _changefeed_enabled(arm_state, acct):
             _feed(store, acct, "BlobDeleted", display, blob)
+        _emit_blob_event(arm_state, acct, display, blob, "BlobDeleted", live)
         return Response(status=202, headers=_base_headers(), body=b"", media_type=None)
 
     return _err(400, "UnsupportedHttpVerb", f"Unsupported blob operation {method}")

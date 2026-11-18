@@ -806,7 +806,8 @@ def run_function_sync(app_name: str, function_name: str, method: str, payload) -
         return {"ok": False}
     from core import gcp_function_runtime
     if _uses_azure_functions(code):
-        return gcp_function_runtime.execute_http(code, function_name, props.get("runtime") or "python", {
+        entry = function_name if (props.get("entryPoint") in (None, "", "main") and "FunctionApp" in code) else (props.get("entryPoint") or "main")
+        return gcp_function_runtime.execute_http(code, entry, props.get("runtime") or "python", {
             "method": method, "path": "/" + function_name, "query": "", "headers": {"content-type": "application/json"},
             "body_b64": __import__("base64").b64encode(json.dumps(payload).encode()).decode(), "url": ""}, flavor="azure")
     return gcp_function_runtime.execute(code, props.get("entryPoint") or "main", props.get("runtime") or "python",

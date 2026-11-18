@@ -375,6 +375,8 @@ def _azure_service(path, lheaders, query):
     p0 = path.split("?", 1)[0]
     if re.match(r"^/api/projects/[^/]+(/|$)", p0):
         return "az-openai"   # Foundry project endpoint (azure-ai-projects / azure-ai-agents) -> core/azure_openai_agents_core
+    if path.split("?", 1)[0].startswith("/contentsafety/"):
+        return "az-contentsafety"   # Azure AI Content Safety data plane -> core/ai_models_core.azure_contentsafety_dispatch
     if re.match(r"^/openai/(deployments/[^/]+/)?(chat/completions|completions|embeddings)$|^/openai/v1/|^/openai/(responses|assistants|threads|vector_stores|files|fine_tuning|evals|vyomi/promptflow|vyomi/custom-models)(/|$)", p0):
         return "az-openai"   # Azure OpenAI data plane -> core/ai_models_core (deployment must exist in the ARM state)
     if re.match(r"^/(?![a-z0-9-]+_[A-Za-z0-9]+/)[^/]+/(v2\.0/\.well-known/openid-configuration|\.well-known/openid-configuration|discovery/(v2\.0/)?keys|discovery/instance)$", p0) \
@@ -871,6 +873,8 @@ class AwsWireRouter:
                 setattr(self.az_arm, _attr, _store)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
+        if getattr(self.az_arm, "sb_store", None) is None:
+            self.az_arm.sb_store = self.az_sb   # ARM-created queues/topics/subscriptions/rules are the entities the wire (and AMQP) serve
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         self.az_arm.graph_store = self.az_graph   # IMDS token issue -> Entra Managed identity sign-ins row
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets
@@ -2193,6 +2197,10 @@ class AwsWireRouter:
         if svc == "gcp-agentengine":
             from core import gcp_agentengine_core
             return gcp_agentengine_core.dispatch(self.s3, method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+
+        if svc == "az-contentsafety":
+            from core import ai_models_core
+            return ai_models_core.azure_contentsafety_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
 
         if svc == "az-openai":
             from core import ai_models_core
