@@ -7,7 +7,7 @@ import net from "node:net";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { createRequire } from "node:module";
-import { createSshTransport, createSshHub, connectSsh, forwardSsh, findCodespace, localPortBusy, freeLocalPort } from "./mesh-ssh.mjs";
+import { createSshTransport, createSshHub, connectSsh, forwardSsh, findCodespace, localPortBusy, freeLocalPort, isCoreName, missingCodespace } from "./mesh-ssh.mjs";
 
 const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
 const { WebSocketServer } = WS;
@@ -62,6 +62,42 @@ assert.ok(lt.every((r) => !("image" in r)), "no image names are shown");
 // Vyomi's own containers are not targets, however they are typed
 for (const n of ["simulator", "llm", "llm-chat", "vyomi-mesh-simulator-1", "vyomi-simulator"]) { const c0 = cmds.length; assert.equal(await t.resolve(n), null, n); assert.ok(!cmds.slice(c0).some((c) => c.includes(" " + n + " 2>") || c.includes("ip " + n + ";")), "never looked up as itself: " + n); }
 assert.deepEqual(await t.resolve("vyomi-i-web", 22), { host: "10.0.0.5", port: 22 });   // the full user-container name works
+// `api`: the Mesh API only, i.e. the simulator's ports 9000 (HTTP) and 9443 (TLS) through the console's fixed lookup; nothing else
+assert.deepEqual(await t.resolve("api", 9000), { host: "10.0.0.2", port: 9000, reserved: "api" });
+assert.deepEqual(await t.resolve("api", 9443), { host: "10.0.0.2", port: 9443, reserved: "api" });
+for (const p of [22, 8080, 6443]) assert.equal(await t.resolve("api", p), null, "api never reaches port " + p);
+assert.ok(isCoreName("vyomi-mesh-simulator-1") && isCoreName("simulator") && isCoreName("llm-chat") && isCoreName("vyomi-mesh-llm-embed-1") && !isCoreName("api") && !isCoreName("web"));
+{ // a core name is refused with the way to the API; a non-API port on `api` is refused; neither touches the Codespace
+  let e1 = ""; const o1 = new PassThrough(); o1.on("data", (d) => { e1 += d; });
+  const boom = { resolve: async () => { throw new Error("must not be called"); } };
+  assert.equal(await (await forwardSsh("vyomi-mesh-simulator-1", { local: 0, remote: 9000, transport: boom, net, stderr: o1 })).done, 3);
+  assert.match(e1, /Vyomi's own Mesh software/); assert.match(e1, /vyomi-tunnel forward api \d+:9000/);
+  let e2 = ""; const o2 = new PassThrough(); o2.on("data", (d) => { e2 += d; });
+  assert.equal(await (await forwardSsh("api", { local: 0, remote: 22, transport: boom, net, stderr: o2 })).done, 2);
+  assert.match(e2, /only the Mesh API ports/);
+  // a failing Codespace lookup is reported as itself (seen live: a deleted Codespace was reported as "not found ... still starting")
+  let e3 = ""; const o3 = new PassThrough(); o3.on("data", (d) => { e3 += d; });
+  const gone = { resolve: async () => { throw new Error(missingCodespace("zany-engine-x")); } };
+  assert.equal(await (await forwardSsh("api", { local: 0, remote: 9000, transport: gone, net, stderr: o3 })).done, 1);
+  assert.match(e3, /Codespace zany-engine-x was not found .*unset it/); assert.doesNotMatch(e3, /still starting/);
+  // the local port is checked before the Codespace is asked (seen live: `forward ... 9000:9000` next to the appliance said "not found")
+  const held = net.createServer(); await new Promise((r) => held.listen(0, "127.0.0.1", r));
+  let e4 = ""; const o4 = new PassThrough(); o4.on("data", (d) => { e4 += d; });
+  assert.equal(await (await forwardSsh("api", { local: held.address().port, remote: 9000, transport: boom, net, stderr: o4 })).done, 1);
+  assert.match(e4, /already in use/); await new Promise((r) => held.close(r));
+}
+{ // gh answers 404 for a deleted Codespace: the transport says which one and how to fix it
+  const gh404 = (bin, args) => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); c.stdin = new PassThrough();
+    setImmediate(() => { c.stdout.end(); c.stderr.end("getting full codespace details: HTTP 404: Not Found (https://api.github.com/user/codespaces/zany?internal=true)\n"); setImmediate(() => c.emit("close", 1)); }); return c; };
+  const tz = createSshTransport({ codespace: "zany-engine-x", ghBin: "gh", spawn: gh404, keepaliveMs: 0 });
+  await assert.rejects(() => tz.resolve("api", 9000), /Codespace zany-engine-x was not found on your GitHub account/);
+  await assert.rejects(() => tz.list(), /was not found/);
+  tz.close();
+}
+{ // one free local port per suggestion: two rows never get the same port
+  const taken = new Set(); const a = await freeLocalPort(39000, net, taken); taken.add(a); const b = await freeLocalPort(39000, net, taken);
+  assert.notEqual(a, b);
+}
 // the user's Mesh Codespace is found automatically (newest running vyomi-mesh-*; never someone else's or an unrelated one)
 const lst = (rows) => (b, a) => { const c = new EventEmitter(); c.stdout = new PassThrough(); c.stderr = new PassThrough(); setImmediate(() => { c.stdout.end(JSON.stringify(rows)); c.emit("close", 0); }); return c; };
 assert.equal(await findCodespace("gh", lst([{ name: "other-app", state: "Available" }, { name: "vyomi-mesh-old", state: "Available", createdAt: "2026-11-01" },

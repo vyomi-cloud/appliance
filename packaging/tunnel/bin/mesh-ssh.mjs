@@ -26,6 +26,15 @@ const HOP = new Set(["connection", "keep-alive", "transfer-encoding", "upgrade",
 // Docs: docs/architecture/v4.0/MESH-SOFTWARE-PROTECTION.md. The same allow-list is enforced on the Codespace by `vyomi-gate`.
 export const USER_CONTAINER = /^(vyomi-i-[A-Za-z0-9][A-Za-z0-9._-]{0,60}|vyomi-k3s-[0-9a-f]{10})$/;
 const GATE = "/usr/local/sbin/vyomi-gate";
+// The one exception for Vyomi's own stack: `api` reaches the simulator's API ports (9000 HTTP, 9443 TLS) and nothing else, through
+// the same fixed lookup the console's API tunnel uses. That is the product a user pays for (SDKs, CLIs, Terraform on the laptop);
+// the shell, the files, other ports and the llm* containers stay out of reach.
+export const API_TARGET = "api";
+export const API_TLS_PORT = 9443;
+/** A name that means one of Vyomi's own Mesh containers (never a target): simulator, llm*, as typed or as compose names. */
+export const isCoreName = (name) => /^(vyomi-mesh-)?(simulator|llm(-[a-z]+)?)(-\d+)?$/i.test(String(name || ""));
+/** `gh` answered 404 for the Codespace: say which one and the likely cause. */
+export const missingCodespace = (cs) => `Codespace ${cs} was not found on your GitHub account (deleted?). If VYOMI_MESH_CODESPACE or --codespace names it, unset it to use your current Mesh (gh codespace list).`;
 /** Run `verb` through the Codespace's root-owned gate when it is installed; older Codespaces fall back to the plain docker command. */
 const viaGate = (verb, legacy) => `if [ -x ${GATE} ]; then sudo -n ${GATE} ${verb}; else ${legacy}; fi`;
 const dockerIp = (rawName) => viaGate(`ip ${rawName}`, `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' ${rawName} 2>/dev/null`);
@@ -112,7 +121,10 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
     }
     if (!codespace) { codespace = await findCodespace(ghBin, sp); log("using Codespace " + codespace); }
     dir = mkdtempSync(join(process.platform === "win32" ? tmpdir() : "/tmp", "vm-"));   // short: a unix ControlPath is limited to ~100 chars
-    const text = await collect(sp(ghBin, ["codespace", "ssh", "-c", codespace, "--config"], { stdio: ["ignore", "pipe", "pipe"] }));
+    const text = await collect(sp(ghBin, ["codespace", "ssh", "-c", codespace, "--config"], { stdio: ["ignore", "pipe", "pipe"] })).catch((e) => {
+      if (/HTTP 404|not found/i.test(e.message)) throw new Error(missingCodespace(codespace));
+      throw e;
+    });
     const m = /^Host\s+(\S+)/m.exec(text);
     if (!m) throw new Error("gh did not return an ssh config for this Codespace");
     const file = join(dir, "ssh_config");
@@ -147,6 +159,13 @@ export function createSshTransport({ codespace, spawn = nodeSpawn, ghBin = null,
   /** Where does <name> listen, from the Codespace host's point of view? Same names and fixed ports as mesh-dial's resolver. */
   async function resolve(name, port = 22) {
     const n = String(name || "").toLowerCase();
+    await ensureConfig();                                            // a gh / Codespace failure is reported as itself, not as "not found"
+    if (n === API_TARGET) {                                          // the Mesh API only: the simulator's two API ports, never a shell or another port
+      const p = Number(port) || simulatorPort;
+      if (p !== simulatorPort && p !== API_TLS_PORT) return null;
+      const s = await simulatorTarget();
+      return s ? { host: s.host, port: p, reserved: "api" } : null;
+    }
     if (n === "host" || n === "codespace") return { host: "127.0.0.1", port: hostSshPort, reserved: "host" };
     if (K3S.test(n)) { const ip = await containerIp(n); return ip ? { host: ip, port: 6443, reserved: "k3s" } : null; }
     if (n === "k3s") {
@@ -339,6 +358,7 @@ export function createSshHub({ WebSocketServer, WebSocket: WSClient = null, tran
 // ── CLI side: `vyomi-tunnel connect|forward` straight over the ssh transport (no relay, no token) ─────────────────────────────
 /** `connect`: pipe stdin/stdout to <name>:<port> in the Codespace. Resolves with the exit code (0 clean, 1 failed, 3 not found). */
 export async function connectSsh(name, { port = 22, transport, stdin = process.stdin, stdout = process.stdout, stderr = process.stderr } = {}) {
+  if (isCoreName(name)) { stderr.write(`vyomi-tunnel: ${name} is part of Vyomi's own Mesh software and cannot be reached. For the Mesh API: vyomi-tunnel forward api 9100:9000\n`); return 3; }
   let t; try { t = await transport.resolve(name, port); } catch (e) { stderr.write(`vyomi-tunnel: ${e.message}\n`); return 1; }
   if (!t) { stderr.write(`vyomi-tunnel: ${name}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.\n`); return 3; }
   let up; try { up = await transport.open(t.host, t.port); } catch (e) { stderr.write(`vyomi-tunnel: ${e.message}\n`); return 1; }
@@ -364,21 +384,26 @@ export async function localPortBusy(port, net = nodeNet) {
 
 /** The local port to suggest for forwarding <remote>: <remote> itself when free here, else the first free one of <remote>+100..+199
  *  (9000 -> 9100+, 9443 -> 9543+, the same rule as the vyomi MCP's forward hint). */
-export async function freeLocalPort(remote, net = nodeNet) {
-  if (!(await localPortBusy(remote, net))) return remote;
-  for (let p = remote + 100; p < remote + 200; p++) if (!(await localPortBusy(p, net))) return p;
+export async function freeLocalPort(remote, net = nodeNet, taken = new Set()) {
+  const free = async (p) => !taken.has(p) && !(await localPortBusy(p, net));
+  if (await free(remote)) return remote;
+  for (let p = remote + 100; p < remote + 200; p++) if (await free(p)) return p;
   return remote;
 }
 
 /** `forward`: listen on 127.0.0.1:<local>; each accepted socket is one ssh stream to <target>:<remote> inside the Codespace. */
 export async function forwardSsh(target, { local, remote, transport, net, stderr = process.stderr } = {}) {
-  const t = await transport.resolve(target, remote);
-  if (!t) { stderr.write(`vyomi-tunnel: ${target}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.\n`); return { close() {}, done: Promise.resolve(3), port: 0 }; }
-  if (local > 0 && await localPortBusy(local, net)) {
-    const alt = await freeLocalPort(remote, net);
-    stderr.write(`vyomi-tunnel: 127.0.0.1:${local} is already in use on this machine (another Vyomi or Docker stack?). Use another local port: vyomi-tunnel forward ${target} ${alt}:${remote}\n`);
-    return { close() {}, done: Promise.resolve(1), port: 0 };
+  const fail = (code, msg) => { stderr.write(`vyomi-tunnel: ${msg}\n`); return { close() {}, done: Promise.resolve(code), port: 0 }; };
+  if (isCoreName(target)) {
+    return fail(3, `${target} is part of Vyomi's own Mesh software and is not forwarded. For the Mesh API (SDKs, CLIs, Terraform): vyomi-tunnel forward api ${await freeLocalPort(9000, net)}:9000`);
   }
+  if (target === API_TARGET && remote !== 9000 && remote !== API_TLS_PORT) return fail(2, "api forwards only the Mesh API ports: 9000 (HTTP) and 9443 (TLS), e.g. vyomi-tunnel forward api 9100:9000");
+  if (local > 0 && await localPortBusy(local, net)) {                // a local check first: no Codespace round trip for a port that is taken here
+    return fail(1, `127.0.0.1:${local} is already in use on this machine (another Vyomi or Docker stack?). Use another local port: vyomi-tunnel forward ${target} ${await freeLocalPort(remote, net)}:${remote}`);
+  }
+  let t; try { t = await transport.resolve(target, remote); } catch (e) { return fail(1, e.message); }
+  if (!t && target === API_TARGET) return fail(3, "the Mesh API is not reachable: the simulator is not running in the Codespace. If the Mesh was just started or woken from idle it may still be starting: `vyomi-tunnel list mesh` shows the api row once it is up.");
+  if (!t) return fail(3, `${target}: not found in the Codespace. If it was just started or woken from idle, its mesh may still be starting: \`vyomi-tunnel list mesh\` lists it once it is up.`);
   const socks = new Set(); let finish; const done = new Promise((r) => { finish = r; });
   const srv = net.createServer(async (sock) => {
     socks.add(sock); sock.setNoDelay(true);

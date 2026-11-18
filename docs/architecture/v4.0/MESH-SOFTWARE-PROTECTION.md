@@ -20,8 +20,13 @@ and it is enforced in two places: on the Codespace (the real control) and in the
 |---|---|---|
 | `vyomi-i-*` VMs | shell, ssh, port forward | same |
 | `vyomi-k3s-*` | Kubernetes API via the tunnel | same |
-| `simulator`, `llm*` | never | fixed internal calls only (the console's API tunnel, the instance key) |
+| `simulator`, `llm*` | never by name | fixed internal calls only (the console's API tunnel, the instance key) |
+| the simulator's API ports (9000 HTTP, 9443 TLS) | `vyomi-tunnel forward api <local>:9000` (or `:9443`), nothing else | same fixed lookup (`compose simulator`) |
 | Images and config | never listed or readable | n/a |
+
+The API is the product a user pays for: SDKs, CLIs and Terraform on their laptop call it. `api` (owner decision 2026-11-19,
+branch `v4/mcp-codespace-followups`) reaches exactly those two ports of the simulator through the console's own lookup; no shell,
+no other port, no container name or IP is shown, and `llm*` stay out of reach.
 
 ## 4. Layers
 

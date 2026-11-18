@@ -224,7 +224,7 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
                           show what you can reach, and how
   ssh <name>.vyomi        connect to the Codespace, a Docker instance or k3s
   vyomi-tunnel forward <name> <local>:<remote>
-                          forward a port, e.g. forward k3s 6443:6443
+                          forward a port, e.g. forward api 9100:9000 (the Mesh API), forward k3s 6443:6443
   vyomi-tunnel gateway-backend <https origin>=<local origin>
                           let a Nano API Gateway reach your local backend (see: help gateway-backend)
   vyomi-tunnel reset <code>
@@ -316,8 +316,12 @@ If you set up SSH before this version, run 'vyomi-tunnel config' once to refresh
   forward: `vyomi-tunnel forward <name> <local>:<remote>
 
 Listen on 127.0.0.1:<local> and forward to <name>:<remote> in your Mesh Codespace.
+  vyomi-tunnel forward api 9100:9000     the Mesh API, for SDKs / CLIs / Terraform (http://127.0.0.1:9100)
+  vyomi-tunnel forward api 9543:9443     the Mesh API over TLS (Cosmos, Key Vault)
   vyomi-tunnel forward k3s 6443:6443
-  vyomi-tunnel forward host 2222:22`,
+  vyomi-tunnel forward host 2222:22
+Targets are your own VMs and k3s clusters, plus 'api' (the simulator's API ports 9000 and 9443 only). Vyomi's own containers
+(simulator, llm*) are not forwarded or listed. A local port that is already in use is refused, with a free one suggested.`,
   mcp: `vyomi-tunnel mcp
 
 Runs the Vyomi MCP server (vyomi-mcp, bundled with this package) on stdin/stdout, for Claude Code and other agents:
@@ -352,7 +356,7 @@ export async function main(argv) {
   if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { const topic = cmd === "help" ? rest[0] : (["-h", "--help", "-help", "-?"].includes(cmd) ? undefined : cmd); const t = topic && DETAILS[topic];
     if (topic && !t) { console.error(`vyomi-tunnel: no help for "${topic}".`); process.stdout.write(HELP); return 2; }
     process.stdout.write((t || HELP) + (t ? "\n" : "")); return cmd ? 0 : 2; }
-  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.3.0"); return 0; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.3.1"); return 0; }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
@@ -409,7 +413,7 @@ export async function main(argv) {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(code)) { console.error("usage: vyomi-tunnel reset <code>   (get a code in the Vyomi console: Setup Tunnel > Get install command; see `vyomi-tunnel help reset`)"); return 2; }
     const { createCredsSync } = await import("./creds-sync.mjs");
     try {
-      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.3.0" });
+      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.3.1" });
       const st = await cs.reset(code, os.hostname());
       console.log(st.state === "ok" ? `Done. The tunnel now uses access key ${st.key_id}.` : `The new key was saved (${st.key_id}) but the portal answered: ${st.error || st.state}.`);
       try { await fetch(`http://127.0.0.1:${process.env.RELAY_PORT || 8090}/reload`, { method: "POST", signal: AbortSignal.timeout(3000) }); console.log("The running tunnel reloaded it."); }
@@ -446,7 +450,10 @@ export async function main(argv) {
     if (kinds.some((k) => ["host", "instance", "k3s", "llm", "service"].includes(k))) {                    // Mesh also needs a plan that allows it
       const o = meshDown ? { error: auth.error } : await openMesh({ cs, configure: false });
       if (o.error) meshP = Promise.resolve({ err: o.error });
-      else { transport = o.transport; meshP = transport.list().then((ts) => ({ ts, cs: transport.codespace })).catch((e) => ({ err: e.message })); }
+      else {
+        transport = o.transport;
+        meshP = transport.list().then(async (ts) => ({ ts, cs: transport.codespace, api: !!(await transport.simulatorTarget().catch(() => null)) })).catch((e) => ({ err: e.message }));
+      }
     }
     const ssh = await import("./mesh-ssh.mjs");
     const port = process.env.RELAY_PORT || 8090;
@@ -457,20 +464,37 @@ export async function main(argv) {
       for (const d of h.dbs || []) rows.push({ where: "browser", name: d.db, type: "db", address: `127.0.0.1:${d.host_port}`, connect: `${d.engine || "db"} client -> 127.0.0.1:${d.host_port}` });
     } catch { notes.push(`local relay not running on :${port} (run: vyomi-tunnel)`); }
     const m = await meshP;
-    if (m && m.err) notes.push("mesh: " + m.err);
-    else if (m) for (const t of m.ts) {
-      // a free local port, as the MCP does: the offline appliance or another stack often holds :9000 / :6443 here
-      const fwd = async (r) => `vyomi-tunnel forward ${t.name} ${await ssh.freeLocalPort(r)}:${r}`;
-      const how = t.kind === "k3s" ? await fwd(6443) : t.ssh ? `ssh ${t.name}${SUFFIX}` : t.ports.length ? await fwd(t.ports[0]) : "";
-      rows.push({ where: "mesh", name: t.name, type: t.kind, address: t.ip ? t.ip + (t.ports[0] ? ":" + t.ports[0] : "") : "", connect: how });
-    }
-    transport?.close();
-    try { for (const f of fs.readdirSync(path.join(HOME, "forwards"))) {                       // active forwards (one file per running `forward`)
+    const fwds = [];                                                                           // running forwards (one file per `forward` process)
+    try { for (const f of fs.readdirSync(path.join(HOME, "forwards"))) {
       const fp = path.join(HOME, "forwards", f); let d; try { d = JSON.parse(fs.readFileSync(fp, "utf8")); } catch { continue; }
       let alive = true; try { process.kill(d.pid, 0); } catch { alive = false; }
       if (!alive) { try { fs.rmSync(fp); } catch { /* */ } continue; }
-      rows.push({ where: "local", name: `${d.target}`, type: "forward", address: `127.0.0.1:${d.local}`, connect: `-> ${d.target}:${d.remote} (pid ${d.pid})` });
+      // A forward to another Codespace (deleted, or replaced by a new Mesh) is stale: it answers on its port but reaches nothing current.
+      d.stale = !!(m && m.cs && d.codespace && d.codespace !== m.cs);
+      fwds.push(d);
     } } catch { /* none */ }
+    const taken = new Set(fwds.map((d) => d.local));                                           // one free local port per suggestion
+    const fwd = async (name, r) => {
+      const live = fwds.find((d) => !d.stale && d.target === name && d.remote === r);
+      if (live) return `already forwarded: 127.0.0.1:${live.local}`;
+      const p = await ssh.freeLocalPort(r, undefined, taken); taken.add(p);                   // the offline appliance or another stack often holds :9000 / :6443
+      return `vyomi-tunnel forward ${name} ${p}:${r}`;
+    };
+    if (m && m.err) notes.push("mesh: " + m.err);
+    else if (m) {
+      // The Mesh API (simulator ports 9000 / 9443 only): the one way SDKs, CLIs and Terraform on this machine reach a Codespace Mesh.
+      if (m.api) rows.push({ where: "mesh", name: ssh.API_TARGET, type: "service", address: "", connect: await fwd(ssh.API_TARGET, 9000) });
+      for (const t of m.ts) {
+        const how = t.kind === "k3s" ? await fwd(t.name, 6443) : t.ssh ? `ssh ${t.name}${SUFFIX}` : t.ports.length ? await fwd(t.name, t.ports[0]) : "";
+        rows.push({ where: "mesh", name: t.name, type: t.kind, address: t.ip ? t.ip + (t.ports[0] ? ":" + t.ports[0] : "") : "", connect: how });
+      }
+    }
+    transport?.close();
+    for (const d of fwds) {
+      const r = { where: "local", name: `${d.target}`, type: "forward", address: `127.0.0.1:${d.local}`, connect: `-> ${d.target}:${d.remote} (pid ${d.pid})` };
+      if (d.stale) r.connect += ` STALE: for Codespace ${d.codespace}, not your current Mesh; stop it: kill ${d.pid}`;   // rows keep the schema 1 keys
+      rows.push(r);
+    }
     const out = rows.filter((r) => kinds.includes(r.type));
     if (out.some((r) => r.connect.startsWith("ssh ") && r.connect.endsWith(SUFFIX)) && !sshConfigured()) notes.push(`'ssh <name>${SUFFIX}' needs a one-time setup: vyomi-tunnel config`);
     if (json) { console.log(JSON.stringify({ schema: 1, rows: out, notes }, null, 2)); return out.length ? 0 : 1; }

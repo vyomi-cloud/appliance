@@ -31,9 +31,11 @@ ask the user, never read the file.
    (the same rows as `vyomi-tunnel list mesh`). It lists the host, instances,
    k3s, LLM and services, each with the command to connect. Then propose, for the user to run **in another terminal** (forwards
    are long-running; never start one yourself):
-   - the API: the exact `vyomi-tunnel forward …` command from the
-     `vyomi_status` hint (it names the target and picks a free local port,
-     e.g. `9100:9000` when an offline appliance already holds :9000),
+   - the API: the exact `vyomi-tunnel forward api …` command from the
+     `vyomi_status` hint (it picks a free local port, e.g. `9100:9000` when an
+     offline appliance already holds :9000; `…:9443` for the TLS endpoint).
+     `api` is the only way to the Mesh API: Vyomi's own containers
+     (simulator, llm*) are never forwarded, so never suggest them by name,
    - Kubernetes, when the project uses it: `vyomi-tunnel forward <k3s target> 6443:6443`,
      then `kubectl --server https://127.0.0.1:6443` with the kubeconfig the
      console gives,
@@ -44,7 +46,9 @@ ask the user, never read the file.
      config; a `vyomi_reach` note says when it is missing). VM logins use the
      mesh's own key and user: `vyomi-tunnel help ssh`.
    Call `vyomi_status` again: the Codespace home is `serving` once the API
-   forward is up.
+   forward is up. If it lists `stale_forwards` (a forward left over from a
+   deleted or replaced Codespace), tell the user to stop it with the `kill`
+   command shown; it answers on its port but reaches nothing.
 4. **Continue with `vyomi-setup`** using `home: mesh`: scan, env, propose, ask,
    write, verify. On a mesh, Cosmos DB and Key Vault use TLS on `:9443` (trust
    its certificate), and Pub/Sub and Firestore are separate gRPC emulators, as
@@ -70,3 +74,6 @@ ask the user, never read the file.
   through Bash, not even in the background; give the exact command and let the
   user run it in their own terminal.
 - Never read `~/.vyomi/credentials` or any key file; ask the user instead.
+- When a home is not reachable or not serving, quote the reason from its
+  `detail` (`error`, `note` or `notes`) word for word, then the next step; do
+  not summarise it as "not answering".
