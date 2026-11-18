@@ -191,9 +191,13 @@ def vault_names(arm_state) -> list:
     return out
 
 
-def infer_vault_for_request(arm_state, sec_store, key_store, cert_store, kind: str, path: str) -> str:
-    """infer_vault() with the three Key Vault stores as the probe (`kind` = secrets|keys|certificates|deleted<kind>)."""
+def infer_vault_for_request(arm_state, sec_store, key_store, cert_store, kind: str, path: str, headers: dict | None = None) -> str:
+    """infer_vault() with the three Key Vault stores as the probe (`kind` = secrets|keys|certificates|deleted<kind>).
+    Only for Azure SDK traffic (x-ms-client-request-id / azsdk user agent): header-less substrate callers keep the legacy shared namespace."""
     import re
+    lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+    if not ("x-ms-client-request-id" in lh or "azsdk" in str(lh.get("user-agent", "")).lower()):
+        return ""
     try:
         from core import azure_keyvault_keys_core as kvk
     except ImportError:  # pragma: no cover - Pyodide flat layout

@@ -91,9 +91,21 @@ def main():
         return "2 versions"
     step("keys: rotate_key + versions", rotate)
 
+    def aes():
+        k = kc.create_oct_key("dek-key", size=256, hardware_protected=True)
+        assert "oct" in str(k.key.kty).lower(), repr(k.key.kty)
+        cc = CryptographyClient(k.id, Cred(), verify_challenge_resource=False)
+        e = cc.encrypt(EncryptionAlgorithm.a256_gcm, b"ledger", additional_authenticated_data=b"aad")
+        assert e.iv and e.tag and cc.decrypt(EncryptionAlgorithm.a256_gcm, e.ciphertext, iv=e.iv, authentication_tag=e.tag, additional_authenticated_data=b"aad").plaintext == b"ledger"
+        w = cc.wrap_key(KeyWrapAlgorithm.aes_256, os.urandom(32))
+        assert cc.unwrap_key(KeyWrapAlgorithm.aes_256, w.encrypted_key)
+        return "A256GCM + A256KW"
+    step("crypto: oct-HSM AES-GCM encrypt/decrypt and AES-KW wrap/unwrap", aes)
+
     def policy():
         p = kc.get_key_rotation_policy("ledger-key")
-        p = kc.update_key_rotation_policy("ledger-key", lifetime_actions=[KeyRotationLifetimeAction(KeyRotationPolicyAction.rotate, time_after_create="P90D")], expires_in="P180D")
+        from azure.keyvault.keys import KeyRotationPolicy
+        p = kc.update_key_rotation_policy("ledger-key", KeyRotationPolicy(), lifetime_actions=[KeyRotationLifetimeAction(KeyRotationPolicyAction.rotate, time_after_create="P90D")], expires_in="P180D")
         assert kc.get_key_rotation_policy("ledger-key").expires_in == "P180D"
     step("keys: rotation policy get/update", policy)
 
