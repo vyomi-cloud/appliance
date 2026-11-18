@@ -117,7 +117,7 @@ G = lambda path, headers=None, now=1000.0: gw.handle(state, svc, "GET", path, {}
 r = G("/fn1/hello")
 check("gateway request is REALLY routed to the function and returns its output", r["status"] == 200 and json.loads(r["body"])["greeting"] == "hola", r)
 check("gateway without subscription key -> 401", gw.handle(state, svc, "GET", "/fn1/hello", {}, {}, b"", fetch=fetch, now=1000.0)["status"] == 401)
-pol = "<policies><inbound><base /><rate-limit calls=\"2\" renewal-period=\"60\" /><ip-filter action=\"allow\"><address>10.0.0.1</address></ip-filter><set-header name=\"x-added\" exists-action=\"override\"><value>yes</value></set-header></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"
+pol = "<policies><inbound><base /><rate-limit calls=\"2\" renewal-period=\"60\" /><ip-filter action=\"allow\"><address>127.0.0.1</address></ip-filter><cache-lookup vary-by-developer=\"false\" vary-by-developer-groups=\"false\" /><set-header name=\"x-added\" exists-action=\"override\"><value>yes</value></set-header></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>"
 call("PUT", AP + "/apis/fn1/policies/policy", {"properties": {"format": "xml", "value": pol}}, "2022-08-01")
 r1, r2, r3 = G("/fn1/hello", now=2000.0), G("/fn1/hello", now=2001.0), G("/fn1/hello", now=2002.0)
 check("APIM policy rate-limit REALLY blocks the 3rd call (429)", (r1["status"], r2["status"], r3["status"]) == (200, 200, 429), (r1["status"], r2["status"], r3["status"]))
@@ -126,8 +126,8 @@ _f = fetch
 fetch = lambda m, u, h, d: (SEEN.append(dict(h)), _f(m, u, h, d))[1]
 G("/fn1/hello", now=3000.0)
 check("APIM set-header policy REALLY reaches the backend request", any(h.get("x-added") == "yes" for h in SEEN), SEEN)
-check("unimplemented policy elements (ip-filter) are reported, never silently passed",
-      "ip-filter" in (r1["headers"].get("x-vyomi-apim-skipped-policies") or ""), r1["headers"])
+check("unimplemented policy elements (cache-lookup; ip-filter is now enforced) are reported, never silently passed",
+      "cache-lookup" in (r1["headers"].get("x-vyomi-apim-skipped-policies") or ""), r1["headers"])
 call("PATCH", f"{W}/sites/fn1/config/web", {"properties": {"apiManagementConfig": None}})
 check("unlinking removes the imported API", not [k for k in state if k.startswith(AP.lower() + "/apis/fn1")])
 
