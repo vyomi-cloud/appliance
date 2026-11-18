@@ -1305,17 +1305,17 @@
       "Topics_CreateOrUpdate",
       "Subscriptions_CreateOrUpdate"
      ],
-     "capabilities": 27,
+     "capabilities": 29,
      "capability_service": "servicebus",
      "data_plane": "in-process broker under /azure-data/servicebus/{namespace}/{entity}/messages",
      "id": "servicebus",
      "level_counts": {
       "nano": {
-       "full": 12,
+       "full": 14,
        "limited": 15
       },
       "offline": {
-       "full": 12,
+       "full": 14,
        "limited": 15
       }
      },

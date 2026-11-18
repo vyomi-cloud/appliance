@@ -864,6 +864,8 @@ class AwsWireRouter:
                 setattr(self.az_arm, _attr, _store)
         self.az_acr = s.get("az_acr") or AcrRegistryStore()   # Container Registry repositories/tags/manifests
         self.az_arm.acr_store = self.az_acr
+        if getattr(self.az_arm, "sb_store", None) is None:
+            self.az_arm.sb_store = self.az_sb   # ARM-created queues/topics/subscriptions/rules are the entities the wire (and AMQP) serve
         self.az_graph = s.get("az_graph") or az_graph.GraphStore()   # Microsoft Graph (Entra ID)
         self.az_arm.graph_store = self.az_graph   # IMDS token issue -> Entra Managed identity sign-ins row
         # EventBridge shares the messaging store (rules + SQS delivery); Lambda gets

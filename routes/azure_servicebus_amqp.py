@@ -44,9 +44,10 @@ def register(app) -> None:
         if not port and not tls:
             return
         # Two Service Bus AMQP stacks exist after the v3.0.47 -> v4 merge and they would race for 5672/5671.
-        # Default runtime listener = core/servicebus_amqp (lease schema, mounted in server.py). This legacy
-        # listener starts only when explicitly selected. See V4.0.0-KNOWN-ISSUES.md (SB-AMQP).
-        if os.environ.get("VYOMI_SB_AMQP_STACK", "lease").strip().lower() != "legacy":
+        # Default listener = THIS full engine (queues, topics, live delivery, sessions, scheduling, rules, $management) on
+        # the appliance router's store, i.e. the one ARM + the REST wire + the console also use. The older single-connection
+        # core/servicebus_amqp "lease" stack (separate sqlite store) runs only with VYOMI_SB_AMQP_STACK=lease.
+        if os.environ.get("VYOMI_SB_AMQP_STACK", "").strip().lower() == "lease":
             return
         try:
             from core.amqp_server import AmqpServer

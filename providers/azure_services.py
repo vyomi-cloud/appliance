@@ -1371,8 +1371,13 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         blocked = _core_lock_block(rid, full_type, for_delete=True)    # CanNotDelete / ReadOnly locks
         if blocked is not None:
             return blocked
+        _sb_kids = ([r for k, r in list(_state.items()) if k.startswith(key + "/") and isinstance(r, dict)
+                     and "microsoft.servicebus/" in str(r.get("_type") or "").lower()]
+                    if full_type.lower() == "microsoft.servicebus/namespaces" else [])
         rec = _state.pop(key, None)
         _ext.on_delete(_state, rec)
+        for _kid in _sb_kids:      # deleting a namespace deletes its entities
+            _deprovision_on_delete(str(_kid.get("_type") or ""), _kid)
         _deprovision_on_delete(full_type, rec)
         if rec is not None and full_type.lower() == _ext.VM_T:
             from core import azure_compute_disks_vm as _vmd
@@ -2076,6 +2081,13 @@ def _cascade_rg_delete_runtime(rg: str) -> None:
 def _deprovision_on_delete(full_type: str, rec: dict | None) -> None:
     if not rec:
         return
+    if "microsoft.servicebus/" in str(full_type or rec.get("type") or "").lower():
+        try:   # an ARM-deleted queue/topic/subscription/rule leaves the shared store the REST wire + AMQP serve
+            from core import azure_servicebus_core as _sbc
+            from core.appliance_stores import az_servicebus_store
+            _sbc.arm_drop(az_servicebus_store(), dict(rec, _type=rec.get("_type") or full_type))
+        except Exception:
+            pass
     try:
         from core import azure_dataplane as _dp
         _dp.on_delete(full_type, rec)

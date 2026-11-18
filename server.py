@@ -25518,8 +25518,13 @@ except Exception as _e:   # never let this break appliance boot
 
 # ── AMQP 1.0 listener for Azure Service Bus emulation (Phase B) ─────
 try:
-    from core.servicebus_amqp import mount as _mount_amqp_servicebus
-    _mount_amqp_servicebus(app)
+    # Two Service Bus AMQP stacks exist (V4.0.0-KNOWN-ISSUES AZ-11). The default listener is the full engine in
+    # routes/azure_servicebus_amqp.py (core/azure_servicebus_amqp.py: queues + topics, live delivery to attached
+    # receivers, sessions, scheduled messages, rules, $management) on the SAME store as ARM + the REST wire + the console.
+    # The older single-connection "lease" stack mounts only with VYOMI_SB_AMQP_STACK=lease.
+    if os.environ.get("VYOMI_SB_AMQP_STACK", "").strip().lower() == "lease":
+        from core.servicebus_amqp import mount as _mount_amqp_servicebus
+        _mount_amqp_servicebus(app)
 except Exception as _e:
     print(f"[servicebus_amqp] AMQP mount skipped: {_e}")
 

@@ -967,3 +967,142 @@ def rotate_cmk(store, ns_rec, kv_store=None):
     if env is not None and kv is not None:
         store._sb_sealed = cmk.rewrap(kv, env, cmk_key_uri(ns_rec))
     return getattr(store, "_sb_sealed", None)
+
+
+# ── ARM -> data plane: ONE entity model (lane az-ref-messaging) ──────────────────────────────────────────────
+# `azure-mgmt-servicebus` writes ARM records (Microsoft.ServiceBus/namespaces/{queues,topics,topics/subscriptions,
+# topics/subscriptions/rules}); the REST wire, the AMQP 1.0 listener and the console all read THIS store. The ARM
+# engine calls arm_sync()/arm_drop() on every write/delete so an entity created through ARM is immediately usable
+# over AMQP and REST (and one created over the REST wire is already in the shared store the AMQP engine serves).
+# The store is shared by every namespace (the data wire carries no namespace), same as the rest of this module.
+import re as _re
+
+ARM_TYPES = ("microsoft.servicebus/namespaces/queues", "microsoft.servicebus/namespaces/topics",
+             "microsoft.servicebus/namespaces/topics/subscriptions",
+             "microsoft.servicebus/namespaces/topics/subscriptions/rules")
+_ISO_DUR = _re.compile(r"^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$")
+
+
+def iso_duration_seconds(v):
+    """ARM durations are ISO 8601 ('PT1M', 'P14D', 'P10675199DT2H48M5.4775807S' = unlimited); the store keeps seconds."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    m = _ISO_DUR.match(str(v or "").strip())
+    if not m or not any(m.groups()):
+        return None
+    d, h, mi, s = m.groups()
+    return int(d or 0) * 86400 + int(h or 0) * 3600 + int(mi or 0) * 60 + float(s or 0)
+
+
+def _arm_options(p: dict) -> dict:
+    out = {}
+    ld = iso_duration_seconds(p.get("lockDuration"))
+    if ld:
+        out["lock_duration"] = ld
+    if p.get("maxDeliveryCount") is not None:
+        out["max_delivery_count"] = int(p["maxDeliveryCount"])
+    for arm_k, key in (("requiresSession", "requires_session"), ("requiresDuplicateDetection", "requires_duplicate_detection"),
+                       ("deadLetteringOnMessageExpiration", "dead_lettering_on_expiration")):
+        if p.get(arm_k) is not None:
+            out[key] = bool(p[arm_k])
+    ttl = iso_duration_seconds(p.get("defaultMessageTimeToLive"))
+    if ttl and ttl < 10 ** 9:          # 'unlimited' (P10675199D...) = no TTL
+        out["default_ttl"] = ttl
+    return out
+
+
+def _arm_rule(name: str, p: dict) -> dict:
+    ft = str(p.get("filterType") or ("CorrelationFilter" if p.get("correlationFilter") else "SqlFilter"))
+    rule = {"name": name, "type": "true", "sql": "1=1", "action": None}
+    if ft.lower() == "correlationfilter":
+        c = p.get("correlationFilter") or {}
+        rule.update(type="correlation", correlation={
+            "correlation_id": c.get("correlationId"), "message_id": c.get("messageId"), "to": c.get("to"),
+            "reply_to": c.get("replyTo"), "subject": c.get("label"), "session_id": c.get("sessionId"),
+            "reply_to_session_id": c.get("replyToSessionId"), "content_type": c.get("contentType"),
+            "properties": dict(c.get("properties") or {}) or None})
+    else:
+        expr = str((p.get("sqlFilter") or {}).get("sqlExpression") or "1=1")
+        rule.update(type="sql", sql=expr)
+        if expr.strip() == "1=1":
+            rule["type"] = "true"
+    act = (p.get("action") or {}).get("sqlExpression")
+    if act:
+        rule["action"] = str(act)
+    return rule
+
+
+def _arm_path(rec: dict):
+    """-> (kind, [entity names under the namespace]) from the record's ARM id."""
+    rid = str(rec.get("id") or "")
+    i = rid.lower().find("/namespaces/")
+    if i < 0:
+        return None, []
+    segs = [s for s in rid[i + len("/namespaces/"):].split("/") if s]
+    # {ns}/queues/{q} | {ns}/topics/{t} | {ns}/topics/{t}/subscriptions/{s} | .../rules/{r}
+    if len(segs) == 3 and segs[1].lower() == "queues":
+        return "queue", [segs[2]]
+    if len(segs) == 3 and segs[1].lower() == "topics":
+        return "topic", [segs[2]]
+    if len(segs) == 5 and segs[1].lower() == "topics" and segs[3].lower() == "subscriptions":
+        return "subscription", [segs[2], segs[4]]
+    if len(segs) == 7 and segs[1].lower() == "topics" and segs[3].lower() == "subscriptions" and segs[5].lower() == "rules":
+        return "rule", [segs[2], segs[4], segs[6]]
+    return None, []
+
+
+def _new_sub(name: str) -> dict:
+    return {"name": name, "messages": [], "dead_letter": [], "lock_duration": DEFAULT_LOCK_DURATION,
+            "max_delivery_count": DEFAULT_MAX_DELIVERY_COUNT, "created": _now_iso()}
+
+
+def arm_sync(store, rec: dict) -> None:
+    """Mirror an ARM queue/topic/subscription/rule record into the shared message store (create or update options;
+    messages and settlement state are never touched)."""
+    if store is None or str(rec.get("_type") or rec.get("type") or "").lower() not in ARM_TYPES:
+        return
+    kind, names = _arm_path(rec)
+    if not kind:
+        return
+    p = rec.get("properties") or {}
+    opts = _arm_options(p)
+    t = store.get_topic(names[0])
+    if t is None:      # (for sub/rule: ARM requires the parent, but the store may have been reset)
+        t = {"name": names[0], "subscriptions": {}, "messages": [], "dead_letter": [], "created": _now_iso()}
+    if kind in ("queue", "topic"):
+        t.update(opts)
+    else:
+        s = t.setdefault("subscriptions", {}).setdefault(names[1], _new_sub(names[1]))
+        if kind == "subscription":
+            s.update(opts)
+        else:
+            try:
+                from core import azure_servicebus_rules as _rules
+            except ImportError:  # pragma: no cover - Pyodide flat layout
+                import azure_servicebus_rules as _rules  # type: ignore
+            if s.get("rules") is None:
+                s["rules"] = _rules.default_rules()
+            s["rules"][names[2]] = _arm_rule(names[2], p)
+    store.put_topic(names[0], t)
+    store.persist()
+
+
+def arm_drop(store, rec: dict) -> None:
+    """Delete counterpart of arm_sync."""
+    if store is None or str(rec.get("_type") or rec.get("type") or "").lower() not in ARM_TYPES:
+        return
+    kind, names = _arm_path(rec)
+    if kind in ("queue", "topic"):
+        store.drop_topic(names[0])
+    elif kind in ("subscription", "rule"):
+        t = store.get_topic(names[0])
+        s = ((t or {}).get("subscriptions") or {}).get(names[1])
+        if s is None:
+            return
+        if kind == "subscription":
+            t["subscriptions"].pop(names[1], None)
+        elif isinstance(s.get("rules"), dict):
+            s["rules"].pop(names[2], None)
+    else:
+        return
+    store.persist()

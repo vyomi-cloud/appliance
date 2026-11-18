@@ -2421,8 +2421,12 @@ class AzureArm:
                     blocked = sqlbk.before_delete(self.state, _net_rec)
                     if blocked:
                         return blocked
+            _sb_kids = [r for k, r in self.state.items() if k.startswith(key + "/") and "microsoft.servicebus/" in str(r.get("_type") or "").lower()]
             rec = self.state.pop(key, None)
             if rec is not None:
+                for _k in _sb_kids:
+                    self._sb_mirror(_k, drop=True)
+                self._sb_mirror(rec, drop=True)
                 self._aks_real_delete(rec)
             if rec is not None and aksmon_engine.handles(rec):
                 aksmon_engine.cleanup(self.state, rec)
@@ -4040,7 +4044,36 @@ class AzureArm:
             self.state[key] = rec                      # visible to the pool reconcile below
             self._aks_real_pool_changed(rec)
         self.state[key] = rec
+        self._sb_mirror(rec)
         return _ok(_view(rec), status=200 if existed else 201)
+
+    def _sb_mirror(self, rec, drop=False):
+        """Service Bus queues/topics/subscriptions/rules written through ARM land in the shared message store the
+        REST wire + AMQP 1.0 listener serve (core/azure_servicebus_core.arm_sync), so they are usable at once."""
+        store = getattr(self, "sb_store", None)
+        if store is None or "microsoft.servicebus/" not in str(rec.get("_type") or "").lower():
+            return
+        try:
+            try:
+                from core import azure_servicebus_core as _sbc
+            except ImportError:   # Nano flat layout
+                import azure_servicebus_core as _sbc
+            new_sub = False
+            if not drop and str(rec.get("_type") or "").lower() == "microsoft.servicebus/namespaces/topics/subscriptions":
+                kind, names = _sbc._arm_path(rec)
+                new_sub = names[1] not in ((store.get_topic(names[0]) or {}).get("subscriptions") or {})
+            (_sbc.arm_drop if drop else _sbc.arm_sync)(store, rec)
+            if new_sub:   # real Service Bus gives every new subscription a visible `$Default` (true filter) rule
+                rkey = (rec["id"] + "/rules/$Default").lower()
+                if rkey not in self.state:
+                    self.state[rkey] = {"id": rec["id"] + "/rules/$Default", "name": "$Default",
+                                        "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions/rules",
+                                        "_type": "Microsoft.ServiceBus/namespaces/topics/subscriptions/rules",
+                                        "_sub": rec.get("_sub"), "_rg": rec.get("_rg"), "_created": _now(),
+                                        "properties": {"action": {}, "filterType": "SqlFilter",
+                                                       "sqlFilter": {"sqlExpression": "1=1", "compatibilityLevel": 20, "requiresPreprocessing": True}}}
+        except Exception:
+            pass   # the control plane never fails because the data-plane mirror could not be updated
 
     # ── REAL Kubernetes (k3s) behind an AKS cluster: only when the offline appliance installed kube_state.CLUSTER_RUNTIME
     # (VYOMI_K8S_BACKEND=k3s). The substrate-free core never imports Docker; it only calls the hook. ──
@@ -5133,6 +5166,7 @@ class AzureArm:
             for k in [k for k, r in self.state.items()
                       if "/__event__/" not in k
                       and ((r.get("_sub") == sub and (r.get("_rg") or "") == rg) or k.startswith(key + "/providers/"))]:
+                self._sb_mirror(self.state[k], drop=True)
                 del self.state[k]
                 removed_any = True
             if not (existed or removed_any or implicit):
