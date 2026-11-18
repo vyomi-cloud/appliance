@@ -737,7 +737,10 @@ def _is_arm_path(path):
     subscription, the tenant list, and the LRO poll URLs AzureArm hands out.
     Checked before the S3 default so ARM never answers with S3 XML (#176)."""
     p = path.split("?", 1)[0]
-    return p in ("/subscriptions", "/tenants") or p.startswith(("/subscriptions/", "/api/azure/operations/"))
+    # tenant-level Resource Graph (`POST /providers/Microsoft.ResourceGraph/resources`, az graph / azure-mgmt-resourcegraph) has no
+    # /subscriptions prefix: without this it fell through to the S3 default (405 MethodNotAllowed) - endurance F206
+    return (p in ("/subscriptions", "/tenants") or p.startswith(("/subscriptions/", "/api/azure/operations/"))
+            or p.lower().startswith("/providers/microsoft.resourcegraph/"))
 
 
 def _lower_headers(headers):
