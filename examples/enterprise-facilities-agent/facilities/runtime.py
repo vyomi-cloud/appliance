@@ -56,7 +56,7 @@ class Ctx:
             self._c[svc] = boto3.client(svc, region_name=self.region, endpoint_url=self.endpoint,
                                         aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "test"),
                                         aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
-                                        config=Config(retries={"max_attempts": 1}, connect_timeout=5, read_timeout=60))
+                                        config=Config(retries={"max_attempts": 1}, connect_timeout=5, read_timeout=int(__import__("os").environ.get("FACILITIES_READ_TIMEOUT", "60"))))
         return self._c[svc]
 
     def blocked_lane(self, e, lane):
