@@ -313,10 +313,15 @@ type tunnelList struct {
 
 // runTunnelList runs `vyomi-tunnel list <scope> --json` with a hard timeout and a 1 MB stdout cap. The
 // result is parsed even on exit 1 (no rows, JSON still printed); without JSON the first stderr line is the note.
-func runTunnelList(ctx context.Context, bin, scope string) (*tunnelList, string) {
+func runTunnelList(ctx context.Context, bin, scope string, quick bool) (*tunnelList, string) {
 	ctx, cancel := context.WithTimeout(ctx, tunnelProbeTimeout)
 	defer cancel()
 	args := []string{"list", scope, "--json"}
+	if quick {
+		// vyomi-tunnel >= 1.3.2: the Mesh part from the signed session alone (API + forwards, no ssh; ~1 s instead of 7-9 s).
+		// Older tunnels ignore the flag and list everything.
+		args = append(args, "--quick")
+	}
 	var cmd *exec.Cmd
 	if strings.HasSuffix(bin, ".mjs") || strings.HasSuffix(bin, ".js") {
 		cmd = exec.CommandContext(ctx, "node", append([]string{bin}, args...)...)
@@ -523,7 +528,7 @@ func (s *mcpServer) probeHomes(ctx context.Context) *homeProbe {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			l, n := runTunnelList(ctx, bin, "mesh")
+			l, n := runTunnelList(ctx, bin, "mesh", true)
 			mu.Lock()
 			list, listNote = l, n
 			mu.Unlock()

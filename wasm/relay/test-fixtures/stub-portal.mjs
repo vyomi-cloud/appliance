@@ -3,7 +3,7 @@ import http from "node:http";
 import { sign, sha256hex } from "../credentials.mjs";
 export const KEYS = { VYKAPRO: { secret: "pro-secret", tier: "pro", allowed: true }, VYKAFREE: { secret: "free-secret", tier: "free", allowed: false },
                       VYKAREVOKED: { secret: "r", revoked: true } };
-export function startStubPortal({ codespace = "vyomi-mesh-stub", sessionEnd = null, ttl = 900, github = "gho_stub", port = 0 } = {}) {
+export function startStubPortal({ codespace = "vyomi-mesh-stub", meshState = "Available", sessionEnd = null, ttl = 900, github = "gho_stub", port = 0 } = {}) {
   const calls = [];
   const srv = http.createServer((req, res) => {
     const b = []; req.on("data", (d) => b.push(d)); req.on("end", () => {
@@ -17,7 +17,7 @@ export function startStubPortal({ codespace = "vyomi-mesh-stub", sessionEnd = nu
       if (k.revoked) return err(403, "KeyRevoked");
       const now = Math.floor(Date.now() / 1000);
       send(200, { session: { expires_at: now + ttl, tier: k.tier, allowed: k.allowed, session_end: k.allowed ? sessionEnd : null,
-        mesh: k.allowed && codespace ? { codespace, state: "Available" } : null, github: k.allowed && github ? { token: github, expires_at: now + 3600 } : null } });
+        mesh: k.allowed && codespace ? { codespace, state: meshState } : null, github: k.allowed && github ? { token: github, expires_at: now + 3600 } : null } });
     });
   });
   return new Promise((r) => srv.listen(port, "127.0.0.1", () => r({ url: `http://127.0.0.1:${srv.address().port}`, calls, close: () => srv.close() })));

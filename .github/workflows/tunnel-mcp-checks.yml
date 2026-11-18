@@ -62,7 +62,7 @@ jobs:
       - name: Tunnel launcher + list contract (node --test)
         env:
           WS_PKG: ${{ runner.temp }}/np/node_modules/ws
-        run: node --test wasm/relay/test-mcp-launch.mjs wasm/relay/test-list-json.mjs
+        run: node --test wasm/relay/test-mcp-launch.mjs wasm/relay/test-list-json.mjs wasm/relay/test-tunnel-prune.mjs
 
       # The real tunnel and the real MCP together against a fake Codespace: hint -> the user's forward -> serving.
       # 1.3.0 shipped with this path broken because only canned `list` JSON fed the MCP.

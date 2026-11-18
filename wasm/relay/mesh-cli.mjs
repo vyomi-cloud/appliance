@@ -229,6 +229,8 @@ const HELP = `vyomi-tunnel - connect your machine to Vyomi
                           let a Nano API Gateway reach your local backend (see: help gateway-backend)
   vyomi-tunnel reset <code>
                           re-pair this tunnel with your Vyomi account (see: help reset)
+  vyomi-tunnel prune [--yes]
+                          delete stopped Mesh Codespaces you no longer use (see: help prune)
   vyomi-tunnel            start the local relay for the Nano console
 
 Agents:
@@ -239,6 +241,12 @@ Get one: 'vyomi-tunnel help credentials'.
 Log in to a Mesh VM over SSH: 'vyomi-tunnel help ssh'. Something failing? 'vyomi-tunnel help troubleshoot'.
 `;
 const DETAILS = {
+  prune: `vyomi-tunnel prune [--yes]
+
+Lists your stopped Mesh Codespaces (vyomi-mesh-*, state Shutdown or Failed): each keeps its disk on your GitHub
+Codespaces storage until it is deleted. Without --yes it only lists them; with --yes it deletes them.
+Never touched: a running or starting Mesh, your current Mesh (the one your Vyomi session names), the newest Mesh, and any
+Codespace that is not a Mesh. Deleting a Mesh Codespace removes what was in it; start a new Mesh from the Vyomi console.`,
   reset: `Re-pair this tunnel with your Vyomi account (new access key, same machine)
 
   vyomi-tunnel reset <code>
@@ -286,7 +294,8 @@ Add a type to narrow it:
   vyomi-tunnel list nano vm        (also: api, db)
   vyomi-tunnel list mesh k3s       (also: host, instance, llm, service, forward)
 A type alone works too: vyomi-tunnel list vm
---json prints {schema: 1, rows: [{where, name, type, address, connect}], notes: [...]} (exit 0 rows, 1 none, 2 no key).`,
+--json prints {schema: 1, rows: [{where, name, type, address, connect}], notes: [...]} (exit 0 rows, 1 none, 2 no key).
+--quick answers the Mesh part from your Vyomi session alone (no ssh): the API and your forwards, not VMs / k3s / LLMs.`,
   ssh: `Log in to a Mesh VM over SSH
 
 1. See your Mesh and its VMs:
@@ -407,6 +416,31 @@ export async function main(argv) {
     console.log(`mapped ${m.from}  ->  ${m.to}\n(${g.mapFile()}; a running relay uses it immediately)`);
     return 0;
   }
+  if (cmd === "prune") {                                               // stopped Mesh Codespaces keep their disk until deleted
+    const yes = rest.includes("--yes");
+    const { ensureGh } = await import("./gh-manager.mjs");
+    let env = { ...process.env };
+    let current = "";
+    try { const { createSessionManager } = await import("./credentials.mjs"); const sx = await createSessionManager({}).get();   // the session's GitHub token, if any
+      if (sx.githubToken) env.GH_TOKEN = sx.githubToken; current = sx.codespace || ""; } catch { /* the user's own gh login then */ }
+    let gh; try { gh = (await ensureGh({ log: (m) => console.error("vyomi-tunnel: " + m) })).path; } catch (e) { console.error("vyomi-tunnel: " + e.message); return 1; }
+    const { spawnSync } = await import("node:child_process");
+    const ls = spawnSync(gh, ["codespace", "list", "--json", "name,state,createdAt"], { env, encoding: "utf8" });
+    if (ls.status !== 0) { const ssh = await import("./mesh-ssh.mjs"); console.error("vyomi-tunnel: " + ssh.ghListError(ls.stderr)); return 1; }
+    let all; try { all = JSON.parse(ls.stdout || "[]"); } catch { all = []; }
+    const meshes = all.filter((c) => /^vyomi-mesh-/.test(c.name || "")).sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    const newest = meshes[0] && meshes[0].name;
+    const stale = meshes.filter((c) => ["Shutdown", "Failed"].includes(c.state) && c.name !== current && c.name !== newest);
+    if (!stale.length) { console.log(`No stopped Mesh Codespaces to delete (${meshes.length} Mesh Codespace${meshes.length === 1 ? "" : "s"} on your account).`); return 0; }
+    for (const c of stale) console.log(`  ${c.name}  ${c.state}  created ${String(c.createdAt || "").slice(0, 10)}`);
+    if (!yes) { console.log(`\n${stale.length} stopped Mesh Codespace${stale.length === 1 ? "" : "s"} still use${stale.length === 1 ? "s" : ""} storage. Delete with: vyomi-tunnel prune --yes`); return 0; }
+    let failed = 0;
+    for (const c of stale) {
+      const d = spawnSync(gh, ["codespace", "delete", "-c", c.name, "--force"], { env, encoding: "utf8" });
+      if (d.status === 0) console.log(`deleted ${c.name}`); else { failed++; console.error(`vyomi-tunnel: could not delete ${c.name}: ${String(d.stderr || "").trim().split("\n")[0]}`); }
+    }
+    return failed ? 1 : 0;
+  }
   if (cmd === "reset") {                                               // re-pair with the account: same code flow as the console's Reset tunnel button
     const arg = String(rest.find((x) => !x.startsWith("-")) || "");
     const code = arg.replace(/[?#].*$/, "").replace(/\/+$/, "").split("/").pop();
@@ -450,7 +484,14 @@ export async function main(argv) {
     if (kinds.some((k) => ["host", "instance", "k3s", "llm", "service"].includes(k))) {                    // Mesh also needs a plan that allows it
       const o = meshDown ? { error: auth.error } : await openMesh({ cs, configure: false });
       if (o.error) meshP = Promise.resolve({ err: o.error });
-      else {
+      else if (rest.includes("--quick") && !cs && o.sess && o.sess.codespace) {
+        // --quick (the MCP's status probe): the signed session already names the Mesh Codespace and its state, so answer without gh / ssh
+        // (an ssh round trip costs 7-9 s from far regions). The api row is the Mesh API by name; VMs, k3s and LLM rows need the full list.
+        // A Codespace that is not running is reported, never woken. A --codespace / VYOMI_MESH_CODESPACE override takes the full path.
+        const st = o.sess.meshState || "";
+        if (st && st !== "Available") { notes.push(`mesh: your Mesh Codespace ${o.sess.codespace} is ${st}. Start Mesh in the Vyomi console (or wait if it is starting).`); meshP = Promise.resolve({ ts: [], cs: o.sess.codespace, api: false }); }
+        else { meshP = Promise.resolve({ ts: [], cs: o.sess.codespace, api: true }); notes.push("quick: VMs, k3s and LLM rows are not listed here; `vyomi-tunnel list mesh` lists them"); }
+      } else {
         transport = o.transport;
         meshP = transport.list().then(async (ts) => ({ ts, cs: transport.codespace, api: !!(await transport.simulatorTarget().catch(() => null)) })).catch((e) => ({ err: e.message }));
       }
