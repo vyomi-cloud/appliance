@@ -151,6 +151,83 @@ def _rsa_sig(alg: str):
     return pad, utils.Prehashed(h)
 
 
+# ── real EC (P-256 / P-384 / P-521 / P-256K) and AES oct keys, same `cryptography` gate as RSA ──────────────
+_EC_CURVES = {"P-256": ("SECP256R1", 32), "P-384": ("SECP384R1", 48), "P-521": ("SECP521R1", 66), "P-256K": ("SECP256K1", 32)}
+
+
+def _ec_new(crv: str):
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    name, size = _EC_CURVES[crv]
+    priv = ec.generate_private_key(getattr(ec, name)())
+    der = priv.private_bytes(serialization.Encoding.DER, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    nums = priv.public_key().public_numbers()
+    return der, nums.x.to_bytes(size, "big"), nums.y.to_bytes(size, "big")
+
+
+def _ec_hash(alg: str):
+    from cryptography.hazmat.primitives import hashes
+    return {"ES384": hashes.SHA384(), "ES512": hashes.SHA512()}.get((alg or "ES256").upper(), hashes.SHA256())
+
+
+def _ec_sign(material: bytes, alg: str, digest: bytes, crv: str) -> bytes:
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+    r, s_ = utils.decode_dss_signature(_rsa_priv(material).sign(digest, ec.ECDSA(utils.Prehashed(_ec_hash(alg)))))
+    size = _EC_CURVES[crv][1]
+    return r.to_bytes(size, "big") + s_.to_bytes(size, "big")      # JWS raw r||s, what Key Vault returns
+
+
+def _ec_verify(material: bytes, alg: str, digest: bytes, sig: bytes, crv: str) -> bool:
+    from cryptography.hazmat.primitives.asymmetric import ec, utils
+    size = _EC_CURVES[crv][1]
+    if len(sig) != 2 * size:
+        return False
+    try:
+        der = utils.encode_dss_signature(int.from_bytes(sig[:size], "big"), int.from_bytes(sig[size:], "big"))
+        _rsa_priv(material).public_key().verify(der, digest, ec.ECDSA(utils.Prehashed(_ec_hash(alg))))
+        return True
+    except Exception:
+        return False
+
+
+def _aes_op(meta: dict, material: bytes, op: str, body: dict, data: bytes):
+    """AES (oct-HSM) keys: A128/192/256 GCM + CBC/CBCPAD for encrypt/decrypt, A128/192/256KW for wrap/unwrap. Returns the response fields."""
+    import os as _os
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.primitives import padding as _pad
+    from cryptography.hazmat.primitives.keywrap import aes_key_wrap, aes_key_unwrap
+    alg = str(body.get("alg", "")).upper()
+    if alg.endswith("KW"):
+        return {"value": _b64url_encode(aes_key_wrap(material, data) if op in ("encrypt", "wrap") else aes_key_unwrap(material, data))}
+    if "GCM" in alg:
+        aad = _b64url_decode(body["aad"]) if body.get("aad") else None
+        if op == "encrypt":
+            iv = _b64url_decode(body["iv"]) if body.get("iv") else _os.urandom(12)
+            enc = Cipher(algorithms.AES(material), modes.GCM(iv)).encryptor()
+            if aad:
+                enc.authenticate_additional_data(aad)
+            ct = enc.update(data) + enc.finalize()
+            return {"value": _b64url_encode(ct), "iv": _b64url_encode(iv), "tag": _b64url_encode(enc.tag)}
+        dec = Cipher(algorithms.AES(material), modes.GCM(_b64url_decode(body["iv"]), _b64url_decode(body["tag"]))).decryptor()
+        if aad:
+            dec.authenticate_additional_data(aad)
+        return {"value": _b64url_encode(dec.update(data) + dec.finalize())}
+    if "CBC" in alg:
+        iv = _b64url_decode(body["iv"]) if body.get("iv") else _os.urandom(16)
+        padded = alg.endswith("PAD")
+        if op == "encrypt":
+            if padded:
+                p = _pad.PKCS7(128).padder(); data = p.update(data) + p.finalize()
+            enc = Cipher(algorithms.AES(material), modes.CBC(iv)).encryptor()
+            return {"value": _b64url_encode(enc.update(data) + enc.finalize()), "iv": _b64url_encode(iv)}
+        dec = Cipher(algorithms.AES(material), modes.CBC(iv)).decryptor()
+        pt = dec.update(data) + dec.finalize()
+        if padded:
+            u = _pad.PKCS7(128).unpadder(); pt = u.update(pt) + u.finalize()
+        return {"value": _b64url_encode(pt)}
+    raise ValueError("unsupported algorithm")
+
+
 # ── per-vault scoping ──────────────────────────────────────────────────────
 # Keys are per VAULT, like secrets/certificates (azure_keyvault_secrets_core.scoped). A vault's keys
 # live in the shared store under `<vault>::<name>/<version>` (names/versions never contain "::", so a
@@ -301,13 +378,16 @@ def _attributes(meta: dict) -> dict:
 
 
 def _key_jwk(meta: dict) -> dict:
-    return {
+    jwk = {
         "kid": _kid_url(meta["name"], meta["version"]),
         "kty": meta.get("kty", "RSA"),
         "key_ops": list(meta.get("key_ops", [])),
-        "n": meta["n"],
-        "e": meta["e"],
     }
+    if meta.get("ec"):
+        jwk.update(crv=meta["crv"], x=meta["x"], y=meta["y"])
+    elif not meta.get("aes"):
+        jwk.update(n=meta["n"], e=meta["e"])
+    return jwk
 
 
 def _key_bundle(meta: dict) -> dict:
@@ -325,7 +405,20 @@ def _create_key(store: KeyStore, name: str, body: dict) -> KvResponse:
                                       "wrapKey", "unwrapKey"]
     version = _new_version()
     real_rsa = kty.upper().startswith("RSA") and key_size in (2048, 3072, 4096) and _rsa_mod()
-    if real_rsa:
+    crv = str(body.get("crv") or "P-256")
+    real_ec = kty.upper().startswith("EC") and crv in _EC_CURVES and _rsa_mod()
+    real_oct = kty.lower().startswith("oct") and int(body.get("key_size") or 256) in (128, 192, 256) and _rsa_mod()
+    ecxy = None
+    if real_ec:
+        material, ex, ey = _ec_new(crv)
+        n = e = b""
+        ecxy = (ex, ey)
+    elif real_oct:
+        import os as _os
+        key_size = int(body.get("key_size") or 256)
+        material = _os.urandom(key_size // 8)
+        n = e = b""
+    elif real_rsa:
         material, n, e = _rsa_new(key_size)
     else:
         material = store.engine.new_key_material()
@@ -338,6 +431,12 @@ def _create_key(store: KeyStore, name: str, body: dict) -> KvResponse:
     }
     if real_rsa:
         meta["rsa"] = True
+    if real_ec:
+        meta.update(ec=True, crv=crv, x=_b64url_encode(ecxy[0]), y=_b64url_encode(ecxy[1]), kty="EC")
+        meta.pop("n"), meta.pop("e")
+    if real_oct:
+        meta.update(aes=True, kty=kty if kty.lower().startswith("oct") else "oct-HSM", key_size=key_size)
+        meta.pop("n"), meta.pop("e")
     attrs = body.get("attributes") or {}
     if "enabled" in attrs:
         meta["enabled"] = bool(attrs["enabled"])
@@ -389,6 +488,13 @@ def _encrypt(store: KeyStore, name: str, version: str, body: dict) -> KvResponse
     except Exception:
         return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
     material = store.get_material(_kid_key(name, version))
+    if meta.get("ec"):
+        return _err(400, "BadParameter", "This operation is not supported for an EC key.")
+    if meta.get("aes"):
+        try:
+            return _json(200, {"kid": _kid_url(name, version), **_aes_op(meta, material, "encrypt", body, plaintext)})
+        except Exception:
+            return _err(400, "BadParameter", "The operation failed for this key/algorithm/parameters.")
     if meta.get("rsa"):
         try:
             blob = _rsa_priv(material).public_key().encrypt(plaintext, _rsa_pad(body.get("alg")))
@@ -413,6 +519,13 @@ def _decrypt(store: KeyStore, name: str, version: str, body: dict) -> KvResponse
     except Exception:
         return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
     material = store.get_material(_kid_key(name, version))
+    if meta.get("ec"):
+        return _err(400, "BadParameter", "This operation is not supported for an EC key.")
+    if meta.get("aes"):
+        try:
+            return _json(200, {"kid": _kid_url(name, version), **_aes_op(meta, material, "decrypt", body, blob)})
+        except Exception:
+            return _err(400, "BadParameter", "The operation failed for this key/algorithm/parameters.")
     try:
         plaintext = (_rsa_priv(material).decrypt(blob, _rsa_pad(body.get("alg"))) if meta.get("rsa")
                      else store.engine.decrypt(material, blob))
@@ -437,6 +550,13 @@ def _wrap_key(store: KeyStore, name: str, version: str, body: dict) -> KvRespons
     except Exception:
         return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
     material = store.get_material(_kid_key(name, version))
+    if meta.get("ec"):
+        return _err(400, "BadParameter", "This operation is not supported for an EC key.")
+    if meta.get("aes"):
+        try:
+            return _json(200, {"kid": _kid_url(name, version), **_aes_op(meta, material, "encrypt", body, key_bytes)})
+        except Exception:
+            return _err(400, "BadParameter", "The operation failed for this key/algorithm/parameters.")
     if meta.get("rsa"):
         try:
             blob = _rsa_priv(material).public_key().encrypt(key_bytes, _rsa_pad(body.get("alg")))
@@ -461,6 +581,13 @@ def _unwrap_key(store: KeyStore, name: str, version: str, body: dict) -> KvRespo
     except Exception:
         return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
     material = store.get_material(_kid_key(name, version))
+    if meta.get("ec"):
+        return _err(400, "BadParameter", "This operation is not supported for an EC key.")
+    if meta.get("aes"):
+        try:
+            return _json(200, {"kid": _kid_url(name, version), **_aes_op(meta, material, "decrypt", body, blob)})
+        except Exception:
+            return _err(400, "BadParameter", "The operation failed for this key/algorithm/parameters.")
     try:
         key_bytes = (_rsa_priv(material).decrypt(blob, _rsa_pad(body.get("alg"))) if meta.get("rsa")
                      else store.engine.decrypt(material, blob))
@@ -491,7 +618,14 @@ def _sign(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
     except Exception:
         return _err(400, "BadParameter", "The 'value' field is not valid base64url.")
     material = store.get_material(_kid_key(name, version))
-    if meta.get("rsa"):
+    if meta.get("ec"):
+        try:
+            sig = _ec_sign(material, alg, digest, meta["crv"])
+        except Exception:
+            return _err(400, "BadParameter", "The digest could not be signed with this key/algorithm.")
+    elif meta.get("aes"):
+        return _err(400, "BadParameter", "Operation sign is not supported for a symmetric (oct) key.")
+    elif meta.get("rsa"):
         try:
             pad, pre = _rsa_sig(alg)
             sig = _rsa_priv(material).sign(digest, pad, pre)
@@ -518,6 +652,10 @@ def _verify(store: KeyStore, name: str, version: str, body: dict) -> KvResponse:
     except Exception:
         return _err(400, "BadParameter", "digest/value must be valid base64url.")
     material = store.get_material(_kid_key(name, version))
+    if meta.get("ec"):
+        return _json(200, {"value": _ec_verify(material, alg, digest, provided, meta["crv"])})
+    if meta.get("aes"):
+        return _err(400, "BadParameter", "Operation verify is not supported for a symmetric (oct) key.")
     if meta.get("rsa"):
         try:
             pad, pre = _rsa_sig(alg)
@@ -649,6 +787,44 @@ def _deleted_keys(store, method: str, segs: list) -> KvResponse:
     return _err(405, "MethodNotAllowed", f"Unsupported method {method} on /deletedkeys/{name}")
 
 
+def _list_versions(store: KeyStore, name: str) -> KvResponse:
+    vs = _versions_for(store, name)
+    if not vs:
+        return _err(404, "KeyNotFound", f"A key with (name/id) {name} was not found in this key vault.")
+    return _json(200, {"value": [{"kid": _kid_url(m["name"], m["version"]), "attributes": _attributes(m)} for m in vs]})
+
+
+def _rotate_key(store: KeyStore, name: str) -> KvResponse:
+    """POST /keys/{name}/rotate: a NEW version with fresh key material, same type / size / curve / ops / tags / policy."""
+    cur = _latest(store, name)
+    if not cur:
+        return _err(404, "KeyNotFound", f"A key with (name/id) {name} was not found in this key vault.")
+    body = {"kty": cur.get("kty", "RSA"), "key_size": cur.get("key_size"), "crv": cur.get("crv"), "key_ops": cur.get("key_ops"), "tags": cur.get("tags")}
+    r = _create_key(store, name, {k: v for k, v in body.items() if v is not None})
+    if r.status == 200 and cur.get("rotation_policy"):
+        new = _latest(store, name)
+        new["rotation_policy"] = cur["rotation_policy"]
+        kid = _kid_key(name, new["version"])
+        store.put_key(kid, new, store.get_material(kid)); store.persist()
+    return r
+
+
+def _rotation_policy(store: KeyStore, name: str, method: str, body: dict) -> KvResponse:
+    cur = _latest(store, name)
+    if not cur:
+        return _err(404, "KeyNotFound", f"A key with (name/id) {name} was not found in this key vault.")
+    now = _now()
+    pol = cur.get("rotation_policy") or {"lifetimeActions": [{"trigger": {"timeBeforeExpiry": "P30D"}, "action": {"type": "Notify"}}],
+                                         "attributes": {"expiryTime": "P2Y", "created": cur.get("created", now), "updated": cur.get("created", now)}}
+    if method == "PUT":
+        pol = {"lifetimeActions": body.get("lifetimeActions") if body.get("lifetimeActions") is not None else pol["lifetimeActions"],
+               "attributes": {**pol["attributes"], **{k: v for k, v in (body.get("attributes") or {}).items() if v is not None}, "updated": now}}
+        cur["rotation_policy"] = pol
+        kid = _kid_key(name, cur["version"])
+        store.put_key(kid, cur, store.get_material(kid)); store.persist()
+    return _json(200, {"id": f"{VAULT_HOST}/keys/{name}/rotationpolicy", **pol})
+
+
 _OPS = ("encrypt", "decrypt", "wrapkey", "unwrapkey", "sign", "verify")
 
 
@@ -721,6 +897,13 @@ def dispatch(store: KeyStore, method: str, path: str,
         return _create_key(store, segs[1], payload)
 
     name = segs[1]
+
+    if len(segs) == 3 and segs[2] == "versions" and method == "GET":
+        return _list_versions(store, name)
+    if len(segs) == 3 and segs[2] == "rotate" and method == "POST":
+        return _rotate_key(store, name)
+    if len(segs) == 3 and segs[2] == "rotationpolicy" and method in ("GET", "PUT"):
+        return _rotation_policy(store, name, method, payload)
 
     # /keys/{name}  → get latest | delete
     if len(segs) == 2:

@@ -392,6 +392,12 @@ async def azure_blob_dispatch_middleware(request, call_next):
             request.scope["path"] = new_path
             request.scope["raw_path"] = new_path.encode("utf-8")
             return await call_next(request)
+        _m_ca = re.match(r"^([a-z0-9][a-z0-9-]*)\.(?:[a-z0-9-]+\.)*azurecontainerapps\.(?:io|dev)$", host)   # Container Apps ingress FQDN
+        if _m_ca and not path.startswith(("/azure-data", "/_wire", "/subscriptions", "/api/")):
+            new_path = "/azure-data/containerapps/" + _m_ca.group(1) + ("" if path == "/" else path)
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+            return await call_next(request)
         if (_m_kv or _m_q or _m_ac) and not path.startswith("/azure-data"):
             kind, name = (("keyvault", _m_kv.group(1)) if _m_kv else
                           ("appconfig", _m_ac.group(1)) if _m_ac else ("queue", _m_q.group(1)))
