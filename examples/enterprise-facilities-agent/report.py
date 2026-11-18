@@ -16,7 +16,7 @@ def render(doc):
     cites = "".join(f"<li>[{x['n']}] <code>{e(x['source'])}</code><br><small>{e(x['text'])}</small></li>" for x in (a.get("citations") or []))
     tools = "".join(f"<li><code>{e(t['tool'])}</code> via {e(t['via'])}</li>" for t in (a.get("tools") or []))
     t = doc["totals"]
-    cloud = {"gcp": "GCP (Google SDKs)"}.get(doc.get("cloud"), "AWS (boto3)")
+    cloud = {"gcp": "GCP (Google SDKs)", "azure": "Azure (Azure SDKs)"}.get(doc.get("cloud"), "AWS (boto3)")
     notes = "".join(f"<li>{e(n)}</li>" for n in doc.get("notes", []))
     notes = f"<h2>Notes</h2><ul>{notes}</ul>" if notes else ""
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">

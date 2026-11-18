@@ -4,10 +4,11 @@ the google-cloud-* / google-genai / vertexai libraries for GCP).
 
   python run_e2e.py                      # AWS: starts the simulator in-process (needs the repo checkout)
   python run_e2e.py --cloud gcp          # GCP: same 13 components on the Google SDKs (see README-GCP.md)
+  python run_e2e.py --cloud azure        # Azure: same 13 components on the Azure SDKs (see README-AZURE.md)
   python run_e2e.py --endpoint http://localhost:8099
   python run_e2e.py --only 5,6           # run a subset of components (dependencies not re-run: use for debugging)
 
-Writes results/e2e-result.json and results/report.html (GCP: results/gcp-e2e-result.json and results/gcp-report.html). Exit code 0 only when all 13 components PASS.
+Writes results/e2e-result.json and results/report.html (GCP: results/gcp-e2e-result.json and results/gcp-report.html; Azure: results/azure-e2e-result.json and results/azure-report.html). Exit code 0 only when all 13 components PASS.
 Statuses: PASS | BLOCKED (the simulator lacks a capability another lane is building; named) | FAIL (the app or the simulator is wrong)."""
 import argparse, json, os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,6 +24,9 @@ def plan(cloud="aws"):
     if cloud == "gcp":
         from facilities.gcp.plan import plan as gcp_plan
         return gcp_plan()
+    if cloud == "azure":
+        from facilities.azure.plan import plan as azure_plan
+        return azure_plan()
     from facilities.components import (c01_access, c02_channels, c03_runtime, c04_gateway, c05_approval, c06_knowledge, c07_tools,
                                        c08_observability, c09_memory, c10_models, c11_response, c12_pipeline, c13_governance)
     # dependency order; the number is the architecture component the step belongs to
@@ -34,12 +38,14 @@ def plan(cloud="aws"):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--endpoint", help="Vyomi simulator URL (default: start one in-process)")
-    ap.add_argument("--cloud", choices=["aws", "gcp"], default="aws", help="which cloud's SDK the 13 components use (default aws)")
-    ap.add_argument("--region", default=None, help="default us-east-1 (aws) / us-central1 (gcp)")
+    ap.add_argument("--cloud", choices=["aws", "gcp", "azure"], default="aws", help="which cloud's SDK the 13 components use (default aws)")
+    ap.add_argument("--region", default=None, help="default us-east-1 (aws) / us-central1 (gcp) / eastus (azure)")
     ap.add_argument("--out", default=os.path.join(HERE, "results"))
     ap.add_argument("--only", help="comma list of component numbers")
     ap.add_argument("--start-emulators", action="store_true", help="gcp dev helper: start the real Pub/Sub + Firestore emulators in Docker (local image only) and set "
                     "PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST; stands in for VYOMI_GCP_REAL_BACKENDS=1 until the simulator does it")
+    ap.add_argument("--start-azurite", action="store_true", help="azure dev helper: start the REAL Azurite (Table service) in Docker (local image only) and set "
+                    "VYOMI_AZURE_REAL_BACKENDS=1 / VYOMI_AZURE_AZURITE_ENDPOINT; stands in for the simulator starting it itself")
     ap.add_argument("--dev-local-functions", action="store_true", help="gcp DEV ONLY: run the Cloud Run function handlers in this process instead of the simulator's "
                     "function sandbox, to exercise the rest of the app before the sandbox lane lands. Never a conformance result: exit code is forced non-zero")
     ap.add_argument("--llm-stub", action="store_true", help="start the deterministic TEST STUB llm (tools/llm_stub) and point the simulator at it "
@@ -56,10 +62,19 @@ def main():
         from facilities.gcp.runtime import PROJECT
         emu = Emulators(PROJECT).start()
         print(f"[emulators] pubsub={os.environ['PUBSUB_EMULATOR_HOST']} firestore={os.environ['FIRESTORE_EMULATOR_HOST']} (real Google emulators, own containers {emu.names})", flush=True)
-    endpoint = a.endpoint
+    azu = None
+    if a.start_azurite:
+        from facilities.azure.azurite import Azurite
+        azu = Azurite().start()
+        print(f"[azurite] real Azurite Table service on {os.environ['VYOMI_AZURE_AZURITE_ENDPOINT']} (own container {azu.name}); VYOMI_AZURE_REAL_BACKENDS=1", flush=True)
+    endpoint, http_endpoint, amqp_port = a.endpoint, None, None
     if not endpoint:
-        from facilities.server import start_in_process
-        endpoint = start_in_process()
+        if a.cloud == "azure":
+            from facilities.azure.server import start_in_process as az_start
+            endpoint, http_endpoint, amqp_port, _ca = az_start()
+        else:
+            from facilities.server import start_in_process
+            endpoint = start_in_process()
     only = {int(x) for x in a.only.split(",")} if a.only else None
     lines = []
 
@@ -68,6 +83,9 @@ def main():
     if a.cloud == "gcp":
         from facilities.gcp.runtime import GcpCtx
         ctx = GcpCtx(endpoint, a.region or "us-central1", out)
+    elif a.cloud == "azure":
+        from facilities.azure.runtime import AzCtx
+        ctx = AzCtx(endpoint, a.region or "eastus", out, http_endpoint=http_endpoint, amqp_port=amqp_port)
     else:
         ctx = Ctx(endpoint, a.region or "us-east-1", out)
     COMPONENTS = ctx.COMPONENTS
@@ -119,7 +137,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     doc = dict(cloud=a.cloud, llm_stub=bool(a.llm_stub), notes=ctx.state.get("notes", []), endpoint=endpoint, when=time.strftime("%Y-%m-%dT%H:%M:%S"), totals=tot, components=table, transcript="\n".join(lines),
                agent={k: res.get(k) for k in ("question", "user", "route", "llm_used", "tools", "answer", "citations", "approval")}, work_order=ctx.state.get("work_order_id"))
-    pre = "gcp-" if a.cloud == "gcp" else ""
+    pre = {"gcp": "gcp-", "azure": "azure-"}.get(a.cloud, "")
     with open(os.path.join(a.out, pre + "e2e-result.json"), "w") as f:
         json.dump(doc, f, indent=2, default=str)
     from report import render
@@ -128,6 +146,8 @@ def main():
     out(f"wrote {a.out}/{pre}e2e-result.json and {pre}report.html")
     if emu:
         emu.stop()
+    if azu:
+        azu.stop()
     sys.exit(0 if tot[PASS] == len(table) and not a.dev_local_functions else 1)
 
 
