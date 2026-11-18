@@ -339,6 +339,9 @@ services:
       CLOUDLEARN_PUBSUB_EMULATOR_HOST: vyomi-pubsub:8085
       FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
       CLOUDLEARN_FIRESTORE_EMULATOR_HOST: vyomi-firestore:8080
+      # VYOMI_GCP_REAL_BACKENDS=1 (default off, needs the "full" profile emulators): real Pub/Sub + Firestore are the data plane
+      VYOMI_GCP_REAL_BACKENDS: ${VYOMI_GCP_REAL_BACKENDS:-}
+      VYOMI_GCP_GRPC_PORT: ${VYOMI_GCP_GRPC_PORT:-}
     volumes:
       - vyomi-data:/data
       - /var/lib/cloudlearn/deployments:/var/lib/cloudlearn/deployments

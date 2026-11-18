@@ -316,7 +316,7 @@
  },
  "firestore": {
   "title": "Firestore",
-  "summary": "Vyomi's own Firestore REST v1 and Admin v1 core stores documents, indexes, rules, TTL, backups and PITR in the appliance state; the Google Firestore emulator container is not the data plane in v4.",
+  "summary": "Vyomi's own Firestore REST v1 and Admin v1 core stores documents, indexes, rules, TTL, backups and PITR in the appliance state; the Google Firestore emulator container is the (default)-database data plane only when VYOMI_GCP_REAL_BACKENDS=1 (offline / Mesh).",
   "wire": [
    "Firestore REST API v1 /v1/projects/{p}/databases/{db}/documents",
    "Firestore Admin v1 (databases, indexes, fields, backups, import/export)",
@@ -326,12 +326,13 @@
    "gcloud firestore"
   ],
   "offline": {
-   "kind": "inhouse",
+   "kind": "hybrid",
    "tech": [
     "Python core (appliance simulator)",
-    "SQLite state store"
+    "SQLite state store",
+    "Google Firestore emulator (gcloud beta emulators firestore), when VYOMI_GCP_REAL_BACKENDS=1"
    ],
-   "notes": "core/gcp_firestore_core.py is served through the unified ingress over the appliance state. The compose file still starts the Google Firestore emulator, but v4 uses it only to adopt documents held by pre-v4 setups (core/appliance_stores.py); whether a gRPC client against that emulator shares v4 state is not verified."
+   "notes": "Default: core/gcp_firestore_core.py is the data plane; the compose emulator is only adopted once. With VYOMI_GCP_REAL_BACKENDS=1 (offline / Mesh only) every (default)-database document call is forwarded to the real emulator (same documents the unmodified firestore.Client sees through FIRESTORE_EMULATOR_HOST); the admin plane, other databases, security rules, TTL and indexes stay on the core. Eventarc document triggers fire for writes made through the simulator's REST surface, not for writes a gRPC client makes directly."
   },
   "nano": {
    "kind": "inhouse",
@@ -349,7 +350,9 @@
    "Export and import use a Vyomi-internal JSON snapshot in the simulator's Cloud Storage, not the protobuf/LevelDB layout, so it is not portable to real Firestore.",
    "Point-in-time recovery supports reads at a past readTime but has no whole-database PITR restore.",
    "Insights, Usage and Key Visualizer show current-session telemetry only, with no history; Key Visualizer buckets are a hash, not tablet ranges.",
-   "Datastore mode lacks transaction read isolation, GQL beyond simple SELECT, multi-kind queries and export/import."
+   "Datastore mode lacks transaction read isolation, GQL beyond simple SELECT, multi-kind queries and export/import.",
+   "VYOMI_GCP_REAL_BACKENDS=1 only: composite-index enforcement, TTL sweep, Vyomi's security-rules enforcement and Datastore-mode entities do not apply to (default)-database documents; the emulator's own behaviour does (it accepts any query without an index).",
+   "VYOMI_GCP_REAL_BACKENDS=1 only: Eventarc Firestore document triggers do not fire for direct gRPC writes (the emulator has no change stream); REST writes through the simulator fire them."
   ],
   "notInScope": [
    "Google's distributed storage, multi-region replication and SLA",
@@ -363,7 +366,10 @@
    "core/appliance_stores.py (Firestore store, emulator adoption)",
    "core/wire_ingress.py (gcp_firestore)",
    "docker-compose.appliance.yml: vyomi-firestore",
-   "core/capabilities/gcp/firestore.json"
+   "core/capabilities/gcp/firestore.json",
+   "core/gcp_real_backends.py",
+   "docker-compose.appliance.yml, codespace/.devcontainer/mesh/docker-compose.mesh.yml (profile gcp-real)",
+   "tests/conformance/test_gcp_real_backends.py"
   ],
   "sub": {
    "datastore": {
@@ -403,19 +409,20 @@
  },
  "pubsub": {
   "title": "Pub/Sub",
-  "summary": "Vyomi's own Pub/Sub REST v1 core implements topics, subscriptions, snapshots and schemas on the same messaging store as SNS/SQS; the Google Pub/Sub emulator container is not the v4 data plane.",
+  "summary": "Vyomi's own Pub/Sub REST v1 core implements topics, subscriptions, snapshots and schemas on the same messaging store as SNS/SQS; the Google Pub/Sub emulator container is the data plane only when VYOMI_GCP_REAL_BACKENDS=1 (offline / Mesh).",
   "wire": [
    "Pub/Sub REST API v1 /v1/projects/{p}/topics, subscriptions, snapshots, schemas",
    "google-cloud-pubsub (REST transport)",
    "gcloud pubsub"
   ],
   "offline": {
-   "kind": "inhouse",
+   "kind": "hybrid",
    "tech": [
     "Python core (appliance simulator)",
-    "SQLite state store"
+    "SQLite state store",
+    "Google Pub/Sub emulator (gcloud beta emulators pubsub), when VYOMI_GCP_REAL_BACKENDS=1"
    ],
-   "notes": "core/gcp_pubsub_core.py is served through the unified ingress over AppStatePubsubStore. The compose file still starts the Google Pub/Sub emulator, used in v4 only to adopt topics and subscriptions from pre-v4 setups; gRPC client access to state is not verified."
+   "notes": "Default: core/gcp_pubsub_core.py over AppStatePubsubStore is the data plane; the compose emulator is only adopted once. With VYOMI_GCP_REAL_BACKENDS=1 (offline / Mesh only) the real emulator holds all topics, subscriptions, snapshots and messages: core/gcp_real_backends.py forwards the REST/console calls to it (same state the unmodified gRPC clients see through PUBSUB_EMULATOR_HOST) and keeps a metadata-only shadow in the core for simulator features that read it; Eventarc / Cloud Run triggers, Cloud Scheduler targets, SCC notifications and sinks publish through the same seam; a poller delivers gRPC-published messages to triggers."
   },
   "nano": {
    "kind": "inhouse",
@@ -433,7 +440,9 @@
    "Write to BigQuery delivery is not modelled; Write to Cloud Storage delivers real newline-delimited objects into the simulator's GCS.",
    "Topic ingestion works from Cloud Storage only; Kinesis, Event Hubs, Confluent and CDC sources are rejected at create.",
    "Message transforms run a documented subset of JavaScript (no loops, classes, async, regex).",
-   "Metrics are gauge snapshots of running totals mirrored into Cloud Monitoring, not Google's per-minute deltas."
+   "Metrics are gauge snapshots of running totals mirrored into Cloud Monitoring, not Google's per-minute deltas.",
+   "VYOMI_GCP_REAL_BACKENDS=1 only: schemas, IAM policies, message transforms and schema validation on publish stay on the simulator's own core; the emulator does not implement them, so a topic with schemaSettings is not validated and a pull-time filter or exactly-once setting follows the emulator.",
+   "VYOMI_GCP_REAL_BACKENDS=1 only: the metrics mirrored into Cloud Monitoring and the console message peek come from the core, which no longer sees messages; a gRPC-published message reaches Eventarc / Cloud Run triggers within about a second (poller), not inline."
   ],
   "notInScope": [
    "Google's global message routing, ordering guarantees across regions and throughput limits",
@@ -446,7 +455,10 @@
    "core/appliance_stores.py (AppStatePubsubStore, _adopt_pubsub_emulator)",
    "core/wire_ingress.py (gcp_pubsub)",
    "docker-compose.appliance.yml: vyomi-pubsub",
-   "core/capabilities/gcp/pubsub.json"
+   "core/capabilities/gcp/pubsub.json",
+   "core/gcp_real_backends.py",
+   "docker-compose.appliance.yml, codespace/.devcontainer/mesh/docker-compose.mesh.yml (profile gcp-real)",
+   "tests/conformance/test_gcp_real_backends.py"
   ]
  },
  "secret-manager": {
@@ -862,7 +874,7 @@
     "Python core (appliance simulator)",
     "SQLite state store"
    ],
-   "notes": "core/gcp_logging_core.py with the persisted space store (routes/gcp_logging.py). Admin Activity audit entries are produced by core/gcp_audit_core.py."
+   "notes": "core/gcp_logging_core.py with the persisted space store (routes/gcp_logging.py). Admin Activity audit entries are produced by core/gcp_audit_core.py. The gapic/gRPC logging client connects through the optional gRPC front door (VYOMI_GCP_GRPC_PORT, core/gcp_grpc_front.py, a REST adapter over this core); logging.Client(_use_grpc=False) speaks REST directly with no adapter."
   },
   "nano": {
    "kind": "inhouse",
@@ -887,7 +899,9 @@
    "core/gcp_logging_core.py",
    "routes/gcp_logging.py",
    "core/gcp_audit_core.py",
-   "core/capabilities/gcp/logs.json"
+   "core/capabilities/gcp/logs.json",
+   "core/gcp_grpc_front.py",
+   "tests/conformance/test_gcp_grpc_front.py"
   ]
  },
  "monitoring": {
@@ -906,7 +920,7 @@
     "Python core (appliance simulator)",
     "VictoriaMetrics (optional mirror, compose profile full)"
    ],
-   "notes": "core/gcp_monitoring_core.py evaluates alert conditions against stored series. When CLOUDLEARN_VICTORIAMETRICS_URL is set each sample is also mirrored to VictoriaMetrics (providers/gcp_monitoring_console.py); the core does not depend on it."
+   "notes": "core/gcp_monitoring_core.py evaluates alert conditions against stored series. When CLOUDLEARN_VICTORIAMETRICS_URL is set each sample is also mirrored to VictoriaMetrics (providers/gcp_monitoring_console.py); the core does not depend on it. Optional gRPC front door (VYOMI_GCP_GRPC_PORT, core/gcp_grpc_front.py): a protocol adapter that turns the gRPC calls of the gRPC-only Google clients into REST calls on this core, so default logging.Client() (gRPC) and MetricServiceClient/AlertPolicyServiceClient connect; no second store. Offline / Mesh only; Nano is REST."
   },
   "nano": {
    "kind": "inhouse",
@@ -935,7 +949,9 @@
    "core/gcp_apphub_core.py",
    "providers/gcp_monitoring_console.py",
    "docker-compose.yml: vyomi-victoriametrics",
-   "core/capabilities/gcp/monitoring.json"
+   "core/capabilities/gcp/monitoring.json",
+   "core/gcp_grpc_front.py",
+   "tests/conformance/test_gcp_grpc_front.py"
   ]
  },
  "iam-admin": {
