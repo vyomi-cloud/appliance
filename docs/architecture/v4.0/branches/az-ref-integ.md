@@ -10,3 +10,9 @@ Integration of the Azure reference-architecture lanes (az-ref-ai, -gateway, -run
 
 ## Open issues
 - Full 13/13 run with a real model pending; trunk parity fix is PR #664.
+
+## Capability ids introduced by the lanes (named here so the claims register can trace them)
+- `azure.contentsafety.analyze-text` (az-ref-messaging)
+- `azure.aisearch.wire` (az-ref-ai)
+- `azure.aisearch.indexer.blob-fill` (az-ref-messaging)
+- `azure.foundry.on-your-data` (az-ref-ondata)
