@@ -51,16 +51,26 @@ def provision(name):
     if CLOUD == "gcp":
         proj = call("GET", "/v1/projects")["projects"][0]["projectId"]
         base = f"/compute/v1/projects/{proj}/zones/us-central1-a/instances"
-        call("POST", base, {"name": name, "machineType": "zones/us-central1-a/machineTypes/e2-micro"})
+        call("POST", base, {"name": name, "machineType": "zones/us-central1-a/machineTypes/e2-micro",
+                            # real Compute requires a boot disk (INVALID_ARGUMENT otherwise)
+                            "disks": [{"boot": True, "autoDelete": True, "initializeParams": {"sourceImage": "projects/debian-cloud/global/images/family/debian-12"}}],
+                            "networkInterfaces": [{"network": "global/networks/default"}]})
 
         def wait():
             cur = {}
             for _ in range(90):
                 cur = call("GET", f"{base}/{name}")
                 if cur.get("status") == "RUNNING":
-                    return True, ""
+                    # the control plane reports RUNNING at once (like GCE); the guest runtime behind it
+                    # boots in the background, and connect-info answers 409 until it is up.
+                    try:
+                        call("GET", f"/api/gcp/compute/instances/{name}/connect-info")
+                        return True, ""
+                    except urllib.error.HTTPError as e:
+                        if e.code != 409:
+                            return False, f"connect-info http {e.code}"
                 time.sleep(2)
-            return False, f"status={cur.get('status')}"
+            return False, f"status={cur.get('status')} (guest runtime never became connectable)"
         return name, wait, f"/api/gcp/compute/instances/{name}/connect-info", lambda: call("DELETE", f"{base}/{name}")
     sub = call("GET", "/subscriptions?api-version=2020-01-01")["value"][0]["subscriptionId"]
     rg = f"/subscriptions/{sub}/resourceGroups/{name}-rg"
