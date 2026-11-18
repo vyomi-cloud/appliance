@@ -25524,6 +25524,18 @@ except Exception as _e:
     print(f"[servicebus_amqp] AMQP mount skipped: {_e}")
 
 
+# HTTPS listener for the Azure clients that refuse plain http (azure-identity/msal authority, Key Vault, Search): core/azure_tls_front.py.
+# Off unless VYOMI_AZURE_TLS_PORT / VYOMI_AZURE_TLS / VYOMI_AZURE_REAL_BACKENDS is set.
+try:
+    from core import azure_tls_front as _az_tls
+
+    @app.get("/_vyomi/azure-tls")
+    def _az_tls_discovery():   # where a remote app (Mesh) finds the https endpoint + its CA
+        return _az_tls.discovery()
+    _az_tls.maybe_start(app)
+except Exception as _e:
+    print(f"[azure_tls_front] skipped: {_e}")
+
 
 if __name__ == "__main__":
     uvicorn.run("server:app", host="0.0.0.0", port=9000, reload=False)

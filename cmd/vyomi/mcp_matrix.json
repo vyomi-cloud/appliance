@@ -1747,15 +1747,15 @@
      "tier": "pro"
     },
     {
-     "capabilities": 18,
+     "capabilities": 19,
      "id": "entra",
      "level_counts": {
       "nano": {
        "full": 9,
-       "limited": 9
+       "limited": 10
       },
       "offline": {
-       "full": 9,
+       "full": 10,
        "limited": 9
       }
      },

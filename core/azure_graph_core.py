@@ -160,6 +160,7 @@ class GraphStore:
         self.audit_logs: list[dict] = []
         self.sign_in_logs: list[dict] = []
         self.auth_codes: dict[str, dict] = {}      # one-time authorization codes minted by /oauth2/v2.0/authorize (interactive sign-in)
+        self.refresh_tokens: dict[str, dict] = {}  # opaque refresh tokens issued by the delegated grants (rotated on every use)
         # Security defaults (Entra ID | Properties' "Manage security defaults" panel,
         # azure.entra.security_defaults): a real Graph policy document, stored and
         # returned exactly as set — Vyomi has no interactive sign-in flow to enforce the
@@ -460,10 +461,12 @@ def _create_application(store: GraphStore, body: dict) -> Response:
         "publicClient": body.get("publicClient") or {"redirectUris": []},
         "identifierUris": body.get("identifierUris") or [],
         "passwordCredentials": [],
-        "requiredResourceAccess": [{
+        "requiredResourceAccess": body.get("requiredResourceAccess") or [{
             "resourceAppId": "00000003-0000-0000-c000-000000000000",   # Microsoft Graph
             "resourceAccess": [{"id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d", "type": "Scope"}],   # User.Read
         }],
+        "appRoles": body.get("appRoles") or [],          # roles this API exposes: granted ones become the `roles` claim of app-only tokens
+        "api": body.get("api") or {"oauth2PermissionScopes": []},   # delegated scopes this API exposes: the `scp` claim of user tokens
         "createdDateTime": _now(),
     }
     store.applications[oid] = app
@@ -733,18 +736,45 @@ def _oauth_err(status: int, code: str, description: str) -> Response:
     return _json(status, {"error": code, "error_description": description})
 
 
-def _token(store: GraphStore, method: str, body: bytes) -> Response:
+def _origin(headers: dict | None) -> str:
+    """Externally visible origin of this simulator (for the endpoints inside OIDC discovery documents)."""
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    host = h.get("x-forwarded-host") or h.get("host") or "localhost"
+    proto = h.get("x-forwarded-proto") or ("https" if str(h.get("x-forwarded-ssl", "")).lower() == "on" else "http")
+    return f"{proto}://{host}"
+
+
+def _basic_auth(headers: dict | None, form: dict) -> None:
+    """client_secret_basic: ``Authorization: Basic base64(client_id:secret)``."""
+    h = {str(k).lower(): v for k, v in (headers or {}).items()}
+    a = h.get("authorization", "")
+    if a.lower().startswith("basic ") and not form.get("client_id"):
+        import base64
+        from urllib.parse import unquote
+        try:
+            cid, _, sec = base64.b64decode(a[6:]).decode().partition(":")
+            form["client_id"] = unquote(cid)
+            form.setdefault("client_secret", unquote(sec))
+        except Exception:
+            pass
+
+
+def _token(store: GraphStore, method: str, body: bytes, path: str = "", headers: dict | None = None) -> Response:
     if method != "POST":
         return _err(405, "Request_UnsupportedQuery", method)
     from urllib.parse import parse_qs
     form = {k: v[0] for k, v in parse_qs((body or b"").decode("utf-8")).items()}
+    _basic_auth(headers, form)
+    form["_v2"] = "v2.0" in path.split("/")
     client_id = form.get("client_id", "")
     if form.get("grant_type") == "password":
         return _token_password(store, form, client_id)
     if form.get("grant_type") == "authorization_code":
         return _token_auth_code(store, form, client_id)
+    if form.get("grant_type") == "refresh_token":
+        return _token_refresh(store, form, client_id)
     if form.get("grant_type") != "client_credentials":
-        return _oauth_err(400, "unsupported_grant_type", "Vyomi simulates the client_credentials, password (ROPC) and authorization_code grants (code from /oauth2/v2.0/authorize).")
+        return _oauth_err(400, "unsupported_grant_type", "Vyomi simulates the client_credentials, password (ROPC), authorization_code and refresh_token grants (code from /oauth2/v2.0/authorize).")
     app = next((a for a in store.applications.values() if a["appId"] == client_id), None)
     if not app:
         store.sign_in(None, client_id, False, 700016, "Application not found in the directory.")
@@ -763,9 +793,7 @@ def _token(store: GraphStore, method: str, body: bytes) -> Response:
         store.sign_in(app, client_id, False, 7000215, "Invalid client secret is provided.")
         return _oauth_err(401, "invalid_client", "AADSTS7000215: Invalid client secret is provided.")
     store.sign_in(app, client_id, True, 0, None)
-    token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
-    return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
-                        "access_token": token, "scope": form.get("scope", "")})
+    return _issue(store, form, client_id, app=app, sp=sp)
 
 
 def _token_password(store: GraphStore, form: dict, client_id: str) -> Response:
@@ -789,9 +817,7 @@ def _token_password(store: GraphStore, form: dict, client_id: str) -> Response:
         store.user_sign_in(user, upn, client_id, False, code, msg.split(": ", 1)[-1], ca="failure")
         return _oauth_err(400 if code != 53003 else 403, "interaction_required" if code in (50076, 53000) else "access_denied", msg)
     store.user_sign_in(user, upn, client_id, True, 0, None, ca="success" if getattr(store, "ca_policies", None) else "notApplied")
-    token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
-    return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
-                       "access_token": token, "scope": form.get("scope", "")})
+    return _issue(store, form, client_id, user=user)
 
 
 def _authorize(store: GraphStore, method: str, body: bytes) -> Response:
@@ -835,9 +861,117 @@ def _token_auth_code(store: GraphStore, form: dict, client_id: str) -> Response:
         return _oauth_err(400, "invalid_grant", "AADSTS70000: The provided authorization code is invalid, expired or already redeemed.")
     if entry["client_id"] != client_id:
         return _oauth_err(400, "invalid_grant", "AADSTS70000: The authorization code was issued to a different client.")
-    token = "vyomi." + uuid.uuid4().hex + uuid.uuid4().hex
-    return _json(200, {"token_type": "Bearer", "expires_in": 3599, "ext_expires_in": 3599,
-                       "access_token": token, "scope": entry["scope"]})
+    user = next((u for u in store.users.values() if u["userPrincipalName"].lower() == entry["upn"].lower()), None)
+    return _issue(store, form, client_id, user=user, scope=entry["scope"] or form.get("scope", ""))
+
+
+# ── real JWT issuance (core/azure_entra_tokens_core) + OIDC discovery ─────────────────────────────────
+def _tokens():
+    try:
+        from core import azure_entra_tokens_core as m
+    except ImportError:   # pragma: no cover - Pyodide flat layout
+        import azure_entra_tokens_core as m  # type: ignore
+    return m
+
+
+def _resource_app(store: GraphStore, resource: str):
+    """The application registration that owns ``resource`` (an identifierUri, ``api://<appId>`` or the bare appId), else None."""
+    r = (resource or "").rstrip("/").lower()
+    for a in store.applications.values():
+        if r in {u.rstrip("/").lower() for u in a.get("identifierUris", [])} or r in (a["appId"].lower(), "api://" + a["appId"].lower()):
+            return a
+    return None
+
+
+def _granted_roles(app: dict | None, client: dict | None) -> list:
+    """App roles of ``app`` that ``client`` holds: the client's requiredResourceAccess entries of type Role (an admin-consented grant)."""
+    if not app or not client:
+        return []
+    ids = {x["id"] for rra in client.get("requiredResourceAccess", []) if rra.get("resourceAppId") == app["appId"]
+           for x in rra.get("resourceAccess", []) if x.get("type") == "Role"}
+    return [r["value"] for r in app.get("appRoles", []) if r.get("id") in ids and r.get("isEnabled", True) and r.get("value")]
+
+
+def _issue(store: GraphStore, form: dict, client_id: str, *, app: dict | None = None, sp: dict | None = None, user: dict | None = None,
+           scope: str | None = None, resource: str | None = None) -> Response:
+    """Build the token response of any grant: a signed RS256 access token (+ id_token / client_info / refresh_token for delegated grants)."""
+    T = _tokens()
+    v2 = bool(form.get("_v2"))
+    tid = store.organization["id"]
+    scope = form.get("scope", "") if scope is None else scope
+    res, names, oidc = T.split_scope(scope)
+    if not v2:
+        res = resource or form.get("resource", "") or "https://graph.microsoft.com"
+    res = res or "https://graph.microsoft.com"
+    client = app or next((a for a in store.applications.values() if a["appId"] == client_id), None)
+    rapp = _resource_app(store, res)
+    out = {"token_type": "Bearer", "expires_in": T.LIFETIME, "ext_expires_in": T.LIFETIME}
+    if user is None:
+        oid = (sp or {}).get("id") or (client or {}).get("id") or client_id
+        tok, claims = T.access_token(tid=tid, v2=v2, aud=res, client_id=client_id, oid=oid, roles=_granted_roles(rapp, client))
+        out["access_token"] = tok
+        if v2:
+            out["scope"] = scope
+    else:
+        scp = [n for n in names if n != ".default"]
+        if not scp:
+            scp = [x["value"] for x in ((rapp or {}).get("api") or {}).get("oauth2PermissionScopes", []) if x.get("isEnabled", True) and x.get("value")] \
+                or (["User.Read"] if "graph.microsoft.com" in res else ["user_impersonation"])
+        u = {"id": user["id"], "upn": user["userPrincipalName"], "name": user.get("displayName"),
+             "given_name": user.get("givenName") or "", "family_name": user.get("surname") or ""}
+        tok, claims = T.access_token(tid=tid, v2=v2, aud=res, client_id=client_id, user=u, scp=scp, nonce=form.get("nonce"))
+        out["access_token"] = tok
+        if v2:
+            out["scope"] = " ".join(scp)
+        if "openid" in oidc or not v2:
+            out["id_token"] = T.id_token(tid=tid, client_id=client_id, user=u, nonce=form.get("nonce"))
+            out["client_info"] = T.client_info(user["id"], tid)
+        if "offline_access" in oidc or not v2:
+            rt = "1." + T.b64u(uuid.uuid4().bytes + uuid.uuid4().bytes + uuid.uuid4().bytes)
+            store.refresh_tokens[rt] = {"client_id": client_id, "upn": user["userPrincipalName"], "scope": scope, "resource": res,
+                                        "v2": v2, "at": time.time()}
+            for k in [k for k, v in store.refresh_tokens.items() if time.time() - v["at"] > 90 * 86400]:
+                store.refresh_tokens.pop(k, None)
+            out["refresh_token"] = rt
+    if not v2:
+        out.update(resource=res, expires_on=str(claims["exp"]), not_before=str(claims["nbf"]))
+    return _json(200, out)
+
+
+def _token_refresh(store: GraphStore, form: dict, client_id: str) -> Response:
+    """Redeem (and rotate) a refresh token: bound to the client_id; the user must still exist and be enabled. The endpoint version
+    (v1/v2) is the one the request used, so a token obtained at v2 can be refreshed at v2 only as real Entra requires of msal."""
+    entry = store.refresh_tokens.pop(form.get("refresh_token", ""), None)
+    if not entry or time.time() - entry["at"] > 90 * 86400:
+        return _oauth_err(400, "invalid_grant", "AADSTS70000: The refresh token is invalid, expired or was already redeemed.")
+    if entry["client_id"] != client_id:
+        return _oauth_err(400, "invalid_grant", "AADSTS70000: The refresh token was issued to a different client.")
+    user = next((u for u in store.users.values() if u["userPrincipalName"].lower() == entry["upn"].lower()), None)
+    if user is None or user.get("accountEnabled") is False:
+        return _oauth_err(400, "invalid_grant", "AADSTS50057: The user account is disabled or no longer exists.")
+    store.user_sign_in(user, user["userPrincipalName"], client_id, True, 0, None, ca="notApplied")
+    return _issue(store, form, client_id, user=user, scope=form.get("scope") or entry["scope"], resource=form.get("resource") or entry["resource"])
+
+
+def _discovery(store: GraphStore, method: str, segs: list, headers: dict | None):
+    """OIDC discovery + JWKS the way login.microsoftonline.com serves them. None = not a discovery path."""
+    if method != "GET":
+        return None
+    T, base, tid = _tokens(), _origin(headers), store.organization["id"]
+    if segs[-2:] == [".well-known", "openid-configuration"] and len(segs) in (3, 4) and segs[0] not in ("v1.0", "beta"):
+        v2 = len(segs) == 4 and segs[1] == "v2.0"
+        if len(segs) == 4 and not v2:
+            return None
+        return _json(200, T.openid_config(base, tid, v2=v2))
+    if segs and segs[-1] == "keys" and "discovery" in segs and len(segs) <= 4 and segs[0] not in ("v1.0", "beta"):
+        return _json(200, T.jwks())
+    if len(segs) == 3 and segs[0] == "common" and segs[1].lower() == "userrealm":   # msal ROPC realm discovery (it drops the port, see azure_tls_front)
+        upn = segs[2]
+        dom = upn.split("@", 1)[-1]
+        return _json(200, {"ver": "1.0", "account_type": "Managed", "domain_name": dom, "cloud_instance_name": "microsoftonline.com", "cloud_audience_urn": "urn:federation:MicrosoftOnline"})
+    if segs[-2:] == ["discovery", "instance"]:
+        return _json(200, T.instance_discovery(base, "common"))
+    return None
 
 
 def _ext(res) -> Response:
@@ -856,7 +990,10 @@ def dispatch(store: GraphStore, method: str, path: str,
     # path shape alone), so it's checked before the Graph-version prefix is stripped below.
     raw_segs = [s for s in p.split("/") if s != ""]
     if raw_segs and raw_segs[-1] == "token" and "oauth2" in raw_segs:
-        return _token(store, method, body)
+        return _token(store, method, body, p, headers)
+    disc = _discovery(store, method, raw_segs, headers)
+    if disc is not None:
+        return disc
     if raw_segs and raw_segs[-1] == "authorize" and "oauth2" in raw_segs:
         return _authorize(store, method, body)
     if p.startswith("/v1.0"):

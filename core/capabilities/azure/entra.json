@@ -31,7 +31,7 @@
    "offline": "full"
   },
   "limitations": [
-   "Only the default Microsoft Graph User.Read delegated permission is seeded on every new registration; the API permissions / admin-consent workflow and OAuth2 token issuance are not simulated."
+   "Only the default Microsoft Graph User.Read delegated permission is seeded on every new registration unless requiredResourceAccess is supplied; there is no admin-consent workflow: a requiredResourceAccess entry of type Role on a client app IS the grant that puts the API's appRoles values into the `roles` claim of its app-only tokens (see azure.entra.tokens.jwt). appRoles and api.oauth2PermissionScopes are stored on the app and drive the roles/scp claims."
   ],
   "tests": [
    "tests/conformance/test_azure_graph_core.py"
@@ -121,7 +121,7 @@
   },
   "limitations": [
    "Service principal sign-ins are real: POST /{tenant}/oauth2/v2.0/token validates the caller's actual client secret (set by addPassword/removePassword on the app, core/azure_graph_core.py) and appends a success or failure row for that exact attempt — never sample data.",
-   "User sign-ins (non-interactive) are real: the oauth2/v2.0/token password (ROPC) grant checks the directory user's actual password and appends a success/failure row (AADSTS50126 wrong password, 50034 unknown user, 50057 disabled). Refresh-token and MFA flows are not modelled.",
+   "User sign-ins (non-interactive) are real: the oauth2/v2.0/token password (ROPC) grant checks the directory user's actual password and appends a success/failure row (AADSTS50126 wrong password, 50034 unknown user, 50057 disabled). The refresh_token grant is modelled (rotating, bound to the client; see azure.entra.tokens.jwt); MFA flows are not.",
    "User sign-ins (interactive) are real but have no browser page: POST /{tenant}/oauth2/v2.0/authorize takes the credentials as form fields, checks the directory user's actual password (same AADSTS codes and Conditional Access evaluation as the password grant), appends an interactive row and returns a one-time authorization code (JSON, not a 302) that /oauth2/v2.0/token redeems with grant_type=authorization_code. There is no HTML sign-in page, MFA prompt or consent screen.",
    "Managed identity sign-ins are real but come only from Vyomi's IMDS simulation: each token a VM's system-assigned identity obtains through Run command (169.254.169.254/metadata/identity/oauth2/token) appends one row. There is no IMDS endpoint reachable from inside a guest OS (no hypervisor), and user-assigned identities and other resource types (Functions, App Service) do not mint rows.",
    "The sign-in logs toolbar's Columns (choose visible columns) and Troubleshoot (explains each failure's AADSTS code from a Vyomi-written table) work; Export Data Settings (streaming to Log Analytics or storage) and Got feedback? are not simulated.",
@@ -237,6 +237,23 @@
   ],
   "tests": [
    "tests/conformance/test_azure_graph_ext.py"
+  ]
+ },
+ "azure.entra.tokens.jwt": {
+  "title": "Entra token endpoint issues real RS256 JWTs (v1 + v2) with OIDC discovery and JWKS",
+  "level": {
+   "nano": "limited",
+   "offline": "full"
+  },
+  "limitations": [
+   "client_credentials, password (ROPC), authorization_code and refresh_token grants return signed RS256 JWTs at /{tenant}/oauth2/v2.0/token (iss https://login.microsoftonline.com/{tid}/v2.0, ver 2.0) and /{tenant}/oauth2/token (iss https://sts.windows.net/{tid}/, ver 1.0) with aud, tid, oid, sub, azp/appid, roles (the API app's appRoles granted to the client via requiredResourceAccess type Role), scp, upn/preferred_username, iat/nbf/exp; delegated grants also return id_token + client_info (+ rotating refresh_token with offline_access, always at v1).",
+   "OIDC discovery (/{tenant}/v2.0/.well-known/openid-configuration, /{tenant}/.well-known/openid-configuration), JWKS (/{tenant}/discovery/v2.0/keys, /discovery/v2.0/keys, /{tenant}/discovery/keys) and /common/discovery/instance are served; the discovery endpoints point at the simulator, the `issuer` is the real Entra value, so PyJWT PyJWKClient, msal and APIM validate-jwt verify signatures with no network beyond the simulator.",
+   "One fixed simulator RSA-2048 signing key (the one core/gcp_iamcredentials_core uses, with an Entra kid): tokens survive restarts, the JWKS is stable, it is NOT a secret. No x5c certificate chain in the JWKS, no key rollover, no claims challenge / CAE, no optional-claims configuration. `aud` is the requested resource verbatim (real Entra rewrites a custom API audience to the app GUID for v2 tokens).",
+   "azure-identity and msal refuse a non-https authority. On the offline appliance / Mesh set VYOMI_AZURE_TLS_PORT=<port> (or VYOMI_AZURE_TLS=1, or VYOMI_AZURE_REAL_BACKENDS=1): core/azure_tls_front.py serves the SAME app over HTTPS with a generated self-signed certificate (GET /_vyomi/azure-tls returns endpoint + CA PEM); trust it with REQUESTS_CA_BUNDLE or connection_verify and pass authority=\"https://localhost:<port>\" with disable_instance_discovery=True. msal builds the ROPC user-realm URL from the bare hostname and drops the port, so on a port other than 443 add the hostname to msal.authority.Authority._domains_without_user_realm_discovery (or serve the front on 443). Nano has no TLS listener, so azure-identity cannot reach Nano; plain-HTTP clients (requests, PyJWT) work."
+  ],
+  "tests": [
+   "tests/conformance/test_azure_entra_jwt_sdk.py",
+   "tests/conformance/test_azure_graph_core.py"
   ]
  }
 }
