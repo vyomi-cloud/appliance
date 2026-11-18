@@ -1,11 +1,11 @@
 {
- "updated": "2026-11-18 14:17 UTC",
+ "updated": "2026-11-18 15:17 UTC",
  "totals": {
   "aws": {
    "released": 19,
    "queue": 26,
-   "building": 7,
-   "in_gate": 2,
+   "building": 8,
+   "in_gate": 1,
    "upstream": 435
   },
   "gcp": {
