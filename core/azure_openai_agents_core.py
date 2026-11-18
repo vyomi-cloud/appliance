@@ -444,6 +444,9 @@ def _vector_stores_dispatch(method, path, query, p):
             return J(200, _vs_view(_new_vs(p.get("name"), p.get("file_ids") or [], p.get("metadata"))))
         if method == "GET":
             return J(200, _page([_vs_view(v) for v in _VS.values()], query))
+    ex = _vs_extra(method, path, query, p)
+    if ex is not None:
+        return ex
     m = re.match(r"^/vector_stores/([^/]+)(?:/(files|file_batches)(?:/([^/]+))?)?$", path)
     if not m:
         return None
@@ -476,6 +479,10 @@ def _vector_stores_dispatch(method, path, query, p):
                 return nf("vector store file", oid)
             if method == "GET":
                 return J(200, f)
+            if method == "POST":                          # update attributes
+                if "attributes" in p:
+                    f["attributes"] = p["attributes"]
+                return J(200, f)
             if method == "DELETE":
                 del v["_files"][oid]
                 v["_chunks"] = [c for c in v["_chunks"] if c["file_id"] != oid]
@@ -490,17 +497,42 @@ def _vector_stores_dispatch(method, path, query, p):
                 if fid not in v["_files"]:
                     _vs_add(v, fid)
             bid = _id("vsfb_", 24)
-            b = {"id": bid, "object": "vector_store.files_batch", "created_at": int(time.time()), "vector_store_id": v["id"], "status": "completed",
+            b = {"_file_ids": list(ids), "id": bid, "object": "vector_store.files_batch", "created_at": int(time.time()), "vector_store_id": v["id"], "status": "completed",
                  "file_counts": dict(v["file_counts"])}
             v.setdefault("_batches", {})[bid] = b
-            return J(200, b)
+            return J(200, _vs_view(b))
         b = (v.get("_batches") or {}).get(oid or "")
         if oid and not b:
             return nf("file batch", oid)
         if oid and method == "GET":
+            return J(200, _vs_view(b))
+    return None
+
+
+def _vs_extra(method, path, query, p):
+    """/vector_stores/{id}/file_batches/{b}/(files|cancel), /vector_stores/{id}/search, /vector_stores/{id}/files/{f}/content."""
+    am = _am()
+    J = am._j
+    m = re.match(r"^/vector_stores/([^/]+)/file_batches/([^/]+)/(files|cancel)$", path)
+    if m:
+        v = _VS.get(m.group(1))
+        b = ((v or {}).get("_batches") or {}).get(m.group(2))
+        if not b:
+            return am._a_err(404, "invalid_request_error", f"No file batch found with id '{m.group(2)}'.")
+        if m.group(3) == "cancel" and method == "POST":
             return J(200, b)
-        if oid and method == "POST":
-            return J(200, b)
+        if m.group(3) == "files" and method == "GET":
+            return J(200, _page([f for f in v["_files"].values() if f["id"] in (b.get("_file_ids") or v["_files"])], query))
+    m = re.match(r"^/vector_stores/([^/]+)/search$", path)
+    if m and method == "POST":
+        v = _VS.get(m.group(1))
+        if not v:
+            return am._a_err(404, "invalid_request_error", f"No vector store found with id '{m.group(1)}'.")
+        q = p.get("query") or ""
+        q = " ".join(q) if isinstance(q, list) else q
+        hits = _retrieve([v["id"]], q, int(p.get("max_num_results") or 10))
+        data = [{"file_id": h["file_id"], "filename": h["filename"], "score": h["score"], "attributes": {}, "content": [{"type": "text", "text": h["text"]}]} for h in hits]
+        return J(200, {"object": "vector_store.search_results.page", "search_query": [q], "data": data, "has_more": False, "next_page": None})
     return None
 
 
@@ -584,6 +616,9 @@ def _execute_run(arm_find, t, run, asst):
             for h in hits:
                 seen.setdefault(h["file_id"], h["filename"])
             cites = list(seen.items())
+            _step(run, "tool_calls", {"type": "tool_calls", "tool_calls": [{"id": _id("call_"), "type": "file_search", "file_search": {
+                "ranking_options": {"ranker": "auto", "score_threshold": 0.0},
+                "results": [{"file_id": h["file_id"], "file_name": h["filename"], "score": h["score"], "content": [{"type": "text", "text": h["text"]}]} for h in hits]}}]})
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     saved_all = []
     for _round in range(_MAX_CI_STEPS + 1):
@@ -781,12 +816,12 @@ def assistants_dispatch(arm_find, method, path, query, p):
             if method == "DELETE":
                 del _THR[t["id"]]
                 return J(200, {"id": t["id"], "object": "thread.deleted", "deleted": True})
-        m = re.match(r"^/threads/([^/]+)/(messages|runs)(?:/([^/]+))?(?:/(submit_tool_outputs|cancel|steps))?$", path)
+        m = re.match(r"^/threads/([^/]+)/(messages|runs)(?:/([^/]+))?(?:/(submit_tool_outputs|cancel|steps))?(?:/([^/]+))?$", path)
         if m:
             t = _THR.get(m.group(1))
             if not t:
                 return nf("thread", m.group(1))
-            kind, oid, sub = m.group(2), m.group(3), m.group(4)
+            kind, oid, sub, sid = m.group(2), m.group(3), m.group(4), m.group(5)
             if kind == "messages":
                 if oid is None and method == "POST":
                     return J(200, _add_message(t, p))
@@ -798,6 +833,16 @@ def assistants_dispatch(arm_find, method, path, query, p):
                 if oid and method == "GET":
                     mm = next((x for x in t["_msgs"] if x["id"] == oid), None)
                     return J(200, mm) if mm else nf("message", oid)
+                if oid and method in ("POST", "DELETE"):
+                    mm = next((x for x in t["_msgs"] if x["id"] == oid), None)
+                    if not mm:
+                        return nf("message", oid)
+                    if method == "DELETE":
+                        t["_msgs"].remove(mm)
+                        return J(200, {"id": oid, "object": "thread.message.deleted", "deleted": True})
+                    if "metadata" in p:
+                        mm["metadata"] = p["metadata"] or {}
+                    return J(200, mm)
             else:
                 if oid is None and method == "POST":
                     asst = _ASST.get(p.get("assistant_id"))
@@ -811,6 +856,13 @@ def assistants_dispatch(arm_find, method, path, query, p):
                     return nf("run", oid)
                 if oid and sub is None and method == "GET":
                     return J(200, _run_view(run))
+                if oid and sub is None and method == "POST":
+                    if "metadata" in p:
+                        run["metadata"] = p["metadata"] or {}
+                    return J(200, _run_view(run))
+                if sub == "steps" and sid and method == "GET":
+                    stp = next((x for x in (run.get("_steps") or []) if x["id"] == sid), None)
+                    return J(200, stp) if stp else nf("run step", sid)
                 if sub == "steps" and method == "GET":
                     return J(200, _page(list(run.get("_steps") or []), query))
                 if sub == "cancel" and method == "POST":
