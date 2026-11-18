@@ -30,4 +30,11 @@ def start_in_process():
     threading.Thread(target=srv.run, daemon=True).start()
     while not srv.started:
         time.sleep(0.05)
+    try:   # VYOMI_GCP_REAL_BACKENDS=1 / VYOMI_GCP_GRPC=1: the gRPC front (Monitoring, gapic Logging) beside the HTTP port, as the appliance does
+        from core import gcp_grpc_front
+        gcp_grpc_front.maybe_start(upstream=f"http://127.0.0.1:{port}", port=0)
+        if os.environ.get("VYOMI_GCP_GRPC_CA"):
+            os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = os.environ["VYOMI_GCP_GRPC_CA"]
+    except Exception:
+        pass
     return f"http://127.0.0.1:{port}"

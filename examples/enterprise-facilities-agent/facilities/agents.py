@@ -1,6 +1,6 @@
-"""Supervisor + three sub-agents (Facilities, Maintenance, Analytics) as a LangGraph StateGraph.
-Tools are plain boto3-backed functions. The model is called through Bedrock Converse; when no model is reachable the
-supervisor routes with keyword rules and the final answer is extractive, and the result says so (llm_used=False)."""
+"""Supervisor + three sub-agents (Facilities, Maintenance, Analytics) as a LangGraph StateGraph. The graph is cloud-neutral: every cloud call
+goes through an IO adapter (ctx.io; default AwsIO = boto3 + Bedrock Converse, GCP = facilities/gcp/io.py with the Google SDKs).
+When no model is reachable the supervisor routes with keyword rules and the final answer is extractive, and the result says so (llm_used=False)."""
 import json, re, time, uuid
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
@@ -23,32 +23,57 @@ class S(TypedDict, total=False):
     spans: list
 
 
+class AwsIO:
+    """AWS adapter: Bedrock Converse for the model, Lambda / AgentCore Gateway for tools, Step Functions for approval, DynamoDB for statistics."""
+
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    def converse(self, system, text, max_tokens=300):
+        """Returns the model text or None when no model is reachable (ModelNotReady / unsupported)."""
+        ctx = self.ctx
+        try:
+            r = ctx.client("bedrock-runtime").converse(
+                modelId=MODEL_ID, system=[{"text": system}], messages=[{"role": "user", "content": [{"text": text}]}],
+                inferenceConfig={"maxTokens": max_tokens, "temperature": 0})
+            return r["output"]["message"]["content"][0]["text"]
+        except Exception as e:
+            ctx.state["llm_error"] = f"{type(e).__name__}: {str(e)[:120]}"
+            return None
+
+    def call_tool(self, tool, args):
+        """Tool call. Through AgentCore Gateway (MCP) when the gateway serves it, otherwise a direct Lambda invoke. Returns (output, path)."""
+        ctx = self.ctx
+        lam_name = {"kb_search": "facilities-kb-search", "asset_status": "facilities-asset-status"}[tool]
+        if ctx.state.get("gateway_tools_ok"):
+            from . import mcp
+            names = [n for n in ctx.state["mcp_tools"] if tool in n]
+            res = mcp.call(ctx, ctx.state["gateway_id"], "tools/call", {"name": names[0], "arguments": args})
+            return (json.loads(res["content"][0]["text"]) if res.get("content") else res), "agentcore-gateway"
+        r = ctx.client("lambda").invoke(FunctionName=lam_name, Payload=json.dumps(args).encode())
+        return json.loads(r["Payload"].read()), "lambda-direct"
+
+    def start_approval(self, rid, payload):
+        """Human-approval write path (Step Functions waitForTaskToken). Returns the approval record the run reports."""
+        ctx = self.ctx
+        ex = ctx.client("stepfunctions").start_execution(stateMachineArn=ctx.state["sm_arn"], name=rid, input=json.dumps(payload))
+        return {"request_id": rid, "execution_arn": ex["executionArn"], "status": "PENDING_APPROVAL"}, "step-functions-approval"
+
+    def work_orders(self):
+        return [aws_json(i) for i in self.ctx.client("dynamodb").scan(TableName=NAMES["work_orders"])["Items"]], "dynamodb"
+
+
+def io_of(ctx):
+    return getattr(ctx, "io", None) or AwsIO(ctx)
+
+
 def converse(ctx, system, text, max_tokens=300):
-    """Returns the model text or None when no model is reachable (ModelNotReady / unsupported)."""
-    try:
-        r = ctx.client("bedrock-runtime").converse(
-            modelId=MODEL_ID, system=[{"text": system}], messages=[{"role": "user", "content": [{"text": text}]}],
-            inferenceConfig={"maxTokens": max_tokens, "temperature": 0})
-        return r["output"]["message"]["content"][0]["text"]
-    except Exception as e:
-        ctx.state["llm_error"] = f"{type(e).__name__}: {str(e)[:120]}"
-        return None
+    return io_of(ctx).converse(system, text, max_tokens)
 
 
 def call_tool(ctx, tool, args, st):
-    """Tool call. Through AgentCore Gateway (MCP) when the gateway serves it, otherwise a direct Lambda invoke."""
     t0 = time.time()
-    lam_name = {"kb_search": "facilities-kb-search", "asset_status": "facilities-asset-status"}[tool]
-    path = "lambda-direct"
-    if ctx.state.get("gateway_tools_ok"):
-        from . import mcp
-        names = [n for n in ctx.state["mcp_tools"] if tool in n]
-        res = mcp.call(ctx, ctx.state["gateway_id"], "tools/call", {"name": names[0], "arguments": args})
-        out = json.loads(res["content"][0]["text"]) if res.get("content") else res
-        path = "agentcore-gateway"
-    else:
-        r = ctx.client("lambda").invoke(FunctionName=lam_name, Payload=json.dumps(args).encode())
-        out = json.loads(r["Payload"].read())
+    out, path = io_of(ctx).call_tool(tool, args)
     st.setdefault("tools", []).append({"tool": tool, "via": path, "args": args})
     st.setdefault("spans", []).append(dict(name=f"tool:{tool}", kind="tool", start=t0, end=time.time(), via=path))
     return out
@@ -111,25 +136,23 @@ def build(ctx):
                                                   f"{[w['work_order_id'] + ' ' + w['title'] for w in out['work_orders'] if w.get('status') == 'OPEN'] or 'none'}.")
                 if re.search(r"work order|raise|open a|create", st["question"], re.I):      # write path: Step Functions human approval
                     rid = "req-" + uuid.uuid4().hex[:10]
-                    ex = ctx.client("stepfunctions").start_execution(
-                        stateMachineArn=ctx.state["sm_arn"], name=rid,
-                        input=json.dumps({"request_id": rid, "asset_id": m.group(1), "summary": f"Work order for {m.group(1)}: " + st["question"][:100],
-                                          "priority": "P1" if re.search(r"exceed|pressure|fire|trapped", st["question"], re.I) else "P2", "requester": st.get("user", "")}))
-                    st["approval"] = {"request_id": rid, "execution_arn": ex["executionArn"], "status": "PENDING_APPROVAL"}
-                    st["tools"].append({"tool": "create_work_order", "via": "step-functions-approval", "args": {"request_id": rid}})
+                    st["approval"], via = io_of(ctx).start_approval(rid, {
+                        "request_id": rid, "asset_id": m.group(1), "summary": f"Work order for {m.group(1)}: " + st["question"][:100],
+                        "priority": "P1" if re.search(r"exceed|pressure|fire|trapped", st["question"], re.I) else "P2", "requester": st.get("user", "")})
+                    st["tools"].append({"tool": "create_work_order", "via": via, "args": {"request_id": rid}})
         span(st, "agent:maintenance", "agent", t0)
         return st
 
     def analytics(st):
         t0 = time.time()
-        items = [aws_json(i) for i in ctx.client("dynamodb").scan(TableName=NAMES["work_orders"])["Items"]]
+        items, store = io_of(ctx).work_orders()
         by = {}
         for w in items:
             by.setdefault(w["status"], {}).setdefault(w["priority"], 0)
             by[w["status"]][w["priority"]] += 1
         st["analytics"] = {"total": len(items), "by_status_priority": by}
         st.setdefault("facts", []).append(f"Work orders: {len(items)} total; by status/priority {json.dumps(by)}.")
-        st.setdefault("tools", []).append({"tool": "work_order_stats", "via": "dynamodb", "args": {}})
+        st.setdefault("tools", []).append({"tool": "work_order_stats", "via": store, "args": {}})
         span(st, "agent:analytics", "agent", t0)
         return st
 

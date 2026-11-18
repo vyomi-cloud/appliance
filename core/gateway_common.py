@@ -124,12 +124,58 @@ def reset_jwks_cache():
     _JWKS.clear()
 
 
+def _google_local(cfg):
+    """True when the config names a Google token issuer this simulator hosts itself: Identity Platform / Firebase (`securetoken.google.com/<p>`,
+    signed by core/gcp_identityplatform_core) or service-account ID tokens (`accounts.google.com`, iamcredentials generateIdToken), looked
+    up at the standard Google JWKS URL or at the simulator's own copy of it. Both are signed by the simulator's one public RS256 key."""
+    iss = str(cfg.get("issuer") or "")
+    if not (iss.startswith("https://securetoken.google.com/") or iss in ("https://accounts.google.com", "accounts.google.com")):
+        return False
+    uri = str(cfg.get("jwks_uri") or "")
+    path = uri.split("//", 1)[-1].partition("/")[2].split("?")[0] if uri else ""
+    return not uri or "googleapis.com/" in uri or path in _GOOGLE_CERT_PATHS
+
+
+_GOOGLE_CERT_PATHS = ("oauth2/v3/certs", "oauth2/v1/certs", "service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+                      "robot/v1/metadata/x509/securetoken@system.gserviceaccount.com")
+
+
 def make_rs256_verifier(ttl: float = 300.0, timeout: float = 5.0, fetch_json=None):
     """-> `verify(token, header, cfg) -> bool` (RS256 only), or None when it cannot run here (Nano / no `cryptography`).
 
     Keys come from `cfg["jwks_uri"]` when set, else OIDC discovery of `cfg["issuer"]`; cached `ttl` seconds. Anything else — another
     alg, an unknown kid, an unreachable issuer, a bad signature — returns False: a token we could not verify is never admitted.
+    Google issuers the simulator itself hosts (see `_google_local`) are verified in pure Python against its own key, with no network.
     `fetch_json(url) -> dict` is injectable for tests."""
+    try:
+        from core import gcp_iamcredentials_core as _iamc
+    except Exception:   # pragma: no cover - Pyodide flat layout
+        try:
+            import gcp_iamcredentials_core as _iamc  # type: ignore
+        except Exception:
+            _iamc = None
+
+    def verify_local(token, header):
+        try:
+            if header.get("alg") != "RS256":
+                return False
+            h, p, sig = token.split(".")
+            return bool(_iamc.rsa_verify(("%s.%s" % (h, p)).encode(), b64u(sig)))
+        except Exception:
+            return False
+
+    inner = _make_remote_verifier(ttl, timeout, fetch_json)
+    if inner is None and _iamc is None:
+        return None
+
+    def verify(token, header, cfg):
+        if _iamc is not None and _google_local(cfg):
+            return verify_local(token, header)
+        return inner(token, header, cfg) if inner is not None else False
+    return verify
+
+
+def _make_remote_verifier(ttl, timeout, fetch_json):
     if sys.platform == "emscripten" and not _local_jwks("x"):   # Nano verifies only issuers it hosts itself (Cognito pools in core/identity_core)
         return None
     try:
@@ -178,6 +224,8 @@ def make_rs256_verifier(ttl: float = 300.0, timeout: float = 5.0, fetch_json=Non
         except Exception:
             return False
     return verify
+
+
 
 
 # ── resumable forwarding (sync + Nano's awaited bridge share ONE engine run) ─────────────────────────────────────────

@@ -7,11 +7,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "One small local model answers every Gemini model id (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts, function calling (functionDeclarations, automatic function calling via google-genai) and responseSchema JSON output work; images/audio/video, grounding/Google Search, code execution, safety settings and tuning are rejected."
+   "One small local model answers every Gemini model id (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts, function calling (functionDeclarations, automatic function calling via google-genai) and responseSchema JSON output work; images/audio/video, Google Search / Vertex AI Search / external-API grounding, code execution, safety settings and tuning are rejected. generateContent with tools[].retrieval.vertexRagStore (a Vertex RAG corpus) runs the retrieval against the corpus first, injects the retrieved chunks into the model's system instruction and returns groundingMetadata (groundingChunks, groundingSupports, retrievalQueries; supports are a lexical overlap match of each answer sentence to the chunks, not Google's attribution model); an unknown corpus is a 404 before any model call. Not attached to streamGenerateContent chunks. modelArmorConfig (promptTemplateName / responseTemplateName, snake or camel case) is honoured: the prompt is sanitized with the stored Model Armor template before the model runs, and a match answers 200 with promptFeedback.blockReason=MODEL_ARMOR + blockReasonMessage and no candidates (model never called; streamGenerateContent too); the answer is sanitized with the response template and a match returns the candidate with finishReason SAFETY and no parts (unary only, not streamed answers). An unknown template is 404, a malformed name 400. Detection is the toy-grade Model Armor engine."
   ],
   "tests": [
    "tests/conformance/test_ai_sdk_tools.py",
-   "tests/conformance/test_local_llm_seam.py"
+   "tests/conformance/test_local_llm_seam.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ],
   "probe": {
    "gcp_vertex": "gemini"
@@ -40,10 +40,10 @@
    "offline": "limited"
   },
   "limitations": [
-   "A small fixed catalog of Google, Meta, Mistral and partner models. Only Gemini and text-embedding models can be called (local-LLM seam); other models are catalog entries, and 'Deploy' registers a model + endpoint record without a serving container."
+   "A small fixed catalog of Google, Meta, Mistral and partner models. Only Gemini and text-embedding models can be called (local-LLM seam); other models are catalog entries, and 'Deploy' registers a model + endpoint record without a serving container. publishers/google/models/<id> answers for every id the simulator serves, including the legacy gemini-* / text-embedding-* ids (resolved onto a local catalogue model, said so in vyomiAlias), with version, inputTokenLimit / outputTokenLimit (8192, the local models' window, not Gemini's) and supportedGenerationMethods; google-genai models.get / list work on both the Vertex and Developer-API surfaces."
   ],
   "tests": [
-   "tests/conformance/test_gcp_vertex_core.py"
+   "tests/conformance/test_gcp_vertex_core.py", "tests/conformance/test_gcp_ref_vertexfix_sdk.py"
   ],
   "probe": {
    "gcp_vertex": "resources"
@@ -175,10 +175,10 @@
    "offline": "limited"
   },
   "limitations": [
-   "Dev Simplified: the control plane (aiplatform v1/v1beta1 reasoningEngines with LROs) is real, and :query / :streamQuery really run an agent - but not a pickled/packaged Python class. The agent is a Vyomi agent spec (JSON instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) carried in spec.vyomiAgentSpec (REST) or a spec.deploymentSpec.env entry VYOMI_AGENT_SPEC (typed google-cloud-aiplatform gapic clients, transport='rest'), executed as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano). Class methods query, stream_query/async_stream_query and session helpers (create/get/list/delete_session, multi-turn history) are served; :streamQuery events follow the ADK Event shape inside the REST JSON-array-of-HttpBody framing. vertexai.agent_engines.create(<python object>) (cloudpickle + GCS staging), packageSpec/containerSpec deployment, Memory Bank, Example Store and ADK/LangChain/LangGraph runtimes are not supported; an engine with no spec answers :query with FAILED_PRECONDITION, and no model running returns 503 UNAVAILABLE (never a canned answer). Toy-grade quality; webhook tools need network egress (not in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. gcloud has no reasoning-engines surface in the stable track - use the SDK or REST. State is in the persisted account bag."
+   "Source packages run: vertexai.Client().agent_engines.create(config={source_packages, entrypoint_module, entrypoint_object, class_methods, env_vars}) is stored (spec.sourceCodeSpec.inlineSource archive held server-side, not echoed; responses validate in the SDK, snake_case spec accepted) and :query / :streamQuery run the user's own code: the entrypoint object (instance, or a class that is instantiated) gets set_up() then the registered class method with the request input as keyword arguments, inside the same sandboxed subprocess as Cloud Run functions (metadata-server identity so google.auth.default() works, network allow-list to the simulator, filesystem confinement, deploy-time env_vars + GOOGLE_CLOUD_PROJECT / VYOMI_ENDPOINT / STORAGE_EMULATOR_HOST), so the hosted agent can call the simulator with the real Google SDKs. Limits: one fresh process per call (set_up runs each call, no instance state between calls - use sessions / memory), generators are buffered then streamed, requirements.txt is not pip-installed (the pre-baked wheel set is used; a missing package surfaces as the agent's ImportError), the sandbox is a guard-rail not a VM, and Nano (no subprocess) answers FAILED_PRECONDITION for source-packaged engines. Pickled objects (create(agent=<python object>), spec.packageSpec) are stored but never unpickled: :query answers FAILED_PRECONDITION naming the supported form. The Vyomi-spec path is the other way to run an agent: the agent is a Vyomi agent spec (JSON instructions + declarative tools: static/template/builtin calculator/webhook/in-process function) carried in spec.vyomiAgentSpec (REST) or a spec.deploymentSpec.env entry VYOMI_AGENT_SPEC (typed google-cloud-aiplatform gapic clients, transport='rest'), executed as a tool-calling loop over the local model (llama.cpp on the mesh/appliance, WebLLM on Nano). Class methods query, stream_query/async_stream_query and session helpers (create/get/list/delete_session, multi-turn history) are served; :streamQuery events follow the ADK Event shape inside the REST JSON-array-of-HttpBody framing. vertexai.agent_engines.create(<python object>) (cloudpickle + GCS staging), packageSpec/containerSpec deployment, Memory Bank, Example Store and ADK/LangChain/LangGraph runtimes are not supported; an engine with no spec answers :query with FAILED_PRECONDITION, and no model running returns 503 UNAVAILABLE (never a canned answer). Toy-grade quality; webhook tools need network egress (not in Nano's browser); on Nano the loop re-runs after each model await, so keep tools idempotent. gcloud has no reasoning-engines surface in the stable track - use the SDK or REST. State is in the persisted account bag."
   ],
   "tests": [
-   "tests/conformance/test_ai_agent_runtimes.py"
+   "tests/conformance/test_ai_agent_runtimes.py", "tests/conformance/test_gcp_ref_vertexfix_sdk.py"
   ]
  },
  "gcp.vertex-ai.rag-engine": {
@@ -192,7 +192,7 @@
   ],
   "tests": [
    "tests/conformance/test_gcp_rag_limvector.py",
-   "tests/conformance/test_gcp_agentplatform_core.py"
+   "tests/conformance/test_gcp_agentplatform_core.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ]
  },
  "gcp.vertex-ai.search": {
@@ -216,10 +216,10 @@
    "offline": "limited"
   },
   "limitations": [
-   "Templates (RAI filters, prompt-injection and jailbreak, basic sensitive-data protection) are really evaluated by the Bedrock Guardrails engine (keyword + local-embedding scoring, regex PII), so detection is toy-grade, not Google's models. Malicious-URI detection (Safe Browsing) and advanced SDP (Cloud DLP templates) are reported EXECUTION_SKIPPED. No floor settings, no SCC / Cloud Logging findings: the page keeps the last 200 sanitize results of this simulator. Prompt injection applies to user prompts only."
+   "Templates (RAI filters, prompt-injection and jailbreak, basic sensitive-data protection) are really evaluated by the Bedrock Guardrails engine (keyword + local-embedding scoring, regex PII), so detection is toy-grade, not Google's models. Malicious-URI detection (Safe Browsing) and advanced SDP (Cloud DLP templates) are reported EXECUTION_SKIPPED. No floor settings, no SCC / Cloud Logging findings: the page keeps the last 200 sanitize results of this simulator. Prompt injection applies to user prompts only. Enums are accepted as proto integers (what google-cloud-modelarmor sends, alt=json;enum-encoding=int) or names, and answered in ints when the caller asked for them; an enum left at 0 (UNSPECIFIED) means the field is not set."
   ],
   "tests": [
-   "tests/conformance/test_gcp_agentgov_core.py"
+   "tests/conformance/test_gcp_agentgov_core.py", "tests/conformance/test_gcp_ref_vertexfix_sdk.py"
   ]
  },
  "gcp.vertex-ai.agent-gateway": {
@@ -269,11 +269,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "Sessions are the Agent Engine's own multi-turn history for a Vyomi agent spec (list, create, get, delete, events), kept in the account state of this simulator and replayed to the local small model on each query. There is no separate Vertex AI Session Service and no session TTL or expiry."
+   "Sessions are the Agent Engine's own multi-turn history for a Vyomi agent spec (list, create, get, delete, events), kept in the account state of this simulator and replayed to the local small model on each query. There is no separate Vertex AI Session Service and no session TTL or expiry. sessions:appendEvent stores a SessionEvent (author, invocationId, timestamp required; content, actions, eventMetadata, errorCode, errorMessage, rawEvent kept as sent) and events list returns them in timestamp order (timestamp filter supported); events are append-only and not fed back to a Vyomi-spec agent's model history."
   ],
   "tests": [
    "tests/conformance/test_gcp_agentplatform_core.py",
-   "tests/conformance/test_ai_agent_runtimes.py"
+   "tests/conformance/test_ai_agent_runtimes.py", "tests/conformance/test_gcp_ref_vertexfix_sdk.py"
   ]
  },
  "gcp.vertex-ai.memory-bank": {

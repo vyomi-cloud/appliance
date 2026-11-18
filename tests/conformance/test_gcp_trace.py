@@ -57,7 +57,7 @@ check("project mismatch rejected", st == 400)
 st, _ = call("POST", f"/v2/projects/{P}/traces:batchWrite", {"spans": [span(T1, "6" * 16, "ok", "2026-11-04T10:00:00Z", "2026-11-04T10:00:01Z"), span(T1, "7", "bad", "2026-11-04T10:00:00Z", "2026-11-04T10:00:01Z")]})
 st2, g = call("GET", f"/v1/projects/{P}/traces/{T1}")
 check("batch is atomic", st == 400 and len(g["spans"]) == 2)
-check("get trace COMPLETE v1 shape", st2 == 200 and g["spans"][0]["kind"] == "RPC_SERVER" and g["spans"][1]["parentSpanId"] == s1 and g["spans"][0]["labels"]["/http/method"] == "GET")
+check("get trace COMPLETE v1 shape", st2 == 200 and g["spans"][0]["kind"] == "RPC_SERVER" and g["spans"][1]["parentSpanId"] == str(int(s1, 16)) and g["spans"][0]["spanId"] == str(int(g["spans"][0]["spanId"])) and g["spans"][0]["labels"]["/http/method"] == "GET")
 check("get missing 404", call("GET", f"/v1/projects/{P}/traces/{'c' * 32}")[0] == 404)
 
 _, l = call("GET", f"/v1/projects/{P}/traces")

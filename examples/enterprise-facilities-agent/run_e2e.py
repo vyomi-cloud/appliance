@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""End-to-end run of the Facilities agent reference application against a Vyomi simulator, through the real AWS SDK (boto3).
+"""End-to-end run of the Facilities agent reference application against a Vyomi simulator, through the real cloud SDK (boto3 for AWS,
+the google-cloud-* / google-genai / vertexai libraries for GCP).
 
-  python run_e2e.py                      # starts the simulator in-process (needs the repo checkout)
+  python run_e2e.py                      # AWS: starts the simulator in-process (needs the repo checkout)
+  python run_e2e.py --cloud gcp          # GCP: same 13 components on the Google SDKs (see README-GCP.md)
   python run_e2e.py --endpoint http://localhost:8099
   python run_e2e.py --only 5,6           # run a subset of components (dependencies not re-run: use for debugging)
 
-Writes results/e2e-result.json and results/report.html. Exit code 0 only when all 13 components PASS.
+Writes results/e2e-result.json and results/report.html (GCP: results/gcp-e2e-result.json and results/gcp-report.html). Exit code 0 only when all 13 components PASS.
 Statuses: PASS | BLOCKED (the simulator lacks a capability another lane is building; named) | FAIL (the app or the simulator is wrong)."""
 import argparse, json, os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -14,10 +16,13 @@ os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 
-from facilities.runtime import Ctx, COMPONENTS, PASS, BLOCKED, FAIL
+from facilities.runtime import Ctx, PASS, BLOCKED, FAIL
 
 
-def plan():
+def plan(cloud="aws"):
+    if cloud == "gcp":
+        from facilities.gcp.plan import plan as gcp_plan
+        return gcp_plan()
     from facilities.components import (c01_access, c02_channels, c03_runtime, c04_gateway, c05_approval, c06_knowledge, c07_tools,
                                        c08_observability, c09_memory, c10_models, c11_response, c12_pipeline, c13_governance)
     # dependency order; the number is the architecture component the step belongs to
@@ -29,9 +34,14 @@ def plan():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--endpoint", help="Vyomi simulator URL (default: start one in-process)")
-    ap.add_argument("--region", default="us-east-1")
+    ap.add_argument("--cloud", choices=["aws", "gcp"], default="aws", help="which cloud's SDK the 13 components use (default aws)")
+    ap.add_argument("--region", default=None, help="default us-east-1 (aws) / us-central1 (gcp)")
     ap.add_argument("--out", default=os.path.join(HERE, "results"))
     ap.add_argument("--only", help="comma list of component numbers")
+    ap.add_argument("--start-emulators", action="store_true", help="gcp dev helper: start the real Pub/Sub + Firestore emulators in Docker (local image only) and set "
+                    "PUBSUB_EMULATOR_HOST / FIRESTORE_EMULATOR_HOST; stands in for VYOMI_GCP_REAL_BACKENDS=1 until the simulator does it")
+    ap.add_argument("--dev-local-functions", action="store_true", help="gcp DEV ONLY: run the Cloud Run function handlers in this process instead of the simulator's "
+                    "function sandbox, to exercise the rest of the app before the sandbox lane lands. Never a conformance result: exit code is forced non-zero")
     ap.add_argument("--llm-stub", action="store_true", help="start the deterministic TEST STUB llm (tools/llm_stub) and point the simulator at it "
                     "(VYOMI_LLM_ENDPOINT). Model-dependent PASSes are then STUB-BACKED, not a real model.")
     a = ap.parse_args()
@@ -40,6 +50,12 @@ def main():
         import stub_llm_server
         os.environ["VYOMI_LLM_ENDPOINT"] = stub_llm_server.start()
         print(f"[llm-stub] VYOMI_LLM_ENDPOINT={os.environ['VYOMI_LLM_ENDPOINT']}  (deterministic test stub, NOT a real model)", flush=True)
+    emu = None
+    if a.start_emulators:
+        from facilities.gcp.emulators import Emulators
+        from facilities.gcp.runtime import PROJECT
+        emu = Emulators(PROJECT).start()
+        print(f"[emulators] pubsub={os.environ['PUBSUB_EMULATOR_HOST']} firestore={os.environ['FIRESTORE_EMULATOR_HOST']} (real Google emulators, own containers {emu.names})", flush=True)
     endpoint = a.endpoint
     if not endpoint:
         from facilities.server import start_in_process
@@ -49,12 +65,20 @@ def main():
 
     def out(s):
         print(s, flush=True); lines.append(s)
-    ctx = Ctx(endpoint, a.region, out)
-    out(f"Facilities agent e2e   endpoint={endpoint}   {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    if a.cloud == "gcp":
+        from facilities.gcp.runtime import GcpCtx
+        ctx = GcpCtx(endpoint, a.region or "us-central1", out)
+    else:
+        ctx = Ctx(endpoint, a.region or "us-east-1", out)
+    COMPONENTS = ctx.COMPONENTS
+    if a.dev_local_functions:
+        ctx.local_functions = True
+        ctx.note("DEV RUN: function handlers ran in the harness process (--dev-local-functions), NOT in the simulator's function sandbox. Not a conformance result.")
+    out(f"Facilities agent e2e ({a.cloud.upper()})   endpoint={endpoint}   {time.strftime('%Y-%m-%d %H:%M:%S')}")
     out("=" * 100)
     seen = set()
     t0 = time.time()
-    for comp, fn in plan():
+    for comp, fn in plan(a.cloud):
         if only and comp not in only:
             continue
         if comp not in seen:
@@ -93,15 +117,18 @@ def main():
     if a.llm_stub:
         out("NOTE: run with --llm-stub: components 10/11 (and agent routing/answers) were answered by the deterministic TEST STUB, not a real model: STUB-BACKED PASS.")
     os.makedirs(a.out, exist_ok=True)
-    doc = dict(llm_stub=bool(a.llm_stub), endpoint=endpoint, when=time.strftime("%Y-%m-%dT%H:%M:%S"), totals=tot, components=table, transcript="\n".join(lines),
+    doc = dict(cloud=a.cloud, llm_stub=bool(a.llm_stub), notes=ctx.state.get("notes", []), endpoint=endpoint, when=time.strftime("%Y-%m-%dT%H:%M:%S"), totals=tot, components=table, transcript="\n".join(lines),
                agent={k: res.get(k) for k in ("question", "user", "route", "llm_used", "tools", "answer", "citations", "approval")}, work_order=ctx.state.get("work_order_id"))
-    with open(os.path.join(a.out, "e2e-result.json"), "w") as f:
+    pre = "gcp-" if a.cloud == "gcp" else ""
+    with open(os.path.join(a.out, pre + "e2e-result.json"), "w") as f:
         json.dump(doc, f, indent=2, default=str)
     from report import render
-    with open(os.path.join(a.out, "report.html"), "w") as f:
+    with open(os.path.join(a.out, pre + "report.html"), "w") as f:
         f.write(render(doc))
-    out(f"wrote {a.out}/e2e-result.json and report.html")
-    sys.exit(0 if tot[PASS] == len(table) else 1)
+    out(f"wrote {a.out}/{pre}e2e-result.json and {pre}report.html")
+    if emu:
+        emu.stop()
+    sys.exit(0 if tot[PASS] == len(table) and not a.dev_local_functions else 1)
 
 
 if __name__ == "__main__":
