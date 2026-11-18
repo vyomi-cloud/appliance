@@ -7,7 +7,7 @@ equivalent REST call (verb + path + JSON) against the simulator's OWN REST front
 back into the response message, so the REST cores stay the single implementation and console/REST/gRPC all see the
 same state. No new data store, no new engine.
 
-Start: VYOMI_GCP_GRPC_PORT=<port> (e.g. 50051) makes server.py call maybe_start(); the upstream REST base defaults to
+Start: automatic when VYOMI_GCP_REAL_BACKENDS=1 or VYOMI_GCP_GRPC=1 (or VYOMI_GCP_GRPC_PORT=<port>, default 50051, TLS with a generated cert); server.py calls maybe_start(); the upstream REST base defaults to
 http://127.0.0.1:${PORT:-9000} (override with VYOMI_GCP_GRPC_UPSTREAM). Optional TLS: VYOMI_GCP_GRPC_TLS_CERT / _KEY. Needs grpcio (already a dependency of the
 Google client libraries); Nano never starts it.
 
@@ -170,22 +170,90 @@ def build_server(upstream: str, port: int = 0, host: str = "127.0.0.1", workers:
 
 
 _server = None
+_info: dict = {}
 
 
-def maybe_start() -> int:
-    """Start from env (VYOMI_GCP_GRPC_PORT); returns the bound port or 0 (off / unavailable)."""
+def _truthy(v) -> bool:
+    return str(v or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def wanted() -> bool:
+    """The front starts by itself when asked (VYOMI_GCP_GRPC=1 or VYOMI_GCP_GRPC_PORT) or when the real-backend mode is on
+    (VYOMI_GCP_REAL_BACKENDS=1: the app's Pub/Sub/Firestore are gRPC then, and so are Monitoring/Logging)."""
+    return bool(os.environ.get("VYOMI_GCP_GRPC_PORT", "").strip()) or _truthy(os.environ.get("VYOMI_GCP_GRPC")) \
+        or _truthy(os.environ.get("VYOMI_GCP_REAL_BACKENDS")) and _truthy(os.environ.get("VYOMI_GCP_GRPC", "1"))
+
+
+def _self_signed(dirpath: str) -> tuple[str, str] | None:
+    """A throwaway self-signed cert for localhost/127.0.0.1 (cryptography is already a dependency of the appliance); None if unavailable."""
+    try:
+        import datetime
+        import ipaddress
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.x509.oid import NameOID
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key()).serial_number(x509.random_serial_number())
+                .not_valid_before(now - datetime.timedelta(minutes=5)).not_valid_after(now + datetime.timedelta(days=365))
+                .add_extension(x509.SubjectAlternativeName([x509.DNSName("localhost"), x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
+                .sign(key, hashes.SHA256()))
+        c, k = os.path.join(dirpath, "grpc-front.crt"), os.path.join(dirpath, "grpc-front.key")
+        open(c, "wb").write(cert.public_bytes(serialization.Encoding.PEM))
+        open(k, "wb").write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
+        return c, k
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def maybe_start(upstream: str | None = None, port: int | None = None) -> int:
+    """Start the front when wanted() (see above); returns the bound port or 0. Contract for clients (also served by discovery()):
+      VYOMI_GCP_GRPC_ENDPOINT = host:port to put in client_options={"api_endpoint": ...}
+      VYOMI_GCP_GRPC_CA       = PEM file of the serving certificate (empty when plaintext); the client sets
+                                GRPC_DEFAULT_SSL_ROOTS_FILE_PATH to it, then the DEFAULT constructors work (MetricServiceClient, logging.Client).
+    `upstream` = base URL of the simulator's REST front door (default: http://127.0.0.1:$PORT or :9000); `port` overrides the env
+    (0 = any free port, what the in-process harness uses). TLS: VYOMI_GCP_GRPC_TLS_CERT/_KEY, else a generated self-signed cert
+    (VYOMI_GCP_GRPC_TLS=0 forces plaintext)."""
     global _server
-    port = os.environ.get("VYOMI_GCP_GRPC_PORT", "").strip()
-    if not port or sys.platform == "emscripten" or _server is not None:
+    if sys.platform == "emscripten" or _server is not None:
+        return _info.get("port", 0) if _server is not None else 0
+    if not wanted():
         return 0
     try:
-        upstream = os.environ.get("VYOMI_GCP_GRPC_UPSTREAM") or f"http://127.0.0.1:{os.environ.get('PORT', '9000')}"
+        upstream = upstream or os.environ.get("VYOMI_GCP_GRPC_UPSTREAM") or f"http://127.0.0.1:{os.environ.get('PORT', '9000')}"
+        want = os.environ.get("VYOMI_GCP_GRPC_PORT", "").strip()
+        port = port if port is not None else (int(want) if want else 50051)
         cert, key = os.environ.get("VYOMI_GCP_GRPC_TLS_CERT", ""), os.environ.get("VYOMI_GCP_GRPC_TLS_KEY", "")
-        _server, bound = build_server(upstream, int(port), host=os.environ.get("VYOMI_GCP_GRPC_HOST", "0.0.0.0"),
-                                      tls=(cert, key) if cert and key else None)
+        if not (cert and key) and os.environ.get("VYOMI_GCP_GRPC_TLS", "1") != "0":
+            import tempfile
+            pair = _self_signed(tempfile.mkdtemp(prefix="vyomi-grpc-"))
+            cert, key = pair if pair else ("", "")
+        host = os.environ.get("VYOMI_GCP_GRPC_HOST", "0.0.0.0")
+        try:
+            _server, bound = build_server(upstream, port, host=host, tls=(cert, key) if cert and key else None)
+        except RuntimeError:   # the default port is taken: any free port, advertised through the endpoint variable
+            _server, bound = build_server(upstream, 0, host=host, tls=(cert, key) if cert and key else None)
         _server.start()
-        _log.info("GCP gRPC front door on :%s -> %s", bound, upstream)
+        _info.update(port=bound, endpoint=f"localhost:{bound}", ca=cert if cert and key else "", tls=bool(cert and key))
+        os.environ["VYOMI_GCP_GRPC_ENDPOINT"], os.environ["VYOMI_GCP_GRPC_CA"] = _info["endpoint"], _info["ca"]
+        _log.info("GCP gRPC front door on :%s -> %s (tls=%s)", bound, upstream, _info["tls"])
         return bound
     except Exception as exc:  # noqa: BLE001 - never break appliance boot
+        _server = None
         _log.warning("GCP gRPC front door not started: %s", exc)
         return 0
+
+
+def discovery() -> dict:
+    """What `GET /_vyomi/gcp-grpc` returns so a remote app (Mesh) learns the endpoint and CA without reading files."""
+    if not _info:
+        return {"enabled": False}
+    pem = ""
+    if _info.get("ca"):
+        try:
+            pem = open(_info["ca"]).read()
+        except OSError:
+            pem = ""
+    return {"enabled": True, "endpoint": _info["endpoint"], "tls": _info["tls"], "ca_pem": pem, "port": _info["port"]}
