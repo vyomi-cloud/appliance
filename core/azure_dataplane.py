@@ -1472,7 +1472,7 @@ def register(app) -> None:
     async def sb_dispatch(namespace: str, rest: str, request: Request):
         return await _sb_handle(namespace, rest, request)
 
-    COSMOS_METHODS = ["GET", "PUT", "POST", "DELETE", "HEAD", "OPTIONS"]
+    COSMOS_METHODS = ["GET", "PUT", "PATCH", "POST", "DELETE", "HEAD", "OPTIONS"]
 
     @app.api_route("/azure-data/cosmos/{account}", methods=COSMOS_METHODS, include_in_schema=False)
     @app.api_route("/azure-data/cosmos/{account}/{rest:path}", methods=COSMOS_METHODS,

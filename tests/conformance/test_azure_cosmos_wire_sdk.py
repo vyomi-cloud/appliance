@@ -87,11 +87,25 @@ def run(base):
     h.ok("query_items paged by continuation", sum(qp) == 4 and qp[0] == 2 and len(qp) == 2, str(qp))
     tok = ct.read_all_items(max_item_count=3).by_page()
     first = list(next(tok))
-    rest = list(ct.read_all_items(max_item_count=3).by_page(tok.continuation_token))
-    h.ok("resume from a continuation token", len(first) == 3 and len(rest) == 5, f"{len(first)}+{len(rest)}")
+    rest = sum(len(list(p)) for p in ct.read_all_items(max_item_count=3).by_page(tok.continuation_token))
+    h.ok("resume from a continuation token", len(first) == 3 and rest == 5, f"{len(first)}+{rest}")
 
-    # transactional batch
-    res = ct.execute_item_batch([("create", ({"id": "b1", "k": 1},)), ("upsert", ({"id": "b2", "k": 2},)), ("read", ("r2",))], partition_key="b1") if False else None
+    # transactional batch (one partition key)
+    bc = db.create_container_if_not_exists("batch", partition_key=PartitionKey(path="/pk"))
+    bc.upsert_item({"id": "seed", "pk": "p", "v": 0})
+    res = bc.execute_item_batch([("create", ({"id": "b1", "pk": "p", "v": 1},)), ("upsert", ({"id": "b2", "pk": "p", "v": 2},)),
+                                 ("patch", ("seed", [{"op": "incr", "path": "/v", "value": 7}])), ("read", ("b1",))], partition_key="p")
+    h.ok("execute_item_batch commits", len(res) == 4 and bc.read_item("seed", partition_key="p")["v"] == 7 and bc.read_item("b2", partition_key="p")["v"] == 2, str(res)[:100])
+    try:
+        bc.execute_item_batch([("create", ({"id": "b3", "pk": "p"},)), ("create", ({"id": "b1", "pk": "p"},))], partition_key="p")
+        h.ok("failing batch raises CosmosBatchOperationError", False)
+    except cx.CosmosBatchOperationError as ex:
+        h.ok("failing batch raises CosmosBatchOperationError (409 on op 1)", True, str(ex)[:80])
+    try:
+        bc.read_item("b3", partition_key="p")
+        h.ok("failing batch is atomic", False)
+    except cx.CosmosResourceNotFoundError:
+        h.ok("failing batch is atomic", True)
     return ct, c
 
 
