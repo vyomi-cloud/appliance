@@ -220,6 +220,17 @@ def _rs256_verifier():
     return gc.make_rs256_verifier()
 
 
+def _waf_policy(state, svc):
+    ref = (svc.get("tags") or {}).get("vyomi-waf-policy")
+    if not ref:
+        return None
+    for r in state.values():
+        if isinstance(r, dict) and str(r.get("type", "")).lower().endswith("webapplicationfirewallpolicies") \
+                and (str(r.get("id", "")).lower() == ref.lower() or str(r.get("name", "")).lower() == ref.lower()):
+            return r
+    return None
+
+
 def _entra():
     try:
         from core import azure_entra_tokens_core as m
@@ -602,6 +613,22 @@ def handle_steps(state, svc, method, path, query, headers, body, can_fetch=True,
         del gw["log"][:-LOG_MAX]
         return res
 
+    # WAF: a policy referenced by the service tag `vyomi-waf-policy` (resource id or name of a *WebApplicationFirewallPolicies resource) is
+    # evaluated BEFORE routing/auth, like a WAF in front of the gateway (core/azure_waf_core: custom rules; managed rule sets are stored only)
+    waf = _waf_policy(state, svc)
+    if waf is not None:
+        try:
+            from core import azure_waf_core as _waf
+        except ImportError:
+            import azure_waf_core as _waf  # type: ignore
+        v = _waf.evaluate(waf, method, path, qd, hd, body or b"", ip, now, gw.setdefault("waf", {}))
+        if v and v["logged"]:
+            warns.append("waf-detected:" + str(v["rule"]))
+        elif v and v["action"] in ("block", "redirect"):
+            h = {"x-vyomi-waf-rule": str(v["rule"]), "x-vyomi-waf-policy": waf.get("name", "")}
+            if v["action"] == "redirect" and v.get("redirect"):
+                h["Location"] = v["redirect"]
+            return done({"status": v["status"], "headers": {"content-type": "text/plain", **h}, "body": v["body"].encode()})
     # route: longest API path prefix
     apis = [a for a in _recs(state, sid + "/apis", APIM + "/apis") if "/" not in a["id"][len(sid) + 6:]]
     if gateway:   # a SELF-HOSTED gateway serves only the APIs associated with it (service/gateways/{gw}/apis/{api}); the managed gateway serves all

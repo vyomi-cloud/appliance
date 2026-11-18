@@ -1859,6 +1859,26 @@
      },
      "name": "Stream Analytics jobs",
      "status": "v4"
+    },
+    {
+     "capabilities": 2,
+     "id": "waf",
+     "level_counts": {
+      "nano": {
+       "full": 1,
+       "limited": 1
+      },
+      "offline": {
+       "full": 1,
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "waf",
+     "status": "v4"
     }
    ],
    "wiring": {

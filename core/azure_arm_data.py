@@ -133,6 +133,18 @@ CATALOG += [
      'defaults': {'properties': {'provisioningState': 'Succeeded', 'virtualNetworks': []}}},
 ]
 
+# az-ref-gateway: WAF policies (CRUD of the policy document; custom rules are evaluated on the APIM gateway path by core/azure_waf_core.py).
+CATALOG += [
+    {'key': 'fdwafpolicy', 'namespace': 'Microsoft.Network', 'type': 'FrontDoorWebApplicationFirewallPolicies', 'api_version': '2022-05-01',
+     'defaults': {'location': 'global', 'sku': {'name': 'Premium_AzureFrontDoor'}, 'properties': {'provisioningState': 'Succeeded', 'resourceState': 'Enabled',
+                  'policySettings': {'enabledState': 'Enabled', 'mode': 'Prevention'}}}},
+    {'key': 'appgwwafpolicy', 'namespace': 'Microsoft.Network', 'type': 'ApplicationGatewayWebApplicationFirewallPolicies', 'api_version': '2023-11-01',
+     'defaults': {'properties': {'provisioningState': 'Succeeded', 'resourceState': 'Enabled', 'policySettings': {'state': 'Enabled', 'mode': 'Detection'}}}},
+    {'key': 'cdnwafpolicy', 'namespace': 'Microsoft.Cdn', 'type': 'cdnWebApplicationFirewallPolicies', 'api_version': '2024-02-01',
+     'defaults': {'location': 'global', 'sku': {'name': 'Standard_Microsoft'}, 'properties': {'provisioningState': 'Succeeded', 'resourceState': 'Enabled',
+                  'policySettings': {'enabledState': 'Enabled', 'mode': 'Prevention'}}}},
+]
+
 # v4 AZ-07: Azure Front Door / CDN profiles (control plane). Semantics + children live in core/azure_netcfg_core.py.
 CATALOG += [
     {'key': 'cdnprofile', 'namespace': 'Microsoft.Cdn', 'type': 'profiles', 'api_version': '2024-02-01',

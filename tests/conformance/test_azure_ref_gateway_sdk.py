@@ -187,6 +187,66 @@ def main():
     check("tools/call create_work_order forwards the JSON body", not _err(res2) and any(x["method"] == "POST" and json.loads(x["body"]) == {"asset": "a42", "priority": 2} for x in SEEN), (res2, SEEN))
     check("unknown tool -> JSON-RPC error", ("Unknown tool" in str(bad)) or _err(bad), bad)
     r = requests.post(MCP, headers={**K, **B(tok_norole)}, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"}); check("MCP endpoint: token without the role -> 401", r.status_code == 401, (r.status_code, r.text))
+
+    # ---- WAF policies: CRUD through the real SDKs; custom rules evaluated in front of the APIM gateway
+    from azure.mgmt.frontdoor import FrontDoorManagementClient
+    from azure.mgmt.frontdoor import models as fm
+    from azure.mgmt.network import NetworkManagementClient
+    from azure.mgmt.network import models as nm
+    fd = arm(FrontDoorManagementClient, http)
+    pol = fm.WebApplicationFirewallPolicy(location="global", sku=fm.Sku(name="Premium_AzureFrontDoor"), policy_settings=fm.PolicySettings(enabled_state="Enabled", mode="Prevention"),
+        custom_rules=fm.CustomRuleList(rules=[
+            fm.CustomRule(name="allowoffice", priority=1, rule_type="MatchRule", action="Allow", match_conditions=[fm.MatchCondition(match_variable="RemoteAddr", operator="IPMatch", match_value=["10.7.0.0/16"])]),
+            fm.CustomRule(name="blockbadip", priority=2, rule_type="MatchRule", action="Block", match_conditions=[fm.MatchCondition(match_variable="RemoteAddr", operator="IPMatch", match_value=["10.0.0.0/8"])]),
+            fm.CustomRule(name="blockbadheader", priority=3, rule_type="MatchRule", action="Block", match_conditions=[fm.MatchCondition(match_variable="RequestHeader", selector="x-bad", operator="Equal", match_value=["1"])]),
+            fm.CustomRule(name="blockuri", priority=4, rule_type="MatchRule", action="Block", match_conditions=[fm.MatchCondition(match_variable="RequestUri", operator="Contains", match_value=["../"])]),
+            fm.CustomRule(name="ratelimit", priority=5, rule_type="RateLimitRule", rate_limit_threshold=3, rate_limit_duration_in_minutes=1, action="Block",
+                          match_conditions=[fm.MatchCondition(match_variable="RequestUri", operator="Contains", match_value=["/policy"])])]),
+        managed_rules=fm.ManagedRuleSetList(managed_rule_sets=[fm.ManagedRuleSet(rule_set_type="Microsoft_DefaultRuleSet", rule_set_version="2.1")]))
+    got = fd.policies.begin_create_or_update(RG, "facilitieswaf", pol).result()
+    check("Front Door WAF policy CRUD via azure-mgmt-frontdoor (custom rules + managed rule set round-trip)",
+          [r.name for r in got.custom_rules.rules][:3] == ["allowoffice", "blockbadip", "blockbadheader"] and got.managed_rules.managed_rule_sets[0].rule_set_version == "2.1"
+          and [p.name for p in fd.policies.list(RG)] == ["facilitieswaf"], got.as_dict())
+    ag = arm(NetworkManagementClient, http)
+    agp = ag.web_application_firewall_policies.create_or_update(RG, "facilitiesagw", nm.WebApplicationFirewallPolicy(location=LOC, policy_settings=nm.PolicySettings(state="Enabled", mode="Prevention"),
+        managed_rules=nm.ManagedRulesDefinition(managed_rule_sets=[nm.ManagedRuleSet(rule_set_type="OWASP", rule_set_version="3.2")]),
+        custom_rules=[nm.WebApplicationFirewallCustomRule(name="blockua", priority=1, rule_type="MatchRule", action="Block", match_conditions=[
+            nm.MatchCondition(match_variables=[nm.MatchVariable(variable_name="RequestHeaders", selector="User-Agent")], operator="Contains", match_values=["sqlmap"], transforms=["Lowercase"])])]))
+    check("Application Gateway WAF policy CRUD via azure-mgmt-network", agp.custom_rules[0].name == "blockua" and [x.name for x in ag.web_application_firewall_policies.list(RG)] == ["facilitiesagw"], agp.as_dict())
+    from azure.mgmt.cdn import CdnManagementClient
+    from azure.mgmt.cdn import models as cm
+    cd = arm(CdnManagementClient, http)
+    cp = cd.policies.begin_create_or_update(RG, "facilitiescdn", cm.CdnWebApplicationFirewallPolicy(location="global", sku=cm.Sku(name="Standard_Microsoft"),
+        policy_settings=cm.PolicySettings(enabled_state="Enabled", mode="Prevention"), custom_rules=cm.CustomRuleList(rules=[cm.CustomRule(name="r", priority=1, enabled_state="Enabled", action="Block",
+        match_conditions=[cm.MatchCondition(match_variable="RemoteAddr", operator="IPMatch", match_value=["1.2.3.4"])])]))).result()
+    check("CDN WAF policy CRUD via azure-mgmt-cdn", cp.custom_rules.rules[0].name == "r" and [x.name for x in cd.policies.list(RG)] == ["facilitiescdn"], cp.as_dict())
+    a.api_management_service.begin_create_or_update(RG, "facilities-apim", {"location": LOC, "sku": {"name": "Developer", "capacity": 1}, "publisher_email": "a@b.c", "publisher_name": "p",
+                                                                          "tags": {"vyomi-waf-policy": "facilitieswaf"}}).result()
+    G = lambda hd=None, path="/assets/a1": requests.get(GW + path, headers={**K, **B(tok), **(hd or {})})  # noqa: E731
+    r = G(); check("WAF: clean request passes", r.status_code == 200, (r.status_code, r.text))
+    r = G({"X-Forwarded-For": "10.9.9.9"}); check("WAF custom rule IPMatch (CIDR) -> 403 with the rule name", r.status_code == 403 and r.headers.get("x-vyomi-waf-rule") == "blockbadip", (r.status_code, dict(r.headers)))
+    r = G({"X-Forwarded-For": "10.7.1.1", "x-bad": "1"}); check("WAF Allow rule (priority 1) wins over later Block rules", r.status_code == 200, (r.status_code, r.text))
+    r = G({"x-bad": "1"}); check("WAF RequestHeader Equal rule -> 403", r.status_code == 403 and r.headers.get("x-vyomi-waf-rule") == "blockbadheader", (r.status_code, dict(r.headers)))
+    r = G(path="/assets/..%2f../etc?x=../"); check("WAF RequestUri Contains rule -> 403", r.status_code == 403 and r.headers.get("x-vyomi-waf-rule") == "blockuri", (r.status_code, dict(r.headers)))
+    codes = [G(path="/policy").status_code for _ in range(5)]
+    check("WAF RateLimitRule: 3 per minute per client, then 403", codes[:3] == [200, 200, 200] and codes[3:] == [403, 403], codes)
+    pol.policy_settings = fm.PolicySettings(enabled_state="Enabled", mode="Detection")
+    fd.policies.begin_create_or_update(RG, "facilitieswaf", pol).result()
+    r = G({"x-bad": "1"}); check("WAF Detection mode: logged, request passes (x-vyomi-apim-warning)", r.status_code == 200 and "waf-detected:blockbadheader" in r.headers.get("x-vyomi-apim-warning", ""), (r.status_code, dict(r.headers)))
+    pol.policy_settings = fm.PolicySettings(enabled_state="Disabled", mode="Prevention")
+    fd.policies.begin_create_or_update(RG, "facilitieswaf", pol).result()
+    r = G({"x-bad": "1"}); check("WAF disabled policy is not evaluated", r.status_code == 200, (r.status_code, r.text))
+    a.api_management_service.begin_create_or_update(RG, "facilities-apim", {"location": LOC, "sku": {"name": "Developer", "capacity": 1}, "publisher_email": "a@b.c", "publisher_name": "p",
+                                                                          "tags": {"vyomi-waf-policy": "facilitiesagw"}}).result()
+    r = G({"User-Agent": "SQLMap/1.7"}); check("App Gateway-shaped policy (matchVariables, Lowercase transform) -> 403", r.status_code == 403 and r.headers.get("x-vyomi-waf-rule") == "blockua", (r.status_code, dict(r.headers)))
+    fd.policies.begin_delete(RG, "facilitieswaf").result()
+    check("WAF policy delete", [p.name for p in fd.policies.list(RG)] == [], None)
+    # explicit mcpTools over ARM REST (azure-mgmt-apimanagement 5.0.0 has no mcpTools field)
+    rid = f"{http}/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.ApiManagement/service/facilities-apim/apis/one-tool?api-version=2024-10-01-preview"
+    rr = requests.put(rid, json={"properties": {"displayName": "one", "path": "one", "type": "mcp", "protocols": ["https"], "subscriptionRequired": True,
+                                              "mcpTools": [{"name": "asset_lookup", "description": "Look up an asset", "operationId": f"/apis/tools/operations/lookup_asset"}]}}, headers=H)
+    r = requests.post(f"{http}/azure-data/apim/facilities-apim/one", headers={**K, **B(tok)}, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    check("mcpTools (ARM REST) selects/renames exactly the listed operations", rr.status_code in (200, 201) and [t["name"] for t in r.json()["result"]["tools"]] == ["asset_lookup"], (rr.status_code, r.text))
     print(f"RESULT fails={_E.fails}", flush=True)
     os._exit(1 if _E.fails else 0)
 
