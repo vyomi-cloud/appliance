@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-18T02:12:43+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): pypi/azure-mgmt-loganalytics: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T01:12:46+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,15 +3007,4 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.7 → v1.114.8
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.9 → v1.52.10
 - · `release` pypi:awscli: 1.46.2 → 1.46.3
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-05T19:07:38+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `release` pypi:google-cloud-secret-manager: 2.31.0 → 2.32.0
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
