@@ -596,3 +596,129 @@ def run_deployed(*, project: str, project_number: str, location: str, service: s
         except ValueError:
             out["result"] = None
     return out
+
+
+# ── Vertex AI Agent Engine: user agent code from a source package, run in the same sandbox ─────────────────────
+# The hosted agent is `entrypoint_module.entrypoint_object` from the uploaded source archive (an instance, or a class that is instantiated);
+# set_up() is called when present and the requested class method is called with the request's `input` as keyword arguments. One sandboxed
+# subprocess per call (same guard as functions: identity via the loopback metadata server, network allow-list, filesystem confinement), so
+# instance state is NOT kept between calls: use sessions / memory for state, exactly what a scaled-out Agent Engine requires anyway.
+_AGENT_HARNESS = r'''
+import json, sys, os, traceback, inspect, asyncio, importlib
+spec = json.loads(sys.stdin.read())
+MARK = spec["marker"]
+here = os.path.dirname(os.path.abspath(__file__))
+_src = os.path.join(here, "src")
+# The SDK tars each source_packages entry under its own relative path (a directory `agent/` arrives as `agent/...`), so the module may be
+# `agent.app` (from the archive root) or `app` (from inside that directory): both resolve.
+for _d in sorted((d for d in os.listdir(_src) if os.path.isdir(os.path.join(_src, d))), reverse=True):
+    sys.path.insert(0, os.path.join(_src, _d))
+sys.path.insert(0, _src)
+try:
+    sys.dont_write_bytecode = True
+    import _guard
+    _guard._install_guard(dict(spec["sandbox"], workdir=here))
+    os.chdir(os.path.join(here, "src"))
+    mod = importlib.import_module(spec["module"])
+    obj = getattr(mod, spec["object"])
+    if inspect.isclass(obj):
+        obj = obj()
+    if hasattr(obj, "set_up"):
+        r = obj.set_up()
+        if inspect.isawaitable(r):
+            asyncio.run(r) if inspect.iscoroutine(r) else None
+    fn = getattr(obj, spec["method"], None)
+    if fn is None or not callable(fn):
+        raise SystemExit("class method %r not found on %s.%s" % (spec["method"], spec["module"], spec["object"]))
+    res = fn(**(spec["input"] or {}))
+    kind = "value"
+    if inspect.isasyncgen(res):
+        async def _drain(g):
+            return [x async for x in g]
+        res, kind = asyncio.run(_drain(res)), "stream"
+    elif inspect.isgenerator(res):
+        res, kind = list(res), "stream"
+    elif inspect.isawaitable(res):
+        async def _aw(a):
+            return await a
+        res = asyncio.run(_aw(res))
+    def _plain(o):
+        for m in ("model_dump", "dict"):
+            if hasattr(o, m):
+                try:
+                    return getattr(o, m)()
+                except Exception:
+                    pass
+        return str(o)
+    sys.stdout.write("\n" + MARK + json.dumps({"kind": kind, "value": res}, default=_plain))
+except SystemExit:
+    raise
+except BaseException:
+    sys.stderr.write(traceback.format_exc()); sys.exit(1)
+'''
+
+_MAX_ARCHIVE = 64 * 1024 * 1024
+
+
+def extract_agent_archive(archive: bytes, dest: str) -> None:
+    """Safely unpack a tar.gz (or tar) source package into dest: no absolute paths, no `..`, no links/devices, bounded size."""
+    import io
+    import tarfile
+    if len(archive) > _MAX_ARCHIVE:
+        raise ValueError("source archive is larger than %d MB" % (_MAX_ARCHIVE >> 20))
+    total = 0
+    root = os.path.realpath(dest)
+    with tarfile.open(fileobj=io.BytesIO(archive), mode="r:*") as tf:
+        for m in tf.getmembers():
+            target = os.path.realpath(os.path.join(root, m.name))
+            if not (target == root or target.startswith(root + os.sep)) or os.path.isabs(m.name):
+                raise ValueError("unsafe path in source archive: %s" % m.name)
+            if not (m.isreg() or m.isdir()):
+                continue                      # links, devices, fifos are skipped, never created
+            total += m.size
+            if total > _MAX_ARCHIVE * 4:
+                raise ValueError("source archive expands past the size limit")
+            if m.isdir():
+                os.makedirs(target, exist_ok=True)
+                continue
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with tf.extractfile(m) as src, open(target, "wb") as out:
+                shutil.copyfileobj(src, out)
+
+
+def run_agent_engine(*, archive: bytes, module: str, obj: str, method: str, input: dict, project: str, project_number: str, location: str,
+                     engine_id: str, user_env: dict | None = None, timeout: int = 120, base: str = "") -> dict:
+    """Run one class-method call of a source-packaged Agent Engine. -> {status:'SUCCESS', kind:'value'|'stream', value, logs} or
+    {status:'ERROR', error, logs}."""
+    endpoint = os.environ.get("VYOMI_SELF_URL") or os.environ.get("VYOMI_SELF_ENDPOINT") or self_url(base)
+    env = function_env(project=project, project_number=project_number, region=location, service="reasoning-engine-" + engine_id, revision="1",
+                       entry=obj, signature="http", endpoint=endpoint.rstrip("/"), user_env=user_env)
+    env["GOOGLE_CLOUD_LOCATION"] = location
+    sandbox = {"identity": {"project": project, "number": project_number, "region": location, "email": "service-%s@gcp-sa-aiplatform-re.iam.gserviceaccount.com" % project_number,
+                            "sub": project_number, "token": FUNCTION_TOKEN, "instance_id": "00" + project_number, "hostname": "reasoning-engine-%s.%s" % (engine_id, location),
+                            "scopes": ["https://www.googleapis.com/auth/cloud-platform"]}}
+    workdir = tempfile.mkdtemp(prefix="cl-ae-")
+    try:
+        src = os.path.join(workdir, "src")
+        os.makedirs(src)
+        extract_agent_archive(archive, src)
+        os.makedirs(os.path.join(workdir, SANDBOX_HOME), exist_ok=True)
+        with open(os.path.join(workdir, "_guard.py"), "w") as fh:
+            fh.write(_GUARD_SRC)
+        with open(os.path.join(workdir, "_run.py"), "w") as fh:
+            fh.write(_AGENT_HARNESS)
+        run_env = _sandbox_env(env, workdir)
+        spec = {"module": module, "object": obj, "method": method, "input": input, "marker": _RESULT_MARKER, "sandbox": dict(sandbox, hosts=_hosts(run_env))}
+        try:
+            proc = subprocess.run([sys.executable, "-B", os.path.join(workdir, "_run.py")], cwd=workdir, input=json.dumps(spec),
+                                  capture_output=True, text=True, timeout=timeout, env=run_env)
+        except subprocess.TimeoutExpired:
+            return {"status": "ERROR", "error": f"Agent call timed out after {timeout}s", "logs": ""}
+        if proc.returncode != 0:
+            return {"status": "ERROR", "error": (proc.stderr or "execution failed").strip()[-2000:], "logs": (proc.stdout or "").strip()[:4000]}
+        result, logs = _parse(proc.stdout or "")
+        if not isinstance(result, dict):
+            return {"status": "ERROR", "error": "the agent produced no result", "logs": logs[:4000]}
+        return {"status": "SUCCESS", "kind": result.get("kind"), "value": result.get("value"), "logs": logs[:4000]}
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)

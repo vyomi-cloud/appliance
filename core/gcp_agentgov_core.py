@@ -135,7 +135,12 @@ def dispatch(store, lam, method, path, query=None, headers=None, body=b"", host=
             m = rx.match(path)
             if m:
                 fn = {"templates": _templates, "provisionedThroughputs": _pt, "mcpServers": _mcp, "agentGateways": _gateways, "agentPolicies": _policies}[kind]
-                r = fn(store, st, lam, method, m, _body(body), q, host)
+                b = _body(body)
+                if kind == "templates":
+                    b = _enum_in(b)
+                r = fn(store, st, lam, method, m, b, q, host)
+                if kind == "templates" and _wants_int(q):
+                    r = _enum_out(r)
                 return _out(200, r)
         raise _Err(404, "NOT_FOUND", "Unsupported Agent Platform governance path: " + path)
     except _Err as e:
@@ -195,6 +200,54 @@ def _pt(store, st, lam, method, m, p, q, host):
 
 
 # ═════════════════════════════ Security: Model Armor over the guardrails engine ═════════════════════════════
+# Proto enum numbers of google.cloud.modelarmor.v1. The Google client libraries send enums as integers (`alt=json;enum-encoding=int`); the real API
+# accepts both forms and answers in the form that was asked for, so we normalise input to names and, when the caller asked for ints, answer in ints.
+_ENUMS = {
+    "filterType": {0: "RAI_FILTER_TYPE_UNSPECIFIED", 2: "SEXUALLY_EXPLICIT", 3: "HATE_SPEECH", 6: "HARASSMENT", 17: "DANGEROUS"},
+    "confidenceLevel": {0: "DETECTION_CONFIDENCE_LEVEL_UNSPECIFIED", 1: "LOW_AND_ABOVE", 2: "MEDIUM_AND_ABOVE", 3: "HIGH"},
+    "filterEnforcement": {0: "FILTER_ENFORCEMENT_UNSPECIFIED", 1: "ENABLED", 2: "DISABLED"},
+    "executionState": {0: "FILTER_EXECUTION_STATE_UNSPECIFIED", 1: "EXECUTION_SUCCESS", 2: "EXECUTION_SKIPPED"},
+    "matchState": {0: "FILTER_MATCH_STATE_UNSPECIFIED", 1: "NO_MATCH_FOUND", 2: "MATCH_FOUND"},
+    "filterMatchState": {0: "FILTER_MATCH_STATE_UNSPECIFIED", 1: "NO_MATCH_FOUND", 2: "MATCH_FOUND"},
+    "invocationResult": {0: "INVOCATION_RESULT_UNSPECIFIED", 1: "SUCCESS", 2: "PARTIAL", 3: "FAILURE"},
+    "messageType": {0: "MESSAGE_TYPE_UNSPECIFIED", 1: "INFO", 2: "WARNING", 3: "ERROR"},
+    "likelihood": {0: "SDP_FINDING_LIKELIHOOD_UNSPECIFIED", 1: "VERY_UNLIKELY", 2: "UNLIKELY", 3: "POSSIBLE", 4: "LIKELY", 5: "VERY_LIKELY"},
+}
+_ENUM_REV = {k: {v: n for n, v in m.items()} for k, m in _ENUMS.items()}
+
+
+def _enum_in(o):
+    """Integer enum values (any filter) -> their names; strings are kept. Applied to every known enum field name."""
+    if isinstance(o, list):
+        return [_enum_in(x) for x in o]
+    if not isinstance(o, dict):
+        return o
+    out = {}
+    for k, v in o.items():
+        if k in _ENUMS and isinstance(v, int) and not isinstance(v, bool):
+            if v not in _ENUMS[k]:
+                raise _Err(400, "INVALID_ARGUMENT", f"Invalid value at '{k}': {v} is not a valid enum number.")
+            if v == 0:          # UNSPECIFIED == field not set
+                continue
+            v = _ENUMS[k][v]
+        elif k in _ENUMS and isinstance(v, str) and v.endswith("_UNSPECIFIED"):
+            continue
+        out[k] = _enum_in(v)
+    return out
+
+
+def _enum_out(o):
+    if isinstance(o, list):
+        return [_enum_out(x) for x in o]
+    if not isinstance(o, dict):
+        return o
+    return {k: (_ENUM_REV[k].get(v, v) if k in _ENUM_REV and isinstance(v, str) else _enum_out(v)) for k, v in o.items()}
+
+
+def _wants_int(q):
+    return "enum-encoding=int" in ";".join(str(v) for k, v in (q or {}).items() if "alt" in k)
+
+
 def _check_filters(fc):
     if not isinstance(fc, dict) or not fc:
         raise _Err(400, "INVALID_ARGUMENT", "filterConfig is required and must enable at least one filter.")
@@ -209,7 +262,8 @@ def _check_filters(fc):
 
 
 def _enabled(s):
-    return bool(s) and (s.get("filterEnforcement", "ENABLED") == "ENABLED")
+    # an enum left at 0 (UNSPECIFIED) is not serialised by the clients; treat both absent and UNSPECIFIED as the default (enabled when the block is present)
+    return bool(s) and (s.get("filterEnforcement") in (None, "ENABLED", "FILTER_ENFORCEMENT_UNSPECIFIED"))
 
 
 def _policy_for(fc, source):

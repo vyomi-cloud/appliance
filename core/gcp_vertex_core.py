@@ -852,15 +852,54 @@ def _pm(pub, mid, oss, stage, title, desc, acts):
             "vyomiAvailability": CAT.availability(mid), "vyomiLicense": CAT.license_of(mid)}
 
 
+def _model_card(it):
+    """Gemini-API Model fields next to the PublisherModel ones (what google-genai's models.get returns on both surfaces): token limits and the
+    methods the id answers. Same values as the Gemini Developer API surface (core/ai_models_core._gdev_model)."""
+    try:
+        try:
+            from core import ai_models_core as am
+        except ImportError:  # Pyodide flat layout
+            import ai_models_core as am  # type: ignore
+        g = am._gdev_model(it["name"].rsplit("/", 1)[-1])
+        it.update(version=g["version"], inputTokenLimit=g["inputTokenLimit"], outputTokenLimit=g["outputTokenLimit"], supportedGenerationMethods=g["supportedGenerationMethods"])
+    except Exception:
+        pass
+    return it
+
+
 def _model_garden(method, pub, mid, query):
     if method != "GET":
         return _err(405, "INVALID_ARGUMENT", "Unsupported method.")
-    items = [_pm(*m) for m in PUBLISHER_MODELS + [(m["publisher"], m["id"], "GOOGLE_OWNED_OSS" if m["vendor"] == "Google" else "THIRD_PARTY_OWNED_OSS", "GA", m["name"], m["blurb"], ["generate"]) for m in CAT.served_special()]]
+    items = [_model_card(_pm(*m)) for m in PUBLISHER_MODELS + [(m["publisher"], m["id"], "GOOGLE_OWNED_OSS" if m["vendor"] == "Google" else "THIRD_PARTY_OWNED_OSS", "GA", m["name"], m["blurb"], ["generate"]) for m in CAT.served_special()]]
     if mid:
         for it in items:
             if it["name"] == f"publishers/{pub}/models/{mid}":
                 return _j(200, it)
+        # The google publisher path serves every id the simulator answers: the catalogue models by bare id and the legacy gemini-* /
+        # text-embedding-* ids that resolve through the alias map onto them. Answer with the requested id as its own Model resource.
+        bare = mid.split("@", 1)[0]
+        cid = CAT.resolve("gcp", bare) if pub in ("google", "-", "*") else None
+        if cid:
+            base = next((m for m in PUBLISHER_MODELS if m[1] == cid), None)
+            if base is None:
+                return _err(404, "NOT_FOUND", f"Publisher model publishers/{pub}/models/{mid} not found.")
+            it = _pm(pub if pub != "*" and pub != "-" else "google", bare, base[2], "GA", bare, base[5], base[6])
+            if bare != cid:
+                it["vyomiAlias"] = {"servedBy": cid, "note": f"{bare} is served by the local model {cid}; quality is that model's, not the named Google model's."}
+            return _j(200, _model_card(it))
         return _err(404, "NOT_FOUND", f"Publisher model publishers/{pub}/models/{mid} not found.")
+    if pub == "google":
+        # google-genai's Vertex client lists publishers/google/models: every id the simulator serves answers on that path (bare catalogue ids),
+        # so they all appear there, each as its own Model resource.
+        have = {i["name"] for i in items}
+        for i in list(items):
+            bid = i["name"].rsplit("/", 1)[-1]
+            if i["name"].startswith("publishers/google/"):
+                continue
+            alias = dict(i, name=f"publishers/google/models/{bid}")
+            alias["publisherModelTemplate"] = alias["publisherModelTemplate"].replace(f"/publishers/{i['name'].split('/')[1]}/", "/publishers/google/")
+            if alias["name"] not in have:
+                items.append(alias)
     if pub and pub not in ("*", "-"):
         items = [i for i in items if i["name"].startswith(f"publishers/{pub}/")]
     raw = query.get("filter") or ""
