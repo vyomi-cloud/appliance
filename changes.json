@@ -1,8 +1,38 @@
 {
- "at": "2026-11-18T14:13:06+00:00",
+ "at": "2026-11-18T15:13:01+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:97328513d9",
+   "title": "Azure cognitiveservices: [Cognitive Services] Fix C# SDK types and naming from API review (#48268)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/97328513d9be1d5a8b75f71f9c1b04209f4eb39a",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:b1d72650d747",
+   "title": "AWS Control Tower now supports existing Amazon S3 bucket for log delivery",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/control-tower-existing-s3-log-bucket/",
+   "detail": "AWS Control Tower now lets you use an existing Amazon S3 bucket in your landing zone to store AWS Config and AWS CloudTrail logs. Previously, AWS Control Tower required you to use the Amazon S3 bucket it creates and manages for log storage. Now, customers who want full control of bucket policies, lifecycle rules, and logging infrastructure can consolidate centralized logs in an Amazon S3 bucket they already manage. You can use your own Amazon S3 bucket for both AWS Config and AWS CloudTrail, giving you full control of bucket policies, lifecycle rules, and logging infrastructure. You can switch",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Elastic Load Balancing",
+   "kind": "announcement",
+   "key": "feed:aws:9b95116d19d8",
+   "title": "AWS Transform now provides F5 BIG-IP load balancer migration",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-transform-f5-big-ip-migration/",
+   "detail": "AWS Transform now migrates F5 BIG-IP load balancer configurations to Elastic Load Balancing as part of network migration. Applications cut over with Application Load Balancers (ALB) and Network Load Balancers (NLB) already in place allowing you to adopt cloud-native load balancing during migration rather than after it. Moving to ALB and NLB has typically been a separate post-migration project because of time and cost. Teams rebuilt each F5 BIG-IP virtual server by hand, a slow and error-prone process that could break when traffic moved. AWS Transform compresses that timeline and enables the F5",
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
  ]
 }
