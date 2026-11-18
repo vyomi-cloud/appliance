@@ -8,6 +8,15 @@ google-cloud-firestore>=2.16.0
 google-cloud-storage>=2.16.0        # pre-baked for Cloud Functions / Cloud Run function sandboxes (core/gcp_function_runtime):
 google-cloud-secret-manager>=2.20.0  #   functions import the real Google clients and call the simulator; no internet to pip install
 requests>=2.31.0
+azure-functions>=1.20.0             # Azure Function Apps worker (providers/azure_functions_host): the REAL azure.functions + the SDKs below, importable by function code
+azure-identity>=1.16.0              #   (DefaultAzureCredential via the managed-identity endpoint the sandbox serves)
+azure-data-tables>=12.5.0
+azure-cosmos>=4.7.0
+azure-servicebus>=7.12.0
+azure-keyvault-secrets>=4.8.0
+azure-keyvault-keys>=4.9.0
+azure-monitor-opentelemetry-exporter>=1.0.0b25   # Application Insights exporters function code / apps may use (track API: /v2.1/track)
+opentelemetry-sdk>=1.25.0
 # MVP P0 backends.
 hvac>=2.1.0          # HashiCorp Vault client (transit KMS + KV secrets for all 3 providers)
 nats-py>=2.7.0       # NATS client (eventing broker for EventBridge + Eventarc + Event Grid)
