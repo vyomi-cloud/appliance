@@ -4,6 +4,19 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.8] — 2026-11-18
+
+GCP reference architecture (13/13) on the real Google SDKs, with the supporting simulator fixes. Beta, Dev Simplified.
+
+### Added
+
+- **[Nano + Mesh]** GCP reference app (`facilities/gcp/`, `run_e2e.py --cloud gcp`), Identity Platform sign-in, API Gateway token validation, Cloud Run function sandbox with SDK access, Vertex Model Armor on the model call, Agent Engine source hosting, Sessions events, GCS notifications.
+- **[Mesh]** Opt-in real Pub/Sub and Firestore emulator data plane (`VYOMI_GCP_REAL_BACKENDS=1`) and a gRPC front for the Logging and Monitoring clients.
+
+### Fixes
+
+- Logging timestamp filters, Trace v1/v2 span ids, KMS additional authenticated data, event-function `print`, `models.get` for served ids.
+
 ## [4.0.7] — 2026-11-18
 
 Integration release: the MCP v4 work and the Service Bus AMQP fix join v4, the Nano bundle is rebuilt in sync with the offline cores, and the endurance fixes from 4.0.5/4.0.6 reach the portal's Nano bundle.

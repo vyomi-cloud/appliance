@@ -62,6 +62,7 @@ refused (FAILED_PRECONDITION), matching the real API.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import re
@@ -1167,6 +1168,22 @@ def _import_version(store, key_name: str, meta: dict, versions: dict, payload: d
 # the same bytes under a new label. Encrypt embeds the *version* that did the work
 # (not just the CryptoKey) so Decrypt can re-check that specific version's state —
 # the one piece symmetric Encrypt/Decrypt needs to enforce lifecycle correctly.
+_AAD_MAGIC = b"\x00VGAAD1\x00"
+
+
+def _aad_bytes(payload: dict):
+    """additionalAuthenticatedData (base64 on the wire) -> bytes, or a 400 response. Empty == absent, as in Cloud KMS."""
+    raw = payload.get("additionalAuthenticatedData") or ""
+    try:
+        aad = base64.b64decode(raw) if raw else b""
+    except Exception:
+        return None, _err(400, "INVALID_ARGUMENT", "additional_authenticated_data must be valid base64.")
+    if payload.get("additionalAuthenticatedDataCrc32c") not in (None, "") and str(payload["additionalAuthenticatedDataCrc32c"]) != str(crc32c(aad)):
+        return None, _err(400, "INVALID_ARGUMENT",
+                          "The checksum in field additional_authenticated_data_crc32c did not match the data in field additional_authenticated_data.")
+    return aad, None
+
+
 def _encrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = None) -> GcpKmsResponse:
     if not store.key_exists(name):
         return _err(404, "NOT_FOUND", f"CryptoKey {name} not found.")
@@ -1186,9 +1203,13 @@ def _encrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = N
         return _err(400, "INVALID_ARGUMENT", "plaintext must be valid base64.")
     if not plaintext:
         return _err(400, "INVALID_ARGUMENT", "plaintext must not be empty.")
+    aad, bad = _aad_bytes(payload)
+    if bad:
+        return bad
     vname = _version_name(name, primary)
     material = store.get_material(vname) or store.get_material(name)
-    blob = store.engine.encrypt(material, vname, plaintext)
+    # AAD is bound into the authenticated plaintext (engine-agnostic): decrypt with a different/missing AAD fails.
+    blob = store.engine.encrypt(material, vname, _AAD_MAGIC + hashlib.sha256(aad).digest() + plaintext)
     out = {
         "name": vname,
         "ciphertext": _b64e(blob),
@@ -1234,10 +1255,18 @@ def _decrypt(store: KeyStore, name: str, payload: dict, headers: dict | None = N
             return _err(400, "FAILED_PRECONDITION",
                         f"Decryption failed: CryptoKeyVersion {name}/cryptoKeyVersions/{ver_part} is not enabled.")
         material = store.get_material(_version_name(name, ver_part)) or material
+    aad, bad = _aad_bytes(payload)
+    if bad:
+        return bad
     try:
         plaintext = store.engine.decrypt(material, blob)
     except Exception:
         return _err(400, "INVALID_ARGUMENT", "Decryption failed: the ciphertext is invalid.")
+    if plaintext.startswith(_AAD_MAGIC):
+        n = len(_AAD_MAGIC)
+        if plaintext[n:n + 32] != hashlib.sha256(aad).digest():
+            return _err(400, "INVALID_ARGUMENT", "Decryption failed: the ciphertext is invalid or the additional_authenticated_data does not match.")
+        plaintext = plaintext[n + 32:]
     used_primary = (ver_part or str(meta.get("primary", "1"))) == str(meta.get("primary", "1"))
     return _json(200, {"plaintext": _b64e(plaintext), "plaintextCrc32c": str(crc32c(plaintext)),
                        "usedPrimary": used_primary, "protectionLevel": "SOFTWARE"})
