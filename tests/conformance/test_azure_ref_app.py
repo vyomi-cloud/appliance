@@ -76,6 +76,11 @@ if doc:
     check("components are reported 1..13", [c["id"] for c in doc["components"]] == list(range(1, 14)))
     check("long-term memory is labelled an application pattern, not a managed service", any("APPLICATION PATTERN" in s["detail"] for (c, n), s in S.items() if c == 9) or
           any("APPLICATION PATTERN" in n for n in doc.get("notes", [])))
+    if os.environ.get("AZ_REF_FULL_STACK") == "1":     # set on the merged integ tree (all lane fixes): every component except the model-dependent ones passes
+        for cid in (1, 4, 5, 6, 7, 8, 12, 13):
+            c = [x for x in doc["components"] if x["id"] == cid][0]
+            check(f"c{cid:02d} component PASS on the full stack", c["status"] == "PASS", str([s["name"] for s in c["steps"] if s["status"] != "PASS"]))
+        check("remaining BLOCKED steps are only 'local model'", all("local model" in s["detail"] for s in S.values() if s["status"] == "BLOCKED"))
     pass_all = all(c["status"] == "PASS" for c in doc["components"])
     check("exit code is 0 only when all 13 components PASS", (p.returncode == 0) == pass_all, f"exit {p.returncode}, all_pass={pass_all}")
     check("the run is not a dev run", not any("DEV RUN" in n for n in doc.get("notes", [])))

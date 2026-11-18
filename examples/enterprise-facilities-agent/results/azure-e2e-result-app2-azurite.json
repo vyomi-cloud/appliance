@@ -1,0 +1,883 @@
+{
+  "cloud": "azure",
+  "llm_stub": false,
+  "notes": [
+    "AI Search: ARM advertises https://facilities-search.search.windows.net/, which this simulator does not serve; the SDKs use the simulator's ARM-extension path form instead.",
+    "WAF policies are created and read back, not enforced against traffic by the simulator (no L7 firewall engine).",
+    "Gateway policy on Azure is APIM policy expressions; Azure has no Cedar-style agent policy engine (AWS AgentCore Gateway and Vertex agentPolicies have one).",
+    "Runtime is ASSEMBLED: Foundry Agents for the agent definitions plus a LangGraph app in a Container App. Azure has no hosted-agent runtime comparable to AgentCore Runtime.",
+    "Long-term memory is an APPLICATION PATTERN on Azure Table storage. Azure has no managed long-term memory service (AWS has AgentCore Memory, GCP has Memory Bank).",
+    "Approval is assembled (Service Bus + Function + Table ledger), not a workflow orchestrator. Service Bus and Cosmos are Vyomi's own cores (Service Bus with a real AMQP 1.0 wire); Table is a real engine (Azurite) only when VYOMI_AZURE_REAL_BACKENDS=1 on a substrate that can run it. This run: real backends ON.",
+    "Key Vault: KeyClient uses the simulator's https host (not properties.vault_uri, which stays the console path form)."
+  ],
+  "endpoint": "https://localhost:58886",
+  "when": "2026-11-18T19:06:49",
+  "totals": {
+    "PASS": 8,
+    "BLOCKED": 5,
+    "FAIL": 0
+  },
+  "components": [
+    {
+      "id": 1,
+      "name": "Access and perimeter security (Entra ID, APIM validate-jwt, WAF)",
+      "status": "PASS",
+      "passed": 11,
+      "total": 11,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 1,
+          "name": "entra: app registration + client secret + user (Graph v1.0)",
+          "status": "PASS",
+          "detail": "app registration facilities-users client_id=bc762f6b-4765-4618-9402-347babcf63ec, secret, user maria.ops@facilities.example.com",
+          "secs": 0.01
+        },
+        {
+          "component": 1,
+          "name": "azure-identity ClientSecretCredential gets an app token (client credentials)",
+          "status": "PASS",
+          "detail": "azure-identity ClientSecretCredential -> JWT (1122 chars)",
+          "secs": 0.07
+        },
+        {
+          "component": 1,
+          "name": "azure-identity UsernamePasswordCredential: user sign-in",
+          "status": "PASS",
+          "detail": "user sign-in (ROPC) as maria.ops@facilities.example.com, JWT claims oid=f1a8d249-adc5-4082-927b-03c4effb2877",
+          "secs": 0.08
+        },
+        {
+          "component": 1,
+          "name": "jwks: the token verifies against the tenant signing keys (RS256)",
+          "status": "PASS",
+          "detail": "signature verified against facilities-tenant JWKS; aud=api://facilities-api iss=https://login.microsoftonline.com/00000000-0000-0000-0000-cloudlearn01/v2.0",
+          "secs": 0.01
+        },
+        {
+          "component": 1,
+          "name": "apim: service + API + operations + validate-jwt policy + subscription (azure-mgmt-apimanagement)",
+          "status": "PASS",
+          "detail": "APIM facilities-apim: API tools (3 operations) -> Function App, validate-jwt + subscription key",
+          "secs": 0.26
+        },
+        {
+          "component": 1,
+          "name": "apim: a call without a subscription key is rejected",
+          "status": "PASS",
+          "detail": "no subscription key -> 401",
+          "secs": 0.01
+        },
+        {
+          "component": 1,
+          "name": "apim validate-jwt: a call without a token is rejected",
+          "status": "PASS",
+          "detail": "subscription key but no JWT -> 401",
+          "secs": 0.0
+        },
+        {
+          "component": 1,
+          "name": "apim validate-jwt: an unsigned (alg=none) token is rejected",
+          "status": "PASS",
+          "detail": "alg=none token -> 401",
+          "secs": 0.01
+        },
+        {
+          "component": 1,
+          "name": "apim validate-jwt: the Entra-issued token is accepted and the tool answers",
+          "status": "PASS",
+          "detail": "HTTP 200 through APIM with the Entra token; caller=anonymous",
+          "secs": 0.26
+        },
+        {
+          "component": 1,
+          "name": "waf: Front Door policy (azure-mgmt-frontdoor)",
+          "status": "PASS",
+          "detail": "Front Door WAF policy facilitieswaf in Prevention mode with the default rule set",
+          "secs": 0.06
+        },
+        {
+          "component": 1,
+          "name": "waf: Application Gateway policy (azure-mgmt-network)",
+          "status": "PASS",
+          "detail": "Application Gateway WAF policy facilitieswafgw (OWASP 3.2, Prevention)",
+          "secs": 0.15
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Channels and input guardrails (content filter), approver inbox (Service Bus)",
+      "status": "BLOCKED",
+      "passed": 5,
+      "total": 6,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 2,
+          "name": "content safety: analyze_text allows a benign question and flags violent text (azure-ai-contentsafety)",
+          "status": "PASS",
+          "detail": "benign {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 0}; violent flagged {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 4}",
+          "secs": 0.06
+        },
+        {
+          "component": 2,
+          "name": "azure openai content filter: RAI policy facilities-guardrail bound to a deployment (azure-mgmt-cognitiveservices)",
+          "status": "PASS",
+          "detail": "RAI policy facilities-guardrail (Prompt + Completion, all four categories) bound to deployment chat-guarded",
+          "secs": 0.02
+        },
+        {
+          "component": 2,
+          "name": "azure openai content filter: a violent prompt is refused with 400 content_filter",
+          "status": "PASS",
+          "detail": "400 code=content_filter before any model was called",
+          "secs": 0.26
+        },
+        {
+          "component": 2,
+          "name": "azure openai content filter: a benign prompt reaches the model",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom",
+          "secs": 0.01
+        },
+        {
+          "component": 2,
+          "name": "service bus: namespace + topic + approver-inbox subscription via ARM",
+          "status": "PASS",
+          "detail": "namespace facilities-bus, topic work-order-approval, subscription approver-inbox (azure-mgmt-servicebus)",
+          "secs": 0.07
+        },
+        {
+          "component": 2,
+          "name": "service bus: send to the topic, receive from approver-inbox, complete (azure-servicebus AMQP)",
+          "status": "PASS",
+          "detail": "send -> receive (peek-lock) -> complete over AMQP 1.0, properties preserved, no redelivery",
+          "secs": 6.06
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Agent runtime: Foundry Agents + LangGraph app on Container Apps",
+      "status": "BLOCKED",
+      "passed": 3,
+      "total": 4,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 3,
+          "name": "foundry agents: create supervisor + Facilities/Maintenance/Analytics agents (azure-ai-agents)",
+          "status": "PASS",
+          "detail": "project facilities-project: supervisor + 3 sub-agents created and listed (['facilities_analytics', 'facilities_facilities', 'facilities_maintenance', 'facilities_supervisor'])",
+          "secs": 0.08
+        },
+        {
+          "component": 3,
+          "name": "foundry agents: a run of the supervisor on a thread completes (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: RuntimeError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm ",
+          "secs": 0.02
+        },
+        {
+          "component": 3,
+          "name": "container apps: environment + facilities-supervisor app via ARM (azure-mgmt-appcontainers)",
+          "status": "PASS",
+          "detail": "container app facilities-supervisor fqdn=facilities-supervisor.f329f3-715cc91f.eastus.azurecontainerapps.io state=ContainerAppProvisioningState.SUCCEEDED",
+          "secs": 2.27
+        },
+        {
+          "component": 3,
+          "name": "container app: POST /query on the ingress runs the LangGraph supervisor + sub-agents in the hosted container",
+          "status": "PASS",
+          "detail": "hosted in pid 65790 route=['facilities', 'maintenance', 'analytics']",
+          "secs": 2.29
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Gateway: APIM tool / MCP front + policy (no Cedar on Azure)",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 4,
+          "name": "apim: the tool catalog lists the three operations (azure-mgmt-apimanagement)",
+          "status": "PASS",
+          "detail": "tool catalog: ['asset-status', 'create-work-order', 'kb-search']",
+          "secs": 0.0
+        },
+        {
+          "component": 4,
+          "name": "apim gateway: read-only tool call (asset-status) reaches the Function App",
+          "status": "PASS",
+          "detail": "asset-status through APIM -> B-12 RUNNING",
+          "secs": 0.28
+        },
+        {
+          "component": 4,
+          "name": "apim: operation policy (rate-limit) is accepted",
+          "status": "PASS",
+          "detail": "operation policy with rate-limit accepted",
+          "secs": 0.04
+        },
+        {
+          "component": 4,
+          "name": "apim policy expression: the write tool is denied without an approval id (the Cedar substitute)",
+          "status": "PASS",
+          "detail": "policy expression: write tool 403 without x-approval-id; with it the call reaches the function, which refuses (no approved ledger row)",
+          "secs": 0.27
+        },
+        {
+          "component": 4,
+          "name": "apim MCP server API: tools/list as JSON-RPC at the gateway",
+          "status": "PASS",
+          "detail": "MCP tools/list through APIM: ['asset-status', 'create-work-order', 'kb-search']",
+          "secs": 0.04
+        },
+        {
+          "component": 4,
+          "name": "apim MCP server API: tools/call asset_status",
+          "status": "PASS",
+          "detail": "MCP tools/call asset_status -> ok",
+          "secs": 0.23
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Actions and approval (Service Bus + Function App + Table ledger)",
+      "status": "PASS",
+      "passed": 10,
+      "total": 10,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 5,
+          "name": "approval path is wired: Service Bus topic + approver-inbox, decision and create-work-order functions, Table ledger",
+          "status": "PASS",
+          "detail": "topic work-order-approval -> subscription approver-inbox, decision + create-work-order functions, Table ledger approvalledger",
+          "secs": 2.02
+        },
+        {
+          "component": 5,
+          "name": "agent write is parked: ledger PENDING (no work order yet)",
+          "status": "PASS",
+          "detail": "ledger PENDING for req-8bc7032006, requester maria.ops@facilities.example.com",
+          "secs": 0.01
+        },
+        {
+          "component": 5,
+          "name": "no write happens before approval",
+          "status": "PASS",
+          "detail": "no work order exists before approval",
+          "secs": 0.01
+        },
+        {
+          "component": 5,
+          "name": "service bus: approver inbox receives the approval request (AMQP)",
+          "status": "PASS",
+          "detail": "approval request delivered to approver-inbox: Work order for B-12: Boiler B-12 is at 34 psi. What does the",
+          "secs": 2.01
+        },
+        {
+          "component": 5,
+          "name": "function: create-work-order refuses an unapproved request",
+          "status": "PASS",
+          "detail": "create-work-order refuses while the ledger is PENDING",
+          "secs": 0.29
+        },
+        {
+          "component": 5,
+          "name": "function: approval-decision rejects an unauthorised approver",
+          "status": "PASS",
+          "detail": "an unauthorised approver cannot decide; ledger still PENDING",
+          "secs": 0.23
+        },
+        {
+          "component": 5,
+          "name": "approver approves: function records APPROVED, waiting caller proceeds, work order created",
+          "status": "PASS",
+          "detail": "decision function -> ledger APPROVED -> caller saw it -> WO-032006 created, ledger EXECUTED",
+          "secs": 0.56
+        },
+        {
+          "component": 5,
+          "name": "create-work-order is idempotent on an EXECUTED request",
+          "status": "PASS",
+          "detail": "second create-work-order call is idempotent (one work order)",
+          "secs": 0.23
+        },
+        {
+          "component": 5,
+          "name": "table ledger: a decision with a stale ETag is refused (412)",
+          "status": "PASS",
+          "detail": "stale ETag decision refused with 412 (Precondition Failed)",
+          "secs": 0.02
+        },
+        {
+          "component": 5,
+          "name": "approver rejects: ledger REJECTED, nothing is written",
+          "status": "PASS",
+          "detail": "REJECTED in the ledger, create-work-order refuses, no work order written",
+          "secs": 3.56
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Knowledge search (Azure AI Search)",
+      "status": "PASS",
+      "passed": 8,
+      "total": 8,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 6,
+          "name": "ai search: SearchIndexClient.create_or_update_index (text + vector + semantic)",
+          "status": "PASS",
+          "detail": "index facilities-kb with vector field (1536 dims) and semantic configuration",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "ai search: embed the indexed documents (azure openai embeddings) and merge_documents the vectors",
+          "status": "PASS",
+          "detail": "5 documents embedded with the embed deployment and merged into content_vector",
+          "secs": 0.05
+        },
+        {
+          "component": 6,
+          "name": "ai search: SearchClient.search BM25 ranks the boiler SOP first",
+          "status": "PASS",
+          "detail": "top hit boiler-sop.md score=4.445491",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "ai search: BM25 ranks the HVAC manual first for an AHU question",
+          "status": "PASS",
+          "detail": "top hit hvac-maintenance-manual.md",
+          "secs": 0.0
+        },
+        {
+          "component": 6,
+          "name": "ai search: vector query (VectorizedQuery on content_vector)",
+          "status": "PASS",
+          "detail": "vector top hit boiler-sop.md",
+          "secs": 0.02
+        },
+        {
+          "component": 6,
+          "name": "ai search: hybrid query (text + vector, RRF)",
+          "status": "PASS",
+          "detail": "hybrid (text + vector) top hit fire-safety-sop.md",
+          "secs": 0.02
+        },
+        {
+          "component": 6,
+          "name": "ai search: semantic ranker returns a reranker score",
+          "status": "PASS",
+          "detail": "semantic ranker top hit boiler-sop.md reranker=0.4506",
+          "secs": 0.01
+        },
+        {
+          "component": 6,
+          "name": "ai search: results carry source names (needed for citations)",
+          "status": "PASS",
+          "detail": "1 results each with content + source blob name",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Tools (Function App + Table storage)",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 7,
+          "name": "table storage: seed fixture assets + work orders (azure-data-tables)",
+          "status": "PASS",
+          "detail": "3 assets, 3 work orders in Azure Table storage (azure-data-tables); empty approvalledger table",
+          "secs": 0.15
+        },
+        {
+          "component": 7,
+          "name": "function app: ARM plan + site + zip deploy of four functions (azure-mgmt-web)",
+          "status": "PASS",
+          "detail": "function app facilities-tools with ['approval-decision', 'asset-status', 'create-work-order', 'kb-search'] created through ARM and zip-deployed",
+          "secs": 0.09
+        },
+        {
+          "component": 7,
+          "name": "function app: ARM list_functions shows the deployed functions",
+          "status": "PASS",
+          "detail": "",
+          "secs": 0.0
+        },
+        {
+          "component": 7,
+          "name": "function app: ARM list_host_keys gives the key that authorises function calls",
+          "status": "PASS",
+          "detail": "host key listed through ARM (sent as x-functions-key)",
+          "secs": 0.0
+        },
+        {
+          "component": 7,
+          "name": "function: kb-search tool (Azure AI Search from inside the function)",
+          "status": "PASS",
+          "detail": "read-only knowledge tool returned 2 cited results (AI Search client inside the function)",
+          "secs": 0.26
+        },
+        {
+          "component": 7,
+          "name": "function: asset-status tool (Azure Table read from inside the function)",
+          "status": "PASS",
+          "detail": "B-12 status=RUNNING, open work orders=1",
+          "secs": 0.22
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "name": "AgentOps and observability (Application Insights, Log Analytics, Monitor)",
+      "status": "PASS",
+      "passed": 9,
+      "total": 9,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 8,
+          "name": "the agent run produced spans to export",
+          "status": "PASS",
+          "detail": "7 agent spans to export",
+          "secs": 0.0
+        },
+        {
+          "component": 8,
+          "name": "log analytics workspace + workspace-based application insights component via ARM",
+          "status": "PASS",
+          "detail": "workspace facilities-law (customerId 1678d755-c0f5-5b10-a743-dbacb89b03d6) + workspace-based Application Insights facilities-ai",
+          "secs": 0.12
+        },
+        {
+          "component": 8,
+          "name": "application insights: export one span per agent / tool step (azure-monitor-opentelemetry-exporter)",
+          "status": "PASS",
+          "detail": "8 spans exported to Application Insights (operation_Id c0572a652a182329f0e70447a98a1fc2)",
+          "secs": 0.1
+        },
+        {
+          "component": 8,
+          "name": "application insights: export a structured agent log line (azure-monitor-opentelemetry-exporter logs)",
+          "status": "PASS",
+          "detail": "structured agent log record exported to Application Insights",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "application insights: export a custom metric (facilities.tool_calls)",
+          "status": "PASS",
+          "detail": "custom metric facilities.tool_calls=4 exported",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "log analytics: KQL (azure-monitor-query LogsQueryClient) reads the spans and the log line back",
+          "status": "PASS",
+          "detail": "KQL read back 7 spans (['agent:analytics', 'agent:facilities', 'agent:maintenance']...) and 1 log line(s) from the workspace",
+          "secs": 0.02
+        },
+        {
+          "component": 8,
+          "name": "log analytics: KQL reads the custom metric back from AppMetrics",
+          "status": "PASS",
+          "detail": "AppMetrics facilities.tool_calls total = 4",
+          "secs": 0.01
+        },
+        {
+          "component": 8,
+          "name": "log analytics: custom table ingest (Data Collector) + KQL summarize read-back",
+          "status": "PASS",
+          "detail": "AgentRun_CL: 4 tool group(s) read back with summarize",
+          "secs": 0.02
+        },
+        {
+          "component": 8,
+          "name": "azure monitor: platform metrics.list on the docs storage account (azure-mgmt-monitor)",
+          "status": "PASS",
+          "detail": "",
+          "secs": 0.02
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Memory: Assistants threads + app-level long-term pattern",
+      "status": "BLOCKED",
+      "passed": 7,
+      "total": 8,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 9,
+          "name": "assistants: create a thread with metadata and two user messages (short-term memory)",
+          "status": "PASS",
+          "detail": "thread_793978924c2249abbef1182f",
+          "secs": 0.42
+        },
+        {
+          "component": 9,
+          "name": "assistants: GET messages returns the session history in order",
+          "status": "PASS",
+          "detail": "2 messages read back in order",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "assistants: update + retrieve thread metadata",
+          "status": "PASS",
+          "detail": "thread metadata updated and retrieved",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "assistants: a run recalls a fact from earlier in the thread (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: AssertionError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm ",
+          "secs": 0.01
+        },
+        {
+          "component": 9,
+          "name": "assistants: delete the thread",
+          "status": "PASS",
+          "detail": "thread deleted",
+          "secs": 0.0
+        },
+        {
+          "component": 9,
+          "name": "long-term memory (app pattern): store a user fact in Azure Table storage",
+          "status": "PASS",
+          "detail": "fact stored for maria.ops@facilities.example.com in table longtermmemory (APPLICATION PATTERN, not a managed Azure memory service)",
+          "secs": 0.02
+        },
+        {
+          "component": 9,
+          "name": "long-term memory (app pattern): a new session recalls the fact",
+          "status": "PASS",
+          "detail": "new session recalls: prefers floor 3 east wing for inspections",
+          "secs": 0.02
+        },
+        {
+          "component": 9,
+          "name": "confirm Azure has no managed long-term memory API (expected absent)",
+          "status": "PASS",
+          "detail": "no managed long-term memory route exists on the Azure OpenAI / Foundry surface (HTTP [404, 404]); this is expected, not invented",
+          "secs": 0.02
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Foundation models (Azure OpenAI chat + embeddings)",
+      "status": "BLOCKED",
+      "passed": 4,
+      "total": 7,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 10,
+          "name": "arm: chat (gpt-4o) and embed (text-embedding-3-small) deployments are listed",
+          "status": "PASS",
+          "detail": "",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "azure openai: embeddings.create (1536-d and dimensions=256)",
+          "status": "PASS",
+          "detail": "2 x 1536 and dimensions=256 (text-embedding-3 feature)",
+          "secs": 0.03
+        },
+        {
+          "component": 10,
+          "name": "azure openai: chat.completions (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "azure openai: chat.completions with a function tool (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "azure openai: chat.completions stream=True (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom",
+          "secs": 0.01
+        },
+        {
+          "component": 10,
+          "name": "azure openai: an unknown deployment answers 404 DeploymentNotFound",
+          "status": "PASS",
+          "detail": "404 DeploymentNotFound",
+          "secs": 0.0
+        },
+        {
+          "component": 10,
+          "name": "azure openai: the content filter refuses a violent prompt on a model call (no model needed)",
+          "status": "PASS",
+          "detail": "model call refused by the deployment's content filter: 400 content_filter",
+          "secs": 0.01
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "name": "Response generation (grounded, cited, content filter)",
+      "status": "BLOCKED",
+      "passed": 5,
+      "total": 7,
+      "blocked_by": [
+        "local model"
+      ],
+      "steps": [
+        {
+          "component": 11,
+          "name": "answer is grounded in retrieved documents (AI Search) and cites them",
+          "status": "PASS",
+          "detail": "answer grounded in 3 cited sources; first: boiler-sop.md",
+          "secs": 0.0
+        },
+        {
+          "component": 11,
+          "name": "content safety: the agent answer passes the output filter and a harmful completion is flagged",
+          "status": "PASS",
+          "detail": "agent answer passes the output filter {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 0}; a harmful completion is flagged {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 4}",
+          "secs": 0.03
+        },
+        {
+          "component": 11,
+          "name": "assistants: vector store + file upload + attach (openai SDK)",
+          "status": "PASS",
+          "detail": "vs_ab2776ca20124158be3fffbc",
+          "secs": 0.27
+        },
+        {
+          "component": 11,
+          "name": "assistants: vector store files list",
+          "status": "PASS",
+          "detail": "1 file(s) in the vector store",
+          "secs": 0.01
+        },
+        {
+          "component": 11,
+          "name": "assistants: an assistant with file_search runs against the vector store (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: AssertionError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm ",
+          "secs": 0.02
+        },
+        {
+          "component": 11,
+          "name": "azure openai On Your Data: chat grounded on the AI Search index returns citations (needs a model)",
+          "status": "BLOCKED",
+          "detail": "waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom",
+          "secs": 0.01
+        },
+        {
+          "component": 11,
+          "name": "azure openai content filter: the guardrail policy covers the completion (output) source",
+          "status": "PASS",
+          "detail": "the guardrail policy filters the Completion source (output) as well as the Prompt",
+          "secs": 0.0
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Knowledge processing pipeline (Blob, Event Grid, Function, AI Search indexer)",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 12,
+          "name": "blob storage: create container + upload the four SOP documents (azure-storage-blob)",
+          "status": "PASS",
+          "detail": "4 documents uploaded to container docs (azure-storage-blob) and read back",
+          "secs": 0.19
+        },
+        {
+          "component": 12,
+          "name": "ai search: blob data source + indexer fill facilities-kb from the container (SearchIndexerClient)",
+          "status": "PASS",
+          "detail": "data source (azureblob) + indexer created and run with SearchIndexerClient: status success",
+          "secs": 0.14
+        },
+        {
+          "component": 12,
+          "name": "ai search: the initial load made all four documents searchable",
+          "status": "PASS",
+          "detail": "4 documents indexed; 'boiler pressure' -> boiler-sop.md",
+          "secs": 0.01
+        },
+        {
+          "component": 12,
+          "name": "function app: ingest function that runs the indexer (ARM + zip deploy)",
+          "status": "PASS",
+          "detail": "function app facilities-ingest with on-blob (runs the indexer on BlobCreated)",
+          "secs": 0.24
+        },
+        {
+          "component": 12,
+          "name": "event grid: system topic on the storage account + AzureFunction subscription to the function (azure-mgmt-eventgrid)",
+          "status": "PASS",
+          "detail": "system topic on storage account facilitiesdocs + AzureFunction subscription blob-created -> function (Succeeded)",
+          "secs": 0.08
+        },
+        {
+          "component": 12,
+          "name": "pipeline: a newly uploaded blob is re-ingested automatically (BlobCreated -> function -> indexer -> searchable)",
+          "status": "PASS",
+          "detail": "upload -> BlobCreated -> function -> indexer: 'zebrafishfa2f37' searchable in water-leak-sop.md",
+          "secs": 1.03
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Governance and security (Key Vault, Activity Log)",
+      "status": "PASS",
+      "passed": 6,
+      "total": 6,
+      "blocked_by": [],
+      "steps": [
+        {
+          "component": 13,
+          "name": "key vault: create facilities-kv through ARM (azure-mgmt-keyvault)",
+          "status": "PASS",
+          "detail": "https://localhost:58886/azure-data/keyvault/facilities-kv/",
+          "secs": 0.08
+        },
+        {
+          "component": 13,
+          "name": "key vault: KeyClient.create_rsa_key ledger-key (azure-keyvault-keys)",
+          "status": "PASS",
+          "detail": "RSA-2048 key ledger-key created (https://localhost:58886/keys/ledger-key/3647af9291ce4bd7a8b4f79641b1cf41)",
+          "secs": 0.1
+        },
+        {
+          "component": 13,
+          "name": "key vault: envelope encryption: wrap_key / unwrap_key a data key that protects a ledger record",
+          "status": "PASS",
+          "detail": "DEK wrapped by ledger-key, record AES-GCM encrypted; unwrap -> decrypt restores the ledger record (envelope encryption)",
+          "secs": 0.05
+        },
+        {
+          "component": 13,
+          "name": "key vault: encrypt / decrypt round trip with the vault key",
+          "status": "PASS",
+          "detail": "direct encrypt/decrypt round trip with the vault key",
+          "secs": 0.05
+        },
+        {
+          "component": 13,
+          "name": "activity log: the run's control-plane operations are readable (azure-mgmt-monitor)",
+          "status": "PASS",
+          "detail": "33 control-plane events; includes the vault create and the function app create",
+          "secs": 0.01
+        },
+        {
+          "component": 13,
+          "name": "activity log: filtered by resource group",
+          "status": "PASS",
+          "detail": "33 events for resource group rg-facilities",
+          "secs": 0.01
+        }
+      ]
+    }
+  ],
+  "transcript": "Facilities agent e2e (AZURE)   endpoint=https://localhost:58886   2026-11-18 19:06:22\n====================================================================================================\n\n[01] Access and perimeter security (Entra ID, APIM validate-jwt, WAF)\n    [PASS   ] entra: app registration + client secret + user (Graph v1.0)  - app registration facilities-users client_id=bc762f6b-4765-4618-9402-347babcf63ec, secret, user maria.ops@facilities.example.com\n    [PASS   ] azure-identity ClientSecretCredential gets an app token (client credentials)  - azure-identity ClientSecretCredential -> JWT (1122 chars)\n    [PASS   ] azure-identity UsernamePasswordCredential: user sign-in  - user sign-in (ROPC) as maria.ops@facilities.example.com, JWT claims oid=f1a8d249-adc5-4082-927b-03c4effb2877\n    [PASS   ] jwks: the token verifies against the tenant signing keys (RS256)  - signature verified against facilities-tenant JWKS; aud=api://facilities-api iss=https://login.microsoftonline.com/00000000-0000-0000-0000-cloudlearn01/v2.0\n\n[02] Channels and input guardrails (content filter), approver inbox (Service Bus)\n    [PASS   ] content safety: analyze_text allows a benign question and flags violent text (azure-ai-contentsafety)  - benign {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 0}; violent flagged {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 4}\n    [PASS   ] azure openai content filter: RAI policy facilities-guardrail bound to a deployment (azure-mgmt-cognitiveservices)  - RAI policy facilities-guardrail (Prompt + Completion, all four categories) bound to deployment chat-guarded\n    [PASS   ] azure openai content filter: a violent prompt is refused with 400 content_filter  - 400 code=content_filter before any model was called\n    [BLOCKED] azure openai content filter: a benign prompt reaches the model  - waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom\n    [PASS   ] service bus: namespace + topic + approver-inbox subscription via ARM  - namespace facilities-bus, topic work-order-approval, subscription approver-inbox (azure-mgmt-servicebus)\n    [PASS   ] service bus: send to the topic, receive from approver-inbox, complete (azure-servicebus AMQP)  - send -> receive (peek-lock) -> complete over AMQP 1.0, properties preserved, no redelivery\n\n[12] Knowledge processing pipeline (Blob, Event Grid, Function, AI Search indexer)\n    [PASS   ] blob storage: create container + upload the four SOP documents (azure-storage-blob)  - 4 documents uploaded to container docs (azure-storage-blob) and read back\n    [PASS   ] ai search: blob data source + indexer fill facilities-kb from the container (SearchIndexerClient)  - data source (azureblob) + indexer created and run with SearchIndexerClient: status success\n    [PASS   ] ai search: the initial load made all four documents searchable  - 4 documents indexed; 'boiler pressure' -> boiler-sop.md\n    [PASS   ] function app: ingest function that runs the indexer (ARM + zip deploy)  - function app facilities-ingest with on-blob (runs the indexer on BlobCreated)\n    [PASS   ] event grid: system topic on the storage account + AzureFunction subscription to the function (azure-mgmt-eventgrid)  - system topic on storage account facilitiesdocs + AzureFunction subscription blob-created -> function (Succeeded)\n    [PASS   ] pipeline: a newly uploaded blob is re-ingested automatically (BlobCreated -> function -> indexer -> searchable)  - upload -> BlobCreated -> function -> indexer: 'zebrafishfa2f37' searchable in water-leak-sop.md\n\n[06] Knowledge search (Azure AI Search)\n    [PASS   ] ai search: SearchIndexClient.create_or_update_index (text + vector + semantic)  - index facilities-kb with vector field (1536 dims) and semantic configuration\n    [PASS   ] ai search: embed the indexed documents (azure openai embeddings) and merge_documents the vectors  - 5 documents embedded with the embed deployment and merged into content_vector\n    [PASS   ] ai search: SearchClient.search BM25 ranks the boiler SOP first  - top hit boiler-sop.md score=4.445491\n    [PASS   ] ai search: BM25 ranks the HVAC manual first for an AHU question  - top hit hvac-maintenance-manual.md\n    [PASS   ] ai search: vector query (VectorizedQuery on content_vector)  - vector top hit boiler-sop.md\n    [PASS   ] ai search: hybrid query (text + vector, RRF)  - hybrid (text + vector) top hit fire-safety-sop.md\n    [PASS   ] ai search: semantic ranker returns a reranker score  - semantic ranker top hit boiler-sop.md reranker=0.4506\n    [PASS   ] ai search: results carry source names (needed for citations)  - 1 results each with content + source blob name\n\n[07] Tools (Function App + Table storage)\n    [PASS   ] table storage: seed fixture assets + work orders (azure-data-tables)  - 3 assets, 3 work orders in Azure Table storage (azure-data-tables); empty approvalledger table\n    [PASS   ] function app: ARM plan + site + zip deploy of four functions (azure-mgmt-web)  - function app facilities-tools with ['approval-decision', 'asset-status', 'create-work-order', 'kb-search'] created through ARM and zip-deployed\n    [PASS   ] function app: ARM list_functions shows the deployed functions\n    [PASS   ] function app: ARM list_host_keys gives the key that authorises function calls  - host key listed through ARM (sent as x-functions-key)\n    [PASS   ] function: kb-search tool (Azure AI Search from inside the function)  - read-only knowledge tool returned 2 cited results (AI Search client inside the function)\n    [PASS   ] function: asset-status tool (Azure Table read from inside the function)  - B-12 status=RUNNING, open work orders=1\n    [PASS   ] apim: service + API + operations + validate-jwt policy + subscription (azure-mgmt-apimanagement)  - APIM facilities-apim: API tools (3 operations) -> Function App, validate-jwt + subscription key\n    [PASS   ] apim: a call without a subscription key is rejected  - no subscription key -> 401\n    [PASS   ] apim validate-jwt: a call without a token is rejected  - subscription key but no JWT -> 401\n    [PASS   ] apim validate-jwt: an unsigned (alg=none) token is rejected  - alg=none token -> 401\n    [PASS   ] apim validate-jwt: the Entra-issued token is accepted and the tool answers  - HTTP 200 through APIM with the Entra token; caller=anonymous\n    [PASS   ] waf: Front Door policy (azure-mgmt-frontdoor)  - Front Door WAF policy facilitieswaf in Prevention mode with the default rule set\n    [PASS   ] waf: Application Gateway policy (azure-mgmt-network)  - Application Gateway WAF policy facilitieswafgw (OWASP 3.2, Prevention)\n\n[04] Gateway: APIM tool / MCP front + policy (no Cedar on Azure)\n    [PASS   ] apim: the tool catalog lists the three operations (azure-mgmt-apimanagement)  - tool catalog: ['asset-status', 'create-work-order', 'kb-search']\n    [PASS   ] apim gateway: read-only tool call (asset-status) reaches the Function App  - asset-status through APIM -> B-12 RUNNING\n    [PASS   ] apim: operation policy (rate-limit) is accepted  - operation policy with rate-limit accepted\n    [PASS   ] apim policy expression: the write tool is denied without an approval id (the Cedar substitute)  - policy expression: write tool 403 without x-approval-id; with it the call reaches the function, which refuses (no approved ledger row)\n    [PASS   ] apim MCP server API: tools/list as JSON-RPC at the gateway  - MCP tools/list through APIM: ['asset-status', 'create-work-order', 'kb-search']\n    [PASS   ] apim MCP server API: tools/call asset_status  - MCP tools/call asset_status -> ok\n\n[05] Actions and approval (Service Bus + Function App + Table ledger)\n    [PASS   ] approval path is wired: Service Bus topic + approver-inbox, decision and create-work-order functions, Table ledger  - topic work-order-approval -> subscription approver-inbox, decision + create-work-order functions, Table ledger approvalledger\n\n[03] Agent runtime: Foundry Agents + LangGraph app on Container Apps\n    [PASS   ] foundry agents: create supervisor + Facilities/Maintenance/Analytics agents (azure-ai-agents)  - project facilities-project: supervisor + 3 sub-agents created and listed (['facilities_analytics', 'facilities_facilities', 'facilities_maintenance', 'facilities_supervisor'])\n    [BLOCKED] foundry agents: a run of the supervisor on a thread completes (needs a model)  - waiting for local model: RuntimeError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm \n    [PASS   ] container apps: environment + facilities-supervisor app via ARM (azure-mgmt-appcontainers)  - container app facilities-supervisor fqdn=facilities-supervisor.f329f3-715cc91f.eastus.azurecontainerapps.io state=ContainerAppProvisioningState.SUCCEEDED\n    [PASS   ] container app: POST /query on the ingress runs the LangGraph supervisor + sub-agents in the hosted container  - hosted in pid 65790 route=['facilities', 'maintenance', 'analytics']\n\n[09] Memory: Assistants threads + app-level long-term pattern\n    [PASS   ] assistants: create a thread with metadata and two user messages (short-term memory)  - thread_793978924c2249abbef1182f\n    [PASS   ] assistants: GET messages returns the session history in order  - 2 messages read back in order\n    [PASS   ] assistants: update + retrieve thread metadata  - thread metadata updated and retrieved\n    [BLOCKED] assistants: a run recalls a fact from earlier in the thread (needs a model)  - waiting for local model: AssertionError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm \n    [PASS   ] assistants: delete the thread  - thread deleted\n    [PASS   ] long-term memory (app pattern): store a user fact in Azure Table storage  - fact stored for maria.ops@facilities.example.com in table longtermmemory (APPLICATION PATTERN, not a managed Azure memory service)\n    [PASS   ] long-term memory (app pattern): a new session recalls the fact  - new session recalls: prefers floor 3 east wing for inspections\n    [PASS   ] confirm Azure has no managed long-term memory API (expected absent)  - no managed long-term memory route exists on the Azure OpenAI / Foundry surface (HTTP [404, 404]); this is expected, not invented\n    [PASS   ] agent write is parked: ledger PENDING (no work order yet)  - ledger PENDING for req-8bc7032006, requester maria.ops@facilities.example.com\n    [PASS   ] no write happens before approval  - no work order exists before approval\n    [PASS   ] service bus: approver inbox receives the approval request (AMQP)  - approval request delivered to approver-inbox: Work order for B-12: Boiler B-12 is at 34 psi. What does the\n    [PASS   ] function: create-work-order refuses an unapproved request  - create-work-order refuses while the ledger is PENDING\n    [PASS   ] function: approval-decision rejects an unauthorised approver  - an unauthorised approver cannot decide; ledger still PENDING\n    [PASS   ] approver approves: function records APPROVED, waiting caller proceeds, work order created  - decision function -> ledger APPROVED -> caller saw it -> WO-032006 created, ledger EXECUTED\n    [PASS   ] create-work-order is idempotent on an EXECUTED request  - second create-work-order call is idempotent (one work order)\n    [PASS   ] table ledger: a decision with a stale ETag is refused (412)  - stale ETag decision refused with 412 (Precondition Failed)\n    [PASS   ] approver rejects: ledger REJECTED, nothing is written  - REJECTED in the ledger, create-work-order refuses, no work order written\n\n[10] Foundation models (Azure OpenAI chat + embeddings)\n    [PASS   ] arm: chat (gpt-4o) and embed (text-embedding-3-small) deployments are listed\n    [PASS   ] azure openai: embeddings.create (1536-d and dimensions=256)  - 2 x 1536 and dimensions=256 (text-embedding-3 feature)\n    [BLOCKED] azure openai: chat.completions (needs a model)  - waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom\n    [BLOCKED] azure openai: chat.completions with a function tool (needs a model)  - waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom\n    [BLOCKED] azure openai: chat.completions stream=True (needs a model)  - waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom\n    [PASS   ] azure openai: an unknown deployment answers 404 DeploymentNotFound  - 404 DeploymentNotFound\n    [PASS   ] azure openai: the content filter refuses a violent prompt on a model call (no model needed)  - model call refused by the deployment's content filter: 400 content_filter\n\n[11] Response generation (grounded, cited, content filter)\n    [PASS   ] answer is grounded in retrieved documents (AI Search) and cites them  - answer grounded in 3 cited sources; first: boiler-sop.md\n    [PASS   ] content safety: the agent answer passes the output filter and a harmful completion is flagged  - agent answer passes the output filter {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 0}; a harmful completion is flagged {'Hate': 0, 'SelfHarm': 0, 'Sexual': 0, 'Violence': 4}\n    [PASS   ] assistants: vector store + file upload + attach (openai SDK)  - vs_ab2776ca20124158be3fffbc\n    [PASS   ] assistants: vector store files list  - 1 file(s) in the vector store\n    [BLOCKED] assistants: an assistant with file_search runs against the vector store (needs a model)  - waiting for local model: AssertionError: run failed: Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyomi llm \n    [BLOCKED] azure openai On Your Data: chat grounded on the AI Search index returns citations (needs a model)  - waiting for local model: InternalServerError: Error code: 503 - Local LLM endpoint http://vyomi-llm:8080 is not reachable (URLError). Start it from the appliance (core/llm_runtime: `vyom\n    [PASS   ] azure openai content filter: the guardrail policy covers the completion (output) source  - the guardrail policy filters the Completion source (output) as well as the Prompt\n\n[08] AgentOps and observability (Application Insights, Log Analytics, Monitor)\n    [PASS   ] the agent run produced spans to export  - 7 agent spans to export\n    [PASS   ] log analytics workspace + workspace-based application insights component via ARM  - workspace facilities-law (customerId 1678d755-c0f5-5b10-a743-dbacb89b03d6) + workspace-based Application Insights facilities-ai\n    [PASS   ] application insights: export one span per agent / tool step (azure-monitor-opentelemetry-exporter)  - 8 spans exported to Application Insights (operation_Id c0572a652a182329f0e70447a98a1fc2)\n    [PASS   ] application insights: export a structured agent log line (azure-monitor-opentelemetry-exporter logs)  - structured agent log record exported to Application Insights\n    [PASS   ] application insights: export a custom metric (facilities.tool_calls)  - custom metric facilities.tool_calls=4 exported\n    [PASS   ] log analytics: KQL (azure-monitor-query LogsQueryClient) reads the spans and the log line back  - KQL read back 7 spans (['agent:analytics', 'agent:facilities', 'agent:maintenance']...) and 1 log line(s) from the workspace\n    [PASS   ] log analytics: KQL reads the custom metric back from AppMetrics  - AppMetrics facilities.tool_calls total = 4\n    [PASS   ] log analytics: custom table ingest (Data Collector) + KQL summarize read-back  - AgentRun_CL: 4 tool group(s) read back with summarize\n    [PASS   ] azure monitor: platform metrics.list on the docs storage account (azure-mgmt-monitor)\n\n[13] Governance and security (Key Vault, Activity Log)\n    [PASS   ] key vault: create facilities-kv through ARM (azure-mgmt-keyvault)  - https://localhost:58886/azure-data/keyvault/facilities-kv/\n    [PASS   ] key vault: KeyClient.create_rsa_key ledger-key (azure-keyvault-keys)  - RSA-2048 key ledger-key created (https://localhost:58886/keys/ledger-key/3647af9291ce4bd7a8b4f79641b1cf41)\n    [PASS   ] key vault: envelope encryption: wrap_key / unwrap_key a data key that protects a ledger record  - DEK wrapped by ledger-key, record AES-GCM encrypted; unwrap -> decrypt restores the ledger record (envelope encryption)\n    [PASS   ] key vault: encrypt / decrypt round trip with the vault key  - direct encrypt/decrypt round trip with the vault key\n    [PASS   ] activity log: the run's control-plane operations are readable (azure-mgmt-monitor)  - 33 control-plane events; includes the vault create and the function app create\n    [PASS   ] activity log: filtered by resource group  - 33 events for resource group rg-facilities\n\n----------------------------------------------------------------------------------------------------\nAgent transcript\n  user      : None\n  question  : None\n  route     : ['facilities', 'maintenance', 'analytics']  (routed by keyword rules; no model reachable)\n  tool      : kb_search          via function-direct\n  tool      : asset_status       via function-direct\n  tool      : create_work_order  via servicebus-approval\n  tool      : work_order_stats   via azure-table\n  answer    : SOP-101 Boiler plant operation (Site HQ-1, Building A): If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 [1] Asset B-12 status RUNNING; open work orders: ['WO-000102 Quarterly PRV inspection']. Work orders: 3 total; by status/priority {\"CLOSED\": {\"P3\": 1}, \"OPEN\": {\"P2\": 2}}. A work order request (req-8bc7032006) was submitted and is waiting for approval.\n  citation  : [1] boiler-sop.md\n  citation  : [2] hvac-maintenance-manual.md\n  citation  : [3] fire-safety-sop.md\n  approval  : req-8bc7032006 -> work order WO-032006\n\n====================================================================================================\nSUMMARY\n #  component                                                      status   steps\n 1  Access and perimeter security (Entra ID, APIM validate-jwt, WAF) PASS     11/11\n 2  Channels and input guardrails (content filter), approver inbox (Service Bus) BLOCKED  5/6   blocked by: local model\n 3  Agent runtime: Foundry Agents + LangGraph app on Container Apps BLOCKED  3/4   blocked by: local model\n 4  Gateway: APIM tool / MCP front + policy (no Cedar on Azure)    PASS     6/6\n 5  Actions and approval (Service Bus + Function App + Table ledger) PASS     10/10\n 6  Knowledge search (Azure AI Search)                             PASS     8/8\n 7  Tools (Function App + Table storage)                           PASS     6/6\n 8  AgentOps and observability (Application Insights, Log Analytics, Monitor) PASS     9/9\n 9  Memory: Assistants threads + app-level long-term pattern       BLOCKED  7/8   blocked by: local model\n10  Foundation models (Azure OpenAI chat + embeddings)             BLOCKED  4/7   blocked by: local model\n11  Response generation (grounded, cited, content filter)          BLOCKED  5/7   blocked by: local model\n12  Knowledge processing pipeline (Blob, Event Grid, Function, AI Search indexer) PASS     6/6\n13  Governance and security (Key Vault, Activity Log)              PASS     6/6\n\n8 PASS, 5 BLOCKED, 0 FAIL of 13 components   (26.6s)",
+  "agent": {
+    "question": null,
+    "user": null,
+    "route": [
+      "facilities",
+      "maintenance",
+      "analytics"
+    ],
+    "llm_used": false,
+    "tools": [
+      {
+        "tool": "kb_search",
+        "via": "function-direct",
+        "args": {
+          "query": "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?",
+          "top_k": 3
+        }
+      },
+      {
+        "tool": "asset_status",
+        "via": "function-direct",
+        "args": {
+          "asset_id": "B-12"
+        }
+      },
+      {
+        "tool": "create_work_order",
+        "via": "servicebus-approval",
+        "args": {
+          "request_id": "req-8bc7032006"
+        }
+      },
+      {
+        "tool": "work_order_stats",
+        "via": "azure-table",
+        "args": {}
+      }
+    ],
+    "answer": "SOP-101 Boiler plant operation (Site HQ-1, Building A): If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 [1] Asset B-12 status RUNNING; open work orders: ['WO-000102 Quarterly PRV inspection']. Work orders: 3 total; by status/priority {\"CLOSED\": {\"P3\": 1}, \"OPEN\": {\"P2\": 2}}. A work order request (req-8bc7032006) was submitted and is waiting for approval.",
+    "citations": [
+      {
+        "n": 1,
+        "source": "boiler-sop.md",
+        "text": "# SOP-101 Boiler plant operation (Site HQ-1, Building A)\n\nIf boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1"
+      },
+      {
+        "n": 2,
+        "source": "hvac-maintenance-manual.md",
+        "text": "# MM-220 HVAC air handling unit maintenance manual (AHU-7)\n\nReplace the AHU-7 filter every 60 days or when differential pressure exceeds 250 Pa.\nInspect belts a"
+      },
+      {
+        "n": 3,
+        "source": "fire-safety-sop.md",
+        "text": "# SOP-310 Fire safety and evacuation\n\nFire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of "
+      }
+    ],
+    "approval": {
+      "request_id": "req-8bc7032006",
+      "status": "PENDING_APPROVAL"
+    }
+  },
+  "work_order": "WO-032006"
+}
