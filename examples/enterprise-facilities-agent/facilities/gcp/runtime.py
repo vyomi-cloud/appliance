@@ -76,6 +76,7 @@ class GcpCtx(Ctx):
         os.environ["PUBSUB_EMULATOR_HOST"] = self.pubsub_host
         os.environ["FIRESTORE_EMULATOR_HOST"] = self.firestore_host
         os.environ.setdefault("GOOGLE_CLOUD_PROJECT", PROJECT)
+        os.environ.setdefault("VYOMI_SELF_ENDPOINT", endpoint)     # where the simulator's own gateway/functions call back to (in-process harness: not port 9000)
 
     @property
     def io(self):
