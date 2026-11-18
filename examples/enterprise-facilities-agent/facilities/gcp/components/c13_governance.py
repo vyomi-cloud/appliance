@@ -50,26 +50,39 @@ def run(ctx):
         if ctx.state.get("sealed"):
             ctx.step("kms: decrypt with the wrong AAD is refused", aad)
 
-    def audit():
+    def activity():
         from google.cloud import logging as gl
         lc = gl.Client(project=ctx.project, credentials=ctx.anon(), _use_grpc=False)
         lc._connection.API_BASE_URL = ctx.endpoint
+        flt = f'logName="{P}/logs/cloudaudit.googleapis.com%2Factivity"'
         names = set()
         for _ in range(10):
-            entries = list(lc.list_entries(filter_=f'logName="{P}/logs/cloudaudit.googleapis.com%2Factivity"', page_size=200))
-            names = {getattr(e, "payload", {}).get("methodName") if isinstance(getattr(e, "payload", None), dict) else None for e in entries}
+            entries = list(lc.list_entries(filter_=flt, page_size=200))
+            names = {e.payload.get("methodName") for e in entries if isinstance(getattr(e, "payload", None), dict)}
             if any("CreateCryptoKey" in (n or "") for n in names):
                 break
             time.sleep(0.5)
-        want = {"CreateCryptoKey", "CreateTopic"}
-        seen = {w for w in want if any(w in (n or "") for n in names)}
-        if seen != want and not names - {None}:
-            raw = {e.get("protoPayload", {}).get("methodName") for e in raw_log_entries(ctx, f'logName="{P}/logs/cloudaudit.googleapis.com%2Factivity"')}
+        if not names - {None}:
+            raw = {e.get("protoPayload", {}).get("methodName") for e in raw_log_entries(ctx, flt)}
             if raw - {None}:
                 raise Blocked(LANE["core"], f"entries:list with the SDK's default timestamp filter returns nothing although {len(raw)} audit entries exist ({sorted(x for x in raw if x)[:3]})")
-        assert seen == want, f"audit methods seen: {sorted(x for x in names if x)}"
+        want = {"CreateCryptoKey", "CreateKeyRing"}
+        assert all(any(w in (n or "") for n in names) for w in want), f"audit methods seen: {sorted(x for x in names if x)}"
+        ctx.state["audit_methods"] = names
         return "admin-activity audit has " + ", ".join(sorted(n.rsplit('.', 1)[-1] for n in names if n))[:150]
-    ctx.step("cloud audit logs: admin-activity entries for the run (CreateCryptoKey, CreateTopic ...)", audit, lane=LANE["core"])
+    ctx.step("cloud audit logs: admin-activity entries for the run (CreateKeyRing, CreateCryptoKey ...)", activity, lane=LANE["core"])
+
+    def pubsub_audit():
+        names = ctx.state.get("audit_methods")
+        if names is None:
+            raise Blocked(LANE["core"], "the audit log could not be read (previous step)")
+        if not any("CreateTopic" in (n or "") for n in names):
+            if ctx.real_backends:
+                raise Blocked(LANE["real"], "Pub/Sub CreateTopic is not audited when the real emulator is the data plane (the emulator emits no audit entries; "
+                                            f"methods seen: {sorted(x for x in names if x)})")
+            raise AssertionError(f"Pub/Sub CreateTopic missing from the audit log; methods seen: {sorted(x for x in names if x)}")
+        return "Pub/Sub CreateTopic is audited"
+    ctx.step("cloud audit logs: the approval topic creation is audited", pubsub_audit)
 
     def ledger():
         need_result(ctx, "audit")

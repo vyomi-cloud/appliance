@@ -1,3 +1,2 @@
 google-cloud-firestore
 google-cloud-aiplatform
-functions-framework

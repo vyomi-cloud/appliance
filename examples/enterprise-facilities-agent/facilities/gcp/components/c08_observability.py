@@ -70,7 +70,8 @@ def run(ctx):
             time.sleep(0.5)
         if not got and raw_log_entries(ctx, f'logName="{P}/logs/facilities-agent"'):
             raise Blocked(LANE["core"], "entries:list with the SDK's default timestamp>= filter returns nothing although the entry exists (raw entries:list shows it)")
-        assert got and tid in json.dumps(got[0].payload), got
+        mine = [e for e in got if isinstance(e.payload, dict) and e.payload.get("event") == "agent_run"]
+        assert mine and (mine[0].trace or "").endswith(tid), [(e.payload, e.trace) for e in got][:3]
         return "structured agent log written with logger.log_struct and read back with list_entries; carries the trace id"
     ctx.step("cloud logging: log_struct + list_entries (structured, trace-correlated)", logs, lane=LANE["core"])
 
