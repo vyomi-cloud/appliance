@@ -4,6 +4,26 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.7] — 2026-11-18
+
+Integration release: the MCP v4 work and the Service Bus AMQP fix join v4, the Nano bundle is rebuilt in sync with the offline cores, and the endurance fixes from 4.0.5/4.0.6 reach the portal's Nano bundle.
+
+### Added
+
+- **[MCP]** `vyomi mcp` v4 knowledge: Nano and Mesh homes alongside offline, `vyomi-tunnel mcp`, Claude plugin 4.1.0, generated MCP knowledge (1,472 capabilities, 6,858 operations). The tunnel source is 1.3.0; it ships to npm through the separate `tunnel-v*` release, not this one.
+
+### Fixes
+
+- **[Azure]** Service Bus: the AMQP-unsupported metadata is corrected (the simulator speaks AMQP 1.0 on :5672; :5671/AMQPS is not TLS-wired yet) and the AMQP ports are published on the Docker/Homebrew tier. AppConfiguration, Search and Support `checkNameAvailability` now reach their cores.
+- **[GCP]** API Gateway backends that name a Cloud Function's `cloudfunctions.net` URL reach the simulated function; the `vm_ssh` probe creates the VM with a boot disk.
+- **[Nano]** `wasm/core` is rebuilt (`azure_monitor_core`, `gcp_wire_ext`), clearing the `wasm-core-in-sync` check that failed on 4.0.6.
+- **[Tests]** The Azure offline-wiring SDK tests skip when the Azure SDK is not installed instead of failing.
+
+### Known limits
+
+- Tunnel 1.3.0 is not on npm yet (`latest` is 1.2.5); the Homebrew formula still pins 1.2.5 until that release.
+- AMQPS (:5671) is not TLS-wired.
+
 ## [4.0.6] — 2026-11-18
 
 Fix release. Release checks had been failing since 4.0.0 because they ran v3 tests against a headless v4 appliance, and the offline simulator had real gaps the checks exposed. The offline CLI cross-check (real aws/gcloud/az CLIs against the image) now passes 84 of 84.

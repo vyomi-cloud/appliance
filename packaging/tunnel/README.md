@@ -69,6 +69,37 @@ ssh -i ~/.ssh/vyomi-<instance>.pem -p 22000 ec2-user@127.0.0.1
 `GET /health` lists `"vm-tcp"` in `features` and the bridged VMs under `vms`.
 Port range: `VM_PORT_MIN` / `VM_PORT_MAX`.
 
+## Agents: the Vyomi MCP server (1.3.0+)
+
+`vyomi-tunnel mcp` runs the Vyomi MCP server on stdin/stdout for Claude Code and
+other agents. The package bundles it for macOS (arm64, x64), Linux (arm64, x64) and Windows
+(x64), so there is nothing else to install:
+
+```bash
+claude mcp add vyomi -- vyomi-tunnel mcp
+```
+
+It finds your simulator (the Nano tab through this tunnel, a local mesh, or your
+Mesh Codespace), says which one it uses, and gives SDK settings, capability levels
+and examples for it. It needs no access key; only live Mesh Codespace details do
+(through `vyomi-tunnel list`). On a platform without a bundled binary it runs
+`vyomi-mcp`, then `vyomi mcp`, from your PATH. The Vyomi Claude Code plugin uses it.
+
+## `vyomi-tunnel list --json`
+
+A stable contract for scripts and the MCP:
+
+```json
+{ "schema": 1,
+  "rows": [ { "where": "local", "name": "nano-api", "type": "api",
+              "address": "http://127.0.0.1:8090", "connect": "aws --endpoint-url ..." } ],
+  "notes": [ "mesh: Mesh is not running. Start it in the Vyomi console, then retry." ] }
+```
+
+Exit code 0 when there are rows, 1 when there are none, 2 with no credentials or a
+usage error. JSON is printed in every case except a usage error. Listing never
+edits `~/.ssh/config`: run `vyomi-tunnel config` once for `ssh <name>.vyomi`.
+
 ## Notes
 
 - **Safari**: connecting an `https://` page to `ws://localhost` can be blocked;

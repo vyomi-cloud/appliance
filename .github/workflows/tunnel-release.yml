@@ -1,10 +1,24 @@
 # vyomi-tunnel release: independent of the appliance release (v4.0.1+ ships the Mesh image only; the tunnel is the
 # Mesh client and keeps its own npm + Homebrew release).
 #
-# Trigger: push tag  tunnel-vX.Y.Z  (must equal packaging/tunnel/package.json version), or manual dispatch (dry_run default).
+# Flow: build ONE tarball -> gates on it (checks, Linux + homes, macOS + brew, Windows) -> publish THAT tarball.
+# Nothing reaches npm or Homebrew unless every gate is green.
+#
+# Triggers:
+#   tag tunnel-vX.Y.Z           final release: package.json must be X.Y.Z; npm dist-tag `latest`, Homebrew tap bumped.
+#   tag tunnel-vX.Y.Z-rc.N      release candidate: version stamped X.Y.Z-rc.N in the build; npm dist-tag `next`
+#                               (testers: npm i -g vyomi-tunnel@next); `latest` and Homebrew untouched. Any branch.
+#   workflow_dispatch           dry run by default: every gate runs, npm publish --dry-run, no tap push.
+#                               gh workflow run tunnel-release.yml --ref <branch> -f dry_run=true
 # npm: TRUSTED PUBLISHING (OIDC), no stored token. One-time setup on npmjs.com -> vyomi-tunnel -> Settings ->
 #      Trusted Publisher: repo vyomi-cloud/appliance, workflow  tunnel-release.yml
-# Homebrew: HOMEBREW_TAP_TOKEN (repo secret) bumps vyomi-cloud/homebrew-tap Formula/vyomi-tunnel.rb.
+# Homebrew: HOMEBREW_TAP_TOKEN (repo secret). The tap formula is rendered from packaging/brew/vyomi-tunnel.rb
+# (url + sha256 filled in), so the repo is the single source of truth, including the formula's test block.
+# Since 1.3.0 the package bundles the five vyomi-mcp binaries (`vyomi-tunnel mcp`), built here (never committed).
+# Claude plugin: a final release then mirrors integrations/claude-plugins into the public marketplace
+# vyomi-cloud/claude-plugins (scripts/sync_claude_plugins.py; CLAUDE_PLUGINS_TOKEN). It runs here, after npm + Homebrew,
+# because the plugin runs `vyomi-tunnel mcp`: users must be able to get the tunnel it needs first. Unchanged plugin
+# content is a no-op; changed content needs a version bump (Claude Code only updates on a new version).
 name: Tunnel release
 
 on:
@@ -13,63 +27,259 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run (npm publish --dry-run, no tap push)"
+        description: "Dry run: every gate runs, npm publish --dry-run, no tap push"
         type: boolean
         default: true
 
 permissions:
   contents: read
 
+concurrency:
+  group: tunnel-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+
 jobs:
-  tunnel:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      channel: ${{ steps.v.outputs.channel }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Version (from the tag) and npm channel
+        id: v
+        run: |
+          PKG=$(node -p "require('./packaging/tunnel/package.json').version"); VER="$PKG"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            TAGVER="${GITHUB_REF_NAME#tunnel-v}"
+            case "$TAGVER" in
+              "$PKG") ;;
+              "$PKG"-*)
+                VER="$TAGVER"
+                # Release candidate: stamp the full version everywhere the package reports it.
+                python3 - "$PKG" "$VER" <<'EOF'
+          import pathlib, sys
+          old, new = sys.argv[1:]
+          for f, pat in [("packaging/tunnel/bin/vyomi-tunnel.mjs", 'const VERSION = "{}";'),
+                         ("packaging/tunnel/bin/mesh-cli.mjs", 'vyomi-tunnel {}"'),
+                         ("packaging/tunnel/bin/mesh-cli.mjs", 'VYOMI_TUNNEL_VERSION_NUM || "{}"'),
+                         ("packaging/tunnel/bin/credentials.mjs", 'version = "{}"'),
+                         ("packaging/tunnel/bin/creds-sync.mjs", 'version = "{}"')]:
+              p = pathlib.Path(f); s = p.read_text(); a = pat.format(old)
+              assert s.count(a) == 1, (f, a)
+              p.write_text(s.replace(a, pat.format(new)))
+          EOF
+                (cd packaging/tunnel && npm pkg set "version=$VER") ;;
+              *) echo "::error::tag $GITHUB_REF_NAME does not match packaging/tunnel/package.json $PKG (or $PKG-rc.N)"; exit 1 ;;
+            esac
+          fi
+          case "$VER" in *-*) CH=next ;; *) CH=latest ;; esac
+          echo "version=$VER" >> "$GITHUB_OUTPUT"; echo "channel=$CH" >> "$GITHUB_OUTPUT"
+          echo "vyomi-tunnel $VER -> npm dist-tag $CH (dry run: $DRY)"
+      - name: Build the bundled vyomi-mcp binaries
+        run: scripts/build_tunnel_mcp.sh
+      - name: Pack once + 25 MB / five-binary guard
+        run: |
+          mkdir -p dist
+          (cd packaging/tunnel && npm pack --pack-destination ../../dist --json > ../../dist/pack.json)
+          # shellcheck disable=SC2016  # JS template literals inside node -e, not shell expansion
+          node -e '
+            const p = require("./dist/pack.json")[0], files = p.files.map((f) => f.path), max = 25 * 1024 * 1024;
+            const want = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64", "win32-x64"].map((d) => `mcp/${d}/vyomi-mcp${d.startsWith("win32") ? ".exe" : ""}`);
+            const missing = want.filter((w) => !files.includes(w));
+            console.log(`packed ${(p.size / 1048576).toFixed(1)} MB, unpacked ${(p.unpackedSize / 1048576).toFixed(1)} MB, ${files.length} files: ${p.filename}`);
+            if (missing.length) { console.log(`::error::bundled vyomi-mcp missing: ${missing.join(", ")}`); process.exit(1); }
+            if (p.size > max) { console.log(`::error::vyomi-tunnel tarball is ${p.size} bytes, over the 25 MB guard`); process.exit(1); }'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vyomi-tunnel-tarball
+          path: dist/vyomi-tunnel-*.tgz
+          if-no-files-found: error
+
+  # ---- gates: every one runs on the tarball built above ----
+  checks:
+    uses: ./.github/workflows/tunnel-mcp-checks.yml
+
+  linux:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      IT_DIR: ${{ github.workspace }}/.it
+      IT_SKIP_BUILD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: docker/setup-qemu-action@v3      # linux/arm64 container on an amd64 runner
+      - uses: actions/download-artifact@v4
+        with: { name: vyomi-tunnel-tarball, path: .it }
+      - name: package (install the tarball, MCP handshake, no key)
+        run: tools/mcp-eval/prerelease-it.sh package
+      - name: linux (node:20 containers, arm64 + amd64)
+        run: tools/mcp-eval/prerelease-it.sh linux
+      - name: homes (fake Codespace + a local mesh from this commit's image)
+        run: tools/mcp-eval/prerelease-it.sh homes
+      - name: Logs
+        if: always()
+        run: cat "$IT_DIR/results.tsv" 2>/dev/null; tail -n 200 "$IT_DIR/log.txt" 2>/dev/null || true
+
+  macos:
+    needs: build
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      IT_DIR: ${{ github.workspace }}/.it
+      IT_SKIP_BUILD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/download-artifact@v4
+        with: { name: vyomi-tunnel-tarball, path: .it }
+      - name: package (darwin binary runs, MCP handshake, no key)
+        run: tools/mcp-eval/prerelease-it.sh package
+      - name: brew (formula rendered from packaging/brew, installed from the tarball, brew test)
+        run: tools/mcp-eval/prerelease-it.sh brew
+      - name: Logs
+        if: always()
+        run: cat "$IT_DIR/results.tsv" 2>/dev/null; tail -n 200 "$IT_DIR/log.txt" 2>/dev/null || true
+
+  windows:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/download-artifact@v4
+        with: { name: vyomi-tunnel-tarball, path: it }
+      - name: npm i -g the tarball; vyomi-tunnel --version and `vyomi-tunnel mcp` answer
+        run: |
+          set -euo pipefail
+          npm i -g ./it/vyomi-tunnel-*.tgz
+          vyomi-tunnel --version
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            | vyomi-tunnel mcp > reply.json 2> err.txt || { cat err.txt; exit 1; }
+          cat reply.json
+          grep -q '"serverInfo":{[^}]*"name":"vyomi"' reply.json
+
+  # ---- publish: only the tested tarball, only when every gate is green ----
+  publish:
+    needs: [build, checks, linux, macos, windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write      # npm trusted publishing
     env:
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-      DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+      VER: ${{ needs.build.outputs.version }}
+      CH: ${{ needs.build.outputs.channel }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm install -g npm@^11.5.1     # trusted publishing needs npm >= 11.5.1
-      - name: Tag must match package.json
-        if: github.ref_type == 'tag'
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - uses: actions/download-artifact@v4
+        with: { name: vyomi-tunnel-tarball, path: dist }
+      - name: npm publish (the tested tarball) to dist-tag ${{ env.CH }}
         run: |
-          PKG=$(node -p "require('./packaging/tunnel/package.json').version")
-          TAG="${GITHUB_REF_NAME#tunnel-v}"
-          [ "$PKG" = "$TAG" ] || { echo "::error::tag $GITHUB_REF_NAME != packaging/tunnel/package.json $PKG"; exit 1; }
-      - name: Package contents (dry pack)
-        working-directory: packaging/tunnel
-        run: npm pack --dry-run
-      - name: Status (npm / tap)
-        id: st
-        run: |
-          python3 scripts/tunnel_sync.py status --json > /tmp/st.json || true
-          cat /tmp/st.json
-          echo "ver=$(python3 -c "import json;print(json.load(open('/tmp/st.json'))['version'])")" >> "$GITHUB_OUTPUT"
-          echo "npm=$(python3 -c "import json;print(str(json.load(open('/tmp/st.json'))['npm_published']).lower())")" >> "$GITHUB_OUTPUT"
-          echo "tap=$(python3 -c "import json;d=json.load(open('/tmp/st.json'));print(str(d['tap_version']==d['version']).lower())")" >> "$GITHUB_OUTPUT"
-      - name: npm publish vyomi-tunnel
-        if: steps.st.outputs.npm == 'false'
-        working-directory: packaging/tunnel
-        run: |
-          if [ "$DRY" = "true" ]; then npm publish --access public --dry-run; else npm publish --access public; fi
-      - name: Bump the Homebrew tap formula
-        if: steps.st.outputs.tap == 'false' && env.DRY != 'true'
+          set -euo pipefail
+          if npm view "vyomi-tunnel@$VER" version >/dev/null 2>&1; then echo "vyomi-tunnel@$VER is already on npm; nothing to publish"; exit 0; fi
+          TGZ=$(ls ./dist/vyomi-tunnel-*.tgz)   # the ./ matters: npm reads "dist/x.tgz" as a GitHub user/repo
+          test "$(tar xzOf "$TGZ" package/package.json | node -p 'JSON.parse(require("fs").readFileSync(0)).version')" = "$VER"
+          # The exact bytes the gates installed and tested (npm publish of a .tgz does not re-pack).
+          if [ "$DRY" = "true" ]; then npm publish "$TGZ" --access public --tag "$CH" --dry-run
+          else npm publish "$TGZ" --access public --tag "$CH"; fi
+      - name: Bump the Homebrew tap (final releases only; formula rendered from packaging/brew/vyomi-tunnel.rb)
+        if: env.CH == 'latest' && env.DRY != 'true'
         timeout-minutes: 35          # npm's CDN can take many minutes to serve a new tarball; the sha step waits for it (up to 25 min)
         run: |
+          set -euo pipefail
           [ -n "$TAP_TOKEN" ] || { echo "::error::HOMEBREW_TAP_TOKEN missing"; exit 1; }
-          VER="${{ steps.st.outputs.ver }}"
           SHA=$(python3 scripts/tunnel_sync.py sha "$VER" --wait 1500) || { echo "::error::registry tarball for $VER never settled"; exit 1; }
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/vyomi-cloud/homebrew-tap.git" tap
+          python3 - packaging/brew/vyomi-tunnel.rb tap/Formula/vyomi-tunnel.rb "$VER" "$SHA" <<'EOF'
+          import re, sys
+          src, dst, ver, sha = sys.argv[1:]
+          f = open(src).read()
+          f = re.sub(r'(?m)^  url .*$', f'  url "https://registry.npmjs.org/vyomi-tunnel/-/vyomi-tunnel-{ver}.tgz"', f)
+          f = re.sub(r'(?m)^  sha256 .*$', f'  sha256 "{sha}"', f)
+          open(dst, "w").write(f)
+          EOF
           cd tap
-          sed -i -e "s|vyomi-tunnel-[0-9][^\"]*\.tgz|vyomi-tunnel-${VER}.tgz|" -e "s|sha256 \"[0-9a-f]*\"|sha256 \"${SHA}\"|" Formula/vyomi-tunnel.rb
           git diff --stat
+          if git diff --quiet; then echo "tap already at $VER"; exit 0; fi
           git config user.email "bot@vyomi.cloud"; git config user.name "Vyomi Release Bot"
           git add Formula/vyomi-tunnel.rb && git commit -m "vyomi-tunnel ${VER}" && git push
       - name: Summary
         if: always()
         run: |
-          { echo "## vyomi-tunnel"; python3 scripts/tunnel_sync.py status || echo "not in sync"; } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## vyomi-tunnel $VER"
+            echo "- npm dist-tag: \`$CH\`  (dry run: $DRY)"
+            echo "- gates: checks, linux (+homes), macos (+brew), windows: all passed (publish only runs when they do)"
+            if [ "$CH" = "next" ]; then echo "- testers: \`npm i -g vyomi-tunnel@next\` (Homebrew and \`latest\` unchanged)"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---- Claude plugin marketplace: final releases only, after the tunnel it needs is on npm + Homebrew ----
+  plugin-sync:
+    needs: [build, publish]
+    if: needs.build.outputs.channel == 'latest'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PLUGINS_TOKEN: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
+      VER: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Mirror integrations/claude-plugins into the marketplace checkout (version guard)
+        id: sync
+        run: |
+          git clone -q https://github.com/vyomi-cloud/claude-plugins.git marketplace
+          python3 scripts/sync_claude_plugins.py marketplace --apply
+      - name: The mirrored marketplace validates
+        if: steps.sync.outputs.changed == 'true'
+        run: npx -y @anthropic-ai/claude-code plugin validate marketplace
+      - name: Push to vyomi-cloud/claude-plugins
+        if: steps.sync.outputs.changed == 'true' && env.DRY != 'true'
+        run: |
+          set -euo pipefail
+          [ -n "$PLUGINS_TOKEN" ] || { echo "::error::CLAUDE_PLUGINS_TOKEN missing"; exit 1; }
+          cd marketplace
+          git config user.email "bot@vyomi.cloud"; git config user.name "Vyomi Release Bot"
+          git add -A && git commit -q -m "${{ steps.sync.outputs.version }} (vyomi-tunnel ${VER})"
+          git push "https://x-access-token:${PLUGINS_TOKEN}@github.com/vyomi-cloud/claude-plugins.git" HEAD:main
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Claude plugin marketplace"
+            if [ "${{ steps.sync.outputs.changed }}" = "true" ]; then
+              echo "- ${{ steps.sync.outputs.version }}: $([ "$DRY" = "true" ] && echo "would be pushed (dry run)" || echo "pushed") to vyomi-cloud/claude-plugins"
+            else echo "- unchanged (${{ steps.sync.outputs.version }})"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
