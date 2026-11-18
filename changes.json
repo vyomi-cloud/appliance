@@ -1,8 +1,17 @@
 {
- "at": "2026-11-18T16:13:08+00:00",
+ "at": "2026-11-18T17:13:10+00:00",
  "baseline": false,
- "changes": [],
- "errors": [
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
- ]
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:8d29ddc5a3bd",
+   "title": "AWS Transform now supports migration to AWS Outposts",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-transform-outposts-migration/",
+   "detail": "AWS Transform now supports AWS Outposts as a migration target. You can migrate workloads onto your Outposts from on-premises environments, another Outpost, or a different Availability Zone or Region. AWS Transform is a collaborative enterprise IT transformation service powered by agentic AI that accelerates cloud migration, application modernization, and continuous tech debt reduction. Run your migration with AI agents in AWS Transform for migrations, or use AWS Transform MGN , the rehost engine within AWS Transform, directly from its console. If you run workloads on Outposts for low latency, ",
+   "actionable": false
+  }
+ ],
+ "errors": []
 }

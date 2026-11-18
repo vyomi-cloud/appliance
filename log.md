@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-18T17:13:10+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` AWS Transform now supports migration to AWS Outposts ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-transform-outposts-migration/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T16:13:08+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3006,4 @@ Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-06T11:08:05+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T10:07:59+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
