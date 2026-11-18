@@ -172,6 +172,7 @@ def _hdr_transport(extra):
 
 
 def test_cosmos_dedicated_gateway_cache_over_offline_wire(base):
+    pytest.importorskip("azure.cosmos")  # SDK not installed -> skip, not a false failure
     from azure.cosmos import CosmosClient
     _rg()
     acct = f"{RG}/providers/Microsoft.DocumentDB/databaseAccounts/owdgw"
@@ -208,6 +209,7 @@ def test_cosmos_dedicated_gateway_cache_over_offline_wire(base):
 
 
 def test_cosmos_cmk_encryption_over_offline_wire(base):
+    pytest.importorskip("azure.cosmos")  # SDK not installed -> skip, not a false failure
     from azure.core.exceptions import HttpResponseError
     from azure.cosmos import CosmosClient
     _rg()
@@ -239,6 +241,8 @@ def test_cosmos_cmk_encryption_over_offline_wire(base):
 
 # ───────────────────────────── Storage Queue / Table service properties (native SDKs) ─────────────────────────────
 def test_storage_queue_and_table_service_properties_over_offline_wire(base):
+    pytest.importorskip("azure.data.tables")  # SDK not installed -> skip, not a false failure
+    pytest.importorskip("azure.storage.queue")  # SDK not installed -> skip, not a false failure
     import urllib.error
     import urllib.request
     from azure.core.credentials import AzureNamedKeyCredential
@@ -306,6 +310,7 @@ def _cmk_vault(key):
 
 
 def test_appconfiguration_cmk_over_offline_wire(base):
+    pytest.importorskip("azure.appconfiguration")  # SDK not installed -> skip, not a false failure
     from azure.appconfiguration import AzureAppConfigurationClient, ConfigurationSetting
     from azure.core.exceptions import HttpResponseError
     from providers import azure_services
