@@ -413,6 +413,9 @@ jobs:
           mkdir -p ext
           collect() {  # collect <workflow file> <artifact name> <label>
             local wf="$1" art="$2" label="$3" id="" st="" concl=""
+            # A workflow that no longer exists on this ref (e.g. release-startup-validate.yml was retired in v4) will never
+            # produce a run: record it as skipped instead of waiting the full 100 minutes for it.
+            if [ ! -f ".github/workflows/$wf" ]; then echo "$label|$wf||skipped" >> ext/index.txt; return; fi
             for i in $(seq 1 100); do
               read -r id st concl < <(gh run list -R "$R" --workflow "$wf" -L 30 --json databaseId,status,conclusion,headBranch,displayTitle \
                 -q "[.[] | select(.displayTitle|test(\"(^| |v)$VER( |$)\"))][0] | \"\(.databaseId) \(.status) \(.conclusion)\"" 2>/dev/null)
