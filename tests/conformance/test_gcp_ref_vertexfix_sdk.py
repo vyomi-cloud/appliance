@@ -225,7 +225,34 @@ def t_sessions():
 
 
 def t_models():
-    pass
+    from google import genai
+    from google.genai import types
+    from google.oauth2.credentials import Credentials
+    from core import ai_model_catalog as CAT
+    gv = genai.Client(vertexai=True, project=P, location=LOC, credentials=Credentials(token="x"), http_options=types.HttpOptions(base_url=EP, api_version="v1"))
+    gd = genai.Client(api_key="x", http_options=types.HttpOptions(base_url=EP))
+    for mid in ("gemini-2.0-flash", "gemini-2.5-pro", "gemini-1.5-flash-002", "gemini-embedding-001", "text-embedding-005", "qwen3-4b"):
+        m = gv.models.get(model=mid)
+        check(f"vertex client.models.get({mid})", m.name == f"publishers/google/models/{mid}" and bool(m.display_name) and m.version, m)
+        d = gd.models.get(model=mid)
+        emb = "embed" in mid
+        check(f"developer-API client.models.get({mid}): token limits + supported methods",
+              d.name == f"models/{mid}" and d.input_token_limit == 8192 and bool(d.supported_actions) and d.version == "001"
+              and (("embedContent" in d.supported_actions) == emb), d)
+    raw = __import__("requests").get(f"{EP}/v1beta1/publishers/google/models/gemini-2.0-flash", headers={"Authorization": "Bearer x"}).json()
+    check("Model Garden get carries inputTokenLimit / outputTokenLimit / supportedGenerationMethods / version, and says what serves the alias",
+          raw.get("inputTokenLimit") == 8192 and raw.get("outputTokenLimit") == 8192 and "generateContent" in raw.get("supportedGenerationMethods", []) and raw.get("version") == "001"
+          and raw.get("vyomiAlias", {}).get("servedBy"), raw)
+    ids = {m.name.rsplit("/", 1)[-1] for m in gv.models.list()}
+    check("vertex client.models.list() lists every catalogue id", {m["id"] for m in CAT.MODELS} <= ids, sorted(ids))
+    for m in CAT.MODELS:
+        assert gv.models.get(model=m["id"]).name.endswith("/" + m["id"]) and gd.models.get(model=m["id"]).name == "models/" + m["id"], m["id"]
+    check("every catalogue id gets on both surfaces", True)
+    try:
+        gv.models.get(model="not-a-model-xyz"); nf = False
+    except Exception as e:
+        nf = "404" in str(e) or "NOT_FOUND" in str(e)
+    check("unknown id -> 404 NOT_FOUND", nf)
 
 
 if __name__ == "__main__":

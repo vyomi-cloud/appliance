@@ -404,7 +404,14 @@ def _query(st, eng, verb, p, q):
 
 def _query_source(eng, src, verb, cm, inp):
     """Run the user's packaged agent: set_up() then the class method with `input` as keyword arguments, in the sandboxed function runtime."""
-    from core import gcp_function_runtime as rt
+    try:
+        from core import gcp_function_runtime as rt
+        usable = rt.enabled()
+    except ImportError:          # Pyodide flat layout: no process to spawn
+        usable = False
+    if not usable:
+        raise _Err(400, "FAILED_PRECONDITION", "Running a source-packaged agent needs the sandboxed subprocess runtime (offline appliance / Mesh); Nano's browser "
+                   "runtime cannot spawn Python processes. Use a Vyomi agent spec (spec.vyomiAgentSpec) on Nano.")
     methods = {m.get("name"): m for m in (eng["spec"].get("classMethods") or []) if isinstance(m, dict)}
     if cm not in methods:
         raise _Err(400, "INVALID_ARGUMENT", f"Unknown class method `{cm}`. Available: {', '.join(methods) or '(none registered; pass class_methods at create)'}.")
