@@ -185,10 +185,11 @@ def t_eventfn():
     up = fc.generate_upload_url(request={"parent": parent})
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
-        z.writestr("main.py", "def handler(event):\n    print('FINALIZED', event.data.get('name'), event['type'])\n    return 'ok'\n")
+        z.writestr("main.py", "import sys, functions_framework\n\n@functions_framework.cloud_event\ndef handler(event):\n    print('ERRLINE', file=sys.stderr)\n    print('FINALIZED', event.data.get('name'), event['type'])\n    return 'ok'\n")
         z.writestr("requirements.txt", "functions-framework\n")
     requests.put(up.upload_url, data=buf.getvalue(), headers={"content-type": "application/zip"}, timeout=60).raise_for_status()
-    fn = f2.Function(name=f"{parent}/functions/onfinal{TAG}", build_config=f2.BuildConfig(runtime="python312", entry_point="handler", source=f2.Source(storage_source=up.storage_source)),
+    fn = f2.Function(name=f"{parent}/functions/onfinal{TAG}", build_config=f2.BuildConfig(runtime="python312", entry_point="handler", source=f2.Source(storage_source=up.storage_source),
+                                             environment_variables={"GOOGLE_FUNCTION_SIGNATURE_TYPE": "cloudevent"}),
                      service_config=f2.ServiceConfig(available_memory="256M", timeout_seconds=60))
     fc.create_function(request={"parent": parent, "function": fn, "function_id": f"onfinal{TAG}"}).result(timeout=120)
     T = f"{EP}/v1/{parent}/triggers"
@@ -208,6 +209,12 @@ def t_eventfn():
     c._connection.API_BASE_URL = EP
     txt = [str(e.payload) for e in c.list_entries(filter_='stdout')]
     check("print() output appears in Cloud Logging", any("FINALIZED sop/boiler.txt google.cloud.storage.object.v1.finalized" in t for t in txt), txt[-3:])
+    es = list(c.list_entries(filter_=f'logName="projects/{P}/logs/run.googleapis.com%2Fstdout" AND resource.type="cloud_run_revision"'))
+    mine = [e for e in es if "FINALIZED" in str(e.payload)]
+    check("stdout entry is on run.googleapis.com/stdout with cloud_run_revision service/revision labels",
+          bool(mine) and mine[0].resource.labels.get("service_name") == f"onfinal{TAG}" and bool(mine[0].resource.labels.get("revision_name")), [(e.resource.type, e.resource.labels) for e in mine[:1]])
+    er = list(c.list_entries(filter_=f'logName="projects/{P}/logs/run.googleapis.com%2Fstderr" AND resource.type="cloud_run_revision"'))
+    check("stderr entry is on run.googleapis.com/stderr (ERROR)", any("ERRLINE" in str(e.payload) for e in er), [str(e.payload) for e in er[-2:]])
 
 
 # ── 5 GCS notificationConfigs ────────────────────────────────────────────────────────────

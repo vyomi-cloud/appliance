@@ -158,6 +158,57 @@ class GcpCtx(Ctx):
             self._c["firestore"] = firestore.Client(project=self.project)
         return self._c["firestore"]
 
+    def grpc_front(self):
+        """(endpoint, tls) of the simulator's gRPC front door for Monitoring / gapic Logging (core/gcp_grpc_front.py), or raises Blocked.
+        Contract: env VYOMI_GCP_GRPC_ENDPOINT[+VYOMI_GCP_GRPC_CA] (in-process harness / same host), else `GET <endpoint>/_vyomi/gcp-grpc` (Mesh/appliance).
+        With TLS the CA is exported as GRPC_DEFAULT_SSL_ROOTS_FILE_PATH so the DEFAULT client constructors work with only client_options.api_endpoint."""
+        if "grpc_front" not in self.state:
+            ep, ca, tls, why = os.environ.get("VYOMI_GCP_GRPC_ENDPOINT", ""), os.environ.get("VYOMI_GCP_GRPC_CA", ""), None, ""
+            if not ep:
+                try:
+                    import requests
+                    d = requests.get(self.endpoint + "/_vyomi/gcp-grpc", timeout=10).json()
+                    if d.get("enabled"):
+                        ep, tls = d["endpoint"], d.get("tls")
+                        host = urlparse(self.endpoint).hostname or "localhost"
+                        ep = f"{host}:{ep.rsplit(':', 1)[1]}" if host not in ("localhost", "127.0.0.1") else ep
+                        if d.get("ca_pem"):
+                            import tempfile
+                            ca = os.path.join(tempfile.mkdtemp(prefix="vyomi-grpc-ca-"), "ca.pem")
+                            open(ca, "w").write(d["ca_pem"])
+                    else:
+                        why = "the simulator reports the gRPC front is off (start it with VYOMI_GCP_REAL_BACKENDS=1 or VYOMI_GCP_GRPC=1)"
+                except Exception as e:
+                    why = f"no gRPC front discovered at {self.endpoint}/_vyomi/gcp-grpc ({type(e).__name__})"
+            if ep and ca:
+                os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = ca
+            self.state["grpc_front"] = (ep, bool(ca), why)
+        ep, tls, why = self.state["grpc_front"]
+        if not ep:
+            raise Blocked(LANE["real"], why)
+        return ep, tls
+
+    def monitoring(self):
+        """monitoring_v3.MetricServiceClient, DEFAULT constructor (gRPC) at the gRPC front door."""
+        if "monitoring" not in self._c:
+            ep, tls = self.grpc_front()
+            from google.cloud import monitoring_v3
+            if tls:
+                self._c["monitoring"] = monitoring_v3.MetricServiceClient(credentials=self.anon(), client_options={"api_endpoint": ep})
+            else:       # plaintext front (VYOMI_GCP_GRPC_TLS=0): the SDK's documented way to use a plain channel
+                import grpc
+                from google.cloud.monitoring_v3.services.metric_service import transports
+                self._c["monitoring"] = monitoring_v3.MetricServiceClient(transport=transports.MetricServiceGrpcTransport(channel=grpc.insecure_channel(ep)))
+        return self._c["monitoring"]
+
+    def logging_grpc(self):
+        """google.cloud.logging.Client, DEFAULT transport (gRPC) at the gRPC front door."""
+        ep, tls = self.grpc_front()
+        if not tls:
+            raise Blocked(LANE["real"], "the gRPC front is plaintext; logging.Client's default gRPC transport needs TLS (leave VYOMI_GCP_GRPC_TLS unset)")
+        from google.cloud import logging as gl
+        return gl.Client(project=self.project, credentials=self.anon(), client_options={"api_endpoint": ep})
+
     def aiplatform(self, name):
         from google.cloud import aiplatform_v1 as av
         key = "av." + name

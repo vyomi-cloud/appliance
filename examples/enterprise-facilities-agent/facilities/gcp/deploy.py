@@ -30,7 +30,7 @@ def function_env(ctx, extra=None):
     return env
 
 
-def deploy_function(ctx, name, module, extra_env=None, event_trigger=None):
+def deploy_function(ctx, name, module, extra_env=None, event_trigger=None, cloudevent=False):
     """Create (or update) a function; returns its HTTPS URI."""
     import requests
     from google.api_core import exceptions as gex
@@ -39,7 +39,8 @@ def deploy_function(ctx, name, module, extra_env=None, event_trigger=None):
     up = fc.generate_upload_url(request={"parent": ctx.parent})
     requests.put(up.upload_url, data=zip_of(module), headers={"content-type": "application/zip"}, timeout=60).raise_for_status()
     fn = f2.Function(name=f"{ctx.parent}/functions/{name}",
-                     build_config=f2.BuildConfig(runtime="python312", entry_point="handler", source=f2.Source(storage_source=up.storage_source)),
+                     build_config=f2.BuildConfig(runtime="python312", entry_point="handler", source=f2.Source(storage_source=up.storage_source),
+                                                 environment_variables={"GOOGLE_FUNCTION_SIGNATURE_TYPE": "cloudevent"} if cloudevent else {}),
                      service_config=f2.ServiceConfig(environment_variables=function_env(ctx, extra_env), available_memory="512M", timeout_seconds=120))
     try:
         fc.get_function(request={"name": fn.name})

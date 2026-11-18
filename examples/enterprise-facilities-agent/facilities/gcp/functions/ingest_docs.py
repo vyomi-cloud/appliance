@@ -1,7 +1,10 @@
 """Knowledge pipeline trigger (Eventarc, storage object finalized): an object landing under docs/ is imported into the RAG corpus."""
 import os
 
+import functions_framework
 
+
+@functions_framework.cloud_event
 def handler(event):
     data = getattr(event, "data", None) or event
     data = data if isinstance(data, dict) else {}

@@ -152,6 +152,7 @@ def _ps_wrapper(orig):
         if not m:
             return orig(store, method, path, query, headers, body, on_publish=on_publish)
         project, coll, rid, sub_coll, verb = m.groups()
+        _seen_projects.add(project)
         if verb in _IAM_VERBS:
             return orig(store, method, path, query, headers, body, on_publish=on_publish)
         method = method.upper()
@@ -194,7 +195,17 @@ def _ps_wrapper(orig):
                 except Exception:  # noqa: BLE001 - a trigger failure never fails the publish (as in the core)
                     _log.debug("realbackends: on_publish hook failed", exc_info=True)
             return _ps_response(mod, st, out, ct)
-        st, out, ct = _http("pubsub", method, clean, query, send)
+        admin = bool(rid) and not verb and not sub_coll and method in ("PUT", "DELETE") and coll in ("topics", "subscriptions")
+        full_name = f"projects/{project}/{coll}/{rid}"
+        if admin:
+            _audit_inflight.add(full_name)
+        try:
+            st, out, ct = _http("pubsub", method, clean, query, send)
+            if admin and 200 <= st < 300:       # the simulator front audits this REST call itself: keep the reconciler off it
+                (_known.setdefault(coll, set()).add if method == "PUT" else _known.setdefault(coll, set()).discard)(full_name)
+        finally:
+            if admin:
+                _audit_inflight.discard(full_name)
         if st == 200 and method == "GET" and not rid:
             out = _filter_hidden(out, coll)
         if st == 200 and method == "GET" and sub_coll == "/subscriptions":
@@ -205,6 +216,79 @@ def _ps_wrapper(orig):
 
     dispatch._vyomi_real = True
     return dispatch
+
+
+# ── Cloud Audit Logs for admin calls the emulator handles itself (gRPC clients) ─────────────────────────
+# The core path audits every REST admin call at the simulator's front door (core/gcp_audit_core.py). A gRPC client (CreateTopic,
+# CreateSubscription, DeleteTopic ...) talks to the emulator directly and never touches the simulator, and the emulator emits no
+# audit entries: the poller below diffs the emulator's topic/subscription lists and writes the SAME Admin Activity entries.
+_known: dict[str, set] = {}          # "topics"/"subscriptions" -> full names already accounted for (audited or REST-handled)
+_audit_inflight: set[str] = set()
+_audit_ready = False
+
+
+_seen_projects: set[str] = set()
+
+
+def _projects() -> list[str]:
+    """Projects to watch: the default plus every project a Pub/Sub REST call named (no router lookup: install() runs inside its construction)."""
+    return sorted({os.environ.get("GOOGLE_CLOUD_PROJECT") or "vyomi-project", "vyomi-project"} | _seen_projects)
+
+
+def _emulator_names(project: str, coll: str) -> set | None:
+    names, token = set(), ""
+    while True:
+        st, out, _ = _http("pubsub", "GET", f"/v1/projects/{project}/{coll}", {"pageToken": token} if token else None, timeout=5)
+        if st != 200:
+            return None
+        try:
+            d = json.loads(out)
+        except Exception:  # noqa: BLE001
+            return None
+        names |= {x if isinstance(x, str) else x.get("name", "") for x in d.get(coll, [])}
+        token = d.get("nextPageToken", "")
+        if not token:
+            return {n for n in names if n and not _hidden(n)}
+
+
+def _audit_call(method: str, name: str) -> None:
+    try:
+        from core import wire_ingress as _wi
+        r = _wi.new_services_router() or _wi.appliance_router()
+        r.gcp_audit(method, "/v1/" + name, {}, {}, b"", 200)
+    except Exception:  # noqa: BLE001
+        _log.debug("realbackends: audit emit failed", exc_info=True)
+
+
+def _audit_reconcile() -> int:
+    """Emit CreateTopic/DeleteTopic/CreateSubscription/DeleteSubscription entries for emulator changes made by gRPC clients."""
+    global _audit_ready
+    n, complete = 0, True
+    for project in _projects():
+        for coll in ("topics", "subscriptions"):
+            cur = _emulator_names(project, coll)
+            if cur is None:
+                complete = False
+                continue
+            with _lock:
+                known = _known.setdefault(coll, set())
+                mine = {k for k in known if k.startswith(f"projects/{project}/")}
+                if not _audit_ready:
+                    known |= cur      # baseline: what was there before we started watching is not "created" now
+                    continue
+                for name in sorted(cur - mine):
+                    if name not in _audit_inflight:
+                        known.add(name)
+                        _audit_call("PUT", name)
+                        n += 1
+                for name in sorted(mine - cur):
+                    if name not in _audit_inflight:
+                        known.discard(name)
+                        _audit_call("DELETE", name)
+                        n += 1
+    if complete:
+        _audit_ready = True
+    return n
 
 
 def _mirror(orig, store, method, path, query, headers, body) -> None:
@@ -332,12 +416,20 @@ def _tap_once() -> int:
 
 
 def _tap_loop() -> None:
+    try:
+        _audit_reconcile()      # baseline first (a miss is retried below)
+    except Exception:  # noqa: BLE001
+        pass
     while True:
         time.sleep(0.5)
         try:
             _tap_once()
         except Exception:  # noqa: BLE001
             _log.debug("realbackends: tap loop", exc_info=True)
+        try:
+            _audit_reconcile()
+        except Exception:  # noqa: BLE001
+            _log.debug("realbackends: audit reconcile", exc_info=True)
 
 
 # ── Firestore ────────────────────────────────────────────────────────────────

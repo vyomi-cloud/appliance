@@ -76,12 +76,8 @@ def run(ctx):
     ctx.step("cloud logging: log_struct + list_entries (structured, trace-correlated)", logs, lane=LANE["core"])
 
     def metric():
-        import grpc
         from google.cloud import monitoring_v3
-        from google.cloud.monitoring_v3.services.metric_service import transports
-        # Monitoring has no REST transport; its SDK default is gRPC. Plain channel to the simulator, like pointing the client at an emulator.
-        need_grpc_target = ctx.state.get("monitoring_target") or __import__("urllib.parse", fromlist=["urlparse"]).urlparse(ctx.endpoint).netloc
-        c = monitoring_v3.MetricServiceClient(transport=transports.MetricServiceGrpcTransport(channel=grpc.insecure_channel(need_grpc_target)))
+        c = ctx.monitoring()      # default MetricServiceClient (gRPC) at the simulator's gRPC front door (Monitoring has no REST transport)
         mt = "custom.googleapis.com/facilities/tool_calls"
         c.create_metric_descriptor(request={"name": P, "metric_descriptor": {"type": mt, "metric_kind": "GAUGE", "value_type": "INT64", "description": "tool calls"}}, timeout=15, retry=None)
         n = len(res.get("tools", [])) or 1
@@ -93,3 +89,18 @@ def run(ctx):
         assert ts_ and ts_[0].points[0].value.int64_value == n, ts_
         return f"custom metric written and read back = {n}"
     ctx.step("cloud monitoring: custom metric create + write + list (SDK default gRPC)", metric, lane=LANE["real"])
+
+    def logs_grpc():
+        c = ctx.logging_grpc()
+        lg = c.logger("facilities-agent-grpc")
+        lg.log_struct({"event": "agent_run_grpc", "trace": f"{P}/traces/{tid}"}, severity="INFO")
+        got = []
+        for _ in range(10):
+            got = list(c.list_entries(filter_=f'logName="{P}/logs/facilities-agent-grpc"'))
+            if got:
+                break
+            time.sleep(0.5)
+        mine = [e for e in got if isinstance(e.payload, dict) and e.payload.get("event") == "agent_run_grpc"]
+        assert mine, f"{len(got)} entries read back, none ours"
+        return "log_struct written and list_entries read back over the SDK-default gRPC transport"
+    ctx.step("cloud logging: default logging.Client (gRPC) write + list_entries", logs_grpc, lane=LANE["real"])

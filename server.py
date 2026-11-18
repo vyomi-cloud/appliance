@@ -248,6 +248,10 @@ except Exception as _e:   # never let this break appliance boot
 try:   # VYOMI_GCP_GRPC_PORT=<port>: gRPC front door for the REST-less Google clients (Monitoring, gapic Logging); core/gcp_grpc_front.py
     from core import gcp_grpc_front as _gcp_grpc
     _gcp_grpc.maybe_start()
+
+    @app.get("/_vyomi/gcp-grpc")
+    def _gcp_grpc_discovery():   # where a remote app (Mesh) finds the gRPC front endpoint + its CA
+        return _gcp_grpc.discovery()
 except Exception as _e:
     print(f"[gcp_grpc_front] skipped: {_e}")
 # v4 C0d — ONE engine: Firestore + Compute Engine (native wire and the classic console
