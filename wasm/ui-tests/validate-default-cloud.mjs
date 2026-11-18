@@ -21,12 +21,12 @@ check("Esc / backdrop do not close it", await p.locator("#vy-pick").isVisible())
 // Open (or, on an empty Nano, create) a GCP space from the dialog -> it becomes the default
 if ((await pfr.locator('.space-card[data-provider="gcp"]').count()) > 0) await pfr.locator('.space-card[data-provider="gcp"]').first().click();
 else { await pfr.getByText("Create Space").first().click(); await pfr.locator("#csm-name").fill("GCP first"); await pfr.locator('input[name="csm-provider"][value="gcp"]').check({ force: true }); await pfr.locator("#csm-submit").click(); }
-await p.waitForURL(/gcp-console\.html/, { timeout: 60000 });
-check("opening/creating a space goes to its console", /gcp-console\.html/.test(p.url()), p.url());
+await p.waitForURL(/(?:gcp-console\.html|\/v4\/gcp\/)/, { timeout: 60000 });
+check("opening/creating a space goes to its console", /(?:gcp-console\.html|\/v4\/gcp\/)/.test(p.url()), p.url());
 const gcpId = await KEY();
 check("it became the default", !!gcpId);
-const p2 = await ctx.newPage(); await p2.goto(base + "/clouds.html"); await p2.waitForURL(/gcp-console\.html/, { timeout: 60000 });
-check("a later launch goes straight to the default space", /gcp-console\.html/.test(p2.url()) && (await p2.locator("#vy-pick").count()) === 0, p2.url());
+const p2 = await ctx.newPage(); await p2.goto(base + "/clouds.html"); await p2.waitForURL(/(?:gcp-console\.html|\/v4\/gcp\/)/, { timeout: 60000 });
+check("a later launch goes straight to the default space", /(?:gcp-console\.html|\/v4\/gcp\/)/.test(p2.url()) && (await p2.locator("#vy-pick").count()) === 0, p2.url());
 await p2.close();
 const p3 = await ctx.newPage(); await p3.goto(base + "/clouds.html#spaces"); await sleep(3000);
 check("clouds.html#spaces is not redirected", /clouds\.html/.test(p3.url()) && (await p3.locator("#vy-pick").count()) === 0, p3.url());
@@ -40,9 +40,9 @@ const fr = p.frameLocator("#vy-modal iframe");
 await fr.locator(`[data-star="${mk}"]`).waitFor({ timeout: 60000 });
 check("exactly one starred space - the GCP default", (await fr.locator(".space-star.on").count()) === 1 && (await fr.locator(`[data-star="${gcpId}"].on`).count()) === 1);
 await fr.locator(`[data-star="${mk}"]`).click(); await sleep(1000);
-check("starring another space moves the default, no navigation", (await KEY()) === mk && /gcp-console\.html/.test(p.url()) && (await fr.locator(".space-star.on").count()) === 1, p.url());
-const p4 = await ctx.newPage(); await p4.goto(base + "/clouds.html"); await p4.waitForURL(/azure-console\.html/, { timeout: 60000 });
-check("the next launch opens the newly starred space", /azure-console\.html/.test(p4.url()), p4.url());
+check("starring another space moves the default, no navigation", (await KEY()) === mk && /(?:gcp-console\.html|\/v4\/gcp\/)/.test(p.url()) && (await fr.locator(".space-star.on").count()) === 1, p.url());
+const p4 = await ctx.newPage(); await p4.goto(base + "/clouds.html"); await p4.waitForURL(/(?:azure-console\.html|\/v4\/azure\/)/, { timeout: 60000 });
+check("the next launch opens the newly starred space", /(?:azure-console\.html|\/v4\/azure\/)/.test(p4.url()), p4.url());
 await p4.close();
 await p.evaluate(() => localStorage.setItem("vyomi.defaultSpace", "space-does-not-exist"));
 const p5 = await ctx.newPage(); await p5.goto(base + "/clouds.html"); await p5.locator("#vy-pick").waitFor({ timeout: 60000 });

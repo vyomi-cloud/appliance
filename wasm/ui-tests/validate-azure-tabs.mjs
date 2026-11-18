@@ -43,9 +43,15 @@ async function sweepService(svcKey, resName) {
       const el = [...document.querySelectorAll(".sub-nav-item")][i];
       const label = (el.querySelector(".lbl")?.innerText || el.innerText || "").trim();
       el.click();
-      await new Promise((r) => setTimeout(r, 180));
-      const c = document.querySelector(".sub-content");
-      const text = (c ? c.innerText : "").trim();
+      // Async renderers (SQL failover groups / auditing fetch first) paint a short "Loading..." placeholder before their
+      // content: give each tab up to 4 s to produce real content. A tab that is still blank after that is still reported BLANK.
+      let text = "";
+      const tw = Date.now();
+      do {
+        await new Promise((r) => setTimeout(r, 180));
+        const c = document.querySelector(".sub-content");
+        text = (c ? c.innerText : "").trim();
+      } while (text.length < 25 && Date.now() - tw < 4000);
       tabs.push({ tab: label, len: text.length, blank: text.length < 25 });
     }
     // close blade for next service

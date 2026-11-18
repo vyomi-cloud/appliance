@@ -11,7 +11,7 @@
  */
 import http from "node:http";
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { createRequire } from "node:module";
 
@@ -49,7 +49,9 @@ export function startServer(root = NANO_DIR, port = 0) {
         const url = new URL(req.url, "http://x");
         let p = normalize(decodeURIComponent(url.pathname));
         if (p === "/" || p === "") p = "/index.html";
-        const file = join(root, p);
+        let file = join(root, p);
+        // like the portal's static mount: a directory URL (/v4/gcp/) serves its index.html
+        if (file.startsWith(root) && existsSync(file) && statSync(file).isDirectory()) file = join(file, "index.html");
         if (!file.startsWith(root) || !existsSync(file)) { res.writeHead(404); return res.end("404"); }
         const body = await readFile(file);
         res.writeHead(200, {
