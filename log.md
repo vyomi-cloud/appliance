@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-18T03:12:47+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` AWS Lambda now supports scale to and from zero for Lambda Managed Instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-managed-instances-scale-to-zero/))
+- · `announcement` Amazon Kinesis Data Streams announces queues to simplify and reduce costs of real-time processing ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/kinesis-data-streams-queues/))
+- · `announcement` Cost Optimization Hub now supports stopping idle Amazon EC2 instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/cost-hub-stop-idle-ec2/))
+
+Sources that failed this run (1): pypi/azure-mgmt-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-18T02:12:43+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3010,4 @@ Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resource
 Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-05T20:07:41+00:00
-
-Tracking 4256 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**6 change(s), 0 actionable.**
-- · `spec-commit` Azure compute: Fix example with correct expected values for PlacementPreference in PlacementScore response (#47873) ([link](https://github.com/Azure/azure-rest-api-specs/commit/3f0d3c288ec31fa03c2a20c8395f897811d08fa5))
-- · `release` cli:aws: 2.39.4 → 2.39.5
-- · `release` go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.73.0 → v1.73.1
-- · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.7 → v1.114.8
-- · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.9 → v1.52.10
-- · `release` pypi:awscli: 1.46.2 → 1.46.3
 
