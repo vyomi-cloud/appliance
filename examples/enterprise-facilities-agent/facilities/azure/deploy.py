@@ -43,7 +43,9 @@ def create_function_app(ctx, name, functions, extra=None):
     w = ctx.arm(WebSiteManagementClient)
     w.app_service_plans.begin_create_or_update(RG, name + "-plan", {"location": LOC, "sku": {"name": "Y1", "tier": "Dynamic"}, "kind": "functionapp"}).result()
     w.web_apps.begin_create_or_update(RG, name, {"location": LOC, "kind": "functionapp,linux", "server_farm_id": ctx.rid("Microsoft.Web", "serverfarms", name + "-plan"),
-        "site_config": {"app_settings": [{"name": k, "value": v} for k, v in app_settings(ctx, extra).items()]}}).result()
+        }).result()
+    from azure.mgmt.web.models import StringDictionary
+    w.web_apps.update_application_settings(RG, name, StringDictionary(properties=app_settings(ctx, extra)))   # `az functionapp config appsettings set`
     r = requests.post(f"{ctx.endpoint}/azure-data/functions/{name}/api/zipdeploy", data=zip_of(functions), timeout=60)
     if r.status_code != 200:
         raise RuntimeError(f"zipdeploy {name} -> HTTP {r.status_code}: {r.text[:300]}")
