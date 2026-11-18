@@ -370,6 +370,8 @@ def check_requirements(text: str) -> list:
             name = line
             for sep in ("==", ">=", "<=", "~=", "!=", ">", "<", "[", ";", " "):
                 name = name.split(sep, 1)[0]
+            if name.strip().lower().replace("_", "-") in _PROVIDED:   # same rule as the packaging path below
+                continue
             try:
                 metadata.version(name.strip())
             except metadata.PackageNotFoundError:

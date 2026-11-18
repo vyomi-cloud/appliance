@@ -441,7 +441,9 @@ async function crawlConsole(browser, base, con, needsSW) {
     const s = r.status(), u = r.url();
     // /api/auth/me is the PORTAL's route (the account menu asks it who is signed in); the bare local
     // Nano server has no portal, so it answers 501 there while the real portal answers it.
-    if (s >= 400 && !/favicon|\.map$|hot-update|\/api\/auth\/me(\?|$)/.test(u)) {
+    // /api/usage/views is the same kind of portal route: the v4.0.8 page-view emitter (wasm/nano-usage.js) POSTs
+    // it same-origin and the portal answers 204; the bare Nano server in this harness has no portal behind it.
+    if (s >= 400 && !/favicon|\.map$|hot-update|\/api\/auth\/me(\?|$)|\/api\/usage\/views(\?|$)/.test(u)) {
       // 5xx: keep the start of the body so the finding says why, not just that it failed.
       const body = s >= 500 ? (await r.text().catch(() => "")).replace(/\s+/g, " ").slice(0, 200) : "";
       net.push({ status: s, url: u.replace(base, "").slice(0, 200), body });
