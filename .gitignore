@@ -82,6 +82,7 @@ docker-compose.unified.yml
 
 # vyomi-mcp binaries cross-compiled by release.yml (shipped in packages, not committed)
 packaging/docker/mcp/
+packaging/tunnel/mcp/
 # locally built launcher / MCP binary (cd cmd/vyomi && go build -o vyomi .)
 cmd/vyomi/vyomi
 cmd/vyomi/vyomi.exe

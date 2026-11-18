@@ -14,6 +14,7 @@ import (
 func testMCPServer(t *testing.T) (*mcpServer, *bytes.Buffer) {
 	t.Helper()
 	t.Setenv("VYOMI_SUBSTRATE", "docker") // never shell out to multipass in tests
+	isolateHomes(t)
 	out := &bytes.Buffer{}
 	s, err := newMCPServer(&Config{VyomiHome: t.TempDir()}, out)
 	if err != nil {
@@ -121,7 +122,7 @@ func TestMCPProtocolRoundTrip(t *testing.T) {
 		t.Errorf("should echo a supported client protocol version, got %v", init["protocolVersion"])
 	}
 	tools := msgs[1]["result"].(map[string]any)["tools"].([]any)
-	want := map[string]bool{"vyomi_status": true, "vyomi_services": true, "vyomi_env": true, "vyomi_scan_repo": true, "vyomi_write_env": true}
+	want := map[string]bool{"vyomi_status": true, "vyomi_services": true, "vyomi_capability": true, "vyomi_snippet": true, "vyomi_env": true, "vyomi_scan_repo": true, "vyomi_write_env": true}
 	for _, tl := range tools {
 		delete(want, tl.(map[string]any)["name"].(string))
 	}
@@ -277,6 +278,7 @@ func TestMCPWriteEnv(t *testing.T) {
 
 func TestMCPStatus(t *testing.T) {
 	s, _ := testMCPServer(t)
+	deadHomes(t)
 
 	t.Setenv("VYOMI_ENDPOINT", "http://127.0.0.1:1") // nothing listens on port 1
 	down, _ := callTool(t, s, "vyomi_status", map[string]any{})
@@ -344,5 +346,24 @@ func TestMCPAliasName(t *testing.T) {
 func TestMCPInstructionsSteerAwayFromRealCloud(t *testing.T) {
 	if !strings.Contains(mcpInstructions, "aws-mcp") || !strings.Contains(mcpInstructions, "real cloud") {
 		t.Error("server instructions must steer local-dev work away from real-cloud MCP servers")
+	}
+}
+
+// The agent must not treat "set this project up" as approval to write: prerelease eval A01 caught a run that did.
+func TestMCPWriteEnvRequiresExplicitApproval(t *testing.T) {
+	var desc string
+	s := &mcpServer{}
+	for _, tl := range s.buildTools() {
+		if tl.Name == "vyomi_write_env" {
+			desc = tl.Description
+		}
+	}
+	for _, want := range []string{"Call ONLY after the user explicitly approved", "is not approval"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("vyomi_write_env description lacks %q: %s", want, desc)
+		}
+	}
+	if !strings.Contains(mcpInstructions, "is not approval") {
+		t.Errorf("server instructions do not say a general request is not approval")
 	}
 }

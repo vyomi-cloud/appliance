@@ -1,0 +1,119 @@
+{
+  "cloud": "aws",
+  "endpoint": "http://127.0.0.1:9000",
+  "env_text": "# Vyomi: AWS\n# Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code.\nAWS_ENDPOINT_URL=http://127.0.0.1:9000\nAWS_ACCESS_KEY_ID=test\nAWS_SECRET_ACCESS_KEY=test\nAWS_DEFAULT_REGION=us-east-1\nAWS_REGION=us-east-1\n# Stops AWS CLI v2's pager swallowing short output.\nAWS_PAGER=\"\"\n",
+  "notes": [
+    "One endpoint serves every AWS service: the simulator routes by SigV4 scope / X-Amz-Target / Query Action.",
+    "S3 is path-style: set forcePathStyle=true (JS v3) or s3={'addressing_style':'path'} (boto3) if virtual-host addressing fails.",
+    "SNS-\u003eSQS fan-out works natively (shared MessagingStore)."
+  ],
+  "sdk": {
+    "cli": {
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "aws s3 ls --endpoint-url http://127.0.0.1:9000",
+        "aws ec2 describe-instances --endpoint-url http://127.0.0.1:9000",
+        "aws iam list-users --endpoint-url http://127.0.0.1:9000",
+        "aws sqs list-queues --endpoint-url http://127.0.0.1:9000",
+        "aws dynamodb list-tables --endpoint-url http://127.0.0.1:9000",
+        "aws lambda list-functions --endpoint-url http://127.0.0.1:9000",
+        "aws apigateway get-rest-apis --endpoint-url http://127.0.0.1:9000"
+      ],
+      "notes": "This simulator accepts AWS-style request/response shapes locally across S3, IAM, EC2, Lambda, VPC, RDS, SQS, DynamoDB, and API Gateway.",
+      "status": "integrated",
+      "tool": "awscli"
+    },
+    "go": {
+      "config": {
+        "baseEndpoint": "http://127.0.0.1:9000",
+        "credentials": "test/test",
+        "region": "us-east-1"
+      },
+      "dependency": "github.com/aws/aws-sdk-go-v2",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Use BaseEndpoint to point the client at the simulator.",
+        "Service request/response bodies stay AWS-shaped."
+      ],
+      "status": "partial",
+      "tool": "aws-sdk-go"
+    },
+    "java": {
+      "config": {
+        "credentials": "test/test",
+        "endpointOverride": "http://127.0.0.1:9000",
+        "region": "us-east-1"
+      },
+      "dependency": "software.amazon.awssdk:*",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Configure the SDK client with endpointOverride=http://127.0.0.1:9000",
+        "Use the same service names and request models as AWS SDK v2."
+      ],
+      "status": "partial",
+      "tool": "aws-sdk-java"
+    },
+    "nodejs": {
+      "config": {
+        "credentials": "test/test",
+        "endpoint": "http://127.0.0.1:9000",
+        "forcePathStyle": true,
+        "region": "us-east-1"
+      },
+      "dependency": "@aws-sdk/client-*",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Pass endpoint to each service client constructor.",
+        "Use forcePathStyle for S3."
+      ],
+      "status": "partial",
+      "tool": "aws-sdk-js-v3"
+    },
+    "python": {
+      "config": {
+        "credentials": "test/test",
+        "endpoint_url": "http://127.0.0.1:9000",
+        "region_name": "us-east-1"
+      },
+      "dependency": "boto3",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Use endpoint_url to point boto3 clients at the simulator.",
+        "All standard boto3 service clients work with the simulator endpoint."
+      ],
+      "status": "partial",
+      "tool": "boto3"
+    }
+  },
+  "terraform": {
+    "hcl": "provider \"aws\" {\n  region                      = \"us-east-1\"\n  access_key                  = \"test\"\n  secret_key                  = \"test\"\n  skip_credentials_validation = true\n  skip_requesting_account_id  = true\n  skip_metadata_api_check     = true\n  s3_use_path_style           = true\n  endpoints {\n    s3       = \"http://127.0.0.1:9000\"\n    sqs      = \"http://127.0.0.1:9000\"\n    dynamodb = \"http://127.0.0.1:9000\"\n    lambda   = \"http://127.0.0.1:9000\"\n    iam      = \"http://127.0.0.1:9000\"\n    ec2      = \"http://127.0.0.1:9000\"\n    rds      = \"http://127.0.0.1:9000\"\n    kms      = \"http://127.0.0.1:9000\"\n    sns      = \"http://127.0.0.1:9000\"\n    secretsmanager = \"http://127.0.0.1:9000\"\n  }\n}"
+  },
+  "variables": [
+    {
+      "name": "AWS_ENDPOINT_URL",
+      "value": "http://127.0.0.1:9000",
+      "note": "Honored by current AWS CLI v2 and SDKs; older SDKs need endpoint_url / endpointOverride in code."
+    },
+    {
+      "name": "AWS_ACCESS_KEY_ID",
+      "value": "test"
+    },
+    {
+      "name": "AWS_SECRET_ACCESS_KEY",
+      "value": "test"
+    },
+    {
+      "name": "AWS_DEFAULT_REGION",
+      "value": "us-east-1"
+    },
+    {
+      "name": "AWS_REGION",
+      "value": "us-east-1"
+    },
+    {
+      "name": "AWS_PAGER",
+      "value": "",
+      "note": "Stops AWS CLI v2's pager swallowing short output."
+    }
+  ]
+}
