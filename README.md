@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-18 11:15 UTC · refreshes after every pipeline run_
+_Updated 2026-11-18 12:17 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 55 services (AWS 19 · GCP 18 · Azure 18) of 1,068 the clouds publish
-- **Building now:** AWS CloudFormation (AWS, 20/20 checks)
-- **In the gate / releasing:** Amazon Cognito Identity Provider (AWS), Amazon EC2 Container Service (AWS), Amazon Elastic Container Registry (AWS), Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
+- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), AWS CloudFormation (AWS, 20/20 checks)
+- **In the gate / releasing:** Amazon ElastiCache (AWS), Amazon Kinesis (AWS), Amazon Route 53 (AWS), Amazon Simple Email Service (AWS), AWS Security Token Service (AWS), BigQuery API (GCP), Cloud DNS API (GCP), Cloud Logging API (GCP), Cloud Run Admin API (GCP), Cloud Tasks API (GCP), Workflows API (GCP), Application Insights (Azure), Container Registry (Azure), Azure Kubernetes Service (Azure), Event Hubs (Azure), Managed Identities (Azure), Azure Cache for Redis (Azure)
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
@@ -16,7 +16,7 @@ _Updated 2026-11-18 11:15 UTC · refreshes after every pipeline run_
 
 | Cloud | Released | Building | In gate | Queued | Console live (offline · Nano) |
 |---|---|---|---|---|---|
-| AWS | 19 | 1 | 8 | 17 | 93% · 93% |
+| AWS | 19 | 4 | 5 | 17 | 93% · 93% |
 | GCP | 18 | 0 | 6 | 12 | 100% · 100% |
 | Azure | 18 | 0 | 6 | 12 | 100% · 100% |
 
@@ -26,9 +26,9 @@ _Updated 2026-11-18 11:15 UTC · refreshes after every pipeline run_
 
 | Service | Cloud | Stage | Checks | Real backend | Backend in the code | Still missing |
 |---|---|---|---|---|---|---|
-| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🔍 In gate ([PR #199](https://github.com/vyomi-cloud/appliance/pull/199)) | 18/18 | in-process | in-process | — |
-| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🔍 In gate ([PR #201](https://github.com/vyomi-cloud/appliance/pull/201)) | 19/19 | docker · Pro · + caddy gateway | docker · Pro ✅ | — |
-| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🔍 In gate ([PR #200](https://github.com/vyomi-cloud/appliance/pull/200)) | 20/20 | registry · Lite | registry · 10 MB · Lite ✅ | — |
+| Amazon Cognito Identity Provider [#53](https://github.com/vyomi-cloud/appliance/issues/53) | AWS | 🛠 Building | 18/18 | in-process | in-process | — |
+| Amazon EC2 Container Service [#55](https://github.com/vyomi-cloud/appliance/issues/55) | AWS | 🛠 Building | 19/19 | docker · Pro · + caddy gateway | docker · Pro ✅ | — |
+| Amazon Elastic Container Registry [#54](https://github.com/vyomi-cloud/appliance/issues/54) | AWS | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite ✅ | — |
 | Amazon ElastiCache [#56](https://github.com/vyomi-cloud/appliance/issues/56) | AWS | 🔍 In gate ([PR #202](https://github.com/vyomi-cloud/appliance/pull/202)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite ✅ | — |
 | Amazon Kinesis [#58](https://github.com/vyomi-cloud/appliance/issues/58) | AWS | 🚀 Releasing | 20/20 | nats · Lite | nats · 10 MB · Lite ⚠️ not in code | — |
 | Amazon Route 53 [#60](https://github.com/vyomi-cloud/appliance/issues/60) | AWS | 🔍 In gate ([PR #205](https://github.com/vyomi-cloud/appliance/pull/205)) | 20/20 | coredns · Lite | coredns · 15 MB · Lite ✅ | — |
