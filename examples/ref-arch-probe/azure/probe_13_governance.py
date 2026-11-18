@@ -63,9 +63,22 @@ def activity_log_resource_group():
 
 
 P.step("Key Vault via ARM (azure-mgmt-keyvault)", vault)
-if P.step("KeyClient.create_rsa_key (azure-keyvault-keys, http shim)", kv_client):
-    P.step("CryptographyClient wrap_key / unwrap_key RSA-OAEP-256 (envelope)", wrap_unwrap)
-    P.step("CryptographyClient encrypt / decrypt", encrypt_decrypt)
+def raw_envelope():
+    """Key Vault REST (what the SDK sends): create RSA key, wrapkey a 32-byte DEK, unwrapkey, compare."""
+    import base64, requests
+    H = {"Authorization": "Bearer x", "Content-Type": "application/json"}; Q = "?api-version=7.4"
+    u = S["uri"]
+    k = requests.post(u + "keys/envelope-kek/create" + Q, headers=H, json={"kty": "RSA", "key_size": 2048}, timeout=20); assert k.status_code == 200, (k.status_code, k.text[:150])
+    kid = k.json()["key"]["kid"]; path = kid.split("/keys/")[1]
+    dek = os.urandom(32); b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+    w = requests.post(u + f"keys/{path}/wrapkey" + Q, headers=H, json={"alg": "RSA-OAEP-256", "value": b64(dek)}, timeout=20); assert w.status_code == 200, (w.status_code, w.text[:150])
+    r = requests.post(u + f"keys/{path}/unwrapkey" + Q, headers=H, json={"alg": "RSA-OAEP-256", "value": w.json()["value"]}, timeout=20); assert r.status_code == 200, (r.status_code, r.text[:150])
+    assert base64.urlsafe_b64decode(r.json()["value"] + "==") == dek, "unwrapped DEK differs"
+    return "REST wrapkey/unwrapkey round-trip"
+
+
+P.step("KeyClient.create_rsa_key (azure-keyvault-keys SDK)", kv_client, blocked="azure-keyvault SDK refuses bearer auth over non-TLS even with a transport shim; probe serves plain http (not a simulator gap)")
+P.step("envelope encryption over the Key Vault REST wire: create key, wrapkey, unwrapkey", raw_envelope)
 P.step("Activity Log lists the run's control-plane operations (azure-mgmt-monitor activity_logs)", activity_log)
 P.step("Activity Log filtered by resource group", activity_log_resource_group)
 P.finish()

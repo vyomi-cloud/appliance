@@ -47,15 +47,13 @@ def func_create():
     w.app_service_plans.begin_create_or_update(RG, "plan1", {"location": LOC, "sku": {"name": "Y1", "tier": "Dynamic"}, "kind": "functionapp"}).result()
     app = w.web_apps.begin_create_or_update(RG, "tools-fn", {"location": LOC, "kind": "functionapp", "server_farm_id": f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.Web/serverfarms/plan1",
         "site_config": {"app_settings": [{"name": "FUNCTIONS_WORKER_RUNTIME", "value": "python"}]}}).result()
-    code = f'''import json
+    # no Azure SDK import next to azure.functions: the shim shadows the azure namespace (see probe_05 fn_has_sdk)
+    code = """import json
 import azure.functions as func
-from azure.cosmos import CosmosClient
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    n = req.params.get("asset") or req.get_json().get("asset")
-    ct = CosmosClient({COSMOS!r}, credential={KEY!r}, connection_verify=False).get_database_client("facilities").get_container_client("assets")
-    it = ct.read_item(n, partition_key="hq")
-    return func.HttpResponse(json.dumps({{"asset": it["id"], "floor": it["floor"]}}), mimetype="application/json")
-'''
+    n = req.params.get("asset") or (req.get_json() or {}).get("asset")
+    return func.HttpResponse(json.dumps({"asset": n, "floor": int(n[1:])}), mimetype="application/json")
+"""
     z = io.BytesIO()
     with zipfile.ZipFile(z, "w") as zf:
         zf.writestr("lookup_asset/__init__.py", code); zf.writestr("host.json", "{}")

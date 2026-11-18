@@ -100,7 +100,7 @@ P.step("read App Insights telemetry back with KQL (AppTraces)", kql_apptraces)
 if P.step("Log Analytics custom-table ingest (Data Collector) + KQL where read-back", custom_ingest):
     P.step("KQL summarize count() by", kql_summarize)
     P.step("KQL extend + ago() + avg() + order by", kql_realistic)
-P.step("azure-monitor-query LogsQueryClient (api.loganalytics.io host form)", logsquery_sdk)
+P.step("azure-monitor-query LogsQueryClient (api.loganalytics.io host form)", logsquery_sdk, blocked="SDK refuses bearer auth over non-TLS; also the api.loganalytics.io host is documented as not modelled")
 P.step("Azure Monitor metrics.list on a storage account (azure-mgmt-monitor)", metrics)
 P.step("OTLP/HTTP ingest at /_obs/v1/traces", otlp)
 P.finish()
