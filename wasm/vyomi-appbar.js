@@ -240,6 +240,9 @@
     // vyomi-tunnel access key + secret (AWS-CLI style): created and downloaded on the portal, saved as ~/.vyomi/credentials
     var tc = document.createElement('a'); tc.href = '/admin/credentials'; tc.setAttribute('data-act', 'tunnel-credentials'); tc.setAttribute('role', 'menuitem'); tc.style.display = 'none';
     tc.innerHTML = '<svg viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.78 7.78 5.5 5.5 0 0 1 7.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Access Key</span>';
+    // Dashboard: the signed-in user's own dashboard on the portal (admin console for admins, account page for personal accounts); URL comes from /api/auth/me
+    var db = document.createElement('a'); db.href = '/dashboard'; db.setAttribute('data-act', 'dashboard'); db.setAttribute('role', 'menuitem'); db.style.display = 'none';
+    db.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 3h8v10H3zM13 3h8v6h-8zM13 11h8v10h-8zM3 15h8v6H3z"/></svg><span>Dashboard</span>';
     var hr = document.createElement('div'); hr.className = 'vy-hr';
     var bo = document.createElement('a'); bo.href = '#'; bo.setAttribute('data-act', 'mesh'); bo.setAttribute('role', 'menuitem'); bo.style.display = 'none';
     function paintMesh() {
@@ -251,7 +254,7 @@
       bo.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span>' + esc(label) + '</span>'; bo.style.display = '';
     }
     window.addEventListener('vyomi-mesh-session', paintMesh); setInterval(paintMesh, 15000);
-    [who$, act, bo, gh, tc, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
+    [who$, act, bo, gh, db, tc, hr, so].forEach(function (n) { menu.appendChild(n); }); document.body.appendChild(menu);
     function closeMenu() { menu.classList.remove('open'); btn.setAttribute('aria-expanded', 'false'); }
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
@@ -314,6 +317,7 @@
       btn.innerHTML = av; btn.title = signed && em ? 'Vyomi account \u2014 ' + em : 'Vyomi account';
       who$.innerHTML = signed ? '<span class="vy-av">' + av + '</span><span class="vy-wt"><b>' + esc(nm || 'Signed in') + '</b>' + (em && em !== nm ? '<small>' + esc(em) + '</small>' : '') + (prof.via ? '<small class="vy-via">Signed in with ' + esc(prof.via) + '</small>' : '') + (edl ? '<small class="vy-via">' + esc(edl) + (prof.role ? ' \u00b7 ' + esc(prof.role.charAt(0).toUpperCase() + prof.role.slice(1)) : '') + '</small>' : '') + '</span>' : '<span class="vy-wt"><small>Not signed in</small></span>';
       so.style.display = (authed || (!NANO && st.tier && st.tier !== 'free') || (!NANO && t && t.activated)) ? '' : 'none';
+      db.href = prof.dash || '/dashboard'; db.style.display = NANO && authed ? '' : 'none';   // Dashboard + Access Key live on the portal: shown in the Nano console once signed in
       tc.style.display = NANO && authed ? '' : 'none';      // the keys live on the portal: shown in the Nano console once signed in
     }
     function refreshAcct() {
@@ -324,7 +328,7 @@
         if (j && j.authenticated) { authed = true; prof.email = j.email || ''; who = prof.email || j.login || ''; prof.avatar = j.avatar || ''; prof.name = j.name || j.login || ''; prof.via = 'GitHub'; prof.edition = j.edition || ''; prof.role = j.role || ''; paintAcct(); }
       }).catch(function () {});
       if (NANO) { try { var x = new XMLHttpRequest(); x.open('GET', '/api/auth/me', true); x.withCredentials = true;
-        x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) { who = j.email; prof.email = j.email; } prof.avatar = j.avatar_url || ''; prof.name = j.name || j.github_login || ''; prof.via = j.provider || ((j.github_login || /githubusercontent|github\.com/.test(j.avatar_url || '')) ? 'GitHub' : ''); } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
+        x.onload = function () { try { var j = JSON.parse(x.responseText); authed = !!j.authenticated; if (j.email) { who = j.email; prof.email = j.email; } prof.avatar = j.avatar_url || ''; prof.dash = (typeof j.dashboard_url === 'string' && j.dashboard_url.charAt(0) === '/' && j.dashboard_url.charAt(1) !== '/') ? j.dashboard_url : ''; prof.name = j.name || j.github_login || ''; prof.via = j.provider || ((j.github_login || /githubusercontent|github\.com/.test(j.avatar_url || '')) ? 'GitHub' : ''); } catch (e) {} paintAcct(); }; x.send(); } catch (e) {} }
     }
     paintAcct(); refreshAcct();
     try {                                                    // live GitHub star count (cached for the tab session, same key as the Spaces page)
