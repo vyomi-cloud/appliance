@@ -91,7 +91,7 @@ def run(ctx):
 
     def event_driven():
         from google.cloud import eventarc_v1 as ea
-        ctx.state["ingest_uri"] = deploy.deploy_function(ctx, "facilities-ingest-docs", "ingest_docs")
+        ctx.state["ingest_uri"] = deploy.deploy_function(ctx, "facilities-ingest-docs", "ingest_docs", cloudevent=True)
         ec = ctx.rest(ea.EventarcClient)
         trig = ea.Trigger(name=f"{ctx.parent}/triggers/facilities-docs-finalized",
                           event_filters=[ea.EventFilter(attribute="type", value="google.cloud.storage.object.v1.finalized"), ea.EventFilter(attribute="bucket", value=bucket)],
