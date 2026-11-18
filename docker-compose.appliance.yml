@@ -59,10 +59,12 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite:latest
     command: ["azurite", "--blobHost", "0.0.0.0", "--blobPort", "10000",
               "--queueHost", "0.0.0.0", "--queuePort", "10001",
+              "--tableHost", "0.0.0.0", "--tablePort", "10002",
               "--location", "/data", "--loose", "--skipApiVersionCheck"]
     ports:
       - "10000:10000"
       - "10001:10001"
+      - "10002:10002"
     volumes:
       - vyomi-azurite:/data
     restart: unless-stopped
@@ -270,6 +272,10 @@ services:
       # (core/gcp_real_backends.py). VYOMI_GCP_GRPC_PORT=50051 starts the gRPC front door for Monitoring / gapic Logging
       # (core/gcp_grpc_front.py); publish it with a compose override if you use it from the host.
       VYOMI_GCP_REAL_BACKENDS: ${VYOMI_GCP_REAL_BACKENDS:-}
+      # VYOMI_AZURE_REAL_BACKENDS=1 (default off): the Azurite above (Table :10002, Queue :10001) becomes the Azure Table + Storage Queue
+      # data plane (core/azure_real_backends.py); e.g. VYOMI_AZURE_REAL_BACKENDS=1 VYOMI_AZURE_AZURITE_ENDPOINT=http://vyomi-azurite
+      VYOMI_AZURE_REAL_BACKENDS: ${VYOMI_AZURE_REAL_BACKENDS:-}
+      VYOMI_AZURE_AZURITE_ENDPOINT: ${VYOMI_AZURE_AZURITE_ENDPOINT:-}
       VYOMI_GCP_GRPC_PORT: ${VYOMI_GCP_GRPC_PORT:-}
       # MVP P0 backends — see compose service block above.
       # v2.0.3+: Vault now runs in prod mode. The root token is generated on

@@ -340,6 +340,205 @@ def _run_query(docs: list[dict], query: str) -> list[dict]:
 
 
 # ── dispatch ──────────────────────────────────────────────────────────────
+
+# ── v4 wire fixes: _rid resolution, If-Match (412), JSON patch, paging, transactional batch ───────────────
+def _resolve_rids(store: CosmosStore, segs: list) -> list:
+    """The SDK addresses an item it already holds through its `_self` link (dbs/{rid}/colls/{rid}/docs/{rid}): map each
+    resource-id segment back to the id the store is keyed by (ids win, so a resource whose id equals another's rid is safe)."""
+    segs = list(segs)
+    if len(segs) >= 2 and segs[0] == "dbs" and segs[1] not in store.dbs:
+        for k, v in store.dbs.items():
+            if v.get("_rid") == segs[1]:
+                segs[1] = k
+                break
+    if len(segs) >= 4 and segs[2] == "colls" and segs[1] in store.colls and segs[3] not in store.colls[segs[1]]:
+        for k, v in store.colls[segs[1]].items():
+            if v.get("_rid") == segs[3]:
+                segs[3] = k
+                break
+    if len(segs) >= 6 and segs[4] == "docs" and segs[1] in store.docs and segs[3] in store.docs[segs[1]]:
+        docs = store.docs[segs[1]][segs[3]]
+        did = "/".join(segs[5:])
+        if did not in docs:
+            for k, v in docs.items():
+                if v.get("_rid") == did:
+                    segs = segs[:5] + k.split("/")
+                    break
+    return segs
+
+
+def _precondition(headers: dict, doc: dict | None) -> Response | None:
+    """If-Match on replace / patch / delete: a stale etag is 412 PreconditionFailed (and nothing is written)."""
+    im = str(headers.get("if-match") or "").strip()
+    if not im or im == "*" or doc is None:
+        return None
+    if im.strip('"') != str(doc.get("_etag", "")).strip('"'):
+        r = _err(412, "PreconditionFailed", "One of the specified pre-condition is not met.")
+        r.headers["x-ms-substatus"] = "0"
+        return r
+    return None
+
+
+def _ptr(path: str) -> list:
+    if path in ("", "/"):
+        return []
+    if not path.startswith("/"):
+        raise ValueError(f"Invalid patch path '{path}'.")
+    return [t.replace("~1", "/").replace("~0", "~") for t in path[1:].split("/")]
+
+
+def _walk(doc, toks):
+    cur = doc
+    for t in toks:
+        if isinstance(cur, list):
+            if not t.isdigit() or int(t) >= len(cur):
+                raise ValueError("Patch path does not exist.")
+            cur = cur[int(t)]
+        elif isinstance(cur, dict):
+            if t not in cur:
+                raise ValueError("Patch path does not exist.")
+            cur = cur[t]
+        else:
+            raise ValueError("Patch path does not exist.")
+    return cur
+
+
+def _apply_patch(doc: dict, ops: list) -> dict:
+    """Cosmos DB partial-document update: add / set / replace / remove / incr / move (RFC 6902 pointers, `/-` appends)."""
+    import copy
+    new = copy.deepcopy(doc)
+    for o in ops:
+        op = str(o.get("op", "")).lower()
+        toks = _ptr(str(o.get("path", "")))
+        if not toks:
+            raise ValueError("The patch path must not be the document root.")
+        if toks[0] in ("id", "_rid", "_self", "_etag", "_ts", "_attachments", "_lsn"):
+            raise ValueError(f"Patching the system / id property '{toks[0]}' is not allowed.")
+        if op == "move":
+            src = _ptr(str(o.get("from", "")))
+            parent = _walk(new, src[:-1])
+            val = parent.pop(int(src[-1])) if isinstance(parent, list) else parent.pop(src[-1])
+            tgt = _walk(new, toks[:-1])
+            if isinstance(tgt, list):
+                tgt.insert(len(tgt) if toks[-1] == "-" else int(toks[-1]), val)
+            else:
+                tgt[toks[-1]] = val
+            continue
+        parent, last = _walk(new, toks[:-1]), toks[-1]
+        if op in ("add", "set"):
+            if isinstance(parent, list):
+                if last == "-":
+                    parent.append(o.get("value"))
+                elif not last.isdigit() or int(last) > len(parent) or (op == "set" and int(last) >= len(parent)):
+                    raise ValueError("Patch array index out of range.")
+                elif op == "add":
+                    parent.insert(int(last), o.get("value"))
+                else:
+                    parent[int(last)] = o.get("value")
+            elif isinstance(parent, dict):
+                parent[last] = o.get("value")
+            else:
+                raise ValueError("Patch path does not exist.")
+        elif op == "replace":
+            if isinstance(parent, list):
+                if not last.isdigit() or int(last) >= len(parent):
+                    raise ValueError("Patch path does not exist.")
+                parent[int(last)] = o.get("value")
+            elif isinstance(parent, dict) and last in parent:
+                parent[last] = o.get("value")
+            else:
+                raise ValueError("Patch path does not exist.")
+        elif op == "remove":
+            if isinstance(parent, list) and last.isdigit() and int(last) < len(parent):
+                parent.pop(int(last))
+            elif isinstance(parent, dict) and last in parent:
+                parent.pop(last)
+            else:
+                raise ValueError("Patch path does not exist.")
+        elif op in ("incr", "increment"):
+            by = o.get("value")
+            if isinstance(by, bool) or not isinstance(by, (int, float)):
+                raise ValueError("The incr value must be a number.")
+            if isinstance(parent, dict):
+                cur = parent.get(last, 0)
+                if isinstance(cur, bool) or not isinstance(cur, (int, float)):
+                    raise ValueError("The incr target must be a number.")
+                parent[last] = cur + by
+            else:
+                raise ValueError("Patch path does not exist.")
+        else:
+            raise ValueError(f"Unknown patch operation '{o.get('op')}'.")
+    return new
+
+
+def _page(items: list, headers: dict) -> tuple[list, str | None]:
+    """x-ms-max-item-count / x-ms-continuation paging over a result list (the token is an opaque offset)."""
+    try:
+        size = int(headers.get("x-ms-max-item-count") or 0)
+    except ValueError:
+        size = 0
+    tok = str(headers.get("x-ms-continuation") or "")
+    start = int(tok.split(":")[-1]) if tok.startswith("vyomi:") and tok.split(":")[-1].isdigit() else 0
+    if size <= 0:
+        return items[start:], None
+    end = start + size
+    return items[start:end], (f"vyomi:{end}" if end < len(items) else None)
+
+
+def _batch(store: CosmosStore, db_id: str, coll_id: str, headers: dict, ops) -> Response:
+    """Transactional batch (container.execute_item_batch): atomic over one partition key. 200 with a result per op, or 207
+    when an op fails: that op carries its status, the others 424 (FailedDependency), and NOTHING is written."""
+    import copy
+    if not isinstance(ops, list) or not ops:
+        return _err(400, "BadRequest", "A transactional batch needs a non-empty list of operations.")
+    if len(ops) > 100:
+        return _err(400, "BadRequest", "A transactional batch is limited to 100 operations.")
+    base = f"/dbs/{db_id}/colls/{coll_id}/docs"
+    pk_hdr = headers.get("x-ms-documentdb-partitionkey")
+    snapshot = copy.deepcopy(store.docs[db_id][coll_id])
+    results, failed = [], None
+    for i, o in enumerate(ops):
+        kind = str(o.get("operationType", "")).lower()
+        rb = o.get("resourceBody")
+        did = o.get("id") or (rb or {}).get("id")
+        h = {"x-ms-documentdb-partitionkey": pk_hdr} if pk_hdr else {}
+        if o.get("ifMatch"):
+            h["if-match"] = o["ifMatch"]
+        if kind in ("create", "upsert"):
+            if kind == "upsert":
+                h["x-ms-documentdb-is-upsert"] = "true"
+            r = _dispatch_inner(store, "POST", base, headers=h, body=json.dumps(rb or {}).encode())
+        elif kind == "read":
+            r = _dispatch_inner(store, "GET", f"{base}/{did}", headers=h)
+        elif kind == "replace":
+            r = _dispatch_inner(store, "PUT", f"{base}/{did}", headers=h, body=json.dumps(rb or {}).encode())
+        elif kind == "delete":
+            r = _dispatch_inner(store, "DELETE", f"{base}/{did}", headers=h)
+        elif kind == "patch":
+            r = _dispatch_inner(store, "PATCH", f"{base}/{did}", headers=h, body=json.dumps(rb or {}).encode())
+        else:
+            r = _err(400, "BadRequest", f"Unknown batch operationType '{o.get('operationType')}'.")
+        entry = {"statusCode": r.status, "requestCharge": 1.0}
+        if r.headers.get("etag"):
+            entry["eTag"] = r.headers["etag"]
+        if r.body:
+            try:
+                entry["resourceBody"] = json.loads(r.body)
+            except ValueError:
+                pass
+        results.append(entry)
+        if r.status >= 400:
+            failed = i
+            break
+    if failed is not None:
+        store.docs[db_id][coll_id] = snapshot
+        store.persist()
+        out = [{"statusCode": 424, "requestCharge": 0.0} for _ in ops]
+        out[failed] = results[failed]
+        return _json(207, out)
+    return _json(200, results)
+
+
 def _dispatch_inner(store: CosmosStore, method: str, path: str,
                     query: dict | None = None, headers: dict | None = None,
                     body: bytes = b"") -> Response:
@@ -363,6 +562,13 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
 
     if not segs or segs[0] != "dbs":
         return _err(404, "NotFound", f"Unknown resource path: {path}")
+    segs = _resolve_rids(store, segs)
+
+    def _load_body_any():
+        try:
+            return json.loads(body.decode("utf-8")) if body else None
+        except Exception:
+            return None
 
     def _load_body() -> dict:
         if not body:
@@ -483,10 +689,15 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
             b = _load_body()
             qtext = b.get("query", "") if isinstance(b, dict) else ""
             results = _run_query(list(docs.values()), qtext)
+            results, cont = _page(results, headers)
+            hdr = {"x-ms-item-count": str(len(results))}
+            if cont:
+                hdr["x-ms-continuation"] = cont
             return _json(200, {"_rid": coll_entry["_rid"],
                                "Documents": results,
-                               "_count": len(results)},
-                         {"x-ms-item-count": str(len(results))})
+                               "_count": len(results)}, hdr)
+        if method == "POST" and str(headers.get("x-ms-cosmos-is-batch-request", "")).lower() == "true":
+            return _batch(store, db_id, coll_id, headers, _load_body_any())
         if method == "POST":                          # create document
             b = _load_body()
             if not isinstance(b, dict):
@@ -534,11 +745,13 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
             return _json(200, {"_rid": coll_entry["_rid"], "Documents": items, "_count": len(items)},
                          {"etag": f'"{items[-1]["_lsn"]}"', "x-ms-item-count": str(len(items))})
         if method == "GET":                           # list documents
-            items = list(docs.values())
+            items, cont = _page(list(docs.values()), headers)
+            hdr = {"x-ms-item-count": str(len(items))}
+            if cont:
+                hdr["x-ms-continuation"] = cont
             return _json(200, {"_rid": coll_entry["_rid"],
                                "Documents": items,
-                               "_count": len(items)},
-                         {"x-ms-item-count": str(len(items))})
+                               "_count": len(items)}, hdr)
         return _err(400, "BadRequest", f"Unsupported method {method} on docs")
 
     # ---- /dbs/{db}/colls/{c}/docs/{id} ----
@@ -554,6 +767,9 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
         if not isinstance(b, dict):
             return _err(400, "BadRequest", "Document body must be a JSON object.")
         prev = docs[doc_id]
+        bad = _precondition(headers, prev)
+        if bad is not None:
+            return bad
         doc = dict(b)
         doc["id"] = doc_id
         doc["_rid"] = prev["_rid"]
@@ -565,9 +781,43 @@ def _dispatch_inner(store: CosmosStore, method: str, path: str,
         docs[doc_id] = doc
         store.persist()
         return _json(200, doc, {"etag": doc["_etag"]})
+    if method == "PATCH":                             # partial document update (JSON patch operations)
+        if doc_id not in docs:
+            return _err(404, "NotFound", f"Document '{doc_id}' not found.")
+        prev = docs[doc_id]
+        bad = _precondition(headers, prev)
+        if bad is not None:
+            return bad
+        b = _load_body()
+        ops = b.get("operations") if isinstance(b, dict) else None
+        if not isinstance(ops, list) or not ops:
+            return _err(400, "BadRequest", "The patch body needs a non-empty 'operations' list.")
+        if len(ops) > 10:
+            return _err(400, "BadRequest", "A patch request is limited to 10 operations.")
+        cond = b.get("condition")
+        if cond:
+            try:
+                ok = bool(_run_query([prev], "SELECT * " + str(cond)))
+            except Exception:
+                return _err(400, "BadRequest", "The patch condition is not valid.")
+            if not ok:
+                return _err(412, "PreconditionFailed", "The patch condition was not met.")
+        try:
+            doc = _apply_patch(prev, ops)
+        except (ValueError, TypeError, IndexError, KeyError) as exc:
+            return _err(400, "BadRequest", str(exc))
+        doc["_etag"] = _etag()
+        doc["_ts"] = _now_ts()
+        doc["_lsn"] = _next_lsn(store)
+        docs[doc_id] = doc
+        store.persist()
+        return _json(200, doc, {"etag": doc["_etag"]})
     if method == "DELETE":
         if doc_id not in docs:
             return _err(404, "NotFound", f"Document '{doc_id}' not found.")
+        bad = _precondition(headers, docs[doc_id])
+        if bad is not None:
+            return bad
         docs.pop(doc_id, None)
         store.persist()
         return Response(status=204, body=b"", media_type=None)
@@ -892,7 +1142,7 @@ def _gateway_dispatch(store, acct, hd, method, path, query, headers, body, arm_s
         m["bypass"] += 1
     r = inner()
     wt_base = None
-    if doc_path and meth in ("PUT", "DELETE") and r.status < 300:      # item write-through / evict (point-read entries only)
+    if doc_path and meth in ("PUT", "PATCH", "DELETE") and r.status < 300:      # item write-through / evict (point-read entries only)
         wt_base = path.split("?", 1)[0].rstrip("/")
     elif coll_docs and meth == "POST" and not is_query and r.status < 300:        # create / upsert
         try:
@@ -1024,7 +1274,7 @@ def _dispatch_plain(store: CosmosStore, method: str, path: str, query: dict | No
     if r.status < 400:
         r.headers.setdefault("x-ms-request-charge", str(charge))
         if arm_state and r.status in (200, 201) and len(segs) >= 5 and segs[0] == "dbs" and segs[2] == "colls" and segs[4] == "docs" \
-                and method.upper() in ("POST", "PUT") and not is_query:
+                and method.upper() in ("POST", "PUT", "PATCH") and not is_query:
             try:
                 doc = json.loads(r.body) if isinstance(r.body, (bytes, str)) else r.body
                 if isinstance(doc, dict) and doc.get("id") is not None:

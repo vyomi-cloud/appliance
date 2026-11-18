@@ -4045,7 +4045,7 @@ class AzureArm:
             self._aks_real_pool_changed(rec)
         self.state[key] = rec
         self._sb_mirror(rec)
-        return _ok(_view(rec), status=200 if existed else 201)
+        return _ok(_view(rec), status=200 if (existed or full_type.lower() == "microsoft.storage/storageaccounts/tableservices/tables") else 201)
 
     def _sb_mirror(self, rec, drop=False):
         """Service Bus queues/topics/subscriptions/rules written through ARM land in the shared message store the

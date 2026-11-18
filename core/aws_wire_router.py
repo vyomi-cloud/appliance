@@ -438,7 +438,7 @@ def _azure_service(path, lheaders, query):
     # queue name (lowercase-only) can look like it.
     accept = lheaders["accept"] if "accept" in lheaders else ""
     tsegs = [s for s in p.split("/") if s]
-    if "odata" in accept.lower() or (tsegs and (tsegs[0] == "Tables" or tsegs[0].startswith("Tables(") or "(" in tsegs[0])):
+    if "odata" in accept.lower() or (tsegs and (tsegs[0] == "Tables" or tsegs[0].startswith("Tables(") or "(" in tsegs[0] or tsegs[-1] == "$batch")):
         return "az-table"
     # Queue / Table SERVICE-level requests (service properties, stats, CORS preflight) share the root path with Blob: a
     # distinct host (<acct>.queue|table.core.windows.net) or x-vyomi-service tells them apart.

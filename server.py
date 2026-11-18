@@ -245,6 +245,11 @@ try:
     _gcp_real.install()
 except Exception as _e:   # never let this break appliance boot
     print(f"[gcp_real_backends] skipped: {_e}")
+try:   # VYOMI_AZURE_REAL_BACKENDS=1 + VYOMI_AZURE_AZURITE_ENDPOINT: real Azurite behind the Azure Table + Queue wires (core/azure_real_backends.py)
+    from core import azure_real_backends as _az_real
+    _az_real.install()
+except Exception as _e:   # never let this break appliance boot
+    print(f"[azure_real_backends] skipped: {_e}")
 try:   # VYOMI_GCP_GRPC_PORT=<port>: gRPC front door for the REST-less Google clients (Monitoring, gapic Logging); core/gcp_grpc_front.py
     from core import gcp_grpc_front as _gcp_grpc
     _gcp_grpc.maybe_start()

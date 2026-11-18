@@ -238,6 +238,11 @@ def appliance_router() -> AwsWireRouter:
             gcp_real_backends.install()
         except Exception:
             pass
+        try:   # VYOMI_AZURE_REAL_BACKENDS=1: real Azurite behind the Azure Table + Queue wires (no-op when off)
+            from core import azure_real_backends
+            azure_real_backends.install()
+        except Exception:
+            pass
     return _APPLIANCE_ROUTER
 
 
