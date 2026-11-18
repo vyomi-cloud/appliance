@@ -1772,14 +1772,14 @@
      "status": "v4"
     },
     {
-     "capabilities": 7,
+     "capabilities": 8,
      "id": "foundry",
      "level_counts": {
       "nano": {
-       "limited": 7
+       "limited": 8
       },
       "offline": {
-       "limited": 7
+       "limited": 8
       }
      },
      "levels": {

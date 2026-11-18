@@ -92,5 +92,18 @@
     "tests": [
       "tests/conformance/test_azure_ref_ai_foundry_sdk.py"
     ]
+  },
+  "azure.foundry.on-your-data": {
+    "title": "Azure OpenAI On Your Data (chat completions grounded on an AI Search index: data_sources[azure_search])",
+    "level": {
+      "nano": "limited",
+      "offline": "limited"
+    },
+    "limitations": [
+      "chat/completions with extra_body.data_sources of type azure_search retrieves from the simulator's own AI Search index (same engine as the native search data plane; api_key / access_token / managed-identity auth values are accepted, only api_key is checked; endpoint forms: /azure-data/search/<service>, the ARM-extension path, <service>.search.* host, or the root when one service exists) and returns message.context {citations[{content,title,url,filepath,chunk_id}], intent} with [docN] markers; stream=true sends the context in the first delta. top_n_documents, filter, fields_mapping (content/title/url/filepath), in_scope and query_type simple/semantic/vector/vector_simple_hybrid/vector_semantic_hybrid work best-effort on the existing engine (vector query embeds the question with the local embedding model). strictness is accepted but not applied, citations carry no rerank_score and the intent is the user question verbatim (no query rewrite). Answer quality is the small local model's. Other data source types (cosmos_db, elasticsearch, azure_ml_index, mongo_db, pinecone) are rejected with 400 BadRequest. The same shared core serves Nano; it answers only while a WebLLM model is loaded (otherwise the native 503), and the Nano path was not separately browser-tested."
+    ],
+    "tests": [
+      "tests/conformance/test_azure_openai_on_your_data.py"
+    ]
   }
 }
