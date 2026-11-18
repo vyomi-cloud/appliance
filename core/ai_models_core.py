@@ -1635,6 +1635,68 @@ def grounding_metadata(retrieval, answer):
             "groundingSupports": supports}
 
 
+def _armor_names(armor):
+    a = {(re.sub(r"_([a-z])", lambda m: m.group(1).upper(), k)): v for k, v in (armor or {}).items()} if isinstance(armor, dict) else {}
+    return a.get("promptTemplateName"), a.get("responseTemplateName")
+
+
+def _armor_err(e):
+    code, _, msg = str(e).partition(":")
+    return _g_err(int(code), "NOT_FOUND" if code == "404" else "INVALID_ARGUMENT", msg) if code in ("400", "404") else _g_err(400, "INVALID_ARGUMENT", str(e))
+
+
+def _armor_prompt(store, armor, contents, model, op, query):
+    """modelArmorConfig.promptTemplateName: sanitize the user prompt BEFORE the model runs; a match answers 200 with
+    promptFeedback.blockReason=MODEL_ARMOR and no candidates (the model is never called). An unknown template is the API's 404."""
+    pt, rt = _armor_names(armor)
+    if store is None or not (pt or rt):
+        return None
+    try:
+        from core import gcp_agentgov_core as gov
+    except ImportError:  # Pyodide flat layout
+        import gcp_agentgov_core as gov  # type: ignore
+    try:
+        if rt:
+            gov.armor_check(store, rt, ".", "OUTPUT")      # existence check up front, so a bad response template fails before the model runs
+        if not pt:
+            return None
+        text = "\n".join("".join(x.get("text", "") for x in (c.get("parts") or []) if isinstance(x, dict)) for c in contents
+                         if isinstance(c, dict) and c.get("role", "user") == "user").strip()
+        hit, res = gov.armor_check(store, pt, text, "INPUT") if text else (False, None)
+    except ValueError as e:
+        return _armor_err(e)
+    if not hit:
+        return None
+    found = sorted(k for k, v in res["filterResults"].items() if "MATCH_FOUND" in json.dumps(v))
+    doc = {"promptFeedback": {"blockReason": "MODEL_ARMOR", "blockReasonMessage": "Blocked by Model Armor template " + pt + (": " + ", ".join(found) if found else "")},
+           "usageMetadata": {"promptTokenCount": llm.estimate_tokens(text), "totalTokenCount": llm.estimate_tokens(text)}, "modelVersion": model}
+    if op == "streamGenerateContent":
+        sse = (query or {}).get("alt") == "sse"
+        chunk = json.dumps(doc)
+        return _stream_out(200, {}, iter([("data: " + chunk + "\r\n\r\n") if sse else ("[" + chunk + "]")]), "text/event-stream" if sse else "application/json")
+    return _j(200, doc)
+
+
+def _armor_response(store, armor, text, model):
+    """modelArmorConfig.responseTemplateName: sanitize the model's answer; a match returns the candidate blocked (finishReason SAFETY, no parts)."""
+    _, rt = _armor_names(armor)
+    if store is None or not rt or not text:
+        return None
+    try:
+        from core import gcp_agentgov_core as gov
+    except ImportError:  # Pyodide flat layout
+        import gcp_agentgov_core as gov  # type: ignore
+    try:
+        hit, res = gov.armor_check(store, rt, text, "OUTPUT")
+    except ValueError as e:
+        return _armor_err(e)
+    if not hit:
+        return None
+    found = sorted(k for k, v in res["filterResults"].items() if "MATCH_FOUND" in json.dumps(v))
+    return _j(200, {"candidates": [{"index": 0, "finishReason": "SAFETY", "finishMessage": "Blocked by Model Armor template " + rt + (": " + ", ".join(found) if found else ""),
+                                    "content": {"role": "model", "parts": []}}], "modelVersion": model, "responseId": uuid.uuid4().hex[:20]})
+
+
 def vertex_dispatch(method, path, query, headers, body, store=None):
     if re.match(r"^/v1(?:beta)?/models(?:[/:]|$)", path):
         return _gdev_dispatch(method, path, query, headers, body, store)
@@ -1675,6 +1737,11 @@ def vertex_dispatch(method, path, query, headers, body, store=None):
         if isinstance(req, str):
             return _g_err(400, "INVALID_ARGUMENT", req)
         msgs, si = req[0], req[1]
+        armor = p.get("modelArmorConfig") or p.get("model_armor_config")
+        if armor and op != "countTokens":
+            blocked = _armor_prompt(store, armor, contents, model, op, query)
+            if blocked is not None:
+                return blocked
         if op == "countTokens":
             n = sum(llm.estimate_tokens(llm._ctext(m["content"])) for m in msgs) + llm.estimate_tokens(si or "")
             return _j(200, {"totalTokens": n, "totalBillableCharacters": sum(len(llm._ctext(m["content"])) for m in msgs)})
@@ -1691,6 +1758,10 @@ def vertex_dispatch(method, path, query, headers, body, store=None):
         except ValueError as e:
             return _g_err(400, "INVALID_ARGUMENT", str(e))
         if op == "generateContent":
+            if armor:
+                blocked = _armor_response(store, armor, r["text"], model)
+                if blocked is not None:
+                    return blocked
             fin = "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"
             cand = {"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"], r.get("reasoning"))}, "index": 0, "finishReason": fin}
             if retrieval is not None:

@@ -664,3 +664,20 @@ def _pol_view(store, x):
     v["attachedGateways"] = [g["name"] for g in _state(store)["gateways"].values() if g.get("policy") == x["name"]]
     v["engine"] = "cedar"
     return v
+
+
+# ═════════════════════════════ Model Armor inside generateContent (modelArmorConfig) ═════════════════════════════
+def armor_check(store, template_name, text, source):
+    """Run a stored Model Armor template over `text` (source "INPUT" = prompt, "OUTPUT" = model response) for the Vertex generateContent path.
+    -> (matched: bool, sanitization_result). Raises ValueError(message) for an unknown / malformed template name (caller answers 404 / 400)."""
+    if not isinstance(template_name, str) or not re.match(r"^projects/[^/]+/locations/[^/]+/templates/[^/]+$", template_name):
+        raise ValueError("400:model_armor_config template name must be projects/PROJECT/locations/LOCATION/templates/TEMPLATE.")
+    r = _state(store)["templates"].get(template_name)
+    if not r:
+        raise ValueError(f"404:Model Armor template `{template_name}` not found.")
+    res = sanitize(r["filterConfig"], text, source)
+    st = _state(store)
+    st["findings"].append({"time": _iso(), "template": template_name, "kind": "userPrompt" if source == "INPUT" else "modelResponse", "matchState": res["filterMatchState"],
+                           "matched": sorted(k for k, v in res["filterResults"].items() if "MATCH_FOUND" in json.dumps(v)), "chars": len(text), "via": "generateContent"})
+    del st["findings"][:-200]
+    return res["filterMatchState"] == "MATCH_FOUND", res
