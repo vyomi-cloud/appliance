@@ -1,39 +1,6 @@
 {
- "at": "2026-11-18T03:12:47+00:00",
+ "at": "2026-11-18T04:13:04+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "AWS Lambda, Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:c6f086ed4e9e",
-   "title": "AWS Lambda now supports scale to and from zero for Lambda Managed Instances",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-managed-instances-scale-to-zero/",
-   "detail": "AWS Lambda now supports scale to and from zero for Event Functions running on Lambda Managed Instances (LMI). Lambda automatically scales execution environments for your function to zero during idle periods and scales them back up when requests arrive, without requiring you to provision minimum capacity. This makes LMI cost-effective for intermittent workloads such as asynchronous processing, development, and test environments. Lambda Managed Instances lets you run Lambda functions on your Amazon EC2 instances while maintaining the operational simplicity of Lambda. With Lambda Managed Instance",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "DynamoDB, Amazon SQS, CloudWatch, Kinesis",
-   "kind": "announcement",
-   "key": "feed:aws:afb5366397bb",
-   "title": "Amazon Kinesis Data Streams announces queues to simplify and reduce costs of real-time processing",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/kinesis-data-streams-queues/",
-   "detail": "Amazon Kinesis Data Streams now supports queues, a simpler and more cost-effective way to process a stream. Because queues track the delivery state of each record, your consumer instances receive records instead of leasing shards, acknowledge each record when processing is complete, and scale beyond the number of shards. Kinesis Data Streams consumers can reduce the cost of processing data by up to 43% by using queues instead of the Kinesis Client Library. You no longer run a DynamoDB table or custom metrics, and you use compute more efficiently. Queues in Kinesis Data Streams are powered by A",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:7c330b1f249b",
-   "title": "Cost Optimization Hub now supports stopping idle Amazon EC2 instances",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cost-hub-stop-idle-ec2/",
-   "detail": "AWS Cost Optimization Hub now lets you stop idle Amazon EC2 instances directly from your recommendations. Cost Optimization Hub consolidates and prioritizes cost optimization recommendations across your AWS accounts and Regions, including idle resources. Previously, stopping an idle instance required you to leave Cost Optimization Hub and identify the specific instance in the Amazon EC2 console. Now you can stop it from the Savings opportunities page in Cost Optimization Hub. When you choose Stop next to an idle instance recommendation, a confirmation shows the instance, its account and Region",
-   "actionable": false
-  }
- ],
- "errors": [
-  "pypi/azure-mgmt-dns: The read operation timed out"
- ]
+ "changes": [],
+ "errors": []
 }
