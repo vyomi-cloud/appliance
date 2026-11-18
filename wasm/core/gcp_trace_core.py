@@ -116,6 +116,8 @@ def _validate_span(project, sp):
         raise _bad("endTime must not be before startTime.")
     if sp.get("parentSpanId") and not SPAN_ID.match(sp["parentSpanId"]):
         raise _bad("parentSpanId must be 16 hex characters.")
+    if isinstance(sp.get("spanKind"), int):   # int enum from the SDK's REST transport
+        sp["spanKind"] = ("SPAN_KIND_UNSPECIFIED", "INTERNAL", "SERVER", "CLIENT", "PRODUCER", "CONSUMER")[sp["spanKind"]] if 0 <= sp["spanKind"] <= 5 else sp["spanKind"]
     if sp.get("spanKind") and sp["spanKind"] not in ("SPAN_KIND_UNSPECIFIED", "INTERNAL", "SERVER", "CLIENT", "PRODUCER", "CONSUMER"):
         raise _bad("Invalid spanKind %r." % sp["spanKind"])
     attrs = (sp.get("attributes") or {}).get("attributeMap") or {}
@@ -145,6 +147,14 @@ def batch_write(store, project, payload):
     return {}
 
 
+def _u64(hexid):
+    """v2 Span ids are 16-hex strings; the v1 TraceSpan.span_id is a uint64 sent as a decimal string."""
+    try:
+        return str(int(hexid, 16))
+    except (TypeError, ValueError):
+        return str(hexid)
+
+
 def _v1_span(sp):
     labels = {}
     for k, v in ((sp.get("attributes") or {}).get("attributeMap") or {}).items():
@@ -153,10 +163,10 @@ def _v1_span(sp):
             sv = str(v["intValue"])
         if sv is not None:
             labels[k] = sv
-    out = {"spanId": sp["spanId"], "kind": KIND_V1.get(sp.get("spanKind"), "SPAN_KIND_UNSPECIFIED"),
+    out = {"spanId": _u64(sp["spanId"]), "kind": KIND_V1.get(sp.get("spanKind"), "SPAN_KIND_UNSPECIFIED"),
            "name": sp["displayName"]["value"], "startTime": sp["startTime"], "endTime": sp["endTime"]}
     if sp.get("parentSpanId"):
-        out["parentSpanId"] = sp["parentSpanId"]
+        out["parentSpanId"] = _u64(sp["parentSpanId"])
     if labels:
         out["labels"] = labels
     return out
@@ -240,7 +250,8 @@ def _filter_match(spans, expr):
 
 
 def list_traces(store, project, query):
-    view = (query.get("view") or "MINIMAL").upper()
+    view = str(query.get("view") or "MINIMAL").upper()
+    view = {"0": "VIEW_TYPE_UNSPECIFIED", "1": "MINIMAL", "2": "ROOTSPAN", "3": "COMPLETE"}.get(view, view)   # the Python SDK's REST transport sends enums as ints
     if view not in ("MINIMAL", "ROOTSPAN", "COMPLETE", "VIEW_TYPE_UNSPECIFIED"):
         raise _bad("Invalid view %r." % view)
     lo = _ts(query["startTime"], "startTime") if query.get("startTime") else None

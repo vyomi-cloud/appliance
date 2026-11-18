@@ -190,6 +190,56 @@ def dispatch_child(store, ae_state, method, path, query=None, headers=None, body
 
 
 # ═════════════════════════════ sessions ═════════════════════════════
+def _camel1(k):
+    h, *t = k.split("_")
+    return h + "".join(x[:1].upper() + x[1:] for x in t)
+
+
+def _ts_in(v):
+    """RFC 3339 string (the SDK sends one) or epoch seconds -> epoch seconds."""
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        raise _Err(400, "INVALID_ARGUMENT", f"timestamp `{v}` is not a valid RFC 3339 timestamp.")
+
+
+def _ts_out(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
+def _append_event(s, p):
+    """sessions/ID:appendEvent. Body: the SessionEvent fields (author, invocationId, timestamp, content, actions, eventMetadata, errorCode,
+    errorMessage, rawEvent), snake_case or lowerCamelCase. author, invocationId and timestamp are required. -> AppendEventResponse ({})."""
+    ev = {_camel1(k): v for k, v in p.items()}
+    ev = {k: ev[k] for k in ev if k != "name"}
+    for k, label in (("author", "author"), ("invocationId", "invocation_id"), ("timestamp", "timestamp")):
+        if ev.get(k) in (None, ""):
+            raise _Err(400, "INVALID_ARGUMENT", f"event.{label}: must be set.")
+    if not isinstance(ev.get("author"), str) or not isinstance(ev.get("invocationId"), str):
+        raise _Err(400, "INVALID_ARGUMENT", "event.author and event.invocation_id must be strings.")
+    for k in ("actions", "eventMetadata"):          # structural keys only; the values (state deltas, custom metadata) are user data and stay as sent
+        if isinstance(ev.get(k), dict):
+            ev[k] = {_camel1(a): b for a, b in ev[k].items()}
+    if ev.get("content") is not None and not isinstance(ev["content"], dict):
+        raise _Err(400, "INVALID_ARGUMENT", "event.content must be a Content object ({role, parts}).")
+    ev["timestamp"] = _ts_in(ev["timestamp"])
+    ev["id"] = str(random.randint(10 ** 17, 10 ** 18 - 1))
+    s["events"].append(ev)
+    s["lastUpdateTime"] = time.time()
+    return {}
+
+
+def _event_view(ename, sid, e):
+    out = {"name": f"{ename}/sessions/{sid}/events/{e['id']}", "author": e.get("author"), "invocationId": e.get("invocationId", e.get("invocation_id")),
+           "timestamp": _ts_out(e.get("timestamp", time.time()))}
+    for k in ("content", "actions", "eventMetadata", "errorCode", "errorMessage", "rawEvent"):
+        if e.get(k) is not None:
+            out[k] = e[k]
+    return out
+
+
 def _sess_view(eng, ename, s):
     return {"name": f"{ename}/sessions/{s['id']}", "userId": s["userId"], "sessionState": s["state"], "updateTime": datetime.fromtimestamp(s["lastUpdateTime"], timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
             "createTime": s.get("createTime", _iso())}
@@ -216,11 +266,20 @@ def _sessions(eng, method, ename, sid, events, verb, p, q):
     s = S.get(sid)
     if not s:
         raise _Err(404, "NOT_FOUND", f"Session {ename}/sessions/{sid} not found.")
+    if verb == ":appendEvent":
+        if method != "POST":
+            raise _Err(405, "METHOD_NOT_ALLOWED", "Use POST.")
+        return _out(200, _append_event(s, p))
     if events:
-        evs = [{"name": f"{ename}/sessions/{sid}/events/{e['id']}", "author": e.get("author"), "invocationId": e.get("invocation_id"),
-                "timestamp": datetime.fromtimestamp(e.get("timestamp", time.time()), timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
-                "content": e.get("content")} for e in s["events"]]
-        return _out(200, _page(evs, q, "sessionEvents"))
+        if method != "GET":
+            raise _Err(405, "METHOD_NOT_ALLOWED", "Session events are append-only: use POST ...:appendEvent and GET ...events.")
+        evs = sorted(s["events"], key=lambda e: e.get("timestamp", 0))
+        flt = q.get("filter") or ""
+        for op, ts in re.findall(r'timestamp\s*(>=|<=|>|<|=)\s*"?([0-9T:.+\-Z]+)"?', flt):
+            lim = _ts_in(ts)
+            cmp = {">=": lambda x: x >= lim, "<=": lambda x: x <= lim, ">": lambda x: x > lim, "<": lambda x: x < lim, "=": lambda x: x == lim}[op]
+            evs = [e for e in evs if cmp(e.get("timestamp", 0))]
+        return _out(200, _page([_event_view(ename, sid, e) for e in evs], q, "sessionEvents"))
     if method == "GET":
         return _out(200, _sess_view(eng, ename, s))
     if method == "DELETE":
