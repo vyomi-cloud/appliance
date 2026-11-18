@@ -7,11 +7,11 @@
    "offline": "limited"
   },
   "limitations": [
-   "One small local model answers every Gemini model id (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts, function calling (functionDeclarations, automatic function calling via google-genai) and responseSchema JSON output work; images/audio/video, grounding/Google Search, code execution, safety settings and tuning are rejected."
+   "One small local model answers every Gemini model id (llama.cpp on the mesh/appliance, WebLLM on Nano when the page registers one), so quality is toy-grade; with no model running the API returns 503 UNAVAILABLE rather than an answer. Text parts, function calling (functionDeclarations, automatic function calling via google-genai) and responseSchema JSON output work; images/audio/video, Google Search / Vertex AI Search / external-API grounding, code execution, safety settings and tuning are rejected. generateContent with tools[].retrieval.vertexRagStore (a Vertex RAG corpus) runs the retrieval against the corpus first, injects the retrieved chunks into the model's system instruction and returns groundingMetadata (groundingChunks, groundingSupports, retrievalQueries; supports are a lexical overlap match of each answer sentence to the chunks, not Google's attribution model); an unknown corpus is a 404 before any model call. Not attached to streamGenerateContent chunks."
   ],
   "tests": [
    "tests/conformance/test_ai_sdk_tools.py",
-   "tests/conformance/test_local_llm_seam.py"
+   "tests/conformance/test_local_llm_seam.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ],
   "probe": {
    "gcp_vertex": "gemini"
@@ -192,7 +192,7 @@
   ],
   "tests": [
    "tests/conformance/test_gcp_rag_limvector.py",
-   "tests/conformance/test_gcp_agentplatform_core.py"
+   "tests/conformance/test_gcp_agentplatform_core.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ]
  },
  "gcp.vertex-ai.search": {

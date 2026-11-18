@@ -66,10 +66,10 @@
    "nano": "full",
    "offline": "full"
   },
-  "limitations": [],
+  "limitations": ["additional_authenticated_data is bound into the ciphertext and enforced on decrypt (wrong, missing or unexpected AAD is refused with 400 INVALID_ARGUMENT); ciphertexts minted before this check carry no AAD and decrypt as before."],
   "tests": [
    "tests/conformance/test_gcp_kms_core.py",
-   "tests/conformance/test_c0b_legacy_parity_core.py"
+   "tests/conformance/test_c0b_legacy_parity_core.py", "tests/conformance/test_gcp_ref_corefix_sdk.py"
   ]
  },
  "gcp.kms.inventory": {

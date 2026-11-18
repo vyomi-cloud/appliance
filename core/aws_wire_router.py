@@ -820,6 +820,9 @@ class AwsWireRouter:
             self.gcs.refs = self._run_refs   # bucket CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcs, "on_object_event", None) is None:
             self.gcs.on_object_event = self._gcs_object_event   # Eventarc Cloud Storage triggers fire on real object finalize/delete
+        if getattr(self.gcs, "publish_hook", None) is None:
+            self.gcs.publish_hook = self._gcs_notify_publish    # bucket notificationConfigs publish into the shared Pub/Sub core
+            self.gcs.topic_exists = self._gcs_notify_topic_exists
         if getattr(self.gcp_sql, "refs", None) is None:
             self.gcp_sql.refs = self._run_refs          # Cloud SQL CMEK keys are checked against real Cloud KMS keys
         if getattr(self.gcp_run, "refs", None) is None:   # a store already wired by its host (offline routes) keeps its own
@@ -1166,6 +1169,12 @@ class AwsWireRouter:
         finally:
             if tok is not None:
                 _ctx.REQUEST_PROVIDER.reset(tok)
+
+    def _gcs_notify_topic_exists(self, topic_full):
+        return bool(self.gcp_msg.get_topic(topic_full))
+
+    def _gcs_notify_publish(self, topic_full, messages):
+        gcp_ps._publish(self.gcp_msg, topic_full, {"messages": messages}, on_publish=self._eventarc_deliver)
 
     def _gcs_object_event(self, bucket, name, event, obj):
         gcp_run.deliver_storage_event(self.gcp_run, bucket, name, event, obj, log_fn=self._run_log)
@@ -2139,7 +2148,7 @@ class AwsWireRouter:
 
         if svc == "gcp-aiplatform":
             from core import ai_models_core
-            return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body))
+            return ai_models_core.vertex_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, bytes(body), self.s3)
 
         if svc == "gcp-agentplatform":
             from core import gcp_agentplatform_core

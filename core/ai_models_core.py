@@ -1480,7 +1480,7 @@ def _gem_stream(model, it, sse):
         yield "[]" if first else "]"
 
 
-def _gdev_dispatch(method, path, query, headers, body):
+def _gdev_dispatch(method, path, query, headers, body, store=None):
     """Gemini Developer API (generativelanguage.googleapis.com /v1beta|/v1 /models/...) over the same seam as Vertex.
     Differences from Vertex handled here: API-key auth (x-goog-api-key / ?key=), models.list/get, batchEmbedContents,
     embedContent takes `model` in the body. Everything else is the Vertex publisher-model wire, which google-genai shares."""
@@ -1520,7 +1520,7 @@ def _gdev_dispatch(method, path, query, headers, body):
         return _g_err(400, "INVALID_ARGUMENT", f"models/{model} does not support embedContent.")
     if op == "generateContent" and _vx_embed(model):
         return _g_err(400, "INVALID_ARGUMENT", f"models/{model} does not support generateContent.")
-    r = vertex_dispatch("POST", f"/v1/projects/gemini-api/locations/global/publishers/google/models/{model}:{op}", query, headers, body)
+    r = vertex_dispatch("POST", f"/v1/projects/gemini-api/locations/global/publishers/google/models/{model}:{op}", query, headers, body, store)
     return r
 
 
@@ -1532,9 +1532,112 @@ def _gdev_model(m):
             "supportedGenerationMethods": ["embedContent", "batchEmbedContents"] if emb else ["generateContent", "streamGenerateContent", "countTokens"]}
 
 
-def vertex_dispatch(method, path, query, headers, body):
+# ── Vertex RAG retrieval tool (tools[].retrieval.vertexRagStore) ─────────────────────────────
+# The request's retrieval tool is executed BEFORE the model call against the project's RAG corpus
+# (core/gcp_agentplatform_core._retrieve, same engine as :retrieveContexts), the retrieved chunks are
+# injected into the system instruction, and the response carries groundingMetadata (groundingChunks,
+# groundingSupports, retrievalQueries). Needs the account store, so it is a no-op when none is given.
+_RAG_PREAMBLE = ("Answer using ONLY the retrieved context below when it is relevant; cite nothing that is not in it.\n"
+                 "Retrieved context:\n")
+
+
+def _last_user_text(p):
+    for c in reversed(p.get("contents") or []):
+        if c.get("role", "user") == "user":
+            t = "".join(x.get("text", "") for x in (c.get("parts") or []) if isinstance(x, dict))
+            if t.strip():
+                return t.strip()
+    return ""
+
+
+def _camel(o):
+    if isinstance(o, dict):
+        return {re.sub(r"_([a-z0-9])", lambda m: m.group(1).upper(), k): _camel(v) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_camel(x) for x in o]
+    return o
+
+
+def rag_prepare(store, proj, loc, p):
+    """-> (new_request_body, retrieval|None, error_response|None). `retrieval` = {"query", "contexts"}."""
+    tools = [t for t in (p.get("tools") or []) if isinstance(t, dict)]
+    rtools = [t for t in tools if t.get("retrieval")]
+    if not rtools:
+        return p, None, None
+    if len(rtools) > 1 or len(tools) > 1 and any(set(t) - {"retrieval", "functionDeclarations"} for t in tools):
+        return p, None, _g_err(400, "INVALID_ARGUMENT", "Only one retrieval tool (alongside functionDeclarations) is supported.")
+    rv = rtools[0]["retrieval"]
+    rv = _camel(rv)      # google-genai sends this subtree in proto (snake_case) JSON, which Vertex accepts alongside camelCase
+    store_cfg = rv.get("vertexRagStore")
+    if not store_cfg:
+        return p, None, _g_err(400, "INVALID_ARGUMENT", "tools.retrieval supports vertexRagStore only (vertexAiSearch/externalApi are not simulated).")
+    if store is None:
+        return p, None, _g_err(400, "FAILED_PRECONDITION", "RAG retrieval is not available on this endpoint.")
+    query = _last_user_text(p)
+    if not query:
+        return p, None, _g_err(400, "INVALID_ARGUMENT", "A retrieval tool needs a user text turn to use as the retrieval query.")
+    from core import gcp_agentplatform_core as _gap
+    q = {"text": query}
+    rc = store_cfg.get("ragRetrievalConfig")
+    if rc:
+        q["ragRetrievalConfig"] = rc
+    elif store_cfg.get("similarityTopK"):
+        q["similarityTopK"] = store_cfg["similarityTopK"]
+    try:
+        out = _gap._retrieve(_gap._state(store), proj, loc, {"query": q, "vertexRagStore": store_cfg})
+    except _gap._Err as e:
+        return p, None, _g_err(e.status, e.st, e.msg)
+    ctxs = ((json.loads(out["body"]) if isinstance(out.get("body"), (bytes, str)) else out.get("body")) or {}).get("contexts", {}).get("contexts", []) \
+        if isinstance(out, dict) else []
+    p2 = dict(p)
+    rest = [t for t in tools if not t.get("retrieval")]
+    if rest:
+        p2["tools"] = rest
+    else:
+        p2.pop("tools", None)
+    if ctxs:
+        block = _RAG_PREAMBLE + "\n".join(f"[{i + 1}] ({c.get('sourceDisplayName') or c.get('sourceUri')}) {c['text']}" for i, c in enumerate(ctxs))
+        si = dict(p2.get("systemInstruction") or {})
+        si["parts"] = list(si.get("parts") or []) + [{"text": block}]
+        p2["systemInstruction"] = si
+    return p2, {"query": query, "contexts": ctxs}, None
+
+
+def _sentences(text):
+    out, pos = [], 0
+    for m in re.finditer(r"[^.!?\n]+[.!?]*", text):
+        seg = m.group(0)
+        if seg.strip():
+            out.append((m.start(), m.end(), seg))
+    return out or ([(0, len(text), text)] if text.strip() else [])
+
+
+def grounding_metadata(retrieval, answer):
+    """Deterministic groundingMetadata: one groundingChunk per retrieved context; each answer sentence is supported by the
+    contexts sharing the most content words with it (confidence = overlap share). UTF-8 byte offsets, as in the real API."""
+    ctxs = retrieval["contexts"]
+    stop = {"the", "a", "an", "of", "to", "is", "are", "and", "in", "on", "it", "if", "or", "for", "be", "not", "must", "that", "this", "with", "as", "at", "by"}
+    words = lambda t: {w for w in re.findall(r"\w+", t.lower()) if w not in stop}
+    cw = [words(c["text"]) for c in ctxs]
+    supports = []
+    for a, b, seg in _sentences(answer):
+        sw = words(seg)
+        if not sw:
+            continue
+        scores = [len(sw & w) / len(sw) for w in cw]
+        idx = [i for i, sc in enumerate(scores) if sc >= 0.3]
+        if idx:
+            idx.sort(key=lambda i: -scores[i])
+            supports.append({"segment": {"startIndex": len(answer[:a].encode()), "endIndex": len(answer[:b].encode()), "text": seg},
+                             "groundingChunkIndices": idx, "confidenceScores": [round(scores[i], 4) for i in idx]})
+    return {"retrievalQueries": [retrieval["query"]],
+            "groundingChunks": [{"retrievedContext": {"uri": c.get("sourceUri", ""), "title": c.get("sourceDisplayName", ""), "text": c["text"]}} for c in ctxs],
+            "groundingSupports": supports}
+
+
+def vertex_dispatch(method, path, query, headers, body, store=None):
     if re.match(r"^/v1(?:beta)?/models(?:[/:]|$)", path):
-        return _gdev_dispatch(method, path, query, headers, body)
+        return _gdev_dispatch(method, path, query, headers, body, store)
     mt = re.match(r"^/v1(?:beta1)?/projects/([^/]+)/locations/([^/]+)/publishers/([^/]+)/models/([^/:]+):([A-Za-z]+)$", path)
     if not mt or method.upper() != "POST":
         return _g_err(404, "NOT_FOUND", f"Unsupported Vertex AI operation: {method} {path}")
@@ -1563,6 +1666,11 @@ def vertex_dispatch(method, path, query, headers, body):
     if op in ("generateContent", "streamGenerateContent", "countTokens"):
         if not isinstance(contents, list) or not contents:
             return _g_err(400, "INVALID_ARGUMENT", "Unable to submit request because at least one contents field is required.")
+        retrieval = None
+        if any(isinstance(t, dict) and t.get("retrieval") for t in (p.get("tools") or [])):
+            p, retrieval, bad = rag_prepare(store, proj, loc, p)
+            if bad:
+                return bad
         req = _gem_request(p)
         if isinstance(req, str):
             return _g_err(400, "INVALID_ARGUMENT", req)
@@ -1584,7 +1692,10 @@ def vertex_dispatch(method, path, query, headers, body):
             return _g_err(400, "INVALID_ARGUMENT", str(e))
         if op == "generateContent":
             fin = "MAX_TOKENS" if r["finish_reason"] == "length" else "STOP"
-            return _j(200, {"candidates": [{"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"], r.get("reasoning"))}, "index": 0, "finishReason": fin}],
+            cand = {"content": {"role": "model", "parts": _gem_parts(r["text"], r["tool_calls"], r.get("reasoning"))}, "index": 0, "finishReason": fin}
+            if retrieval is not None:
+                cand["groundingMetadata"] = grounding_metadata(retrieval, r["text"])
+            return _j(200, {"candidates": [cand],
                             "usageMetadata": _gem_usage(r), "modelVersion": model, "responseId": uuid.uuid4().hex[:20]},
                       {"x-vyomi-local-model": r["model"]})
         sse = (query or {}).get("alt") == "sse"
