@@ -1592,18 +1592,19 @@
      "status": "v4"
     },
     {
-     "capabilities": 2,
+     "capabilities": 3,
      "id": "aisearch",
      "level_counts": {
       "nano": {
-       "limited": 2
+       "limited": 2,
+       "not_simulated": 1
       },
       "offline": {
-       "limited": 2
+       "limited": 3
       }
      },
      "levels": {
-      "nano": "limited",
+      "nano": "not_simulated",
       "offline": "limited"
      },
      "name": "aisearch",
@@ -1767,14 +1768,14 @@
      "status": "v4"
     },
     {
-     "capabilities": 6,
+     "capabilities": 7,
      "id": "foundry",
      "level_counts": {
       "nano": {
-       "limited": 6
+       "limited": 7
       },
       "offline": {
-       "limited": 6
+       "limited": 7
       }
      },
      "levels": {

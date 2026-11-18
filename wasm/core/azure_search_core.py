@@ -22,9 +22,11 @@ the injected ``blob_store`` (text, JSON, JSON arrays, CSV) and populate the inde
 ``dataDeletionDetectionPolicy`` / re-run idempotence. ``cosmosdb`` / ``azuresql`` / ``azuretable`` data sources are
 stored and validated but their indexers report ``transientFailure`` -- they are not read yet.
 
-NOT modelled: semantic ranker / vector (HNSW) / hybrid retrieval, skillsets (AI enrichment), analyzers beyond
-lower-casing + whitespace/punctuation splitting, scoring profiles, suggesters, synonym maps, geo and the Lucene query
-parser. Scores are TF-IDF, not BM25.
+Also modelled: Okapi BM25 text scoring, vector + hybrid (RRF) retrieval, the semantic reranker (core/azure_search_vector_core),
+suggesters (suggest + autocomplete), synonym map + alias storage, and the NATIVE data-plane wire the unmodified azure-search-documents
+clients speak (OData `indexes('x')`, `docs/search.post.search`, `search.index`, `search.run` ... : see `wire_dispatch`).
+NOT modelled: skillsets run as AI enrichment beyond the embedding skill, analyzers beyond lower-casing + whitespace/punctuation
+splitting, scoring profiles, geo and the Lucene query parser. Synonym maps are stored, not applied at query time.
 
 Pure python, no framework imports. Functions return ``{"status": int, "body": ...}``.
 """
@@ -236,6 +238,10 @@ def _norm_index(body, name):
         out["vectorSearch"] = body["vectorSearch"]
     if body.get("semantic"):
         out["semantic"] = body["semantic"]
+    for k in ("suggesters", "scoringProfiles", "defaultScoringProfile", "corsOptions", "analyzers", "tokenizers", "tokenFilters", "charFilters",
+              "normalizers", "similarity", "encryptionKey"):
+        if body.get(k) is not None:
+            out[k] = body[k]
     return out
 
 
@@ -343,8 +349,9 @@ def _cmp(op, a, b):
         return False
 
 
-def _searchable_text(doc, idx):
+def _searchable_text(doc, idx, only=None):
     return " ".join(" ".join(v) if isinstance(v, list) else str(v) for f in idx["fields"] if f["searchable"] and f["type"] != "Collection(Edm.Single)"
+                    and (not only or f["name"] in only)
                     for v in [doc.get(f["name"])] if v is not None)
 
 
@@ -373,7 +380,13 @@ def search(index_rec, params):
             if not toks:
                 continue
             (mustnot if neg else (must if phrase else terms)).append(toks)
-    corpus = {k: tokenize(_searchable_text(d, idx)) for k, d in docs.items()}
+    sf = params.get("searchFields")
+    only = {x.strip() for x in (sf.split(",") if isinstance(sf, str) else sf)} if sf else None
+    if only and any(x not in fm for x in only):
+        return _err(400, "InvalidRequest", f"Unknown field '{next(x for x in only if x not in fm)}' in searchFields.")
+    corpus = {k: tokenize(_searchable_text(d, idx, only)) for k, d in docs.items()}
+    if str(params.get("searchMode") or "any").lower() == "all":
+        must, terms = must + [[t] for ph in terms for t in ph], []
     # keyword half = Okapi BM25 over the whole index (SQLite FTS5 bm25(), core/knowledge_core), as Azure AI Search scores text
     q_terms = [t for ph in must + terms for t in ph]
     if q_terms:
@@ -822,12 +835,171 @@ def dispatch(state, method, sub, rg, chain, payload, query, blob_store=None, bas
     if op in ("datasources", "indexers", "skillsets"):
         rec.setdefault("_skillsets", {})
         return _ds_ix(rec, op, method, chain[3:], payload, blob_store, cosmos_store, sql_store)
+    if op in ("synonymmaps", "aliases"):
+        return _simple_store(rec, op, method, chain[3:], payload)
     if op == "stats" and method == "GET":
+        q = SKUS[rec["sku"]["name"]][2]
         return _ok({"counters": {"documentCount": {"usage": sum(len(i["_docs"]) for i in rec["_indexes"].values()), "quota": None},
-                                 "indexesCount": {"usage": len(rec["_indexes"]), "quota": SKUS[rec["sku"]["name"]][2]},
-                                 "indexersCount": {"usage": len(rec["_indexers"]), "quota": SKUS[rec["sku"]["name"]][2]},
-                                 "dataSourcesCount": {"usage": len(rec["_datasources"]), "quota": SKUS[rec["sku"]["name"]][2]}}})
+                                 "indexesCount": {"usage": len(rec["_indexes"]), "quota": q},
+                                 "indexersCount": {"usage": len(rec["_indexers"]), "quota": q},
+                                 "dataSourcesCount": {"usage": len(rec["_datasources"]), "quota": q},
+                                 "aliasesCount": {"usage": len(rec.get("_aliases") or {}), "quota": q},
+                                 "storageSize": {"usage": sum(len(json.dumps(d)) for i in rec["_indexes"].values() for d in i["_docs"].values()), "quota": None},
+                                 "synonymMaps": {"usage": len(rec.get("_synonymmaps") or {}), "quota": q},
+                                 "skillsetCount": {"usage": len(rec.get("_skillsets") or {}), "quota": q},
+                                 "vectorIndexSize": {"usage": 0, "quota": None}},
+                    "limits": {"maxFieldsPerIndex": 1000, "maxFieldNestingDepthPerIndex": 10, "maxComplexCollectionFieldsPerIndex": 40,
+                               "maxComplexObjectsInCollectionsPerDocument": 3000}})
     return _err(404, "ResourceNotFound", f"Unknown search service operation '{chain[2]}'.")
+
+
+def _simple_store(svc, kind, method, rest, payload):
+    """synonymmaps / aliases: validated + stored (CRUD with ETags); synonyms are not applied at query time."""
+    st = svc.setdefault("_" + kind, {})
+    if not rest:
+        if method == "GET":
+            return _ok({"value": list(st.values())})
+        if method == "POST":
+            rest = [(payload or {}).get("name")]
+            method = "PUT"
+        else:
+            return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+    name = rest[0]
+    if method == "GET":
+        return _ok(st[name]) if name in st else _err(404, "ResourceNotFound", f"{kind[:-1]} '{name}' was not found.")
+    if method == "DELETE":
+        if name not in st:
+            return _err(404, "ResourceNotFound", f"{kind[:-1]} '{name}' was not found.")
+        st.pop(name)
+        return {"status": 204, "body": None}
+    if method == "PUT":
+        b = dict(payload or {})
+        if not name or not re.match(r"^[a-z0-9][a-z0-9\-]{0,126}[a-z0-9]$|^[a-z0-9]$", name):
+            return _err(400, "InvalidRequest", "Names are lower-case letters, digits and dashes.")
+        if kind == "synonymmaps" and not isinstance(b.get("synonyms"), str):
+            return _err(400, "InvalidRequest", "synonyms (Solr rules, newline separated) is required.")
+        if kind == "aliases" and not (isinstance(b.get("indexes"), list) and len(b["indexes"]) == 1 and b["indexes"][0] in svc["_indexes"]):
+            return _err(400, "InvalidRequest", "An alias maps to exactly one existing index.")
+        existed = name in st
+        b["name"] = name
+        b["@odata.etag"] = '"0x%s"' % uuid.uuid4().hex[:14].upper()
+        st[name] = b
+        return _ok(b, 200 if existed else 201)
+    return _err(405, "MethodNotAllowed", f"{method} not allowed.")
+
+
+def suggest(index_rec, params, auto=False):
+    """docs/search.post.suggest + search.post.autocomplete over the index's suggester (prefix match on words of the sourceFields)."""
+    idx, docs = index_rec["_def"], index_rec["_docs"]
+    params = params or {}
+    sg = next((x for x in idx.get("suggesters") or [] if x.get("name") == params.get("suggesterName")), None)
+    if sg is None:
+        return _err(400, "InvalidRequest", f"The suggester '{params.get('suggesterName')}' was not found on the index.")
+    q = str(params.get("search") or "").strip().lower()
+    if not q:
+        return _err(400, "InvalidRequest", "The 'search' parameter is required.")
+    try:
+        pred = compile_filter(params["filter"], idx) if params.get("filter") else (lambda d: True)
+    except ValueError as e:
+        return _err(400, "InvalidRequest", str(e))
+    top = int(params.get("top") or 5)
+    keyf = next(f["name"] for f in idx["fields"] if f["key"])
+    cand = [d for d in docs.values() if pred(d)]
+    if auto:
+        head, _, last = q.rpartition(" ")
+        mode = str(params.get("autocompleteMode") or "oneTerm").lower()
+        counts = {}
+        for d in cand:
+            for fld in sg["sourceFields"]:
+                v = d.get(fld)
+                words = re.findall(r"[A-Za-z0-9_']+", " ".join(v) if isinstance(v, list) else str(v or ""))
+                low = [w.lower() for w in words]
+                for i, w in enumerate(low):
+                    if w.startswith(last) and (not head or " ".join(low[max(0, i - len(head.split())):i]) == head):
+                        c = w if mode == "oneterm" else (" ".join(low[i:i + 2]) if mode == "twoterms" else (head + " " + w).strip())
+                        counts[c] = counts.get(c, 0) + 1
+        comp = [c for c, _n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))][:top]
+        return _ok({"value": [{"text": c, "queryPlusText": c if mode == "onetermwithcontext" else (head + " " + c).strip()} for c in comp]})
+    sel = params.get("select")
+    cols = [c.strip() for c in (sel.split(",") if isinstance(sel, str) else sel)] if sel else [keyf]
+    out = []
+    for d in cand:
+        for fld in sg["sourceFields"]:
+            v = d.get(fld)
+            txt = " ".join(v) if isinstance(v, list) else str(v or "")
+            if re.search(r"(?:^|\W)" + re.escape(q), txt.lower()):
+                out.append(dict({"@search.text": txt}, **{c: d.get(c) for c in cols}))
+                break
+    return _ok({"value": out[:top]})
+
+
+# ───────── native data-plane wire (azure-search-documents: SearchIndexClient / SearchClient / SearchIndexerClient) ─────────
+WIRE_ROOTS = ("indexes", "datasources", "indexers", "skillsets", "synonymmaps", "aliases", "servicestats")
+
+
+def wire_owns(path, query=None) -> bool:
+    """A root-level Azure AI Search data-plane path (`/indexes('kb')/docs/search.post.search?api-version=...`)."""
+    head = path.lstrip("/").split("/", 1)[0].split("(", 1)[0]
+    return head in WIRE_ROOTS and "api-version" in (query or {})
+
+
+_ODATA = re.compile(r"^([A-Za-z]+)\('((?:[^']|'')*)'\)$")
+
+
+def wire_chain(path):
+    """OData wire path -> the engine's chain tail: `indexes('kb')/docs/search.post.search` -> ['indexes','kb','docs','search']."""
+    out = []
+    for seg in [x for x in path.split("/") if x]:
+        m = _ODATA.match(seg)
+        if m:
+            out += [m.group(1), m.group(2).replace("''", "'")]
+            continue
+        seg = {"$count": "count", "search.post.search": "search", "search.post.suggest": "suggest", "search.post.autocomplete": "autocomplete",
+               "search.index": "index", "search.stats": "stats", "search.run": "run", "search.status": "status", "search.reset": "reset",
+               "search.resetdocs": "resetdocs", "search.resync": "resync"}.get(seg, seg)
+        out.append(seg)
+    if out and out[0] == "servicestats":
+        out = ["stats"]
+    return out
+
+
+def wire_dispatch(state, svc_hint, method, path, query, headers, body, **stores):
+    """Serve one native data-plane request: pick the service (hint = host / path prefix name; else the only service), check the
+    api-key (admin or query key), translate the OData path, and run the same engine the ARM-extension path uses."""
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    svcs = _services(state)
+    if svc_hint and svc_hint != "_":
+        svc = next((r for r in svcs if r["name"].lower() == svc_hint.lower()), None)
+        if svc is None:
+            return _err(404, "ResourceNotFound", f"The search service '{svc_hint}' was not found.")
+    elif len(svcs) == 1:
+        svc = svcs[0]
+    elif not svcs:
+        return _err(404, "ResourceNotFound", "No Azure AI Search service exists in this space.")
+    else:
+        return _err(400, "AmbiguousService", "Several search services exist; address one as <host>/azure-data/search/<service> or https://<service>.search.* .")
+    key = lh.get("api-key")
+    auth = lh.get("authorization", "")
+    admin = auth.lower().startswith("bearer ") or key in (svc["_admin"]["primary"], svc["_admin"]["secondary"])
+    if not admin and not (key and key in svc["_query"]):
+        return _err(403, "Forbidden", "Access denied: a valid api-key (admin or query key) or bearer token is required.")
+    method = method.upper()
+    chain = wire_chain(path)
+    payload = None
+    if body:
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            return _err(400, "InvalidRequest", "The request body is not valid JSON.")
+    if not admin:         # query keys: read documents + run queries only
+        okq = len(chain) >= 3 and chain[0] == "indexes" and chain[2] == "docs" and (
+            method == "GET" or (method == "POST" and len(chain) == 4 and chain[3] in ("search", "suggest", "autocomplete")))
+        if not okq:
+            return _err(403, "Forbidden", "This operation requires an admin key.")
+    r = dispatch(state, method, svc["_sub"], svc["_rg"], ["searchServices", svc["name"]] + chain, payload, query or {}, **stores)
+    if chain[:1] == ["indexes"] and chain[2:4] == ["docs", "count"] and r["status"] == 200:
+        r = dict(r, text=str(r["body"]))      # `docs/$count` answers the bare number as text/plain
+    return r
 
 
 def _indexes(svc, method, rest, payload, query):
@@ -865,13 +1037,16 @@ def _indexes(svc, method, rest, payload, query):
             return search(rec, payload or {})
         if sub == "search" and method == "GET":
             return search(rec, query)
+        if sub in ("suggest", "autocomplete") and method in ("POST", "GET"):
+            return suggest(rec, payload if method == "POST" else query, sub == "autocomplete")
         if sub == "count" and method == "GET":
             return _ok(len(rec["_docs"]))
         if len(rest) == 3 and method == "GET":
             d = rec["_docs"].get(rest[2])
             return _ok(d) if d else _err(404, "DocumentNotFound", f"Document with key '{rest[2]}' not found.")
     if rest[1].lower() == "stats" and method == "GET":
-        return _ok({"documentCount": len(rec["_docs"]), "storageSize": sum(len(json.dumps(d)) for d in rec["_docs"].values())})
+        return _ok({"documentCount": len(rec["_docs"]), "storageSize": sum(len(json.dumps(d)) for d in rec["_docs"].values()),
+                    "vectorIndexSize": sum(4 * len(v) for d in rec["_docs"].values() for v in d.values() if isinstance(v, list) and v and isinstance(v[0], float))})
     return _err(404, "ResourceNotFound", "Unknown index operation.")
 
 

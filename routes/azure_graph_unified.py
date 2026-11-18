@@ -52,6 +52,8 @@ def table_path(path: str, headers: dict) -> bool:
     segs = [x for x in path.split("?", 1)[0].split("/") if x]
     if not segs or segs[0] in _NOT_TABLE or segs[0].startswith("$"):
         return False
+    if "api-key" in headers and segs[0].split("(", 1)[0] in ("indexes", "datasources", "indexers", "skillsets", "synonymmaps", "aliases", "servicestats"):
+        return False       # Azure AI Search OData (`indexes('kb')`): core/azure_search_core.wire_dispatch via routes/azure_dataplane_unified
     if segs[0] == "Tables" or segs[0].startswith("Tables(") or "(" in segs[0]:
         return True
     return len(segs) == 1 and "odata" in str(headers.get("accept") or "").lower()
