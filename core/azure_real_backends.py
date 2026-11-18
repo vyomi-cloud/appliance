@@ -147,7 +147,7 @@ def _forward(kind: str, method: str, path: str, query, headers, body, resp_cls):
         (("?" + urllib.parse.urlencode(query, quote_via=urllib.parse.quote)) if query else "")
     fwd = {k: v for k, v in hd.items() if k not in _DROP_REQ}
     fwd.update(_sign_headers(kind, method, qpath, query, fwd, body))
-    req = urllib.request.Request(url, data=body if (body or method in ("POST", "PUT", "PATCH", "MERGE")) else None,
+    req = urllib.request.Request(url, data=body or None,
                                  method=method, headers=fwd)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:

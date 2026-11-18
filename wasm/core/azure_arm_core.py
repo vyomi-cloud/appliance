@@ -4040,7 +4040,7 @@ class AzureArm:
             self.state[key] = rec                      # visible to the pool reconcile below
             self._aks_real_pool_changed(rec)
         self.state[key] = rec
-        return _ok(_view(rec), status=200 if existed else 201)
+        return _ok(_view(rec), status=200 if (existed or full_type.lower() == "microsoft.storage/storageaccounts/tableservices/tables") else 201)
 
     # ── REAL Kubernetes (k3s) behind an AKS cluster: only when the offline appliance installed kube_state.CLUSTER_RUNTIME
     # (VYOMI_K8S_BACKEND=k3s). The substrate-free core never imports Docker; it only calls the hook. ──

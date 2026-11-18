@@ -41,7 +41,18 @@ import _az_inproc as h
 import _az_table_scenario as sc
 
 
+PROC = None
+
+
 def start_azurite():
+    """Docker image first; or AZURITE_BIN=<path to the npm `azurite` binary> (same real Azurite, no docker needed)."""
+    global PROC
+    if os.environ.get("AZURITE_BIN"):
+        import tempfile
+        qp, tp = h.freeport(), h.freeport()
+        PROC = subprocess.Popen([os.environ["AZURITE_BIN"], "--location", tempfile.mkdtemp(prefix="azurite-"), "--silent", "--loose",
+                                 "--skipApiVersionCheck", "--blobPort", str(h.freeport()), "--queuePort", str(qp), "--tablePort", str(tp)])
+        return _wait(qp, tp)
     try:
         if sh("docker", "info").returncode != 0:
             skip("docker daemon not running")
@@ -54,6 +65,10 @@ def start_azurite():
            "--blobHost", "0.0.0.0", "--queueHost", "0.0.0.0", "--tableHost", "0.0.0.0", "--skipApiVersionCheck", "--loose")
     if r.returncode:
         raise RuntimeError(r.stderr)
+    return _wait(qp, tp)
+
+
+def _wait(qp, tp):
     import socket
     for _ in range(60):
         try:
@@ -120,7 +135,7 @@ def main():
         sm.table.create(rg, acct, "armtable")
         h.ok("ARM: storage account + table record created and listed",
              "armtable" in [x.name for x in sm.table.list(rg, acct)] and sm.storage_accounts.get_properties(rg, acct).name == acct)
-        h.ok("ARM: keys still issued", len(sm.storage_accounts.list_keys(rg, acct).keys) >= 1)
+        h.ok("ARM: keys still issued", len(sm.storage_accounts.list_keys(rg, acct)["keys"]) >= 1)
         h.ok("data plane unaffected by ARM calls", tn in [x.name for x in via.list_tables()])
 
         # (d) Storage Queue
@@ -135,7 +150,10 @@ def main():
         got = [m.content for m in qv.receive_messages(max_messages=1)]
         h.ok("queue message sent directly is received via simulator", got == ["hello-from-azurite"], str(got))
     finally:
-        sh("docker", "rm", "-f", NAME)
+        if PROC is not None:
+            PROC.terminate()
+        else:
+            sh("docker", "rm", "-f", NAME)
     print(f"\n{len(h.FAILS)} failure(s)" if h.FAILS else "\nAll PASS")
     sys.exit(1 if h.FAILS else 0)
 
