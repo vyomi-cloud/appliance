@@ -2174,16 +2174,16 @@
       "Functions.delete",
       "Functions.invoke"
      ],
-     "capabilities": 14,
+     "capabilities": 15,
      "capability_service": "functions",
      "id": "functions",
      "level_counts": {
       "nano": {
        "full": 7,
-       "limited": 7
+       "limited": 8
       },
       "offline": {
-       "full": 7,
+       "full": 8,
        "limited": 7
       }
      },
@@ -2419,17 +2419,17 @@
       "Objects.insert",
       "Objects.delete"
      ],
-     "capabilities": 27,
+     "capabilities": 28,
      "capability_service": "storage",
      "id": "storage",
      "level_counts": {
       "nano": {
        "full": 6,
-       "limited": 21
+       "limited": 22
       },
       "offline": {
        "full": 6,
-       "limited": 21
+       "limited": 22
       }
      },
      "levels": {
@@ -2611,6 +2611,24 @@
       "offline": "limited"
      },
      "name": "hub",
+     "status": "v4"
+    },
+    {
+     "capabilities": 1,
+     "id": "identity-platform",
+     "level_counts": {
+      "nano": {
+       "limited": 1
+      },
+      "offline": {
+       "limited": 1
+      }
+     },
+     "levels": {
+      "nano": "limited",
+      "offline": "limited"
+     },
+     "name": "identity-platform",
      "status": "v4"
     },
     {
