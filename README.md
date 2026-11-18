@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-18 20:20 UTC · refreshes after every pipeline run_
+_Updated 2026-11-18 21:19 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-18 20:20 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
-- **Upstream watch:** 102 open changes from the real clouds to adopt
+- **Upstream watch:** 106 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -81,7 +81,7 @@ _Updated 2026-11-18 20:20 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|---|
 | EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 29 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 5 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+s3) | before gate |
-| IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ✅ watched | before gate |
+| IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+iam) | before gate |
 | RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ✅ watched | before gate |
 | DynamoDB | — | not audited | 🧩 18/19 · 🧩 18/19 | 0 · 0 | ✅ watched | before gate |
 | SQS | — | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
@@ -111,7 +111,7 @@ _Updated 2026-11-18 20:20 UTC · refreshes after every pipeline run_
 | Cloud Functions | — | not audited | ✅ 15/15 · ✅ 15/15 | 0 · 0 | ✅ watched | before gate |
 | API Gateway | caddy · Lite | not audited | ✅ 12/12 · ✅ 12/12 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+apigateway/v1) | before gate |
 | VPC Network | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
-| IAM & Admin | — | not audited | ✅ 9/9 · ✅ 9/9 | 0 · 0 | ✅ watched | before gate |
+| IAM & Admin | — | not audited | ✅ 9/9 · ✅ 9/9 | 0 · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+iam/v1) | before gate |
 | Eventarc | — | not audited | ✅ 12/12 · ✅ 12/12 | 0 · 0 | ✅ watched | before gate |
 | Secret Manager | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ✅ watched | before gate |
 | Cloud KMS | — | not audited | ✅ 13/13 · ✅ 13/13 | 0 · 0 | ⚠️ 1 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudkms/v1) | before gate |
