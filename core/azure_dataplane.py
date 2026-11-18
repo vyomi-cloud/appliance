@@ -722,6 +722,16 @@ async def _function_app_handle(app_name: str, function_name: str, request: Reque
     if _au:
         return JSONResponse(status_code=_au[0], headers=_au[3], content={"error": {"code": _au[1], "message": _au[2]}})
 
+    function_name = function_name.strip("/")
+    try:       # zip-deployed apps: real function discovery, routes, function-key auth, sandboxed SDK-capable worker (providers/azure_functions_host)
+        from providers import azure_functions_host as _fh
+        _hr = await _fh.serve_http(func_rec, app_name, function_name, request)
+        if _hr is not None:
+            return _hr
+    except ImportError:
+        pass
+    if function_name.startswith("api/"):
+        function_name = function_name[4:]
     props = func_rec.get("properties") or {}
     code = props.get("code") or props.get("sourceCode") or ""
     entry = props.get("entryPoint") or "main"
@@ -784,6 +794,12 @@ async def _function_app_handle(app_name: str, function_name: str, request: Reque
 def run_function_sync(app_name: str, function_name: str, method: str, payload) -> dict:
     """Invoke a function app's code directly (Event Grid AzureFunction destination)."""
     rec = _find_function_app(app_name)
+    try:       # zip-deployed app: run the named function with its trigger binding (Event Grid / Service Bus / blob / timer / http)
+        from providers import azure_functions_host as _fh
+        if rec is not None and _fh.has_deployed(rec):
+            return _fh.invoke_by_name(rec, function_name, method, payload)
+    except ImportError:
+        pass
     props = (rec or {}).get("properties") or {}
     code = props.get("code") or ""
     if not code.strip():
@@ -809,11 +825,22 @@ async def _function_app_zipdeploy(app_name: str, request: Request) -> Response:
         z = zipfile.ZipFile(io.BytesIO(data))
     except Exception:
         return JSONResponse(status_code=400, content={"error": "Body is not a zip archive"})
+    try:       # real functions (ARM list_functions / keys / routes / triggers) come from providers/azure_functions_host
+        from providers import azure_functions_host as _fh
+        _fh.note_base(request)
+        _loop = __import__("asyncio").get_running_loop()
+        _st, _msg = await _loop.run_in_executor(None, lambda: _fh.deploy(rec, data, str(request.base_url)))
+        if _st != 200:
+            return JSONResponse(status_code=_st, content={"error": _msg})
+    except ImportError:
+        pass
     names = z.namelist()
     pick = next((n for n in ("function_app.py", "main.py", "__init__.py") if n in names), None) \
         or next((n for n in names if n.endswith("/__init__.py") and n.count("/") == 1), None) \
         or next((n for n in names if n.endswith(".py") and "/" not in n), None)
     if not pick:
+        if rec.get("_zipfiles"):
+            return Response(content="Deployment successful.", status_code=200, media_type="text/plain")
         return JSONResponse(status_code=400, content={"error": "No python entry module found (function_app.py, main.py or <fn>/__init__.py)"})
     props = rec.setdefault("properties", {})
     props["code"] = z.read(pick).decode("utf-8")
@@ -1486,8 +1513,21 @@ def register(app) -> None:
 
     FN_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
 
-    @app.api_route("/azure-data/functions/{app_name}/api/{function_name}", methods=FN_METHODS, include_in_schema=False)
-    @app.api_route("/azure-data/functions/{app_name}/{function_name}", methods=FN_METHODS, include_in_schema=False)
+    @app.get("/azure-data/functions/{app_name}", include_in_schema=False)
+    async def function_app_home(app_name: str):
+        if not _find_function_app(app_name):
+            return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found in any space"})
+        return Response(content="<html><body><h1>Your Functions 4.0 app is up and running.</h1></body></html>", media_type="text/html")
+
+    @app.api_route("/azure-data/functions/{app_name}/admin/{rest:path}", methods=FN_METHODS, include_in_schema=False)
+    async def function_app_admin(app_name: str, rest: str, request: Request):
+        rec = _find_function_app(app_name)
+        if not rec:
+            return JSONResponse(status_code=404, content={"error": f"Function App '{app_name}' not found in any space"})
+        from providers import azure_functions_host as _fh
+        return await _fh.serve_admin(rec, app_name, rest, request)
+
+    @app.api_route("/azure-data/functions/{app_name}/{function_name:path}", methods=FN_METHODS, include_in_schema=False)
     async def function_app_invoke(app_name: str, function_name: str, request: Request):
         return await _function_app_handle(app_name, function_name, request)
 

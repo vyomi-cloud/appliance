@@ -151,7 +151,7 @@ def _install_guard(cfg):
             return False
 
     # ---- loopback metadata server: this function's identity ----
-    ident = cfg["identity"]
+    ident = cfg.get("identity") or {}
     def _jwt(aud):
         now = int(time.time())
         b = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
@@ -192,10 +192,40 @@ def _install_guard(cfg):
                 if p == base + "/identity":
                     return self._send(200, _jwt((q.get("audience") or [""])[0]))
             self._send(404, "not found")
-    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _MD)
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    os.environ["GCE_METADATA_HOST"] = "127.0.0.1:%d" % srv.server_address[1]
-    os.environ["GCE_METADATA_IP"] = os.environ["GCE_METADATA_HOST"]
+    if cfg.get("identity"):
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _MD)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        os.environ["GCE_METADATA_HOST"] = "127.0.0.1:%d" % srv.server_address[1]
+        os.environ["GCE_METADATA_IP"] = os.environ["GCE_METADATA_HOST"]
+
+    # ---- Azure managed identity (App Service / Functions MSI endpoint: IDENTITY_ENDPOINT + IDENTITY_HEADER) ----
+    az = cfg.get("azure_identity")
+    if az:
+        def _az_jwt(res):
+            now = int(time.time())
+            b = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()
+            return b({"alg": "none", "typ": "JWT"}) + "." + b({"aud": res, "iss": "https://sts.windows.net/%s/" % az["tenant"], "iat": now, "nbf": now,
+                "exp": now + 86400, "appid": az["client_id"], "appidacr": "2", "idp": "https://sts.windows.net/%s/" % az["tenant"], "oid": az["principal"],
+                "sub": az["principal"], "tid": az["tenant"], "idtyp": "app", "xms_mirid": az.get("resource_id", "")}) + "."
+        class _MSI(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.0"
+            def log_message(self, *a): pass
+            def do_GET(self):
+                u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query)
+                if self.headers.get("X-IDENTITY-HEADER") != az["header"] and self.headers.get("secret") != az["header"]:
+                    b = json.dumps({"statusCode": 401, "message": "missing or invalid X-IDENTITY-HEADER"}).encode(); code = 401
+                else:
+                    res = (q.get("resource") or q.get("resource_uri") or ["https://management.azure.com/"])[0]
+                    b = json.dumps({"access_token": _az_jwt(res), "expires_on": str(int(time.time()) + 86400), "resource": res, "token_type": "Bearer",
+                                    "client_id": az["client_id"]}).encode(); code = 200
+                self.send_response(code); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(b)))
+                self.end_headers(); self.wfile.write(b)
+        msrv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _MSI)
+        threading.Thread(target=msrv.serve_forever, daemon=True).start()
+        os.environ["IDENTITY_ENDPOINT"] = "http://127.0.0.1:%d/msi/token" % msrv.server_address[1]
+        os.environ["MSI_ENDPOINT"] = os.environ["IDENTITY_ENDPOINT"]
+        os.environ["IDENTITY_HEADER"] = az["header"]
+        os.environ["MSI_SECRET"] = az["header"]
 
     # ---- network allow-list ----
     _real_connect, _real_gai = socket.socket.connect, socket.getaddrinfo
@@ -408,6 +438,7 @@ def enabled() -> bool:
 _PY_HTTP_HARNESS = r'''
 import json, importlib.util, sys, os, base64, urllib.parse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_shim"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "_shim_az"))     # fallback only: the real azure-functions package wins when installed
 import flask as _flask
 spec = json.loads(sys.stdin.read())
 MARK = spec["marker"]
@@ -436,7 +467,7 @@ try:
                 import azure.functions as _func
                 import urllib.parse as _up
                 _q = {k: v[0] for k, v in _up.parse_qs(spec["request"]["query"], keep_blank_values=True).items()}
-                _r = _func.HttpRequest(_r.method, spec["request"].get("url", ""), dict(_r.headers), _q, spec["request"].get("route_params") or {}, _r.data)
+                _r = _func.HttpRequest(_r.method, spec["request"].get("url", ""), headers=dict(_r.headers), params=_q, route_params=spec["request"].get("route_params") or {}, body=_r.data)
             rv = fn(_r)
             status, headers, body = _norm(rv)
         except _flask._Abort as a:
@@ -492,10 +523,8 @@ def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with open(dest, "w") as fh:
                     fh.write(text)
-        os.makedirs(os.path.join(workdir, "_shim", "azure"))
-        with open(os.path.join(workdir, "_shim", "azure", "__init__.py"), "w") as fh:
-            fh.write("")
-        with open(os.path.join(workdir, "_shim", "azure", "functions.py"), "w") as fh:
+        os.makedirs(os.path.join(workdir, "_shim_az", "azure"))     # a namespace portion (no __init__): `azure.data.tables` etc. still resolve
+        with open(os.path.join(workdir, "_shim_az", "azure", "functions.py"), "w") as fh:
             fh.write(_shims.AZ_FUNCTIONS_SHIM)
         with open(os.path.join(workdir, "_shim", "flask.py"), "w") as fh:
             fh.write(_shims.FLASK_SHIM)
@@ -722,3 +751,299 @@ def run_agent_engine(*, archive: bytes, module: str, obj: str, method: str, inpu
         return {"status": "SUCCESS", "kind": result.get("kind"), "value": result.get("value"), "logs": logs[:4000]}
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+# ══════════════ Azure Functions host (v4 lane az-ref-runtime) ════════════════════════════════════════════
+# A deployed Function App runs through the SAME sandbox as the Cloud Functions above (subprocess per call, scrubbed environment,
+# interpreter-level egress/filesystem guard) with the Azure Functions contract: the standard environment (FUNCTIONS_WORKER_RUNTIME,
+# WEBSITE_SITE_NAME, the app settings as environment variables, AzureWebJobsStorage), a managed-identity endpoint (IDENTITY_ENDPOINT /
+# IDENTITY_HEADER, so DefaultAzureCredential works), the REAL `azure.functions` package (function.json v1 and decorator v2 programming
+# models; the Vyomi shim is only a fallback when it is not installed) and the REAL Azure SDKs of the appliance wheel set.
+# The `azure` namespace is never shadowed: `azure.functions` and `azure.data.tables` / `azure.cosmos` / `azure.servicebus` coexist.
+_AZ_HARNESS = r'''
+import json, sys, os, base64, traceback, importlib, importlib.util, inspect, logging, asyncio, datetime
+HERE = os.path.dirname(os.path.abspath(__file__))
+spec = json.loads(sys.stdin.read())
+MARK = spec["marker"]
+sys.path.insert(0, HERE)
+for _extra in (".python_packages/lib/site-packages",):
+    if os.path.isdir(os.path.join(HERE, _extra)):
+        sys.path.insert(1, os.path.join(HERE, _extra))
+sys.path.append(os.path.join(HERE, "_shim_az"))      # fallback only: the real azure-functions package wins when installed
+logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(levelname)s: %(message)s")
+try:
+    if spec.get("sandbox"):
+        sys.dont_write_bytecode = True
+        import _guard
+        _guard._install_guard(dict(spec["sandbox"], workdir=HERE))
+    import azure.functions as func
+    low = lambda v: str(v).lower() if v is not None else v
+
+    def _bindings_of(fn):
+        out = []
+        for b in fn.get_bindings():
+            d = dict(b.get_dict_repr()) if hasattr(b, "get_dict_repr") else dict(b)
+            d["direction"] = low(d.get("direction") if not hasattr(d.get("direction"), "name") else d["direction"].name)
+            if "authLevel" in d:
+                d["authLevel"] = low(d["authLevel"].name if hasattr(d["authLevel"], "name") else d["authLevel"])
+            out.append(d)
+        return out
+
+    def _apps(mod):
+        found = []
+        for v in vars(mod).values():
+            if hasattr(v, "get_functions") and callable(v.get_functions) and v not in found:
+                found.append(v)
+        return found
+
+    def _load_v2(script):
+        modname = os.path.splitext(script)[0]
+        m = importlib.import_module(modname)
+        fns = []
+        for a in _apps(m):
+            fns.extend(a.get_functions())
+        return fns
+
+    def _load_v1(d, script, entry):
+        path = os.path.normpath(os.path.join(HERE, d, script))
+        if script == "__init__.py":
+            mod = importlib.import_module(d.replace("/", "."))
+        else:
+            sp = importlib.util.spec_from_file_location(d.replace("/", ".") + "." + os.path.splitext(os.path.basename(script))[0], path)
+            mod = importlib.util.module_from_spec(sp); sp.loader.exec_module(mod)
+        fn = getattr(mod, entry or "main", None)
+        if fn is None:
+            raise SystemExit("entry point %r not found in %s" % (entry or "main", os.path.join(d, script)))
+        return fn
+
+    if spec["mode"] == "discover":
+        res = []
+        for fn in _load_v2(spec["script"]):
+            res.append({"name": fn.get_function_name(), "scriptFile": spec["script"], "bindings": _bindings_of(fn)})
+        sys.stdout.write("\n" + MARK + json.dumps({"functions": res}))
+        sys.exit(0)
+
+    f = spec["fn"]
+    if f.get("v2"):
+        found = {x.get_function_name(): x for x in _load_v2(f["scriptFile"])}
+        if f["name"] not in found:
+            raise SystemExit("function %r is not registered by %s" % (f["name"], f["scriptFile"]))
+        user = found[f["name"]].get_user_function()
+    else:
+        user = _load_v1(f["dir"], f.get("scriptFile") or "__init__.py", f.get("entryPoint") or "main")
+    bindings = f["bindings"]
+    trig = next((b for b in bindings if b.get("direction") == "in" and str(b.get("type", "")).lower().endswith("trigger")), None)
+
+    class _Out(func.Out):
+        def __init__(self): self._v = None
+        def set(self, v): self._v = v
+        def get(self): return self._v
+
+    def _dt(v):
+        try:
+            return datetime.datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+        except Exception:
+            return datetime.datetime.now(datetime.timezone.utc)
+
+    def _trigger_arg(t, ev):
+        ty = str(t.get("type", "")).lower()
+        data = ev.get("data") if isinstance(ev, dict) and "data" in ev and ty != "httptrigger" else ev
+        if ty == "httptrigger":
+            r = ev
+            q = {k: v[0] for k, v in __import__("urllib.parse").parse.parse_qs(r.get("query", ""), keep_blank_values=True).items()}
+            return func.HttpRequest(r["method"], r.get("url", ""), headers=dict(r.get("headers") or {}), params=q,
+                                    route_params=r.get("route_params") or {}, body=base64.b64decode(r.get("body_b64", "")))
+        if ty == "servicebustrigger":
+            body = ev.get("body", ev) if isinstance(ev, dict) else ev
+            if not isinstance(body, (str, bytes)):
+                body = json.dumps(body)
+            m = func.ServiceBusMessage(body=body, content_type=(ev.get("content_type") if isinstance(ev, dict) else None) or "application/json",
+                                       correlation_id=ev.get("correlation_id") if isinstance(ev, dict) else None)
+            return m
+        if ty == "eventgridtrigger":
+            e = ev if isinstance(ev, dict) else {}
+            return func.EventGridEvent(id=str(e.get("id", "")), data=e.get("data") or {}, topic=str(e.get("topic", "")), subject=str(e.get("subject", "")),
+                                       event_type=str(e.get("eventType") or e.get("type") or ""), event_time=_dt(e.get("eventTime") or e.get("time")),
+                                       data_version=str(e.get("dataVersion") or e.get("specversion") or ""))
+        if ty == "timertrigger":
+            return func.TimerRequest(past_due=bool((ev or {}).get("past_due", False)) if isinstance(ev, dict) else False)
+        if ty == "queuetrigger":
+            body = ev.get("body", ev) if isinstance(ev, dict) else ev
+            return func.QueueMessage(id=str((ev or {}).get("id", "")) if isinstance(ev, dict) else "", body=body if isinstance(body, (str, bytes)) else json.dumps(body))
+        if ty == "blobtrigger":
+            b = ev if isinstance(ev, dict) else {}
+            return func.blob.InputStream(name=b.get("name"), uri=b.get("uri"), length=b.get("length")) if hasattr(func, "blob") else b
+        return data
+
+    arg = _trigger_arg(trig, spec["payload"]) if trig else None
+    sig = inspect.signature(user)
+    kwargs, outs = {}, {}
+    for pname, prm in sig.parameters.items():
+        if trig and pname == trig.get("name"):
+            kwargs[pname] = arg
+        elif any(b.get("name") == pname and b.get("direction") == "out" for b in bindings):
+            outs[pname] = kwargs[pname] = _Out()
+        elif prm.default is inspect._empty and prm.kind not in (prm.VAR_POSITIONAL, prm.VAR_KEYWORD):
+            kwargs[pname] = None      # an input binding the simulator does not resolve (blob/table/cosmos input): the function gets None
+    rv = user(**kwargs)
+    if inspect.iscoroutine(rv):
+        rv = asyncio.run(rv)
+    if inspect.isasyncgen(rv):
+        raise SystemExit("async generators are not supported as functions")
+
+    def _plain(o):
+        if hasattr(o, "get_body"):
+            b = o.get_body()
+            return b.decode("utf-8", "replace") if isinstance(b, bytes) else b
+        if isinstance(o, bytes):
+            return o.decode("utf-8", "replace")
+        return str(o)
+
+    if trig and str(trig.get("type")).lower() == "httptrigger":
+        http_out = next((b for b in bindings if b.get("direction") == "out" and str(b.get("type")).lower() == "http"), None)
+        if http_out and http_out.get("name") != "$return" and http_out["name"] in outs:
+            rv = outs[http_out["name"]].get()
+        if rv is None:
+            status, headers, body = 204, {}, b""
+        elif hasattr(rv, "get_body") and hasattr(rv, "status_code"):
+            headers = {str(k): str(v) for k, v in dict(getattr(rv, "headers", {}) or {}).items()}
+            if getattr(rv, "mimetype", None) and not any(k.lower() == "content-type" for k in headers):
+                headers["Content-Type"] = rv.mimetype
+            status, body = int(rv.status_code), bytes(rv.get_body() or b"")
+        elif isinstance(rv, (dict, list)):
+            status, headers, body = 200, {"Content-Type": "application/json"}, json.dumps(rv, default=_plain).encode()
+        elif isinstance(rv, bytes):
+            status, headers, body = 200, {"Content-Type": "application/octet-stream"}, rv
+        else:
+            status, headers, body = 200, {"Content-Type": "text/plain; charset=utf-8"}, str(rv).encode()
+        out = {"kind": "http", "status": status, "headers": headers, "body_b64": base64.b64encode(body).decode()}
+    else:
+        out = {"kind": "event", "return": json.loads(json.dumps(rv, default=_plain)) if rv is not None else None,
+               "outputs": {k: json.loads(json.dumps(v.get(), default=_plain)) for k, v in outs.items()}}
+    sys.stdout.write("\n" + MARK + json.dumps(out))
+except SystemExit:
+    raise
+except BaseException:
+    sys.stderr.write(traceback.format_exc()); sys.exit(1)
+'''
+
+# What the pre-baked Azure wheel set must offer for a function to use the real SDKs (listed by azure_libraries()).
+AZURE_LIBS = ("azure-functions", "azure-identity", "azure-core", "azure-data-tables", "azure-cosmos", "azure-servicebus", "azure-storage-blob",
+              "azure-storage-queue", "azure-keyvault-secrets", "azure-keyvault-keys", "azure-monitor-opentelemetry-exporter", "opencensus-ext-azure",
+              "opentelemetry-sdk")
+
+
+def azure_libraries() -> dict:
+    from importlib import metadata
+    out = dict(libraries())
+    for d in AZURE_LIBS:
+        try:
+            out[d] = metadata.version(d)
+        except metadata.PackageNotFoundError:
+            pass
+    return out
+
+
+def base64_key(seed: str) -> str:
+    import base64
+    import hashlib
+    return base64.b64encode(hashlib.sha512(("vyomi-fn-" + seed).encode()).digest()).decode()
+
+
+def azure_function_env(*, app: str, resource_group: str, region: str, subscription: str, runtime: str, endpoint: str, settings: dict | None = None,
+                       conn_strings: dict | None = None, slot: str = "") -> dict:
+    """The environment a deployed Function App's worker sees: the standard Functions variables, the app settings and connection strings
+    (App Service exposes them as environment variables), the simulator endpoint, and an AzureWebJobsStorage connection string for the
+    simulator's storage account (unless the app sets its own). Reserved platform variables cannot be overridden by app settings."""
+    host = "%s.azurewebsites.net" % app
+    acct = "vyomifn" + "".join(c for c in app.lower() if c.isalnum())[:16]
+    storage = ("DefaultEndpointsProtocol=http;AccountName=%s;AccountKey=%s;BlobEndpoint=%s/azure-data/blob/%s;TableEndpoint=%s/azure-data/table/%s;"
+               "QueueEndpoint=%s/azure-data/queue/%s") % (acct, base64_key(app), endpoint, acct, endpoint, acct, endpoint, acct)
+    env = {"FUNCTIONS_WORKER_RUNTIME": "python", "FUNCTIONS_EXTENSION_VERSION": "~4", "AzureWebJobsStorage": storage}
+    env.update({str(k): str(v) for k, v in (settings or {}).items()})
+    for name, c in (conn_strings or {}).items():
+        v = (c or {}).get("value", "") if isinstance(c, dict) else str(c)
+        ty = str((c or {}).get("type", "Custom")) if isinstance(c, dict) else "Custom"
+        prefix = {"sqlazure": "SQLAZURECONNSTR_", "mysql": "MYSQLCONNSTR_", "sqlserver": "SQLCONNSTR_", "postgresql": "POSTGRESQLCONNSTR_",
+                  "servicebus": "SERVICEBUSCONNSTR_", "notificationhub": "NOTIFICATIONHUBCONNSTR_", "eventhub": "EVENTHUBCONNSTR_",
+                  "apihub": "APIHUBCONNSTR_", "documentdb": "DOCDBCONNSTR_", "rediscache": "REDISCACHECONNSTR_"}.get(ty.lower(), "CUSTOMCONNSTR_")
+        env[prefix + name] = v
+    env.update({"WEBSITE_SITE_NAME": app, "WEBSITE_HOSTNAME": host, "WEBSITE_INSTANCE_ID": "vyomi-" + app, "WEBSITE_RESOURCE_GROUP": resource_group,
+                "WEBSITE_OWNER_NAME": "%s+%s-%s" % (subscription, resource_group, region), "REGION_NAME": region, "FUNCTIONS_WORKER_RUNTIME_VERSION": "3.11",
+                "AZURE_FUNCTIONS_ENVIRONMENT": "Production", "WEBSITE_AUTH_ENABLED": "False", "WEBSITE_SKU": "Dynamic", "VYOMI_ENDPOINT": endpoint,
+                "WEBSITE_SLOT_NAME": slot or "Production", "AzureWebJobsScriptRoot": "/home/site/wwwroot"})
+    for k in ("VYOMI_AMQP_HOST", "VYOMI_AMQP_PORT", "VYOMI_AMQPS_PORT", "VYOMI_AZURE_REAL_BACKENDS", "VYOMI_AZURE_AZURITE_ENDPOINT"):
+        if os.environ.get(k) and k not in env:
+            env[k] = os.environ[k]
+    return env
+
+
+_PROVIDED.add("azure-functions")        # the harness provides azure.functions (the real package when installed, else the Vyomi shim)
+
+
+def _run_azure_harness(files: dict, spec: dict, timeout: int, env: dict, sandbox: dict) -> dict:
+    workdir = tempfile.mkdtemp(prefix="cl-az-")
+    try:
+        root = os.path.realpath(workdir)
+        for rel, data in (files or {}).items():
+            dest = os.path.realpath(os.path.join(root, rel))
+            if not dest.startswith(root + os.sep) or os.path.isabs(rel):
+                continue
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "wb" if isinstance(data, (bytes, bytearray)) else "w") as fh:
+                fh.write(data)
+        os.makedirs(os.path.join(workdir, "_shim_az", "azure"), exist_ok=True)
+        with open(os.path.join(workdir, "_shim_az", "azure", "functions.py"), "w") as fh:
+            fh.write(_shims.AZ_FUNCTIONS_SHIM)
+        os.makedirs(os.path.join(workdir, SANDBOX_HOME), exist_ok=True)
+        with open(os.path.join(workdir, "_guard.py"), "w") as fh:
+            fh.write(_GUARD_SRC)
+        with open(os.path.join(workdir, "_run.py"), "w") as fh:
+            fh.write(_AZ_HARNESS)
+        run_env = _sandbox_env(env, workdir)
+        spec = dict(spec, marker=_RESULT_MARKER, sandbox=dict(sandbox, hosts=_hosts(run_env)))
+        try:
+            proc = subprocess.run([sys.executable, "-B", os.path.join(workdir, "_run.py")], cwd=workdir, input=json.dumps(spec),
+                                  capture_output=True, text=True, timeout=timeout, env=run_env)
+        except subprocess.TimeoutExpired:
+            return {"status": "ERROR", "error": "Timeout value of 00:%02d:%02d was exceeded by function" % (timeout // 60, timeout % 60), "logs": "", "stderr": ""}
+        if proc.returncode != 0:
+            return {"status": "ERROR", "error": (proc.stderr or "execution failed").strip()[-2000:], "logs": (proc.stdout or "").strip()[:4000],
+                    "stderr": (proc.stderr or "")[-8000:]}
+        result, logs = _parse(proc.stdout or "")
+        return {"status": "SUCCESS", "result": result, "logs": logs[:4000], "stderr": (proc.stderr or "")[-8000:]}
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _noid() -> dict:
+    z = "00000000-0000-0000-0000-000000000000"
+    return {"header": "discover", "client_id": z, "principal": z, "tenant": z}
+
+
+def azure_discover(files: dict, script: str, env: dict, timeout: int = 60) -> dict:
+    """Import a v2 (decorator) function_app in the sandbox and list the functions + bindings it registers.
+    -> {ok, functions:[{name, scriptFile, bindings}], error, stderr}"""
+    out = _run_azure_harness(files, {"mode": "discover", "script": script}, timeout, env, {"azure_identity": _noid()})
+    if out["status"] != "SUCCESS":
+        return {"ok": False, "functions": [], "error": out.get("error"), "stderr": out.get("stderr", "")}
+    return {"ok": True, "functions": (out.get("result") or {}).get("functions", []), "error": None, "stderr": out.get("stderr", "")}
+
+
+def azure_invoke(files: dict, fn: dict, payload, env: dict, identity: dict, timeout: int = 60) -> dict:
+    """Run ONE function of a deployed app. `fn` = {name, v2, dir, scriptFile, entryPoint, bindings}; `payload` is the trigger input
+    (http: {method, url, query, headers, body_b64, route_params}; others: the event dict). Returns
+    {ok, kind:'http'|'event', status, headers, body(bytes), result, logs, stderr, error}."""
+    import base64
+    out = _run_azure_harness(files, {"mode": "invoke", "fn": fn, "payload": payload}, timeout, env, {"azure_identity": identity})
+    if out["status"] != "SUCCESS":
+        err = out.get("error") or "execution failed"
+        return {"ok": False, "kind": "http", "status": 500, "headers": {"Content-Type": "text/plain"}, "body": b"", "error": err,
+                "logs": out.get("logs", ""), "stderr": out.get("stderr", "")}
+    r = out.get("result") or {}
+    res = {"ok": True, "kind": r.get("kind", "http"), "logs": out.get("logs", ""), "stderr": out.get("stderr", ""), "error": None}
+    if r.get("kind") == "http":
+        res.update(status=int(r.get("status", 200)), headers=r.get("headers") or {}, body=base64.b64decode(r.get("body_b64", "")))
+    else:
+        res.update(status=200, headers={}, body=b"", result=r)
+    return res

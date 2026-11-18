@@ -381,6 +381,14 @@ async def azure_blob_dispatch_middleware(request, call_next):
         _m_ac = re.match(r"^([a-z0-9][a-z0-9-]*)\.azconfig\.", host)   # App Configuration: {store}.azconfig.*
         _m_b = re.match(r"^([a-z0-9][a-z0-9-]*)\.blob\.", host)         # host-style blob/table endpoints (endurance F407)
         _m_t = re.match(r"^([a-z0-9][a-z0-9-]*)\.table\.", host)
+        # Function App front door: https://<app>.azurewebsites.net/api/<route> (and /admin/...) -> the functions host
+        # (providers/azure_functions_host). `<app>.scm.azurewebsites.net` does not match (a dot follows the app name).
+        _m_fn = re.match(r"^([a-z0-9][a-z0-9-]*)\.azurewebsites\.", host)
+        if _m_fn and not path.startswith(("/azure-data", "/_wire")) and (path in ("/", "") or path.startswith(("/api/", "/admin/"))):
+            new_path = "/azure-data/functions/" + _m_fn.group(1) + ("" if path == "/" else path)
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+            return await call_next(request)
         if _m_q and os.environ.get("VYOMI_AZURE_STORAGE_SUFFIX") and not path.startswith(("/azure-data", "/_wire")):
             new_path = "/azure-data/queue-core" + path     # host-style queue endpoint -> queue core (endurance F407)
             request.scope["path"] = new_path
