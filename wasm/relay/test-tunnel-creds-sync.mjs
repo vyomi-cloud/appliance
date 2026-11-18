@@ -8,6 +8,8 @@ import { mkdtempSync, writeFileSync, readFileSync, statSync, readdirSync } from 
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+// the packaged tunnel reports package.json's version (it was a hard-coded "1.3.0", which broke on every release)
+const PKG_VERSION = JSON.parse(readFileSync(new URL("../../packaging/tunnel/package.json", import.meta.url), "utf8")).version;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const BIN = join(here, "../../packaging/tunnel/bin/vyomi-tunnel.mjs");
@@ -47,7 +49,7 @@ for (let i = 0; i < 50; i++) { try { await H("/health"); break; } catch { await 
 try {
   let h = await health();
   for (let i = 0; i < 30 && h.credentials.state === "unknown"; i++) { await new Promise((r) => setTimeout(r, 100)); h = await health(); }
-  assert.equal(exited, false); assert.equal(h.credentials.state, "revoked"); assert.equal(h.credentials.key_id, "VYKAGONE"); assert.ok(h.features.includes("creds-sync")); assert.equal(h.version, "1.3.0");
+  assert.equal(exited, false); assert.equal(h.credentials.state, "revoked"); assert.equal(h.credentials.key_id, "VYKAGONE"); assert.ok(h.features.includes("creds-sync")); assert.equal(h.version, PKG_VERSION);
   assert.ok(!JSON.stringify(h).includes("x\n") && !JSON.stringify(h).includes("secret")); ok("revoked key: tunnel stays up and reports state=revoked (no crash loop, no secret on /health)");
 
   // file replaced -> picked up by /reload

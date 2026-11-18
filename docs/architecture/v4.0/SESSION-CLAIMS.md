@@ -6,3 +6,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 
 | Session | Branch | Repo | Paths claimed | Since |
 |---|---|---|---|---|
+| tunnel-release-hardening | v4/tunnel-release-hardening | appliance | .github/workflows/tunnel-*.yml, scripts/sync_tunnel_bin.py, wasm/relay/mesh-cli.mjs, wasm/relay/creds-sync.mjs, wasm/relay/test-mcp-codespace-e2e.mjs, wasm/relay/test-tunnel-creds-sync.mjs | 2026-11-19 |
