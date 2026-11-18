@@ -1732,6 +1732,8 @@ def _site_route(state, method, sub, rg, after, payload):
         return _ok(None, 200, site_id, "Microsoft.Web/sites/" + rest[0], site.get("name", ""))
     if rest == ["config", "appsettings", "list"] and method == "POST":
         return None   # app settings live on v4's Microsoft.Web engine (PUT/PATCH/list share one store)
+    if rest[:1] == ["host"] or (rest[:1] == ["functions"] and len(rest) >= 2):
+        return None       # host/function keys + functions are owned by the Microsoft.Web engine (core/azure_webapp_core: one key store shared with the functions host)
     hk = site["_hostkeys"]
     if rest == ["host", "default", "listkeys"] and method == "POST":
         return _ok(dict(hk))

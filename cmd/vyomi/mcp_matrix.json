@@ -1128,17 +1128,17 @@
       "WebApps_ListFunctions",
       "WebApps_CreateOrUpdateSlot"
      ],
-     "capabilities": 39,
+     "capabilities": 40,
      "capability_service": "functionapp",
      "data_plane": "metadata only (function exec not yet wired; see post-MVP roadmap)",
      "id": "functionapp",
      "level_counts": {
       "nano": {
        "full": 7,
-       "limited": 32
+       "limited": 33
       },
       "offline": {
-       "full": 7,
+       "full": 8,
        "limited": 32
       }
      },
@@ -1193,23 +1193,24 @@
      "status": "released"
     },
     {
-     "capabilities": 38,
+     "capabilities": 39,
      "capability_service": "monitor",
      "id": "monitor",
      "level_counts": {
       "nano": {
        "config_only": 1,
        "full": 13,
-       "limited": 24
+       "limited": 24,
+       "not_simulated": 1
       },
       "offline": {
        "config_only": 1,
-       "full": 13,
+       "full": 14,
        "limited": 24
       }
      },
      "levels": {
-      "nano": "config_only",
+      "nano": "not_simulated",
       "offline": "config_only"
      },
      "name": "Monitor alerts",

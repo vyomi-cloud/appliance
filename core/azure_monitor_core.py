@@ -1354,9 +1354,26 @@ def dispatch(state, method, sub, rg, chain, names, payload=None, query=None, bas
     method = (method or "GET").upper()
     payload = payload if isinstance(payload, dict) else {}
     try:
-        return _dispatch(state, method, sub, rg, list(chain), payload, query or {}, base)
+        return _absolute_ingestion(_dispatch(state, method, sub, rg, list(chain), payload, query or {}, base), base)
     except _E as e:
         return _err(e.status, e.code, e.message)
+
+
+def _absolute_ingestion(resp, base):
+    """A component's connection string must point at an endpoint the exporters can POST to: IngestionEndpoint/LiveEndpoint become this
+    simulator's base URL (the track API is served at <base>/v2/track and <base>/_obs/v2/track)."""
+    if not base or not isinstance(resp, dict):
+        return resp
+    def fix(o):
+        if isinstance(o, dict):
+            p = o.get("properties") if isinstance(o.get("properties"), dict) else None
+            if p and "ConnectionString" in p and "IngestionEndpoint=/" in str(p["ConnectionString"]):
+                b = base.rstrip("/")
+                p["ConnectionString"] = f"InstrumentationKey={p.get('InstrumentationKey')};IngestionEndpoint={b};LiveEndpoint={b}"
+            for v in (o.get("value") if isinstance(o.get("value"), list) else []):
+                fix(v)
+    fix(resp.get("body"))
+    return resp
 
 
 def handles(chain):

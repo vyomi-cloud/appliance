@@ -439,5 +439,31 @@
   "limitations": ["Lists the real invoke attempts Vyomi ran for this function (status, measured duration, error); the history is capped at the last 200 invocations per app and there is no Application Insights trace or per-invocation log lines."],
   "api": ["sites/invocationlogs"],
   "tests": ["tests/conformance/test_azure_webapp_ops.py"]
- }
+ },
+  "azure.functionapp.sdk-runtime": {
+    "title": "Function App code runs in a sandboxed worker with the real azure.functions and Azure SDKs (v1 function.json + v2 decorators), function keys, azurewebsites.net host form, admin API",
+    "level": {
+      "nano": "limited",
+      "offline": "full"
+    },
+    "limitations": [
+      "Offline / Mesh: zipdeploy discovers the functions (v1 function.json, v2 decorators imported in the sandbox) and registers them as ARM Microsoft.Web/sites/functions (list_functions, get_function, list_function_keys, list_host_keys). Each call runs in a subprocess (core/gcp_function_runtime, the same guard as the GCP functions) with FUNCTIONS_WORKER_RUNTIME, WEBSITE_SITE_NAME, app settings + connection strings as environment, AzureWebJobsStorage and VYOMI_ENDPOINT pointing at the simulator, and IDENTITY_ENDPOINT/IDENTITY_HEADER (unsigned alg=none JWT) so DefaultAzureCredential works. Azure SDKs reject bearer tokens over plain http, so data access from a function uses connection strings / keys; the credential itself works.",
+      "Libraries: the appliance's pre-baked wheel set (azure-functions, azure-identity, azure-data-tables, azure-cosmos, azure-servicebus, azure-storage-blob/queue, azure-keyvault-secrets/keys, azure-monitor-opentelemetry-exporter, requests, httpx, boto3, ...). requirements.txt is honoured only against it (no internet): an unsatisfiable requirement fails the deploy with the list of available libraries. Not a VM: interpreter-level guard (egress loopback + simulator only, files confined, no subprocess); hostile native code is not contained.",
+      "HTTP front door https://<app>.azurewebsites.net/api/<route> (Host-header form) and /azure-data/functions/<app>/api/<route>: route templates, methods, authLevel anonymous/function/admin with x-functions-key or ?code= (master key opens everything), 401 otherwise; /admin/host/keys, /admin/host/systemkeys, /admin/functions/<fn>/keys, /admin/host/status and POST /admin/functions/<fn> (manual trigger invoke, 202). One process per call (about 0.5 s), no warm instances.",
+      "Non-HTTP triggers run through the invocation seam (Event Grid delivery, POST /admin/functions/<fn>, providers.azure_functions_host.invoke_trigger) with azure.functions.EventGridEvent / ServiceBusMessage / QueueMessage / TimerRequest. There is no scheduler (timer functions run only when invoked), no Service Bus/blob listener of its own (lane messaging delivers through the seam), no resolution of input bindings (blob/table/cosmos input arrive as None) and output bindings are captured, not delivered.",
+      "Nano (Pyodide, no process spawn) keeps the in-interpreter sandbox: computational stdlib + the azure.functions / flask shims only, no Azure SDKs, no network, no function keys."
+    ],
+    "api": [
+      "WebApps_ListFunctions",
+      "WebApps_GetFunction",
+      "WebApps_ListFunctionKeys",
+      "WebApps_ListHostKeys",
+      "zipdeploy",
+      "POST /admin/functions/{fn}",
+      "GET /admin/host/keys"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_functions_runtime_sdk.py"
+    ]
+  }
 }

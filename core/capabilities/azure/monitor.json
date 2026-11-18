@@ -373,5 +373,25 @@
     "tests": [
       "tests/conformance/test_azure_monitor_core.py"
     ]
+  },
+  "azure.appinsights.track-ingest": {
+    "title": "Application Insights track API ingest into the workspace App* tables (traces, requests, dependencies, exceptions, metrics, events)",
+    "level": {
+      "nano": "not_simulated",
+      "offline": "full"
+    },
+    "limitations": [
+      "Offline / Mesh: POST <IngestionEndpoint>/v2/track and /v2.1/track (also /_obs/v2.1/track; JSON array, NDJSON or gzip) from azure-monitor-opentelemetry-exporter and the Application Insights SDKs lands in AppRequests, AppDependencies, AppTraces, AppExceptions, AppMetrics, AppEvents, AppPageViews, AppAvailabilityResults of the workspace the component is linked to (workspaceResourceId), readable with azure-monitor-query LogsQueryClient (endpoint <base>/azure-data/loganalytics) and KQL (where/project/summarize/extend, dynamic Properties.key). The component connection string is absolute (IngestionEndpoint = the simulator).",
+      "A component without a workspace accepts telemetry but keeps it on the component (no classic /v1/apps/{id}/query API, no Live Metrics stream). Metrics arrive pre-aggregated like the real table (Sum/ItemCount/Min/Max). opencensus-ext-azure 1.1.x is itself broken on Python 3.13 (upstream); its wire is the same track API. Nano has no ingest route for /v2/track."
+    ],
+    "api": [
+      "POST /v2/track",
+      "POST /v2.1/track",
+      "LogsQueryClient.query_workspace",
+      "Components_CreateOrUpdate"
+    ],
+    "tests": [
+      "tests/conformance/test_azure_appinsights_ingest_sdk.py"
+    ]
   }
 }

@@ -69,6 +69,9 @@ class HttpResponse:
             self.headers["Content-Type"] = "text/plain; charset=utf-8"
     def get_body(self): return self._body
     data = property(lambda s: s._body)
+class Out:
+    def get(self): raise NotImplementedError
+    def set(self, value): raise NotImplementedError
 class FunctionApp:
     def __init__(self, http_auth_level=None):
         self.fns = {}
@@ -147,6 +150,11 @@ def _norm(rv):
     if isinstance(rv, _flask.Response):
         h = dict(rv.headers); h.update(headers or {})
         return rv.status_code if status == 200 else int(status), h, rv.data
+    if hasattr(rv, "status_code") and hasattr(rv, "get_body") and not hasattr(rv, "data"):   # a real azure.functions.HttpResponse
+        h = {str(k): str(v) for k, v in dict(getattr(rv, "headers", {}) or {}).items()}
+        if getattr(rv, "mimetype", None) and not any(k.lower() == "content-type" for k in h):
+            h["Content-Type"] = rv.mimetype
+        return int(rv.status_code), h, bytes(rv.get_body() or b"")
     if hasattr(rv, "status_code") and hasattr(rv, "data"):     # a real framework Response
         return int(rv.status_code), dict(getattr(rv, "headers", {}) or {}), bytes(rv.data)
     h = dict(headers or {})
