@@ -103,8 +103,81 @@ def t_armor():
     check("empty filter_config -> InvalidArgument (validation kept)", bad)
 
 
+AGENT_SRC = '''import os, json
+class EchoAgent:
+    def set_up(self):
+        self.greeting = os.environ.get("GREETING", "hello")
+        self.calls = 0
+    def query(self, *, prompt: str, user: str = "anonymous") -> dict:
+        self.calls += 1
+        out = {"answer": f"{self.greeting} {user}: {prompt.upper()}", "pid": os.getpid(), "calls": self.calls}
+        # the hosted process can reach the simulator with the real SDKs (same env contract as Cloud Run functions)
+        try:
+            from google.cloud import storage
+            from google.api_core.client_options import ClientOptions
+            from google.auth.credentials import AnonymousCredentials
+            c = storage.Client(project=os.environ["GOOGLE_CLOUD_PROJECT"], credentials=AnonymousCredentials(), client_options=ClientOptions(api_endpoint=os.environ["VYOMI_ENDPOINT"]))
+            out["buckets_visible"] = [b.name for b in c.list_buckets()]
+        except Exception as e:
+            out["sdk_error"] = repr(e)[:200]
+        return out
+    def stream_query(self, *, prompt: str):
+        for w in prompt.split():
+            yield {"token": w}
+agent = EchoAgent()
+'''
+
+
+def _vertex_client(api_version="v1beta1"):
+    import vertexai
+    from google.genai import types
+    from google.oauth2.credentials import Credentials
+    return vertexai.Client(project=P, location=LOC, credentials=Credentials(token="vyomi-local"), http_options=types.HttpOptions(base_url=EP, api_version=api_version))
+
+
 def t_engine():
-    pass
+    os.environ["STORAGE_EMULATOR_HOST"] = EP
+    work = tempfile.mkdtemp(prefix="engsrc-", dir=os.path.realpath(os.getcwd()))
+    d = os.path.relpath(work)
+    open(os.path.join(d, "echo_app.py"), "w").write(AGENT_SRC)
+    open(os.path.join(d, "requirements.txt"), "w").write("google-cloud-storage\n")
+    from google.cloud import storage
+    from google.api_core.client_options import ClientOptions
+    g = storage.Client(project=P, credentials=AnonymousCredentials(), client_options=ClientOptions(api_endpoint=EP))
+    g.create_bucket(f"eng-stage-{TAG}")
+    c = _vertex_client()
+    qprops = {"type": "object", "properties": {"prompt": {"type": "string"}, "user": {"type": "string"}}, "required": ["prompt"]}
+    eng = c.agent_engines.create(config={"display_name": f"echo-{TAG}", "staging_bucket": f"gs://eng-stage-{TAG}", "source_packages": [d], "entrypoint_module": "echo_app",
+                                         "entrypoint_object": "agent", "requirements_file": os.path.join(d, "requirements.txt"),
+                                         "env_vars": {"VYOMI_ENDPOINT": EP, "GOOGLE_CLOUD_PROJECT": P, "GREETING": "hi"},
+                                         "class_methods": [{"name": "query", "api_mode": "", "parameters": qprops},
+                                                           {"name": "stream_query", "api_mode": "stream", "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}}, "required": ["prompt"]}}]})
+    name = eng.api_resource.name
+    check("agent_engines.create(source_packages + entrypoint) returns a validated AgentEngine", name.startswith(f"projects/{P}/locations/{LOC}/reasoningEngines/"), name)
+    sp = eng.api_resource.spec
+    check("response carries spec.source_code_spec.python_spec (entrypoint) and class_methods, without echoing the archive",
+          [m["name"] for m in sp.class_methods] == ["query", "stream_query"] and sp.source_code_spec.python_spec.entrypoint_module == "echo_app"
+          and sp.source_code_spec.python_spec.entrypoint_object == "agent" and not (sp.source_code_spec.inline_source and sp.source_code_spec.inline_source.source_archive), sp)
+    out = eng.query(prompt="open work order", user="maria")
+    check("engine.query runs user code (set_up + query) in a separate process", out["answer"] == "hi maria: OPEN WORK ORDER" and out["pid"] != os.getpid(), out)
+    out2 = eng.query(prompt="again", user="maria")
+    check("each call is a fresh sandboxed process with set_up run again (documented: no instance state between calls)", out2["calls"] == 1 and out2["pid"] != out["pid"], out2)
+    check("hosted code calls the simulator with the real google-cloud-storage SDK", "sdk_error" not in out and f"eng-stage-{TAG}" in out.get("buckets_visible", []), out)
+    chunks = list(eng.stream_query(prompt="a b c"))
+    print("   stream chunks:", chunks)
+    toks = [x["token"] for x in chunks]
+    check("engine.stream_query streams the generator's yields", toks == ["a", "b", "c"], toks)
+    got = c.agent_engines.get(name=name)
+    check("agent_engines.get validates", got.api_resource.display_name == f"echo-{TAG}")
+    check("agent_engines.list includes it", any(x.api_resource.name == name for x in c.agent_engines.list()))
+    up = c.agent_engines.update(name=name, config={"display_name": f"echo2-{TAG}", "description": "updated"})
+    check("agent_engines.update returns the engine", up.api_resource.display_name == f"echo2-{TAG}", up.api_resource)
+    c.agent_engines.delete(name=name, force=True)
+    try:
+        c.agent_engines.get(name=name); gone = False
+    except Exception as e:
+        gone = "404" in str(e) or "NOT_FOUND" in str(e) or "not found" in str(e).lower()
+    check("delete then get -> not found", gone)
 
 
 def t_sessions():
