@@ -278,16 +278,57 @@ EOF`)
 }
 
 // L1-15: a hanging tunnel costs at most the 8 s cap, and its whole process group is gone afterwards.
+// vyomi-tunnel >= 1.3 lists the Codespace Mesh API as `api` (Vyomi's own containers are no longer rows, MESH-SOFTWARE-PROTECTION.md):
+// the hint forwards `api`, a forward to it serves, and a forward to another (deleted) Codespace is reported, never used.
+func TestMCPHomesCodespaceAPIRow(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	isolateHomes(t)
+	fakeTunnel(t, `cat <<'EOF'
+{"schema":1,"rows":[{"where":"mesh","name":"api","type":"service","address":"","connect":"vyomi-tunnel forward api 9100:9000"},
+ {"where":"mesh","name":"vyomi-k3s-0123456789","type":"k3s","address":"172.18.0.9:6443","connect":"vyomi-tunnel forward vyomi-k3s-0123456789 6443:6443"},
+ {"where":"local","name":"api","type":"forward","address":"127.0.0.1:9188","connect":"-> api:9000 (pid 77) STALE: for Codespace zany-old, not your current Mesh; stop it: kill 77"}],"notes":[]}
+EOF`)
+	_, homes := statusOf(t, s)
+	cs := homes[homeMeshCodespace]
+	d := cs["detail"].(map[string]any)
+	if cs["reachable"] != true || cs["serving"] != false || d["api_target"] != "api" ||
+		!strings.HasPrefix(fmt.Sprint(d["forward_command"]), "vyomi-tunnel forward api ") || !strings.HasSuffix(fmt.Sprint(d["forward_command"]), ":9000") ||
+		!strings.HasSuffix(fmt.Sprint(d["forward_tls_command"]), ":9443") {
+		t.Fatalf("api row: %v", cs)
+	}
+	if st, _ := d["stale_forwards"].([]any); len(st) != 1 || !strings.Contains(fmt.Sprint(st[0]), "kill 77") {
+		t.Errorf("the stale forward must be reported, not used: %v", d)
+	}
+	// a live forward to the api serves (its mesh answers /mesh/status through it)
+	fwd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"mesh":true,"mesh_id":"m-api","version":"4.0.0","tier":"pro","locked":false}`))
+	}))
+	defer fwd.Close()
+	fakeTunnel(t, `cat <<'EOF'
+{"schema":1,"rows":[{"where":"mesh","name":"api","type":"service","address":"","connect":"already forwarded: `+strings.TrimPrefix(fwd.URL, "http://")+`"},
+ {"where":"local","name":"api","type":"forward","address":"`+strings.TrimPrefix(fwd.URL, "http://")+`","connect":"-> api:9000 (pid 4242)"}],"notes":[]}
+EOF`)
+	res, homes := statusOf(t, s)
+	cs = homes[homeMeshCodespace]
+	if cs["serving"] != true || cs["endpoint"] != fwd.URL || res["selected"] != homeMeshCodespace {
+		t.Errorf("forwarded api: %v (selected %v)", cs, res["selected"])
+	}
+}
+
 func TestMCPHomesCodespaceTimeout(t *testing.T) {
 	s, _ := testMCPServer(t)
 	deadHomes(t)
+	old := tunnelProbeTimeout
+	tunnelProbeTimeout = 2 * time.Second
+	t.Cleanup(func() { tunnelProbeTimeout = old })
 	dir := fakeTunnel(t, "")
 	pidFile := filepath.Join(dir, "pids")
 	_ = os.WriteFile(os.Getenv("VYOMI_TUNNEL_BIN"), []byte("#!/bin/sh\necho $$ > "+pidFile+"\nsleep 20 &\necho $! >> "+pidFile+"\nwait\n"), 0o755)
 	start := time.Now()
 	_, homes := statusOf(t, s)
-	if el := time.Since(start); el > 9*time.Second {
-		t.Errorf("status took %v (> 9 s)", el)
+	if el := time.Since(start); el > 3*time.Second {
+		t.Errorf("status took %v (> 3 s with a 2 s limit)", el)
 	}
 	cs := homes[homeMeshCodespace]
 	if n, _ := cs["detail"].(map[string]any)["note"].(string); cs["reachable"] != false || !strings.HasPrefix(n, "timeout") || !strings.Contains(n, "idle") {

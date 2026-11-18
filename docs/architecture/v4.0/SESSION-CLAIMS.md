@@ -6,4 +6,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 
 | Session | Branch | Repo | Paths claimed | Since |
 |---|---|---|---|---|
-| mcp-v4 | v4/mcp-v4-knowledge | appliance | wasm/relay/local-relay.mjs, wasm/relay/mesh-cli.mjs, wasm/relay/mcp-launch.mjs, wasm/relay/mesh-ssh.mjs, wasm/relay/test-*.mjs, packaging/tunnel/** | 2026-11-14 |
+| mcp-codespace-followups | v4/mcp-codespace-followups | appliance | wasm/relay/mesh-cli.mjs, wasm/relay/mesh-ssh.mjs, wasm/relay/test-mesh-ssh-transport.mjs, wasm/relay/test-list-json.mjs, packaging/tunnel/bin/mesh-*.mjs, cmd/vyomi/mcp_homes*.go, integrations/claude-plugins/plugins/vyomi/skills/vyomi-mesh/**, tools/mcp-eval/prerelease-it.sh | 2026-11-19 |

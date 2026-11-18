@@ -106,6 +106,31 @@ test("pro key, live session: listing the Mesh never writes ~/.ssh/config or ~/.v
   noSshEdits(sb);
 });
 
+test("pro key, live Codespace: the Mesh API row, one free port per row, 'already forwarded', stale forwards flagged, no core containers",
+  { skip: process.platform === "win32" && "sh fake gh/ssh" }, async () => {
+  const sb = sandbox(); const binDir = path.join(sb.home, "bin"); fs.mkdirSync(binDir);
+  fs.writeFileSync(sb.gh, "#!/bin/sh\n[ \"$1\" = --version ] && { echo 'gh version 2.99.0 (2026-01-01)'; exit 0; }\n" +
+    "[ \"$1 $2\" = 'codespace ssh' ] && { printf 'Host cs.fake\\n  User u\\n'; exit 0; }\nexit 0\n", { mode: 0o755 });
+  fs.writeFileSync(path.join(binDir, "ssh"), "#!/bin/sh\nfor a; do last=$a; done\ncase \"$last\" in\n" +
+    "  *xargs*) printf '/vyomi-mesh-simulator-1|x|172.18.0.2 |9000/tcp \\n/vyomi-mesh-llm-1|x|172.18.0.3 |9000/tcp \\n/vyomi-i-web|u|172.18.0.5 |22/tcp \\n/vyomi-k3s-0123456789|k|172.18.0.9 |6443/tcp \\n/vyomi-k3s-abcdef0123|k|172.18.0.10 |6443/tcp \\n' ;;\n" +
+    "  *compose.service=simulator*) echo vyomi-mesh-simulator-1 ;;\n  *'docker inspect'*) echo 172.18.0.2 ;;\nesac\nexit 0\n", { mode: 0o755 });
+  const fw = path.join(sb.home, ".vyomi", "forwards"); fs.mkdirSync(fw, { recursive: true });
+  const held = http.createServer(); await new Promise((r) => held.listen(0, "127.0.0.1", r)); const heldPort = held.address().port; servers.push(held);
+  // this process stands in for two running forwards: one to this Mesh's API, one left over from a deleted Codespace
+  fs.writeFileSync(path.join(fw, "1.json"), JSON.stringify({ pid: process.pid, target: "api", local: heldPort, remote: 9000, codespace: "vyomi-mesh-stub" }));
+  fs.writeFileSync(path.join(fw, "2.json"), JSON.stringify({ pid: process.pid, target: "api", local: 9188, remote: 9000, codespace: "zany-engine-old" }));
+  const r = await run(sb, ["mesh", "--json"], { ...PRO, RELAY_PORT: String(await deadPort()), PATH: binDir + path.delimiter + process.env.PATH });
+  assert.equal(r.status, 0, r.stderr + r.stdout); const j = shape(r.json); const by = (n, ty) => j.rows.filter((x) => x.name === n && (!ty || x.type === ty));
+  assert.ok(!j.rows.some((x) => /simulator|llm/.test(x.name)), "Vyomi's own containers are never rows");
+  assert.equal(by("api", "service")[0].connect, `already forwarded: 127.0.0.1:${heldPort}`);
+  const k3s = j.rows.filter((x) => x.type === "k3s").map((x) => x.connect.split(" ").pop().split(":")[0]);
+  assert.equal(k3s.length, 2); assert.notEqual(k3s[0], k3s[1], "two k3s rows never get the same local port");
+  const fwds = by("api", "forward"); assert.equal(fwds.length, 2);
+  assert.ok(fwds.some((x) => x.address === `127.0.0.1:${heldPort}` && !/STALE/.test(x.connect)));
+  assert.match(fwds.find((x) => x.address === "127.0.0.1:9188").connect, /STALE: for Codespace zany-engine-old.*kill \d+/);
+  noSshEdits(sb);
+});
+
 test("usage errors: exit 2, nothing on stdout", async () => {
   const sb = sandbox();
   for (const a of [["bogus", "--json"], ["nano", "k3s", "--json"]]) { const r = await run(sb, a, FREE); assert.equal(r.status, 2, a.join(" ")); assert.equal(r.stdout, ""); }

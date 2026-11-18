@@ -185,7 +185,7 @@ fake_tunnel() { # a stand-in vyomi-tunnel whose `list mesh --json` replays the r
 #!/bin/sh
 case "$*" in
   *list*--json*|*--json*list*) cat <<'J'
-{"schema":1,"rows":[{"where":"mesh","name":"host","type":"host","address":"codespace","connect":"ssh vyomi-mesh"},{"where":"mesh","name":"vyomi-mesh-simulator-1","type":"service","address":"172.23.0.2:9000","connect":"vyomi-tunnel forward vyomi-mesh-simulator-1 9000:9000"}],"notes":[]}
+{"schema":1,"rows":[{"where":"mesh","name":"host","type":"host","address":"codespace","connect":"ssh vyomi-mesh"},{"where":"mesh","name":"api","type":"service","address":"","connect":"vyomi-tunnel forward api 9000:9000"}],"notes":[]}
 J
   ;;
   *--version*) echo "1.3.0" ;;
@@ -215,9 +215,10 @@ stage_homes() {
     vyomi_env '{"cloud":"aws","lang":"python","home":"mesh"}'
   check homes codespace-detected "Codespace home reachable via the tunnel's list" js "$o" \
     'any(h["id"]=="mesh-codespace" and h["reachable"] for h in t(10)["homes"])'
-  check homes codespace-reach "vyomi_reach lists the appliance row" js "$o" '"vyomi-mesh-simulator-1" in json.dumps(t(11))'
+  check homes codespace-reach "vyomi_reach lists the Mesh API row (api); no core container names" js "$o" \
+    '__import__("re").search(r"name\W+api\W", json.dumps(t(11))) and "simulator-1" not in json.dumps(t(11))'
   check homes codespace-forward-hint "hint gives the forward command on a free local port, for the user to run" js "$o" \
-    '__import__("re").search(r"vyomi-tunnel forward vyomi-mesh-simulator-1 \d+:9000", json.dumps(t(10))) and "do not run it yourself" in json.dumps(t(10))'
+    '__import__("re").search(r"vyomi-tunnel forward api \d+:9000", json.dumps(t(10))) and "do not run it yourself" in json.dumps(t(10))'
   check homes codespace-env "home=mesh env is the Codespace (not mesh-local, not the dead VYOMI_MESH_URL)" js "$o" \
     '"mesh-codespace" in json.dumps(t(12)) and "mesh-local" not in json.dumps(t(12)) and "127.0.0.1:9\"" not in json.dumps(t(12)) and "never starts forwards" in json.dumps(t(12))'
 

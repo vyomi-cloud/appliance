@@ -37,7 +37,7 @@ const (
 
 var (
 	homeProbeTimeout   = 1500 * time.Millisecond // each HTTP probe (spec §2)
-	tunnelProbeTimeout = 8 * time.Second         // `vyomi-tunnel list mesh --json` (spec Q5)
+	tunnelProbeTimeout = 20 * time.Second        // `vyomi-tunnel list mesh --json` (spec Q5). Measured 7 s on an AWAKE Codespace (gh ssh setup, India -> US), so 8 s was too tight
 	homeCacheTTL       = 10 * time.Second        // agents call status then env back to back (plan H1.6)
 )
 
@@ -357,6 +357,10 @@ func runTunnelList(ctx context.Context, bin, scope string) (*tunnelList, string)
 
 var forwardTo9000 = regexp.MustCompile(`->\s*(\S+):9000\b`)
 
+// meshAPITarget is the tunnel's name for a Codespace Mesh's API (`vyomi-tunnel forward api <local>:9000`). Vyomi's own
+// containers are not forwardable since the Mesh software protection (MESH-SOFTWARE-PROTECTION.md); the API ports are.
+const meshAPITarget = "api"
+
 // portFree reports whether a forward could own 127.0.0.1:p right now (a variable so tests are independent of the host).
 // Busy = something answers a connect, or 127.0.0.1:p cannot be bound. The connect matters on macOS: there a socket on
 // *:9000 (Docker Desktop publishing the offline appliance) does not stop a bind to 127.0.0.1:9000, so a bind-only test
@@ -407,13 +411,21 @@ func (s *mcpServer) codespaceHome(l *tunnelList, note string) *home {
 		rows = append(rows, map[string]any{"where": r.Where, "name": r.Name, "type": r.Type, "address": r.Address, "connect": r.Connect})
 		if r.Where == "mesh" {
 			h.Reachable = true
-			if apiTarget == "" && r.Type == "service" && strings.HasSuffix(r.Address, ":9000") {
+			switch {
+			case r.Name == meshAPITarget: // vyomi-tunnel >= 1.3: the Mesh API (simulator ports 9000 / 9443 only)
+				apiTarget = meshAPITarget
+			case apiTarget == "" && r.Type == "service" && strings.HasSuffix(r.Address, ":9000"): // older tunnels listed the container itself
 				apiTarget = r.Name
 			}
 		}
 	}
+	var stale []string
 	for _, r := range l.Rows {
 		if r.Type != "forward" {
+			continue
+		}
+		if strings.Contains(r.Connect, "STALE") { // a forward to a Codespace that is not the current Mesh: it reaches nothing current
+			stale = append(stale, clip(r.Address+" "+r.Connect))
 			continue
 		}
 		if m := forwardTo9000.FindStringSubmatch(r.Connect); m != nil && strings.HasPrefix(r.Address, "127.0.0.1:") {
@@ -439,15 +451,18 @@ func (s *mcpServer) codespaceHome(l *tunnelList, note string) *home {
 		}
 		h.Detail["notes"] = notes
 	}
+	if len(stale) > 0 {
+		h.Detail["stale_forwards"] = stale
+	}
 	if apiTarget != "" {
 		h.Detail["api_target"] = apiTarget
 	} else if h.Reachable {
-		h.Detail["api_target"] = "unknown: no service row on port 9000 in `vyomi-tunnel list mesh` (on a Codespace it is vyomi-mesh-simulator-1)"
+		h.Detail["api_target"] = "unknown: no `api` row in `vyomi-tunnel list mesh`: the simulator is not running in the Codespace yet (just started or woken), or vyomi-tunnel is older than 1.3"
 	}
 	if h.Reachable && !h.Serving {
 		target := apiTarget
 		if target == "" {
-			target = "<the service row on port 9000 from vyomi_reach mesh>"
+			target = meshAPITarget
 		}
 		api, tls := forwardPort(9000, 9100), forwardPort(9443, 9543)
 		h.Detail["forward_command"] = fmt.Sprintf("vyomi-tunnel forward %s %d:9000", target, api)
