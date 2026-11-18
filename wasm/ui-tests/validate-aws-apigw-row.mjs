@@ -18,7 +18,8 @@ try {
   await page.locator("#main button").filter({ hasText: /^\s*add\s*Create/i }).first().click();
   await sleep(1200);
   await page.locator("#main button").filter({ hasText: /Create resource|^\s*(rocket_launch)?\s*Create\s*$/ }).first().click();
-  await sleep(3000);
+  // Poll for the row instead of a fixed 3 s sleep: on a slow runner the list had not refreshed yet (flaky FAIL in the nightly baseline).
+  await page.waitForFunction(() => [...document.querySelectorAll("#main table td")].some((c) => c.innerText.trim().startsWith("MyApi")), null, { timeout: 20000 }).catch(() => {});
   const cells = await page.locator("#main table tr").evaluateAll((trs) => trs.map((tr) => [...tr.children].map((c) => c.innerText.trim())));
   const row = cells.find((r) => r.some((c) => c.startsWith("MyApi")));
   check("created API is listed by name", !!row, JSON.stringify(cells.slice(-2)));
