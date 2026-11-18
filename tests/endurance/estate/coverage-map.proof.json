@@ -1,0 +1,505 @@
+{
+ "aws.vpc.dhcp-option-sets": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: dhcp (aws cli)",
+   "sdk": "sdk proof 2026-11-17: dhcp (boto3)",
+   "ui": "ui proof 2026-11-17: dhcp (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.elastic-ips": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: eip (aws cli)",
+   "sdk": "sdk proof 2026-11-17: eip (boto3)",
+   "ui": "ui proof 2026-11-17: eip (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.internet-gateways": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: igw (aws cli)",
+   "sdk": "sdk proof 2026-11-17: igw (boto3)",
+   "ui": "ui proof 2026-11-17: igw (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.managed-prefix-lists": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: prefix_list (aws cli)",
+   "sdk": "sdk proof 2026-11-17: prefix_list (boto3)",
+   "ui": "ui proof 2026-11-17: prefix_list (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.nat-gateways": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: nat (aws cli)",
+   "sdk": "sdk proof 2026-11-17: nat (boto3)",
+   "ui": "ui proof 2026-11-17: nat (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.network-acls": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: nacl (aws cli)",
+   "sdk": "sdk proof 2026-11-17: nacl (boto3)",
+   "ui": "ui proof 2026-11-17: nacl (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.route-tables": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: route_tables (aws cli)",
+   "sdk": "sdk proof 2026-11-17: route_tables (boto3)",
+   "ui": "ui proof 2026-11-17: route_tables (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.security-groups": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sgs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sgs (boto3)",
+   "ui": "ui proof 2026-11-17: sgs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.subnets": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: subnets (aws cli)",
+   "sdk": "sdk proof 2026-11-17: subnets (boto3)",
+   "ui": "ui proof 2026-11-17: subnets (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "aws.vpc.vpcs": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: vpc (aws cli)",
+   "sdk": "sdk proof 2026-11-17: vpc (boto3)",
+   "ui": "ui proof 2026-11-17: vpc (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "bedrock.agents": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: bedrock (aws cli)",
+   "sdk": "sdk proof 2026-11-17: bedrock (boto3)",
+   "ui": "ui proof 2026-11-17: bedrock (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "bedrock.guardrails": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: bedrock (aws cli)",
+   "sdk": "sdk proof 2026-11-17: bedrock (boto3)",
+   "ui": "ui proof 2026-11-17: bedrock (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "dynamodb.table.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ddb (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ddb (boto3)",
+   "ui": "ui proof 2026-11-17: ddb (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "dynamodb.table.indexes": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ddb (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ddb (boto3)",
+   "ui": "ui proof 2026-11-17: ddb (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "dynamodb.table.pitr": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ddb (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ddb (boto3)",
+   "ui": "ui proof 2026-11-17: ddb (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "dynamodb.table.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ddb (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ddb (boto3)",
+   "ui": "ui proof 2026-11-17: ddb (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "dynamodb.table.ttl": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ddb (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ddb (boto3)",
+   "ui": "ui proof 2026-11-17: ddb (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ec2.elastic-ips": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: eip (aws cli)",
+   "sdk": "sdk proof 2026-11-17: eip (boto3)",
+   "ui": "ui proof 2026-11-17: eip (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ec2.iam-instance-profiles": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: instance_profile (aws cli)",
+   "sdk": "sdk proof 2026-11-17: instance_profile (boto3)"
+  }
+ },
+ "ec2.key-pairs": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ec2_misc (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ec2_misc (boto3)",
+   "ui": "ui proof 2026-11-17: ec2_misc (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ec2.launch-templates": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ec2_misc (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ec2_misc (boto3)",
+   "ui": "ui proof 2026-11-17: ec2_misc (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ec2.security-groups": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sgs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sgs (boto3)",
+   "ui": "ui proof 2026-11-17: sgs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ec2.volumes": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ec2_misc (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ec2_misc (boto3)",
+   "ui": "ui proof 2026-11-17: ec2_misc (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ecr.lifecycle": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ecr (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ecr (boto3)",
+   "ui": "ui proof 2026-11-17: ecr (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "ecr.repositories": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: ecr (aws cli)",
+   "sdk": "sdk proof 2026-11-17: ecr (boto3)",
+   "ui": "ui proof 2026-11-17: ecr (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "eventbridge.bus.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: events (aws cli)",
+   "sdk": "sdk proof 2026-11-17: events (boto3)",
+   "ui": "ui proof 2026-11-17: events (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "eventbridge.rule.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: events (aws cli)",
+   "sdk": "sdk proof 2026-11-17: events (boto3)",
+   "ui": "ui proof 2026-11-17: events (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "eventbridge.rule.targets": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: events (aws cli)",
+   "sdk": "sdk proof 2026-11-17: events (boto3)",
+   "ui": "ui proof 2026-11-17: events (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.policy.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_policy (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_policy (boto3)",
+   "ui": "ui proof 2026-11-17: iam_policy (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.role.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_role (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_role (boto3)",
+   "ui": "ui proof 2026-11-17: iam_role (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.role.permissions": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_role (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_role (boto3)",
+   "ui": "ui proof 2026-11-17: iam_role (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.role.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_role (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_role (boto3)",
+   "ui": "ui proof 2026-11-17: iam_role (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.role.trust-policy": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_role (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_role (boto3)",
+   "ui": "ui proof 2026-11-17: iam_role (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.user.access-keys": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_user (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_user (boto3)",
+   "ui": "ui proof 2026-11-17: iam_user (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.user.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_user (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_user (boto3)",
+   "ui": "ui proof 2026-11-17: iam_user (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.user.groups": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_user (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_user (boto3)",
+   "ui": "ui proof 2026-11-17: iam_user (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "iam.user.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: iam_user (aws cli)",
+   "sdk": "sdk proof 2026-11-17: iam_user (boto3)",
+   "ui": "ui proof 2026-11-17: iam_user (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "kms.key.aliases": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: kms (aws cli)",
+   "sdk": "sdk proof 2026-11-17: kms (boto3)",
+   "ui": "ui proof 2026-11-17: kms (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "kms.key.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: kms (aws cli)",
+   "sdk": "sdk proof 2026-11-17: kms (boto3)",
+   "ui": "ui proof 2026-11-17: kms (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "kms.key.rotation": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: kms (aws cli)",
+   "sdk": "sdk proof 2026-11-17: kms (boto3)",
+   "ui": "ui proof 2026-11-17: kms (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "kms.key.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: kms (aws cli)",
+   "sdk": "sdk proof 2026-11-17: kms (boto3)",
+   "ui": "ui proof 2026-11-17: kms (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "rds.instance.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: rds (aws cli)",
+   "sdk": "sdk proof 2026-11-17: rds (boto3)",
+   "ui": "ui proof 2026-11-17: rds (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "rds.instance.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: rds (aws cli)",
+   "sdk": "sdk proof 2026-11-17: rds (boto3)",
+   "ui": "ui proof 2026-11-17: rds (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "rds.parameter-groups": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: rds (aws cli)",
+   "sdk": "sdk proof 2026-11-17: rds (boto3)",
+   "ui": "ui proof 2026-11-17: rds (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "rds.snapshot.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: rds (aws cli)",
+   "sdk": "sdk proof 2026-11-17: rds (boto3)",
+   "ui": "ui proof 2026-11-17: rds (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "rds.subnet-groups": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: rds (aws cli)",
+   "sdk": "sdk proof 2026-11-17: rds (boto3)",
+   "ui": "ui proof 2026-11-17: rds (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.cors": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.encryption": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.lifecycle": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.ownership": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.public-access-block": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.bucket.versioning": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "s3.object.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: s3 (aws cli)",
+   "sdk": "sdk proof 2026-11-17: s3 (boto3)",
+   "ui": "ui proof 2026-11-17: s3 (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "secretsmanager.secret.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: secret (aws cli)",
+   "sdk": "sdk proof 2026-11-17: secret (boto3)",
+   "ui": "ui proof 2026-11-17: secret (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "secretsmanager.secret.deletion": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: secret (aws cli)",
+   "sdk": "sdk proof 2026-11-17: secret (boto3)",
+   "ui": "ui proof 2026-11-17: secret (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "secretsmanager.secret.encryption": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: secret (aws cli)",
+   "sdk": "sdk proof 2026-11-17: secret (boto3)",
+   "ui": "ui proof 2026-11-17: secret (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "secretsmanager.secret.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: secret (aws cli)",
+   "sdk": "sdk proof 2026-11-17: secret (boto3)",
+   "ui": "ui proof 2026-11-17: secret (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "secretsmanager.secret.versions": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: secret (aws cli)",
+   "sdk": "sdk proof 2026-11-17: secret (boto3)",
+   "ui": "ui proof 2026-11-17: secret (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sns.subscription.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sns (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sns (boto3)",
+   "ui": "ui proof 2026-11-17: sns (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sns.subscription.filter-policy": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sns (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sns (boto3)",
+   "ui": "ui proof 2026-11-17: sns (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sns.subscription.raw-delivery": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sns (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sns (boto3)",
+   "ui": "ui proof 2026-11-17: sns (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sns.topic.access-policy": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sns.topic.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sns (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sns (boto3)",
+   "ui": "ui proof 2026-11-17: sns (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sns.topic.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sns (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sns (boto3)",
+   "ui": "ui proof 2026-11-17: sns (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.queue.attributes": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.queue.crud": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.queue.dlq-redrive": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.queue.fifo": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.queue.redrive-allow-policy": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.queue.tags": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sqs (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sqs (boto3)",
+   "ui": "ui proof 2026-11-17: sqs (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ },
+ "sqs.sns-subscriptions": {
+  "proof": {
+   "cli": "cli proof 2026-11-17: sns (aws cli)",
+   "sdk": "sdk proof 2026-11-17: sns (boto3)",
+   "ui": "ui proof 2026-11-17: sns (Nano v4 AWS console, Playwright, mesh-homed space)"
+  }
+ }
+}

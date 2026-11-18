@@ -550,8 +550,7 @@ def _create_repo(store, project, loc, query, body, kms_store=None) -> GcpRespons
                 if err:
                     return _err(400, err)
             repo[k] = body[k]
-    if fmt == "DOCKER":
-        repo.setdefault("dockerConfig", {"immutableTags": False})
+    # F311: a docker repository without dockerConfig reports none (the provider planned a phantom docker_config block)
     store.repos[name] = repo
     store.persist()
     return _json(200, _operation(store, project, loc, "Repository", _repo_view(repo)))

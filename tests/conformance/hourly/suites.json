@@ -1988,6 +1988,14 @@
       "timeout": 300
     },
     {
+      "id": "gcp-gateway-function-backend-core",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "core",
+      "cmd": "python3 tests/conformance/test_gcp_gateway_function_backend.py",
+      "timeout": 60
+    },
+    {
       "id": "offline-post-create-gcp-apigateway-invoke",
       "target": "offline",
       "cloud": "gcp",

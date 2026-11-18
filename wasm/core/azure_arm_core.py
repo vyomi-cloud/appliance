@@ -1877,7 +1877,7 @@ class AzureArm:
                 and chain[0].lower() == "roledefinitions" and len(chain) == 1):
             if method != "GET":
                 return _err(405, "MethodNotAllowed", "Collection supports GET only.")
-            return self._role_definitions_list(sub)
+            return self._role_definitions_list(sub, query)
 
         # Microsoft Defender for Cloud (Microsoft.Security): subscription / resource-group scope,
         # computed live over this state (core/azure_security_core.py).
@@ -3494,7 +3494,18 @@ class AzureArm:
         return [rec for rec in self.state.values()
                 if rec.get("_type", "").lower() == "microsoft.authorization/roleassignments" and rec.get("_sub") == sub]
 
-    def _role_definitions_list(self, sub):
+    def _role_definitions_list(self, sub, query=None):
+        flt = str((query or {}).get("$filter") or (query or {}).get("%24filter") or "")
+        if flt:
+            # azurerm resolves `role_definition_name` with $filter=roleName eq 'Reader' and uses the FIRST row's id as the
+            # roleDefinitionId, so a filtered list must answer with real GUID-named built-ins (endurance F402)
+            import re as _re
+            val = [dict(b) for b in iam_builtin_roles(sub)]
+            allv = self._role_definitions_list(sub)["body"]["value"]
+            val += [v for v in allv if v["properties"]["type"] == "CustomRole"]
+            for fld, want in _re.findall(r"(roleName|type)\s+eq\s+'([^']*)'", flt):
+                val = [v for v in val if str(v["properties"].get(fld, "")).lower() == want.lower()]
+            return _ok({"value": val})
         roles = self._role_catalog(sub)
         counts = {}
         for rec in self._role_assignments(sub):
@@ -5109,7 +5120,8 @@ class AzureArm:
             rec["properties"] = {"provisioningState": "Succeeded"}
             self.state[key] = rec
             self._record_activity(rid, "Microsoft.Resources/resourceGroups/write", sub)
-            return _ok(_view(rec), status=200)
+            # real ARM answers 201 Created for a new group, 200 for an update (endurance F400)
+            return _ok(_view(rec), status=200 if prior else 201)
 
         if method == "DELETE":
             existed = self.state.pop(key, None) is not None

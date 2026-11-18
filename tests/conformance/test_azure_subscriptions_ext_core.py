@@ -39,7 +39,7 @@ def run() -> int:
     _check("public IP usage starts at zero", next(row for row in r["body"]["value"] if row["name"]["value"] == "PublicIPAddresses")["currentValue"] == 0)
 
     r = arm.handle("PUT", _sub("/resourceGroups/quotarg"), {"api-version": AV}, {"location": "eastus"})
-    _check("quota test rg created", r["status"] == 200)
+    _check("quota test rg created", r["status"] in (200, 201))
     QUOTA_LIMIT = 100
     for i in range(QUOTA_LIMIT):
         r = arm.handle("PUT", _sub(f"/resourceGroups/quotarg/providers/Microsoft.Compute/virtualMachines/vm{i}"),

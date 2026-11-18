@@ -407,7 +407,8 @@ _CMEK_RE = re.compile(r"^projects/[^/]+/locations/([^/]+)/keyRings/[^/]+/cryptoK
 def _validate_replication(replication) -> str | None:
     if not isinstance(replication, dict) or not replication:
         return None
-    has_auto, has_um = "automatic" in replication, "userManaged" in replication
+    # F315: the Terraform provider sends a null/absent counterpart; only a present value counts
+    has_auto, has_um = replication.get("automatic") is not None, replication.get("userManaged") is not None
     if has_auto and has_um:
         return "replication must set exactly one of automatic or userManaged, not both."
     if has_um:

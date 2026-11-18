@@ -1995,6 +1995,18 @@ def dispatch(s3, method, path, query, headers, body, lam=None):
         except _Err as e:
             return _err_resp(e)
     r = _dispatch_inner(s3, method, path, query, headers, body, lam)
+    # bedrock-agent List* operations are POST on a trailing-slash collection (ListAgents = POST /agents/, ListAgentAliases = POST
+    # /agents/{id}/agentaliases/ ...) with maxResults/nextToken in the JSON body (endurance F501). Knowledge-base lists are already POST,
+    # so the GET form is only tried when the POST was not recognised.
+    if method == "POST" and r.get("status") in (404, 405) and path.split("?", 1)[0].endswith("/") and not path.startswith("/_vyomi"):
+        try:
+            _lb = json.loads(body) if body else {}
+        except ValueError:
+            _lb = None
+        if isinstance(_lb, dict) and set(_lb) <= {"maxResults", "nextToken"}:
+            r2 = _dispatch_inner(s3, "GET", path, {**(query or {}), **{k: str(v) for k, v in _lb.items()}}, headers, b"", lam)
+            if r2.get("status") not in (404, 405):
+                r = r2
     # create-time tags: PUT /agents/ | /agents/{id}/agentaliases/ | /knowledgebases/ carry `tags` (map) -> the new resource's ARN
     if method == "PUT" and 200 <= r.get("status", 500) < 300 and re.match(r"^/(agents|agents/[^/]+/agentaliases|knowledgebases)$", npath.lower()):
         try:

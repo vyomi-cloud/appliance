@@ -69,7 +69,7 @@ def run() -> int:
     # ── sinks ────────────────────────────────────────────────────────────
     st, b = call("POST", "/v2/projects/demo/sinks", body={
         "name": "err-sink", "destination": "storage.googleapis.com/my-bucket", "filter": 'severity>="ERROR"'})
-    _check("sinks.create 200", st == 200 and b["name"] == "projects/demo/sinks/err-sink")
+    _check("sinks.create 200", st == 200 and b["name"] == "err-sink")  # F307b: wire name is the short id
     _check("sinks.create matchedCount reflects past entries' matching filter", b["matchedCount"] == 0)
 
     st, b = call("POST", "/v2/projects/demo/sinks", body={"name": "bad-sink", "destination": "not-a-real-destination"})
@@ -80,7 +80,7 @@ def run() -> int:
     _check("sinks.create duplicate -> 409", st == 409 and b["error"]["status"] == "ALREADY_EXISTS")
 
     st, b = call("GET", "/v2/projects/demo/sinks")
-    _check("sinks.list has err-sink", st == 200 and any(s["name"].endswith("/err-sink") for s in b["sinks"]))
+    _check("sinks.list has err-sink", st == 200 and any(s["name"] == "err-sink" for s in b["sinks"]))
 
     st, b = call("POST", "/v2/entries:write", body={"logName": "projects/demo/logs/app", "entries": [{"severity": "ERROR", "textPayload": "another"}]})
     _check("second write 200", st == 200)
@@ -97,7 +97,7 @@ def run() -> int:
 
     # ── log-based metrics ────────────────────────────────────────────────
     st, b = call("POST", "/v2/projects/demo/metrics", body={"name": "error-count", "filter": 'severity>="ERROR"', "description": "errors"})
-    _check("metrics.create 200", st == 200 and b["name"] == "projects/demo/metrics/error-count")
+    _check("metrics.create 200", st == 200 and b["name"] == "error-count")   # F307: wire name is the short id
 
     st, b = call("POST", "/v2/projects/demo/metrics", body={"name": "no-filter"})
     _check("metrics.create requires filter -> 400", st == 400)

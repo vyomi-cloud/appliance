@@ -34,7 +34,7 @@ def run() -> int:
     st = fs.FirestoreStore()
     _check("native default DB refuses the Datastore API", call(st, "lookup", {"keys": [key(("A", "x"))]})[0] == 400)
     r = fs.dispatch(st, "POST", f"/v1/projects/{P}/databases", {"databaseId": "(default)"}, {}, json.dumps({"type": "DATASTORE_MODE", "locationId": "us-central1"}).encode())
-    _check("datastore-mode database created", r.status == 200 and json.loads(r.body)["type"] == "DATASTORE_MODE")
+    _check("datastore-mode database created", r.status == 200 and json.loads(r.body)["response"]["type"] == "DATASTORE_MODE")
     _check("native api refused? n/a; lookup on empty DB ok", call(st, "lookup", {"keys": [key(("Task", "t1"))]})[1]["missing"][0]["entity"]["key"]["path"][0]["name"] == "t1")
 
     def commit(muts, mode="NON_TRANSACTIONAL", **kw):

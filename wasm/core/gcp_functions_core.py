@@ -213,7 +213,10 @@ def _v2_to_meta(ctx, project, location, fid, body, gen=2, prior=None):
                               "maxInstanceRequestConcurrency": int(sc.get("maxInstanceRequestConcurrency") or 1),
                               "serviceAccountEmail": sc.get("serviceAccountEmail") or "%s-compute@developer.gserviceaccount.com" % R.project_number(project),
                               "allTrafficOnLatestRevision": sc.get("allTrafficOnLatestRevision", True),
-                              "vpcConnector": sc.get("vpcConnector", ""), "vpcConnectorEgressSettings": sc.get("vpcConnectorEgressSettings", "PRIVATE_RANGES_ONLY")},
+                              "vpcConnector": sc.get("vpcConnector", ""),
+                              # F318: the egress setting is reported only when a connector (or an explicit value) is present
+                              **({"vpcConnectorEgressSettings": sc.get("vpcConnectorEgressSettings", "PRIVATE_RANGES_ONLY")}
+                                 if (sc.get("vpcConnector") or sc.get("vpcConnectorEgressSettings")) else {})},
             "eventTrigger": et, "code": code,
             "createTime": (prior or {}).get("createTime", now), "updateTime": now,
             "versionId": str(int((prior or {}).get("versionId", 0)) + 1)}

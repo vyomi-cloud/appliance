@@ -29,11 +29,33 @@ def token(cap_id):
     return p[1] if p[0] in ("aws", "gcp", "azure") else p[0]
 
 
+def merge_proofs(cmap):
+    """Additive (endurance-proof): fold SDK/CLI/UI proofs into the map. Sources, both optional:
+      estate/coverage-map.proof.json  {id: {"proof": {"sdk": "...", ...}}}  (written by proof/run_proof.sh, only for what passed)
+      proof/proof.json                {id: {"sdk": "pass|fail|n/a", "cli": ..., "ui": ...}}  (only "pass" counts)
+    A capability that is excused or unmapped is left alone."""
+    pm = os.path.join(HERE, "estate", "coverage-map.proof.json")
+    if os.path.exists(pm):
+        for k, v in json.load(open(pm)).items():
+            e = cmap.get(k)
+            if e and "excuse" not in e:
+                e.setdefault("proof", {}).update({a: b for a, b in (v.get("proof") or {}).items() if b})
+    pj = os.environ.get("ENDURANCE_PROOF_JSON") or os.path.join(HERE, "proof", "proof.json")
+    if os.path.exists(pj):
+        for k, v in json.load(open(pj)).items():
+            e = cmap.get(k)
+            if e and "excuse" not in e:
+                for kind in ("sdk", "cli", "ui"):
+                    if v.get(kind) == "pass":
+                        e.setdefault("proof", {})[kind] = "proof.json"
+
+
 def main():
     manifest = json.load(open(os.path.join(HERE, "manifest.json")))
     mp = os.path.join(HERE, "estate", "coverage-map.json")
     cmap = json.load(open(mp)) if os.path.exists(mp) else {}
     ids = {r["id"] for r in manifest["rows"]}
+    merge_proofs(cmap)
     problems = [f"stale map entry (not in manifest): {k}" for k in cmap if k not in ids]
     stages = json.load(open(os.path.join(HERE, "estate", "stages.json")))["stages"]
     stage_of = {t: st for st, ts in stages.items() for t in ts}

@@ -368,10 +368,9 @@ def create_instance(store, project, location, iid, payload):
         raise _E(400, "INVALID_ARGUMENT", "Invalid transitEncryptionMode %r." % tmode)
     if "labels" in spec:
         _check_labels(spec["labels"])
-    cfg = dict(DEFAULT_CONFIGS)
-    cfg.update(_check_configs(spec.get("redisConfigs") or {}))
+    cfg = dict(_check_configs(spec.get("redisConfigs") or {}))   # F305: only what the caller set is reported back
     inst = {
-        "name": full, "displayName": spec.get("displayName") or iid, "labels": spec.get("labels") or {},
+        "name": full, **({"displayName": spec["displayName"]} if spec.get("displayName") else {}), "labels": spec.get("labels") or {},
         "locationId": zone, "alternativeLocationId": alt or "", "redisVersion": ver,
         "reservedIpRange": spec.get("reservedIpRange") or "10.%d.0.0/29" % (int(hashlib.sha1(full.encode()).hexdigest()[:2], 16) % 200 + 10),
         "currentLocationId": zone, "createTime": _ts(), "state": "READY", "statusMessage": "",

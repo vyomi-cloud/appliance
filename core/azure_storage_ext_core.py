@@ -71,6 +71,12 @@ def apply_endpoints(rec: dict) -> None:
     rp = props.get("routingPreference") or {}
     name = rec.get("name", "")
     pe = props.setdefault("primaryEndpoints", {})
+    import os as _os
+    _sfx = _os.environ.get("VYOMI_AZURE_STORAGE_SUFFIX", "").strip()
+    if _sfx and name:
+        # host-style endpoints (https://{acct}.blob.<suffix>/) like real Azure; azurerm/giovanni refuse a path-style endpoint (endurance F407)
+        for svc in ("blob", "queue", "table", "file", "dfs", "web"):
+            pe[svc] = f"https://{name}.{svc}.{_sfx}/"
     # Vyomi is single-origin: both route-specific endpoints resolve to the SAME account data path.
     for flag, key in (("publishMicrosoftEndpoints", "microsoftEndpoints"), ("publishInternetEndpoints", "internetEndpoints")):
         if rp.get(flag):

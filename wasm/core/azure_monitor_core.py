@@ -628,6 +628,9 @@ def _component_props(props, old=None):
            "AppId": app_id, "InstrumentationKey": ik, "Name": p.get("Name") or "",
            "ConnectionString": f"InstrumentationKey={ik};IngestionEndpoint=/_obs/;LiveEndpoint=/_obs/",
            "TenantId": "00000000-0000-0000-0000-000000000000", "provisioningState": "Succeeded"}
+    for _k in ("SamplingPercentage", "DisableIpMasking", "ImmediatePurgeDataOn30Days", "ForceCustomerStorageForProfiler", "DisableLocalAuth"):
+        if p.get(_k) is not None:
+            out[_k] = p[_k]       # echoed like real ARM; azurerm reads sampling_percentage etc. back (endurance F423)
     if p.get("WorkspaceResourceId"):
         out["WorkspaceResourceId"] = str(p["WorkspaceResourceId"])
     return out
@@ -1429,6 +1432,12 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
     rec = state.get(rid.lower())
     rest = chain[2:]
     if rest:
+        if low == "workbooks" and method == "POST" and rest[0].lower() == "render":
+            # The workbook renderer (core/azure_workbooks_core). Azure's arm core intercepts this verb first; the offline wire reaches
+            # this core directly, so it delegates here too instead of answering ResourceTypeNotSupported.
+            from core import azure_workbooks_core as _wbk
+            r = _wbk.render(state, sub, rg, name, payload)
+            return _ok(r["body"], status=r["status"], headers=r.get("headers"))   # the offline host reads lro/rid/verb off every dispatch result
         if rec is None:
             raise _not_found(low, name, rg)
         if low == "actiongroups":

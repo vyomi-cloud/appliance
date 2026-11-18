@@ -785,6 +785,19 @@ def dispatch(store: AzureBlobStore, method: str, path: str,
             enabled = _changefeed_enabled(arm_state, acct)
             rows = store.change_feed.get(acct, []) if enabled else []
             return _json_response(200, {"value": rows, "enabled": enabled})
+        if comp == "properties" and restype == "service":
+            # Get/Set Blob Service Properties (azurerm waits on this data-plane call after creating an account) (endurance F403)
+            if method == "PUT":
+                return Response(status=202, headers=_base_headers(), body=b"", media_type=None)
+            if method in ("GET", "HEAD"):
+                return _xml(200, '<?xml version="1.0" encoding="utf-8"?><StorageServiceProperties>'
+                                 '<Logging><Version>1.0</Version><Read>false</Read><Write>false</Write><Delete>false</Delete>'
+                                 '<RetentionPolicy><Enabled>false</Enabled></RetentionPolicy></Logging>'
+                                 '<HourMetrics><Version>1.0</Version><Enabled>false</Enabled><RetentionPolicy><Enabled>false</Enabled></RetentionPolicy></HourMetrics>'
+                                 '<MinuteMetrics><Version>1.0</Version><Enabled>false</Enabled><RetentionPolicy><Enabled>false</Enabled></RetentionPolicy></MinuteMetrics>'
+                                 '<Cors />'
+                                 '<DeleteRetentionPolicy><Enabled>false</Enabled></DeleteRetentionPolicy>'
+                                 '<StaticWebsite><Enabled>false</Enabled></StaticWebsite></StorageServiceProperties>')
         return _err(400, "InvalidUri", f"Unsupported account operation {method}")
 
     display = segs[0]

@@ -53,7 +53,9 @@ def main():
         sys.platform, urllib.request.urlopen = real_platform, real_open
     dl = d["deliveries"][0]
     assert d["delivered"] == 1 and dl["attemptCount"] == 2 and [a["ok"] for a in dl["attempts"]] == [False, True], d
+    print("[PASS] first attempt fails (503), the retry is DELIVERED (attemptCount 2)")
     assert len(seen) == 2 and seen[0][3] == "google.cloud.pubsub.topic.v1.messagePublished"
+    print("[PASS] both attempts went through the bridge as messagePublished CloudEvents")
     print("eventarc nano http delivery: ok (RETRYING after 503, DELIVERED after retry, via the bridge)")
 
 

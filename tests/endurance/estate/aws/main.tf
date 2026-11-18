@@ -1,7 +1,10 @@
 # Vyomi Reference Estate - AWS. One application, composed from stages. Every resource is mapped to capability ids in
 # ../../coverage-map.json; `tests/endurance/run_estate.sh estate/aws <endpoint>` is the release check.
 terraform {
-  required_providers { aws = { source = "hashicorp/aws", version = "~> 5.0" } }
+  required_providers {
+    aws = { source = "hashicorp/aws", version = "~> 5.0" }
+    archive = { source = "hashicorp/archive" }
+  }
 }
 
 variable "endpoint" { default = "http://host.docker.internal:9000" }
@@ -29,6 +32,10 @@ provider "aws" {
     eventbridge    = var.endpoint
     bedrock        = var.endpoint
     bedrockagent   = var.endpoint
+    lambda         = var.endpoint
+    apigateway     = var.endpoint
+    apigatewayv2   = var.endpoint
+    sfn            = var.endpoint
     cloudwatch     = var.endpoint
     cloudtrail     = var.endpoint
     ssm            = var.endpoint
@@ -62,6 +69,17 @@ module "ai" {
   source      = "./modules/stage6-ai"
   kms_key_arn = module.network_identity.kms_key_arn
   log_bucket  = module.compute_data.bucket
+}
+
+module "serverless" {
+  source            = "./modules/stage5-serverless"
+  kms_key_arn       = module.network_identity.kms_key_arn
+  orders_table_name = module.compute_data.orders_table_name
+  orders_table_arn  = module.compute_data.orders_table_arn
+  orders_queue_arn  = module.messaging.orders_queue_arn
+  dlq_arn           = module.messaging.dlq_arn
+  topic_arn         = module.messaging.topic_arn
+  bus_name          = module.messaging.bus_name
 }
 
 module "observability" {

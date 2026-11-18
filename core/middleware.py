@@ -379,6 +379,19 @@ async def azure_blob_dispatch_middleware(request, call_next):
         _m_kv = re.match(r"^([a-z0-9][a-z0-9-]*)\.vault\.", host)
         _m_q = re.match(r"^([a-z0-9][a-z0-9-]*)\.queue\.", host)
         _m_ac = re.match(r"^([a-z0-9][a-z0-9-]*)\.azconfig\.", host)   # App Configuration: {store}.azconfig.*
+        _m_b = re.match(r"^([a-z0-9][a-z0-9-]*)\.blob\.", host)         # host-style blob/table endpoints (endurance F407)
+        _m_t = re.match(r"^([a-z0-9][a-z0-9-]*)\.table\.", host)
+        if _m_q and os.environ.get("VYOMI_AZURE_STORAGE_SUFFIX") and not path.startswith(("/azure-data", "/_wire")):
+            new_path = "/azure-data/queue-core" + path     # host-style queue endpoint -> queue core (endurance F407)
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+            return await call_next(request)
+        if (_m_b or _m_t) and not path.startswith(("/azure-data", "/_wire")):
+            _nm = (_m_b or _m_t).group(1)
+            new_path = ("/azure-data/blob/" if _m_b else "/azure-data/table/") + _nm + ("" if path == "/" else path)
+            request.scope["path"] = new_path
+            request.scope["raw_path"] = new_path.encode("utf-8")
+            return await call_next(request)
         if (_m_kv or _m_q or _m_ac) and not path.startswith("/azure-data"):
             kind, name = (("keyvault", _m_kv.group(1)) if _m_kv else
                           ("appconfig", _m_ac.group(1)) if _m_ac else ("queue", _m_q.group(1)))
@@ -479,6 +492,19 @@ def _meter_storage_write(request, response, orig_path: str) -> None:
         pass
 
 
+def _collapse_doubled_version(request):
+    path = request.scope.get("path", "")
+    # F300: google-provider clients that append their API version to a *_custom_endpoint already ending in /v1/
+    # (KMS cryptoKeyVersions on destroy, Cloud SQL instances) produce /v1/v1/...; real endpoints never see this, so collapse it.
+    for _ver in ("/v1/v1/", "/v1beta1/v1beta1/", "/v2/v2/", "/sql/v1beta4/sql/v1beta4/"):
+        if path.startswith(_ver):
+            path = path[len(_ver) // 2:]
+            request.scope["path"] = path
+            request.scope["raw_path"] = path.encode()
+            break
+    return path
+
+
 async def _gcp_normalize_project(request):
     """Every GCP request names its project by ID, number or a legacy id; map it
     onto the space's project ID (path, query, JSON body) before any handler sees
@@ -521,7 +547,7 @@ async def provider_api_alias_middleware(request, call_next):
 
 
 async def _provider_api_alias(request, call_next):
-    path = request.scope.get("path", "")
+    path = _collapse_doubled_version(request)
     _gcp_capture_public_base(request)
     if _is_azure_native_path(path):
         provider = "azure"
@@ -1076,12 +1102,15 @@ def register_middleware(app) -> None:
     else:
         origins = ["*"]
     class _AppCors(CORSMiddleware):
-        """The app-wide CORS layer must not answer a Storage Queue/Table preflight itself: those are governed by the storage
+        """The app-wide CORS layer must not answer a Storage Queue/Table or Cosmos preflight itself: those are governed by the storage
         account's own service-properties CORS rules (core/azure_storage_svc_core, 403 CorsPreflightFailure on no match)."""
 
         async def __call__(self, scope, receive, send):
             if scope.get("type") == "http" and str(scope.get("path", "")).startswith(("/azure-data/queue-core", "/azure-data/tableroot")):
                 return await self.app(scope, receive, send)
+            if scope.get("type") == "http" and scope.get("method") == "OPTIONS" and str(scope.get("path", "")).startswith("/dbs") \
+                    and any(k == b"x-vyomi-account" for k, _ in (scope.get("headers") or [])):
+                return await self.app(scope, receive, send)   # a Cosmos data-plane preflight is answered from the account's own properties.cors rules (403 on no match)
             return await super().__call__(scope, receive, send)
 
     app.add_middleware(

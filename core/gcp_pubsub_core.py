@@ -1531,10 +1531,10 @@ def _get_schema(store, name: str, query: dict) -> PubsubResponse:
     schema = _schema_store(store).get(name)
     if not schema:
         raise PubsubError(404, "NOT_FOUND", f"Schema not found: {name}")
-    view = (query or {}).get("view", "BASIC")
+    view = (query or {}).get("view", "FULL")   # F304: schemas.get with no view returns the definition (only list defaults to BASIC)
     if isinstance(view, list):
-        view = view[0] if view else "BASIC"
-    return _json(200, _schema_view(schema, full=(view == "FULL")))
+        view = view[0] if view else "FULL"
+    return _json(200, _schema_view(schema, full=(view != "BASIC")))
 
 
 def _list_schemas(store, project: str, query: dict) -> PubsubResponse:

@@ -4,6 +4,70 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.7] — 2026-11-18
+
+Integration release: the MCP v4 work and the Service Bus AMQP fix join v4, the Nano bundle is rebuilt in sync with the offline cores, and the endurance fixes from 4.0.5/4.0.6 reach the portal's Nano bundle.
+
+### Added
+
+- **[MCP]** `vyomi mcp` v4 knowledge: Nano and Mesh homes alongside offline, `vyomi-tunnel mcp`, Claude plugin 4.1.0, generated MCP knowledge (1,472 capabilities, 6,858 operations). The tunnel source is 1.3.0; it ships to npm through the separate `tunnel-v*` release, not this one.
+
+### Fixes
+
+- **[Azure]** Service Bus: the AMQP-unsupported metadata is corrected (the simulator speaks AMQP 1.0 on :5672; :5671/AMQPS is not TLS-wired yet) and the AMQP ports are published on the Docker/Homebrew tier. AppConfiguration, Search and Support `checkNameAvailability` now reach their cores.
+- **[GCP]** API Gateway backends that name a Cloud Function's `cloudfunctions.net` URL reach the simulated function; the `vm_ssh` probe creates the VM with a boot disk.
+- **[Nano]** `wasm/core` is rebuilt (`azure_monitor_core`, `gcp_wire_ext`), clearing the `wasm-core-in-sync` check that failed on 4.0.6.
+- **[Tests]** The Azure offline-wiring SDK tests skip when the Azure SDK is not installed instead of failing.
+
+### Known limits
+
+- Tunnel 1.3.0 is not on npm yet (`latest` is 1.2.5); the Homebrew formula still pins 1.2.5 until that release.
+- AMQPS (:5671) is not TLS-wired.
+
+## [4.0.6] — 2026-11-18
+
+Fix release. Release checks had been failing since 4.0.0 because they ran v3 tests against a headless v4 appliance, and the offline simulator had real gaps the checks exposed. The offline CLI cross-check (real aws/gcloud/az CLIs against the image) now passes 84 of 84.
+
+### Fixes
+
+- **[AWS]** DynamoDB: the console table list no longer deletes tables created with the CLI/SDK (it synced against an unused DynamoDB Local and dropped every table as "deleted there"). Tables now show both ways.
+- **[GCP]** Cloud DNS, Cloud Functions, Security Command Center and logging-sink requests now reach the shared router instead of falling through to the S3 catch-all.
+- **[Azure]** Monitor workbooks render; tenant-scoped Resource Graph queries work; the Defender audit feed records offline-served writes; Service Bus network rules, diagnostic settings and Cosmos CORS preflight work offline.
+
+### Changed
+
+- **[CI]** Release checks run the branch the release is built on (`v4-on-main` for v4+, not v3 `main`). v4+ skips the offline console UI suites and the Windows MSI / E2E checks (headless since 4.0). The v4 checklist waits for Docker Publish before checking the image.
+
+### Known limits
+
+- Nano-side checks `azure-cognitiveservices`, `gcp-container`, Nano `azure-defender-automation` / `azure-netenforce` and `nano-ui-default-cloud` were not re-verified in this release.
+- The offline fixes were verified on the 4.0.4 image with these changes applied, not on a freshly built 4.0.6 image.
+
+## [4.0.5] — 2026-11-18
+
+Fix release. **37 simulator fixes** found by the vyomi-endurance Terraform estate (serverless, observability and lifecycle stages on AWS; the first complete GCP estate) and by its SDK / CLI / console proof layers, plus Nano and Mesh UI changes.
+
+### Fixes
+
+- **[AWS]** Lambda: `Publish=true` publishes version 1 with its layers/KMS/tracing/DLQ; KMS key and empty environment round-trip; functions addressable by name, qualifier or ARN; AddPermission/GetPolicy honour the qualifier and function-URL auth type; event-source-mapping and invoke-config times are epoch numbers; GetFunction returns concurrency; code-signing config returns 200 when none is attached (F101-F107).
+- **[AWS]** API Gateway v1 timestamps are epoch numbers on the wire and stage tags persist; Step Functions ARNs use account 123456789012; IAM AWS-managed policy ARNs resolve (F100, F108, F109).
+- **[AWS]** CloudWatch composite-alarm rules with hyphenated names parse; no invented `DatapointsToAlarm`; SSM maintenance window no longer invents a timezone (F200, F202, F203). **New services:** AWS Budgets and Resource Groups (F204, F205).
+- **[AWS]** `DescribeLaunchTemplateVersions` honours `$Latest`/`$Default`; bedrock-agent List operations work as POST on the collection (SDK/CLI listing); the Mesh CORS preflight allows the headers and methods a browser console needs (F500-F502).
+- **[GCP]** 19 fixes (F300-F318) so the google Terraform provider plans clean against the simulator: duplicated API version in endpoint paths, Firestore database long-running operations, Google public image projects, Pub/Sub schemas, Memorystore, instance templates, project metadata, Artifact Registry, health checks, Cloud Run v2 and Cloud Functions v2 wire views (Functions v2 routes were not mounted offline), Secret Manager, peering, regional firewall policy rules, log metrics/sinks/buckets, router and NAT.
+- **[Nano]** Bedrock Playground has a "Load in-browser model (WebLLM)" button; the "no local model" error now says where to load one.
+- **[Mesh]** A refused start shows the real reason (GitHub quota, Codespaces limit) and the status chip carries it; the console shows Mesh hours used of the allowance plus the last run's length and why it ended; the "Vyomi Mesh" drawer tab is a cloud-native button.
+- **[Nano]** Lambda detail tabs persist on the unified engine; Event Grid CloudEvents webhook delivery sends a batch array; vendored Event Grid core rebuilt.
+
+### Added
+
+- **[tests]** The endurance estate (AWS stages 1-8, GCP 7 stages) and the SDK/CLI/UI proof runner under `tests/endurance/` (test infrastructure only; not shipped in the image). AWS stages 1-4+5+7+8 and the GCP estate pass apply / no-diff re-plan / destroy / rebuild / destroy on the real server.
+
+### Known limits
+
+- The full AWS stage 1-8 gate has not been run in one piece: the host disk guard (>92% full) refuses EC2 launches. Stages were verified in targeted cycles.
+- Azure estate not included in this release.
+- Wire shapes F305 and F313 (GCP) follow what the provider expects, not captured real-cloud responses. Pre-existing trunk test failures: bedrock build/flows/models-alias, gcp kms sdk, mesh capacity.
+
 ## [4.0.4] — 2026-11-18
 
 Fix release on top of v4.0.3 (AI stack Beta).

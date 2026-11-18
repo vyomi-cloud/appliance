@@ -6,11 +6,13 @@ Mirror of ``core/azure_blob_store`` for the Queue service: the simulator keeps
 official open-source Azure Storage emulator — so they survive simulator restarts
 and use a real emulator (parity with MinIO/S3, fake-gcs/GCS, Azurite/Blob).
 
-This is the **AMQP→HTTP substitution for Azure Service Bus**: the native Service
-Bus SDK speaks AMQP 1.0 (which the appliance can't serve), so Azure messaging
-conformance is delivered through the native HTTP ``azure-storage-queue`` SDK
-instead — a different service, stated plainly, but a real native Azure queue SDK
-with full runtime create/send/receive/delete.
+This started as the **AMQP→HTTP substitution for Azure Service Bus**, from
+before the appliance could serve native AMQP 1.0: Azure messaging conformance
+was delivered through this native HTTP ``azure-storage-queue`` SDK instead — a
+different service, stated plainly, but a real native Azure queue SDK with full
+runtime create/send/receive/delete. The appliance now also speaks AMQP 1.0
+natively for Service Bus (``core/servicebus_amqp/``), so this module remains a
+valid point-to-point alternative rather than the only option.
 
 If ``CLOUDLEARN_AZURITE_QUEUE_URL`` is unset/unreachable, callers degrade (the
 native surface returns empty results rather than 500ing).

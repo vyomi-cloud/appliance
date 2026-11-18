@@ -79,7 +79,11 @@ async def _table(request: Request):
     body = await request.body()
     raw = request.scope.get("raw_path") or b""
     path = (raw.decode("utf-8", "replace") if raw else request.url.path).split("?", 1)[0]
-    path = unquote(path[len("/azure-data/tableroot"):] or "/")
+    if path.startswith("/azure-data/table/"):     # the ARM primaryEndpoints.table form: /azure-data/table/{account}/... (endurance F404)
+        tail = path[len("/azure-data/table/"):]
+        path = "/" + (tail.split("/", 1)[1] if "/" in tail else "")
+    else:
+        path = unquote(path[len("/azure-data/tableroot"):] or "/")
     out = _wi.dispatch_service("azure_table", request.method, path,
                                dict(request.query_params), dict(request.headers), body)
     hdrs = {k: v for k, v in out["headers"].items() if k.lower() != "content-length"}
@@ -99,11 +103,12 @@ def register(app) -> list:
             app.add_route(tok, _graph, methods=["POST"])
         mounted.append("azure_graph")
     if _wi.is_unified("azure_cosmos"):
-        app.add_route("/dbs", _cosmos, methods=_METHODS)
-        app.add_route("/dbs/{rest:path}", _cosmos, methods=_METHODS)
+        app.add_route("/dbs", _cosmos, methods=_METHODS + ["OPTIONS"])   # OPTIONS: the CORS preflight (account properties.cors)
+        app.add_route("/dbs/{rest:path}", _cosmos, methods=_METHODS + ["OPTIONS"])
         mounted.append("azure_cosmos")
     if _wi.is_unified("azure_table"):
         app.add_route("/azure-data/tableroot/{rest:path}", _table, methods=_METHODS + ["HEAD", "MERGE", "OPTIONS"])
+        app.add_route("/azure-data/table/{rest:path}", _table, methods=_METHODS + ["HEAD", "MERGE", "OPTIONS"])
         app.add_middleware(AzureTableRewrite)
         mounted.append("azure_table")
     return mounted

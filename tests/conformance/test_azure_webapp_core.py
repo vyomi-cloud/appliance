@@ -220,7 +220,7 @@ st4["/subscriptions/sub1/resourcegroups/rg1/providers/microsoft.storage/storagea
 call(st4, "PATCH", ["serverfarms", "scaleplan2"], {"sku": {"name": "S1"}})   # backups need Standard+
 SAS_URL = "https://xstore.blob.core.windows.net/backups?sv=1&sig=abc"
 r = call(st4, "GET", ["sites", "scaleapp", "config", "backup"])
-check("default backup config is disabled, no storage account", r["body"]["properties"]["enabled"] is False)
+check("an unconfigured site has no backup configuration: 404 like real ARM (endurance F420)", r["status"] == 404)
 r = call(st4, "PUT", ["sites", "scaleapp", "config", "backup"], {"properties": {
     "enabled": True, "storageAccountUrl": SAS_URL, "backupSchedule": {"frequencyInterval": 2}}})
 check("backup config PUT merges (schedule frequency changes, other schedule fields keep defaults)",

@@ -23,14 +23,13 @@ class VyomiTunnel < Formula
   end
 
   test do
-    port = free_port
-    pid = spawn({ "RELAY_PORT" => port.to_s }, bin/"vyomi-tunnel")
-    sleep 2
-    begin
-      out = shell_output("curl -s http://127.0.0.1:#{port}/health")
-      assert_match "\"relay\":\"vyomi-local\"", out
-    ensure
-      Process.kill("TERM", pid)
-    end
+    # The relay itself needs a Vyomi access key (gated since 1.2.x), which `brew test` does not have.
+    # Test what works without one: the version, and the bundled MCP server answering an initialize.
+    assert_match version.to_s, shell_output("#{bin}/vyomi-tunnel --version")
+    init = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18",' \
+           '"capabilities":{},"clientInfo":{"name":"brew-test","version":"0"}}}'
+    out = pipe_output("#{bin}/vyomi-tunnel mcp 2>/dev/null", "#{init}\n")
+    assert_match "\"serverInfo\":{", out
+    assert_match "\"name\":\"vyomi\"", out
   end
 end

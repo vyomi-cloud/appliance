@@ -287,6 +287,9 @@ def _add_peering(store, project, name, body) -> ComputeResponse:
                             "exchangeSubnetRoutes": bool(nc.get("exchangeSubnetRoutes", body.get("exchangeSubnetRoutes", True))),
                             "exportCustomRoutes": bool(nc.get("exportCustomRoutes", False)),
                             "importCustomRoutes": bool(nc.get("importCustomRoutes", False)),
+                            # F316: public-IP subnet route exchange defaults as on the real API (export on, import off)
+                            "exportSubnetRoutesWithPublicIp": bool(nc.get("exportSubnetRoutesWithPublicIp", True)),
+                            "importSubnetRoutesWithPublicIp": bool(nc.get("importSubnetRoutesWithPublicIp", False)),
                             "state": "INACTIVE"})
     _refresh_peerings(store, project)
     return _json(200, _operation(project, "global", None, "addPeering", _self_link("global", project, f"networks/{name}"), store))
@@ -1027,7 +1030,8 @@ def _router_view(rec: dict) -> dict:
     project, region = rec["project"], rec["region"]
     return {"kind": "compute#router", "id": rec["id"], "name": rec["name"], "description": rec.get("description", ""),
             "network": _self_link("global", project, f"networks/{rec['networkName']}"),
-            "region": _self_link("regions", project, region), "bgp": rec.get("bgp", {"asn": 64512}),
+            "region": _self_link("regions", project, region),
+            **({"bgp": rec["bgp"]} if rec.get("bgp") else {}),   # F301: a router created without bgp has none (no phantom asn)
             "nats": [dict(n) for n in rec.get("nats", [])], "creationTimestamp": rec["creationTimestamp"],
             "selfLink": _self_link("regions", project, f"{region}/routers/{rec['name']}")}
 
@@ -1040,10 +1044,15 @@ def _norm_nats(project, region, nats) -> list:
                  _self_link("regions", project, f"{region}/subnetworks/{_tail(s.get('name'))}"),
                  "sourceIpRangesToNat": s.get("sourceIpRangesToNat") or ["ALL_IP_RANGES"]}
                 for s in n.get("subnetworks") or []]
-        out.append({"name": n.get("name", "nat"), "natIpAllocateOption": n.get("natIpAllocateOption") or "AUTO_ONLY",
-                    "sourceSubnetworkIpRangesToNat": mode, "subnetworks": subs,
-                    "logConfig": n.get("logConfig") or {"enable": False, "filter": "ALL"},
-                    "enableEndpointIndependentMapping": bool(n.get("enableEndpointIndependentMapping", False))})
+        # F302: keep every field the client sent (natIps, minPortsPerVm, timeouts, ...); logConfig only when set
+        nat = {**n, "name": n.get("name", "nat"), "natIpAllocateOption": n.get("natIpAllocateOption") or "AUTO_ONLY",
+               "sourceSubnetworkIpRangesToNat": mode, "subnetworks": subs,
+               "enableEndpointIndependentMapping": bool(n.get("enableEndpointIndependentMapping", False))}
+        if not n.get("subnetworks"):
+            nat.pop("subnetworks")
+        if not n.get("logConfig"):
+            nat.pop("logConfig", None)
+        out.append(nat)
     return out
 
 
@@ -1062,7 +1071,7 @@ def _insert_router(store, project, region, body) -> ComputeResponse:
     store.seq["ip"] += 1
     routers[_router_key(project, region, name)] = {
         "id": str(50_000 + store.seq["ip"]), "project": project, "region": region, "name": name,
-        "description": str(body.get("description", "")), "networkName": net, "bgp": body.get("bgp") or {"asn": 64512},
+        "description": str(body.get("description", "")), "networkName": net, "bgp": body.get("bgp") or None,
         "nats": _norm_nats(project, region, body.get("nats")), "creationTimestamp": _ts()}
     return _json(200, _operation(project, "regional", region, "insert", _self_link("regions", project, f"{region}/routers/{name}"), store))
 
@@ -1544,9 +1553,11 @@ def _nfp_key(project, region, name):
 
 
 def _nfp_rule_view(r: dict) -> dict:
-    return {"priority": r["priority"], "action": r["action"], "direction": r.get("direction", "INGRESS"),
-            "disabled": r.get("disabled", False), "description": r.get("description", ""),
-            "match": r.get("match") or {}}
+    # F317: keep the whole rule the client sent (ruleName, enableLogging, targetResources, ...) and report it as a firewallPolicyRule
+    return {**r, "kind": "compute#firewallPolicyRule", "priority": r["priority"], "action": r["action"],
+            "direction": r.get("direction", "INGRESS"), "disabled": r.get("disabled", False),
+            "description": r.get("description", ""), "match": r.get("match") or {},
+            "ruleTupleCount": r.get("ruleTupleCount", 2)}
 
 
 def _nfp_view(rec: dict) -> dict:
@@ -1606,10 +1617,21 @@ def _firewall_policies(store: ComputeStore, method: str, project: str, region: s
             return _err(400, "INVALID_ARGUMENT", "priority and action (allow|deny|goto_next) are required")
         if any(x["priority"] == priority for x in rec["rules"]):
             return _err(409, "ALREADY_EXISTS", f"A rule at priority {priority} already exists")
-        rec["rules"].append({"priority": int(priority), "action": r["action"], "direction": r.get("direction", "INGRESS"),
+        rec["rules"].append({**r, "priority": int(priority), "action": r["action"], "direction": r.get("direction", "INGRESS"),
                              "disabled": bool(r.get("disabled", False)), "description": str(r.get("description", "")),
                              "match": r.get("match") or {}})
         return _json(200, _operation(project, "regional", region, "addRule", link, store))
+    if verb in ("getRule", "patchRule") and method in ("GET", "POST"):
+        pr = (query or {}).get("priority") if query else None
+        pr = int(pr) if pr is not None else payload.get("priority")
+        rule = next((x for x in rec["rules"] if x["priority"] == pr), None)
+        if rule is None:
+            return _not_found(f"No rule at priority {pr}")
+        if verb == "getRule":
+            return _json(200, _nfp_rule_view(rule))
+        patch = payload.get("firewallPolicyRule") or payload
+        rule.update({k: v for k, v in patch.items() if k != "priority"})
+        return _json(200, _operation(project, "regional", region, "patchRule", link, store))
     if verb == "removeRule" and method == "POST":
         priority = (query or {}).get("priority") if query else None
         priority = int(priority) if priority is not None else payload.get("priority")

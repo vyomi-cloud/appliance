@@ -744,6 +744,36 @@ def _apim_default_policy(type_chain, names, state, rid=""):
     return None
 
 
+# Singleton child resources real ARM always answers with (GET before any PUT): {type-chain tail -> default properties} (endurance F406)
+_SINGLETON_DEFAULTS = {
+    ("microsoft.storage", "storageaccounts", "blobservices"): {"cors": {"corsRules": []}, "deleteRetentionPolicy": {"enabled": False},
+        "containerDeleteRetentionPolicy": {"enabled": False}, "isVersioningEnabled": False, "changeFeed": {"enabled": False}},
+    ("microsoft.storage", "storageaccounts", "fileservices"): {"cors": {"corsRules": []}, "shareDeleteRetentionPolicy": {"enabled": True, "days": 7}},
+    ("microsoft.storage", "storageaccounts", "queueservices"): {"cors": {"corsRules": []}},
+    ("microsoft.storage", "storageaccounts", "tableservices"): {"cors": {"corsRules": []}},
+    ("microsoft.sql", "servers", "sqlvulnerabilityassessments"): {"state": "Disabled"},
+    ("microsoft.servicebus", "namespaces", "networkrulesets"): {"defaultAction": "Allow", "publicNetworkAccess": "Enabled", "trustedServiceAccessEnabled": False, "ipRules": [], "virtualNetworkRules": []},
+    ("microsoft.sql", "servers", "connectionpolicies"): {"connectionType": "Default"},
+    ("microsoft.sql", "servers", "auditingsettings"): {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": [], "isStorageSecondaryKeyInUse": False, "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
+    ("microsoft.sql", "servers", "extendedauditingsettings"): {"state": "Disabled", "retentionDays": 0, "auditActionsAndGroups": [], "isStorageSecondaryKeyInUse": False, "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
+    ("microsoft.sql", "servers", "devopsauditingsettings"): {"state": "Disabled", "isAzureMonitorTargetEnabled": False, "queueDelayMs": 1000},
+    ("microsoft.sql", "servers", "securityalertpolicies"): {"state": "Disabled", "disabledAlerts": [], "emailAddresses": [], "emailAccountAdmins": False, "retentionDays": 0},
+    ("microsoft.sql", "servers", "advancedthreatprotectionsettings"): {"state": "Disabled"},
+    ("microsoft.sql", "servers", "encryptionprotector"): {"serverKeyType": "ServiceManaged", "serverKeyName": "ServiceManaged", "autoRotationEnabled": False},
+    ("microsoft.sql", "servers", "vulnerabilityassessments"): {"recurringScans": {"isEnabled": False, "emailSubscriptionAdmins": True, "emails": []}},
+}
+
+
+def _singleton_default(type_chain, names, rid):
+    """GET of a not-yet-written 'default'-style singleton under an existing parent -> the real default document."""
+    if len(type_chain) == 3 and len(names) == 2:
+        props = _SINGLETON_DEFAULTS.get(tuple(t.lower() for t in type_chain))
+        if props is not None and rid.rsplit("/", 2)[0].lower() in _state:
+            import copy as _c
+            return {"id": rid, "name": names[1], "type": "/".join(type_chain), "properties": _c.deepcopy(props)}
+    return None
+
+
 def _canonical_id(sub: str, rg: str | None, type_chain: list[str], names: list[str]) -> str:
     seg = [f"/subscriptions/{sub}"]
     if rg:
@@ -842,6 +872,8 @@ def _lro_headers(base: str, op_id: str, api_version: str) -> dict:
 def _is_lro_type(namespace: str, type_chain: list[str]) -> bool:
     # Top-level resources are long-running, except RBAC role assignments
     # (synchronous in real Azure).
+    if namespace.lower() == "microsoft.documentdb" and len(type_chain) >= 3:    # Cosmos sqlDatabases/containers PUT are LROs; SDK rejects 201 (endurance F409)
+        return True
     return len(type_chain) == 2 and namespace.lower() != "microsoft.authorization"
 
 
@@ -858,7 +890,21 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
         missing = missing_identity_ref(_state, ua)
         if missing:
             return _error(400, "ResourceNotFound", f"The Resource '{missing}' of type 'Microsoft.ManagedIdentity/userAssignedIdentities' was not found.")
+    _body = b""
+    if method in ("PUT", "PATCH", "POST", "DELETE"):
+        try:
+            _body = await request.body()
+        except Exception:
+            _body = b""
     resp = await _handle_arm_inner(request, rest)
+    if method != "GET" and not getattr(request.state, "_arm_core_recorded", False):
+        # Security audit feed (Defender alerts, workflow automations): the shared ARM core records every write it serves; a write the
+        # offline catalog served itself (Storage accounts, Key Vaults, NSGs, ...) must reach the same feed or Defender never raises.
+        try:
+            from core import azure_security_core as _sec
+            _sec.record_call(_state, rest.split("/", 1)[0], method, "/subscriptions/" + rest.split("?")[0], _body.decode("utf-8", "replace"), resp.status_code)
+        except Exception:
+            pass
     if ua and resp.status_code < 300:
         from core.azure_arm_core import resolve_identity_refs
         rec = _state.get(("/subscriptions/" + rest.split("?")[0].strip("/")).lower())
@@ -866,6 +912,9 @@ async def handle_arm(request: Request, rest: str) -> JSONResponse:
             resolve_identity_refs(rec, _state)
     return resp
 
+
+# Namespaces whose dedicated core answers checkNameAvailability with real taken/invalid results
+_OWN_NAME_CHECK_NAMESPACES = {"microsoft.appconfiguration", "microsoft.search", "microsoft.support"}
 
 async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     """Parse `/subscriptions/{rest}` and CRUD the in-memory ARM store."""
@@ -885,7 +934,14 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     # (Microsoft.Resources/tags/default) and subscription-scope locks — the subscription blade —
     # are the shared core ARM engine's, over the persisted per-subscription names/tags.
     low0 = [s.lower() for s in rest_segs]
-    if (not rest_segs
+    # Microsoft.Insights extension resources scoped to ANY other resource's id (…/providers/{ns}/{type}/{name}/providers/Microsoft.Insights/
+    # diagnosticSettings|metrics|metricDefinitions): the shared core ARM engine owns them (settings are real Monitor records the diagnostic
+    # pipeline delivers from). Without this the generic catalog stored them as an inert "<type>/providers/diagnosticSettings" stub.
+    _prov = [i for i, x in enumerate(low0) if x == "providers"]
+    _nested_insights = len(_prov) >= 2 and any(
+        i + 2 < len(low0) and low0[i + 1] == "microsoft.insights" and low0[i + 2] in ("diagnosticsettings", "diagnosticsettingscategories", "metrics", "metricdefinitions")
+        for i in _prov[1:])
+    if (_nested_insights or not rest_segs
             or low0 == ["locations"]                   # subscription locations list
             or low0 == ["resources"]                   # the subscription's generic resource list
             or low0 == ["providers"]                   # resource providers: list / get / (un)register
@@ -979,10 +1035,35 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         if method != "GET" and _x["status"] < 300 and _x.get("scope"):
             _record_usage(f"azure.{method.lower()}", {"type": _x["type"], "name": _x["name"],
                                                        "resource_id": _x["scope"]})
+        _xh = dict(_x.get("headers") or {})
+        if after[0].lower() == "microsoft.insights" and method == "PUT" and _x["status"] == 201:
+            _x["status"] = 200            # Application Insights components are a sync 200 PUT in real ARM (endurance F419)
+        if after[0].lower() == "microsoft.web" and method == "PUT" and _x["status"] == 201 and not _xh:
+            # App Service plans / sites: CreateOrUpdate is an LRO answering 200/202, never a bare 201 (endurance F415)
+            _x["status"] = 200
+            _xh.update(_lro_headers(base, _make_operation(_x["scope"] or "/", method), request.query_params.get("api-version") or "2024-04-01"))
+        if (after[0].lower() == "microsoft.network" and method == "PUT" and _x["status"] < 300
+                and _x.get("scope") and not any(k.lower() in ("azure-asyncoperation", "location") for k in _xh)):
+            # real ARM: Network child writes (subnets, rules, ...) are LROs; without the header the SDK
+            # falls back to a 10 s default poll interval (endurance F401)
+            _xh.update(_lro_headers(base, _make_operation(_x["scope"], method), request.query_params.get("api-version") or "2023-01-01"))
         if _x["body"] is None:
-            return Response(status_code=_x["status"])
-        return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_x.get("headers") or {})
+            return Response(status_code=_x["status"], headers=_xh)
+        return JSONResponse(status_code=_x["status"], content=_x["body"], headers=_xh)
 
+    if (len(after) >= 4 and after[0].lower() == "microsoft.keyvault" and after[1].lower() == "locations"
+            and after[3].lower() == "deletedvaults"):
+        # soft-deleted vaults: a vault delete here is immediate (nothing is retained), so GET is 404 and purge is an accepted no-op (endurance F428)
+        if method == "POST" and len(after) == 6 and after[5].lower() == "purge":
+            return Response(status_code=202, headers=_lro_headers(base, _make_operation(f"/subscriptions/{sub}/providers/Microsoft.KeyVault/locations/{after[2]}/deletedVaults/{after[4]}", "POST"),
+                                                                  request.query_params.get("api-version") or "2023-07-01"))
+        if method == "GET" and len(after) == 5:
+            return _error(404, "ResourceNotFound", f"The deleted vault '{after[4]}' was not found.")
+    if (method == "POST" and len(after) == 2 and after[1].lower() == "checknameavailability"
+            and after[0].lower() not in _OWN_NAME_CHECK_NAMESPACES):
+        return JSONResponse({"nameAvailable": True, "reason": "", "message": ""})    # azurerm checks names before creating Web apps etc. (endurance F417)
+    if method == "GET" and len(after) == 2 and after[0].lower() == "microsoft.operationalinsights" and after[1].lower() == "deletedworkspaces":
+        return JSONResponse({"value": []})      # soft-deleted workspaces list (azurerm checks before creating a workspace) (endurance F416)
     namespace = after[0]
     # after = [ns, type, name?, childType?, childName?, ...]
     chain = after[1:]
@@ -1033,6 +1114,12 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     if namespace.lower() == "microsoft.insights" and chain and chain[0].lower() in ("diagnosticsettings", "diagnosticsettingscategories"):
         return await _handle_core_arm(request, method, rest, base)   # subscription-scope Activity log export (shared core engine)
 
+    if (namespace.lower() == "microsoft.insights" and len(chain) == 3 and chain[0].lower() == "components"
+            and chain[2].lower() == "currentbillingfeatures" and method in ("GET", "PUT")):
+        # App Insights billing features (azurerm reads them after creating a component) (endurance F421)
+        return JSONResponse({"DataVolumeCap": {"Cap": 100, "ResetTime": 0, "WarningThreshold": 90,
+                                               "StopSendNotificationWhenHitThreshold": False, "StopSendNotificationWhenHitCap": False},
+                             "CurrentBillingFeatures": ["Basic"]})
     if namespace.lower() == "microsoft.insights":
         from core import azure_monitor_core as _mon_probe
         if _mon_probe.handles(chain):
@@ -1135,7 +1222,7 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
     if method == "GET":
         rec = _state.get(key)
         if not rec:
-            rec = _apim_default_policy(type_chain, names, _state, rid)
+            rec = _apim_default_policy(type_chain, names, _state, rid) or _singleton_default(type_chain, names, rid)
         if not rec:
             return _error(404, "ResourceNotFound", f"Resource '{rid}' not found.")
         _ext.after_upsert(_state, rec)
@@ -1242,6 +1329,7 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             if _fe:
                 return JSONResponse(status_code=400, content=_fe)
         _new_vault = full_type.lower() == "microsoft.keyvault/vaults" and key not in _state
+        _existed = key in _state
         resp = _upsert(rid, key, full_type, leaf_name, top, payload, base, patch=(method == "PATCH"))
         if full_type.lower() == _ext.VM_T and key in _state:
             _ext.after_vm_upsert(_state, _state[key])
@@ -1263,11 +1351,14 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
             resp = JSONResponse(status_code=resp.status_code, content=_b2)
         # Data-plane provisioning hooks (real Postgres for SQL, etc.).
         _provision_on_create(full_type, _state.get(key), base)
+        if resp.status_code == 201 and ((len(type_chain) > 2 and (leaf_name.lower() in ("default", "current") or namespace.lower() == "microsoft.servicebus"))
+                                        or namespace.lower() == "microsoft.insights"):
+            resp.status_code = 200      # singleton settings children are sync 200 in real ARM; the SDKs reject 201 (endurance F408)
         if lro:
             # Generated SDK LRO create methods accept only a subset of 2xx for
             # the initial response (armstorage→{200,202}, armcompute→{200,201});
             # 200 is the common intersection. 201 breaks armstorage.
-            resp.status_code = 200
+            resp.status_code = 201 if (namespace.lower() == "microsoft.eventgrid" and not _existed) else 200   # EventGrid CreateOrUpdate wants 201 (endurance F413)
             op_id = _make_operation(rid, method)
             for hk, hv in _lro_headers(base, op_id, api_version).items():
                 resp.headers[hk] = hv
@@ -1295,6 +1386,9 @@ async def _handle_arm_inner(request: Request, rest: str) -> JSONResponse:
         # pollers (a header-less terminal status = immediately complete). The
         # create path above carries the Azure-AsyncOperation header that
         # exercises real LRO polling.
+        if rec is not None and namespace.lower() in ("microsoft.documentdb", "microsoft.eventgrid"):
+            # Cosmos / EventGrid DELETE is an LRO (202 + operation headers); a header-less 200 is an SDK error (endurance F412)
+            return Response(status_code=202, headers=_lro_headers(base, _make_operation(rid, method), api_version))
         return Response(status_code=200 if rec is not None else 204)
     return _error(405, "MethodNotAllowed", f"{method} not allowed.")
 
@@ -1349,6 +1443,8 @@ async def _handle_monitor(request: Request, method: str, sub: str, rg: str | Non
         _record_usage(f"azure.{r['verb']}", {"type": "Microsoft.Insights/" + chain[0], "name": r["rid"].rsplit("/", 1)[-1],
                                              "resource_id": r["rid"]})
         _record_arm_activity(r["rid"], ("Microsoft.Insights/" + chain[0]) + ("/delete" if r["verb"] == "delete" else "/write"), sub)   # Activity log (offline parity with Nano)
+    if resp.status_code == 201 and chain[0].lower() == "components":
+        resp.status_code = 200      # App Insights components: sync 200 PUT (endurance F419)
     return resp
 
 
@@ -1601,6 +1697,7 @@ def _subscription_meta(key: str) -> dict:
 
 async def _handle_core_arm(request: Request, method: str, rest: str, base: str):
     arm = core_arm()
+    request.state._arm_core_recorded = True   # arm.handle() writes the security audit feed itself
     arm._base = base
     payload = await _safe_json(request) if method in ("PUT", "PATCH", "POST") else {}
     out = arm.handle(method, "/subscriptions/" + rest, dict(request.query_params), payload)
@@ -2114,3 +2211,22 @@ def register(app, _h=None) -> None:
         app.add_api_route("/subscriptions/{rest:path}", arm_dispatch,
                           methods=["GET", "PUT", "POST", "PATCH", "DELETE"],
                           include_in_schema=False)
+
+    # Azure Resource Graph is TENANT-scoped: POST /providers/Microsoft.ResourceGraph/resources (no /subscriptions prefix), what
+    # `az graph query` and the Resource Graph Explorer call. The shared ARM core answers it; without this route the request fell
+    # through to the S3 catch-all (405 MethodNotAllowed).
+    async def arm_resourcegraph(request: Request):
+        from core import app_context as _ctx
+        payload = await _safe_json(request) if request.method == "POST" else {}
+        _tok = _ctx.REQUEST_PROVIDER.set("azure")   # a tenant-scoped path carries no /subscriptions prefix, so nothing else selects the Azure space
+        try:
+            out = core_arm().handle(request.method, "/providers/Microsoft.ResourceGraph/resources", dict(request.query_params), payload)
+        finally:
+            _ctx.REQUEST_PROVIDER.reset(_tok)
+        body = out.get("body")
+        resp = JSONResponse(status_code=out.get("status", 200), content=body) if body is not None else Response(status_code=out.get("status", 200))
+        for hk, hv in (out.get("headers") or {}).items():
+            resp.headers[hk] = str(hv)
+        return resp
+
+    app.add_api_route("/providers/Microsoft.ResourceGraph/resources", arm_resourcegraph, methods=["GET", "POST"], include_in_schema=False)

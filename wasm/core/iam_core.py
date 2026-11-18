@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -195,8 +196,44 @@ def _require_role(store, name):
     return r
 
 
+_AWS_MANAGED_PREFIX = "arn:aws:iam::aws:policy/"
+_AWS_MANAGED_DOCS = {
+    "service-role/AWSLambdaBasicExecutionRole": [
+        {"Effect": "Allow", "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"], "Resource": "*"}],
+    "service-role/AWSLambdaVPCAccessExecutionRole": [
+        {"Effect": "Allow", "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents",
+                                       "ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces",
+                                       "ec2:DeleteNetworkInterface", "ec2:AssignPrivateIpAddresses",
+                                       "ec2:UnassignPrivateIpAddresses"], "Resource": "*"}],
+    "service-role/AWSLambdaSQSQueueExecutionRole": [
+        {"Effect": "Allow", "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes",
+                                       "logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"], "Resource": "*"}],
+}
+
+
+def _aws_managed_policy(store, arn):
+    """AWS-managed policies (arn:aws:iam::aws:policy/...) exist in every account without being created.
+    Materialise the record on first use so attach/get/list behave like the real service."""
+    if not arn.startswith(_AWS_MANAGED_PREFIX):
+        return None
+    path_name = arn[len(_AWS_MANAGED_PREFIX):]
+    if not path_name or not re.fullmatch(r"[A-Za-z0-9+=,.@_/-]+", path_name):
+        return None
+    name = path_name.rsplit("/", 1)[-1]
+    path = "/" + path_name[: -len(name)] if "/" in path_name else "/"
+    stmts = _AWS_MANAGED_DOCS.get(path_name) or [{"Effect": "Allow", "Action": ["*"], "Resource": "*"}]
+    doc = {"Version": "2012-10-17", "Statement": stmts}
+    now = _now()
+    p = {"policy_name": name, "policy_id": _id("ANPA"), "arn": arn, "path": path, "document": doc,
+         "description": "AWS managed policy", "created": now, "updated": now, "default_version_id": "v1",
+         "attachment_count": 0, "tags": {}, "aws_managed": True,
+         "versions": {"v1": {"document": doc, "created": now}}}
+    store.policies[arn] = p
+    return p
+
+
 def _require_policy(store, arn):
-    p = store.get_policy(arn)
+    p = store.get_policy(arn) or _aws_managed_policy(store, arn)
     if not p:
         raise IamError("NoSuchEntity", f"Policy {arn} does not exist.", 404)
     return p

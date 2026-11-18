@@ -283,6 +283,22 @@ def backend_overrides():
     return out
 
 
+_CF_HOST = __import__("re").compile(r"^([a-z]+-[a-z]+\d+)-([a-z][a-z0-9-]*)\.cloudfunctions\.net$")
+
+
+def local_function_url(url):
+    """`https://<region>-<project>.cloudfunctions.net/<fn>[...]` is the public URL of a Cloud Function (what a real
+    `x-google-backend.address` names). The simulator owns those functions, so the call goes to its own `/gcf/<project>/<region>/<fn>`
+    instead of the real internet (where the name resolves to Google and answers 404). None when `url` is not one."""
+    import os
+    u = urlsplit(url)
+    m = _CF_HOST.match((u.hostname or "").lower()) if u.scheme == "https" else None
+    if not m:
+        return None
+    base = os.environ.get("VYOMI_SELF_ENDPOINT") or "http://127.0.0.1:" + (os.environ.get("PORT") or "9000")
+    return "%s/gcf/%s/%s%s%s" % (base.rstrip("/"), m.group(2), m.group(1), u.path or "/", ("?" + u.query) if u.query else "")
+
+
 def default_http_fetch():
     """`fetch(method, url, headers, body, timeout) -> (status, headers, bytes)`; 4xx/5xx are returned, not raised. None on Nano.
     Applies backend_overrides() (every cloud's gateway shares it)."""
@@ -296,6 +312,7 @@ def default_http_fetch():
             if url == src or url.startswith(src + "/") or url.startswith(src + "?"):
                 url = dst + url[len(src):]
                 break
+        url = local_function_url(url) or url
         req = urllib.request.Request(url, data=body or None, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:

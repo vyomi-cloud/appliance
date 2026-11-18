@@ -1,0 +1,96 @@
+{
+  "cloud": "gcp",
+  "endpoint": "http://127.0.0.1:9000",
+  "env_text": "# Vyomi: GCP\n# GCS rides the simulator endpoint.\nSTORAGE_EMULATOR_HOST=http://127.0.0.1:9000\n# Separate gRPC emulator container, NOT the simulator port.\nPUBSUB_EMULATOR_HOST=127.0.0.1:8085\n# Separate gRPC emulator container, NOT the simulator port.\nFIRESTORE_EMULATOR_HOST=127.0.0.1:8080\n# Use your active space's project id if it differs.\nGOOGLE_CLOUD_PROJECT=cloudlearn\n",
+  "notes": [
+    "On the Max tier (Multipass VM) replace the host with the VM IP for :8085/:8080 if localhost isn't bridged.",
+    "Secret Manager and Cloud KMS have no Google emulator: use the REST/HttpJson transport against https://127.0.0.1:9443 (caddy) and trust its certificate.",
+    "gcloud command adapters are partial; prefer client libraries."
+  ],
+  "sdk": {
+    "cli": {
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Simulated gcloud will point at local Google-style endpoints.",
+        "Commands currently translate to compute, storage, sql, pubsub, firestore, functions, api gateway, VPC, and IAM routes."
+      ],
+      "notes": "gcloud command-shape adapters are partially implemented and expanding toward full provider coverage.",
+      "status": "partial",
+      "tool": "gcloud"
+    },
+    "go": {
+      "dependency": "cloud.google.com/go",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Use the simulator endpoint with Google Cloud Go clients.",
+        "Client wrappers are partial, so transport and request shape glue is still expanding."
+      ],
+      "status": "partial",
+      "tool": "google-cloud-go"
+    },
+    "java": {
+      "dependency": "com.google.cloud:*",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Use the simulator endpoint with Google Cloud Java clients.",
+        "Client wrappers are partial, so transport and request shape glue is still expanding."
+      ],
+      "status": "partial",
+      "tool": "google-cloud-java"
+    },
+    "nodejs": {
+      "config": {
+        "apiEndpoint": "http://127.0.0.1:9000",
+        "projectId": "cloudlearn"
+      },
+      "dependency": "@google-cloud/storage (and other @google-cloud/* packages)",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Pass apiEndpoint to each client constructor.",
+        "Client wrappers are partial, so transport and request shape glue is still expanding."
+      ],
+      "status": "partial",
+      "tool": "google-cloud-nodejs"
+    },
+    "python": {
+      "config": {
+        "STORAGE_EMULATOR_HOST": "http://127.0.0.1:9000",
+        "project": "cloudlearn"
+      },
+      "dependency": "google-cloud-storage (and other google-cloud-* packages)",
+      "endpoint": "http://127.0.0.1:9000",
+      "help": [
+        "Set STORAGE_EMULATOR_HOST env var to point Python clients at the simulator.",
+        "Client wrappers are partial, so transport and request shape glue is still expanding."
+      ],
+      "status": "partial",
+      "tool": "google-cloud-python"
+    }
+  },
+  "terraform": {
+    "hcl": "provider \"google\" {\n  project                 = \"cloudlearn\"\n  region                  = \"us-central1\"\n  access_token            = \"vyomi-local\"\n  storage_custom_endpoint = \"http://127.0.0.1:9000/storage/v1/\"\n}",
+    "note": "UNVERIFIED against Vyomi: custom_endpoint overrides per google service; confirm with a conformance run before relying on it."
+  },
+  "variables": [
+    {
+      "name": "STORAGE_EMULATOR_HOST",
+      "value": "http://127.0.0.1:9000",
+      "note": "GCS rides the simulator endpoint."
+    },
+    {
+      "name": "PUBSUB_EMULATOR_HOST",
+      "value": "127.0.0.1:8085",
+      "note": "Separate gRPC emulator container, NOT the simulator port."
+    },
+    {
+      "name": "FIRESTORE_EMULATOR_HOST",
+      "value": "127.0.0.1:8080",
+      "note": "Separate gRPC emulator container, NOT the simulator port."
+    },
+    {
+      "name": "GOOGLE_CLOUD_PROJECT",
+      "value": "cloudlearn",
+      "note": "Use your active space's project id if it differs."
+    }
+  ]
+}

@@ -160,10 +160,23 @@ def is_ui_path(method: str, path: str, headers: dict) -> bool:
     return False
 
 
-def cors_headers(origin: str) -> list[tuple[bytes, bytes]]:
+_CORS_BASE_HEADERS = ("authorization", "content-type", "x-vyomi-mesh-token")
+_CORS_METHODS = "GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS"
+
+
+def cors_headers(origin: str, request_headers: str = "") -> list[tuple[bytes, bytes]]:
+    """CORS for the Nano tab -> mesh calls. A Nano console talks the NATIVE wire, so the preflight must allow what native SDK-shaped
+    requests carry (x-amz-date, x-amz-target, x-amz-content-sha256, x-goog-*, x-ms-*, if-match ...) and every verb S3/ARM/GCP REST use
+    (PUT/DELETE/PATCH/HEAD), and the page must be able to read the response headers (ETag, x-amz-request-id ...) (endurance F502)."""
+    allow = list(_CORS_BASE_HEADERS)
+    for h in (request_headers or "").split(","):
+        h = h.strip().lower()
+        if h and re.fullmatch(r"[a-z0-9-]{1,64}", h) and h not in allow:
+            allow.append(h)
     return [(b"access-control-allow-origin", origin.encode()), (b"vary", b"Origin"),
-            (b"access-control-allow-headers", b"authorization, content-type, x-vyomi-mesh-token"),
-            (b"access-control-allow-methods", b"GET, POST, OPTIONS"),
+            (b"access-control-allow-headers", ", ".join(allow).encode()),
+            (b"access-control-allow-methods", _CORS_METHODS.encode()),
+            (b"access-control-expose-headers", b"*"),
             (b"access-control-allow-private-network", b"true")]
 
 
@@ -221,7 +234,7 @@ class HeadlessMiddleware:
                 origin = headers.get("origin", "")
                 ok = bool(origin) and origin_allowed(origin) and host_allowed(headers.get("host", ""))
                 if scope.get("method") == "OPTIONS":
-                    return await self._respond(send, 204 if ok else 403, b"", cors_headers(origin) if ok else ())
+                    return await self._respond(send, 204 if ok else 403, b"", cors_headers(origin, headers.get("access-control-request-headers", "")) if ok else ())
                 if ok:
                     async def cors_send(msg):
                         if msg["type"] == "http.response.start":
