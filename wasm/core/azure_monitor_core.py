@@ -1432,6 +1432,12 @@ def _dispatch(state, method, sub, rg, chain, payload, query, base=""):
     rec = state.get(rid.lower())
     rest = chain[2:]
     if rest:
+        if low == "workbooks" and method == "POST" and rest[0].lower() == "render":
+            # The workbook renderer (core/azure_workbooks_core). Azure's arm core intercepts this verb first; the offline wire reaches
+            # this core directly, so it delegates here too instead of answering ResourceTypeNotSupported.
+            from core import azure_workbooks_core as _wbk
+            r = _wbk.render(state, sub, rg, name, payload)
+            return _ok(r["body"], status=r["status"], headers=r.get("headers"))   # the offline host reads lro/rid/verb off every dispatch result
         if rec is None:
             raise _not_found(low, name, rg)
         if low == "actiongroups":
