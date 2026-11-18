@@ -97,9 +97,17 @@ check("settings: invocation logging saved", true); await shot("s1-settings");
 await go("prompt-optimization", "Advanced prompt optimization");
 await page.getByRole("button", { name: /Choose a model/ }).first().click(); await page.getByRole("option").first().click();
 await page.getByPlaceholder("Write the prompt to improve").fill("tell me about {{topic}}");
+// a usable model reply (keeps the user's {{topic}}) is shown as the optimized prompt
+await page.evaluate(() => window.vyomiRegisterLLM({ model: "ui-stub", chat: async () => JSON.stringify({ text: "STUB ANSWER: You are an expert. Explain {{topic}} in three clear bullet points.", input_tokens: 1, output_tokens: 1 }) }));
 await page.getByRole("button", { name: "Optimize" }).click();
 await page.getByTestId("optimized").waitFor({ timeout: 60000 });
 check("prompt optimization: returns optimized prompt", /STUB ANSWER/.test(await page.getByTestId("optimized").innerText())); await shot("o1");
+// regression (owner symptom): a tiny model that loops '{{input}}{{output}}' must never reach the result; a rule-based rewrite + note is shown instead
+await page.evaluate(() => window.vyomiRegisterLLM({ model: "ui-loop", chat: async () => JSON.stringify({ text: "{{input}}{{output}}".repeat(60), input_tokens: 1, output_tokens: 1 }) }));
+await page.getByRole("button", { name: "Optimize" }).click();
+await page.getByTestId("optimize-note").waitFor({ timeout: 60000 });
+const ot = await page.getByTestId("optimized").innerText();
+check("prompt optimization: looping '{{input}}{{output}}' reply never shown, user's {{topic}} kept, honest note", !/\{\{(input|output)\}\}/.test(ot) && /\{\{topic\}\}/.test(ot) && /rule-based/.test(await page.getByTestId("optimize-note").innerText()), ot); await shot("o2-loop");
 
 for (const [h, t] of [["automated-reasoning", "Automated Reasoning"], ["data-automation", "Data Automation"]]) {
   await go(h, t); const b = await body();

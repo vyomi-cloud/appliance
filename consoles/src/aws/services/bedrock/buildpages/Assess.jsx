@@ -205,7 +205,8 @@ export function PromptOptimization() {
           <FormField label="Prompt"><Textarea value={text} rows={5} onChange={({ detail }) => setText(detail.value)} ariaLabel="Prompt to optimize" placeholder="Write the prompt to improve" /></FormField>
           <Box><Button variant="primary" loading={busy} disabled={!text || !model} onClick={go}>Optimize</Button></Box>
           {err && <ErrorAlert error={err} header="Optimization failed" />}
-          {res !== null && <FormField label="Optimized prompt"><Box data-testid="optimized" variant="p"><span style={{ whiteSpace: "pre-wrap" }}>{res}</span></Box></FormField>}
+          {res !== null && res.fallback && <Alert type="warning" data-testid="optimize-note">{res.note}</Alert>}
+          {res !== null && <FormField label="Optimized prompt"><Box data-testid="optimized" variant="p"><span style={{ whiteSpace: "pre-wrap" }}>{res.text}</span></Box></FormField>}
         </SpaceBetween>
       </Container>
     </Page>

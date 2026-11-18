@@ -85,5 +85,7 @@ export const deleteLogging = () => B("DELETE", "/logging/modelinvocations");
 export const modelAvailability = (id) => B("GET", `/foundation-model-availability/${enc(id)}`);
 export const optimizePrompt = async (text, targetModelId) => {
   const ev = await stream("/optimize-prompt", { input: { textPrompt: { text } }, targetModelId });
-  return ev.find((e) => e.type === "optimizedPromptEvent")?.data.optimizedPrompt?.textPrompt?.text || "";
+  const note = ev.find((e) => e.type === "analyzePromptEvent")?.data.message || "";
+  // fallback = the local model's reply was unusable (looped / invented placeholders) and the core applied a rule-based rewrite instead
+  return { text: ev.find((e) => e.type === "optimizedPromptEvent")?.data.optimizedPrompt?.textPrompt?.text || "", note, fallback: /rule-based/i.test(note) };
 };

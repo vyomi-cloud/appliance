@@ -1511,6 +1511,44 @@ def _availability(mid):
             "entitlementAvailability": "AVAILABLE", "regionAvailability": "AVAILABLE"}
 
 
+_VAR = re.compile(r"\{\{\s*[A-Za-z_][\w.\-]*\s*\}\}")
+
+
+def _user_vars(text):
+    """The {{placeholders}} the USER typed, in order, de-duplicated (the only ones an optimized prompt may carry)."""
+    seen, out = set(), []
+    for m in _VAR.findall(text or ""):
+        if m not in seen:
+            seen.add(m)
+            out.append(m)
+    return out
+
+
+def _usable(out, text):
+    """Is the local model's reply fit to show as an optimized prompt? A <1 GB model told to 'keep every {{variable}}' sometimes parrots
+    placeholders it was never given ('{{input}}{{output}}{{input}}...') or loops. Reject placeholder-only, looping or variable-dropping output."""
+    s = (out or "").strip()
+    if not s:
+        return False
+    allowed = set(_user_vars(text))
+    if any(v not in s for v in allowed):
+        return False                                   # a variable the user typed must survive
+    if any(v not in allowed for v in _VAR.findall(s)):
+        return False                                   # a placeholder nobody typed = the model made it up
+    words = re.findall(r"[A-Za-z]{2,}", _VAR.sub(" ", s))
+    if len(words) < 3:
+        return False
+    toks = s.split()
+    return not (len(toks) >= 12 and len(set(toks)) / len(toks) < 0.35)   # the same few tokens over and over
+
+
+def _rule_rewrite(text):
+    """Deterministic fallback when the local model's reply is unusable: a plain role/task/format scaffold around the user's own prompt.
+    It adds no facts and leaves every {{variable}} exactly as typed. It is labelled as rule-based, never presented as model output."""
+    return ("You are a careful assistant.\n\nTask:\n" + text.strip() + "\n\nRespond clearly and concisely, and state the output format "
+            "you are using. If the task is ambiguous, say what you assumed.")
+
+
 def _optimize(p):
     t = ((p.get("input") or {}).get("textPrompt") or {}).get("text")
     mid = p.get("targetModelId")
@@ -1519,13 +1557,21 @@ def _optimize(p):
     if am._resolve_model(mid) is None:
         raise _bad("The provided model identifier is invalid.")
     llm = _llm()
-    meta = ("Rewrite the following prompt so that a language model follows it more reliably: state the role and the task, name the output format, "
-            "keep every {{variable}} placeholder unchanged, add no new facts. Reply with the rewritten prompt only.\n\nPROMPT:\n" + t)
+    vs = _user_vars(t)
+    keep = ("Keep these placeholders exactly as written and add no others: " + " ".join(vs) + ". ") if vs else "Do not add any placeholders. "
+    meta = ("Rewrite the prompt below so that a language model follows it more reliably: state the role and the task, name the output format. "
+            + keep + "Add no new facts. Reply with the rewritten prompt only.\n\nPROMPT:\n" + t)
     try:
-        out = llm.chat([{"role": "user", "content": meta}], max_tokens=400, temperature=0.2)["text"].strip()
-    except llm.LlmUnavailable:
-        return _err(BErr("DependencyFailedException", "No local LLM backend is available on this substrate.", 424))
-    frames = [_frame("analyzePromptEvent", {"message": "Analysed the prompt with the local model (a meta-prompt rewrite, not Bedrock's managed optimizer)."}),
+        out = llm.chat([{"role": "user", "content": meta}], max_tokens=min(400, max(96, 3 * len(t.split()) + 80)), temperature=0.2)["text"].strip()
+    except llm.LlmUnavailable as e:
+        return _err(BErr("DependencyFailedException", str(e) or "No local LLM backend is available on this substrate.", 424))
+    if _usable(out, t):
+        note = "Analysed the prompt with the local model (a meta-prompt rewrite, not Bedrock's managed optimizer)."
+    else:
+        out = _rule_rewrite(t)
+        note = ("The local model's reply was not usable as a prompt (it repeated itself or emitted placeholders you did not write), so a "
+                "rule-based rewrite was applied instead. Try a larger local model for a model-written rewrite.")
+    frames = [_frame("analyzePromptEvent", {"message": note}),
               _frame("optimizedPromptEvent", {"optimizedPrompt": {"textPrompt": {"text": out}}})]
     return {"status": 200, "headers": {"content-type": "application/vnd.amazon.eventstream"}, "body": b"".join(frames)}
 
