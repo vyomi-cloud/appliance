@@ -30,3 +30,7 @@ Evidence: `docs/architecture/v4.0/REF-ARCH-PROBE-AZURE.md` (components 2, 5, 12)
 - `wire_ingress` hands the blob core the concrete Azure-space ARM dict (the context proxy resolved wrongly in the delivery thread).
 - Test: `tests/conformance/test_azure_ref_eventgrid_sdk.py` (azure-mgmt-eventgrid + azure-storage-blob + azure-servicebus).
 - Contract for lane 6: the AzureFunction path calls `run_function_sync(app, fn, "POST", [event,...])` and treats HTTP 2xx / `ok` as delivered; the azure.functions shim's `req.headers` is case-sensitive (real is case-insensitive), so the handshake header `aeg-event-type` is only seen lower-case.
+
+### 4. AI Search indexer fill
+- The indexer engine (`core/azure_search_core.run_indexer`) already fills an index from Blob; the probe's "fills nothing" was a connection-string/account mismatch. Now `UseDevelopmentStorage=true` / `devstoreaccount1` resolves to the sole storage account holding a container of that name.
+- Test: `tests/conformance/test_azure_ref_search_indexer.py` (azure-storage-blob upload, azure-mgmt-search admin key, ARM-extension REST for the data plane until az-ref-ai lands the native wire). Embedding skills are BLOCKED(no model) here.
