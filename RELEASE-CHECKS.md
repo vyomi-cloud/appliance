@@ -1,6 +1,6 @@
 # Release checks — v4.0.8
 
-Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/44371054246) for tag `v4.0.8`.
+Generated 2026-11-18 20:59 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/44367810424) for tag `v4.0.8`.
 
 | Package / check | Platform | Result |
 |---|---|---|
@@ -10,7 +10,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 | Homebrew: vyomi + vyomi-docker (install, vyomi commands, uninstall) | macOS (GitHub) | ✅ passed |
 | CLI: aws / gcloud / az suites + CLI ↔ console both ways (83/84 checks passed) | Linux, release images | ❌ failure |
 | Nano CLI: aws / gcloud / az through the tunnel + CLI ↔ console both ways (84/84 checks passed) | Chromium, release wasm bundle | ✅ passed |
-| Startup: all services + UI status | Linux, release images | — not run |
+| Startup: all services + UI status | Linux, release images | ❌ null ([run](https://github.com/vyomi-cloud/appliance/actions/runs/null)) |
 
 ## DEB
 
@@ -56,7 +56,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.0.8 | exit 0; compose v4.0.8; ==> Vyomi 4.0.8 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.0.8 (SHA256-checked) | exit 0; cached compose v4.0.8 |
-| ✅ | after update, vyomi runs the cached v4.0.8 |   compose   : v4.0.8 (/tmp/tmp.VSVPw0s1OZ/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.0.8 |   compose   : v4.0.8 (/tmp/tmp.sRboJ6cpAc/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (4.0.8) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -67,7 +67,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-4.0.8-1.noarch.rpm | 1s |
+| ✅ | install vyomi-4.0.8-1.noarch.rpm | 4s |
 | ✅ | package manager reports version 4.0.8 | found '4.0.8' |
 | ✅ | bundled VERSION is 4.0.8 | /usr/lib/cloud-learn/VERSION = 4.0.8 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -105,7 +105,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.0.8 | exit 0; compose v4.0.8; ==> Vyomi 4.0.8 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.0.8 (SHA256-checked) | exit 0; cached compose v4.0.8 |
-| ✅ | after update, vyomi runs the cached v4.0.8 |   compose   : v4.0.8 (/tmp/tmp.VvSzimUrLn/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.0.8 |   compose   : v4.0.8 (/tmp/tmp.uQZ4mbNO05/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -116,7 +116,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 9s |
+| ✅ | install vyomi | 12s |
 | ✅ | package manager reports version 4.0.8 | found '4.0.8' |
 | ✅ | bundled VERSION is 4.0.8 | /opt/homebrew/opt/vyomi/libexec/VERSION = 4.0.8 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -139,7 +139,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 4s |
+| ✅ | install vyomi-docker | 5s |
 | ✅ | package manager reports version 4.0.8 | found '4.0.8' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -155,7 +155,7 @@ Generated 2026-11-18 20:13 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.0.8 | exit 0; compose v4.0.8; ==> Vyomi 4.0.8 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.0.8 (SHA256-checked) | exit 0; cached compose v4.0.8 |
-| ✅ | after update, vyomi runs the cached v4.0.8 |   compose   : v4.0.8 (/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.q4ZvedGuWk/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.0.8 |   compose   : v4.0.8 (/var/folders/q2/p1t6rgxj5fj32g1dc7dmd49r0000gn/T/tmp.hK1C3gzFCf/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/4.0.8/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/4.0.8... (12 files, 31.8MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -399,7 +399,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 | Failing suite | Passed | Failed |
 |---|---|---|
-| `nano-ui-crawl` | 2 | 18 |
+| `nano-ui-crawl` | 1 | 18 |
 | `nano-ui-default-cloud` | 4 | 1 |
 
 
@@ -409,7 +409,7 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 | Failing suite | Passed | Failed |
 |---|---|---|
-| `nano-ui-crawl` | 3 | 31 |
+| `nano-ui-crawl` | 2 | 32 |
 | `nano-ui-azure-tabs` | 69 | 1 |
 
 
@@ -418,25 +418,3 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 ✅ 25/25 suites passed
 
 
-
-## SDK checks (Python, Go, Java)
-
-❌ SDK checks: 1473/1478 passed (99.7%)
-
-Native-SDK conformance suites (the ones the hourly conformance agent runs) against the published release images, per cloud and language.
-
-| Cloud | Python | Go | Java |
-|---|---|---|---|
-| aws | 156/158 | 353/354 | 338/339 |
-| gcp | 5/5 | 153/153 | 95/95 |
-| azure | 18/19 | 216/216 | 139/139 |
-
-| Failing suite | Passed | Failed |
-|---|---|---|
-| `offline-sdk-python-aws` | 74 | 1 |
-| `offline-sdk-java-aws-sns` | 72 | 1 |
-| `offline-sdk-go-aws-sns` | 70 | 1 |
-| `offline-sweepA-aws` | 13 | 1 |
-| `offline-sdk-python-azure-vm-runcommand` | 10 | 1 |
-
-<!-- sdk-pass-rate: passed=1473 total=1478 not_run=0 rate=99.7 -->
