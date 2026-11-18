@@ -11,7 +11,7 @@ const SRC = fs.readFileSync(resolve(HERE, "../../wasm/nano-usage.js"), "utf8");
 let fails = 0;
 const check = (ok, what, detail = "") => { console.log(`[${ok ? "PASS" : "FAIL"}] nano-usage: ${what}${!ok && detail ? " :: " + detail : ""}`); if (!ok) fails++; };
 
-function world({ cloud = "aws", hash = "", path = "/v4/aws/index.html", ls = {}, dnt, flag, fetchStatus = 204, noBeacon = false } = {}) {
+function world({ cloud = "aws", hash = "", path = "/v4/aws/index.html", ls = {}, dnt, flag, fetchStatus = 204, noBeacon = false, fp = false } = {}) {
   const t = { now: 1_700_000_000_000 };
   const timers = [], listeners = {}, docL = {};
   const sent = [], beacons = [];
@@ -39,6 +39,12 @@ function world({ cloud = "aws", hash = "", path = "/v4/aws/index.html", ls = {},
     clearInterval: (i) => { if (timers[i - 1]) timers[i - 1].f = null; },
     fetch: (u, o) => { sent.push({ u, o, body: JSON.parse(o.body) }); return Promise.resolve({ status: fetchStatus, ok: fetchStatus < 300 }); },
   };
+  if (fp) {   // shims for the device-fingerprint path (crypto.subtle, TextEncoder, screen, Intl, canvas)
+    win.crypto.subtle = { digest: async (_alg, data) => { const h = new Uint8Array(32); for (let i = 0; i < data.length; i++) h[i % 32] = (h[i % 32] * 31 + data[i]) & 255; return h.buffer; } };
+    ctx.TextEncoder = TextEncoder; ctx.Intl = Intl; ctx.screen = { width: 1440, height: 900, colorDepth: 24 };
+    ctx.navigator.platform = "MacIntel"; ctx.navigator.hardwareConcurrency = 8; ctx.navigator.language = "en-US";
+    doc.createElement = () => ({ getContext: () => null });
+  }
   ctx.self = ctx; win.window = win; Object.assign(win, { navigator: ctx.navigator, localStorage: ctx.localStorage, sessionStorage: ctx.sessionStorage, document: doc });
   vm.createContext(ctx);
   vm.runInContext(SRC, ctx);
@@ -143,6 +149,37 @@ for (const [name, opts] of [["localStorage vyomi.telemetry=off", { ls: { "vyomi.
 {
   const w = world({ hash: "#/s3/buckets" });
   check(/^[0-9a-f]{16}$/.test(w.dbg().sid), "sid generated");
+}
+// 9 — browser id (iid): optional field, the same device fingerprint as the Nano install ping, cached in localStorage
+{
+  const IIDRE = /^[A-Za-z0-9_-]{1,64}$/;
+  // a) no fingerprint support, nothing cached: events go out WITHOUT iid (older-compatible body)
+  const a = world({ hash: "#/s3/buckets" });
+  a.advance(5000); a.fire("click"); a.setHash("#/ec2/instances"); a.advance(31_000);
+  check(a.sent.length >= 1 && a.sent.every((x) => !("iid" in x.body) && x.body.v === 1), "no iid available -> body has no iid key", JSON.stringify(a.sent[0] && a.sent[0].body).slice(0, 80));
+  // b) an id already cached by an earlier page: sent with every batch, events keep exactly the contract fields
+  const b = world({ hash: "#/s3/buckets", ls: { "vyomi.nano.iid": "nano-fp-0123456789abcdef01234567" } });
+  b.advance(5000); b.fire("click"); b.setHash("#/ec2/instances"); b.advance(31_000);
+  check(b.sent.length >= 1 && b.sent.every((x) => x.body.iid === "nano-fp-0123456789abcdef01234567"), "cached iid rides with every batch");
+  check(Object.keys(b.sent[0].body.events[0]).sort().join() === "cloud,dur,enter,exit,service,sid,view", "events themselves unchanged (no iid inside events)");
+  // c) a malformed cached value is ignored
+  const c = world({ hash: "#/s3/buckets", ls: { "vyomi.nano.iid": "bad id!!" } });
+  c.advance(5000); c.fire("click"); c.setHash("#/ec2/instances"); c.advance(31_000);
+  check(c.sent.every((x) => !("iid" in x.body)), "malformed cached iid is ignored");
+  // d) computed like clouds.html nanoFp: 'nano-fp-' + 24 hex, cached under vyomi.nano.iid, sent from then on
+  const d = world({ hash: "#/s3/buckets", fp: true });
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  d.advance(5000); d.fire("click"); d.setHash("#/ec2/instances"); d.advance(31_000);
+  const id = d.sent[0] && d.sent[0].body.iid;
+  check(/^nano-fp-[0-9a-f]{24}$/.test(id || "") && IIDRE.test(id || ""), "fingerprint iid = nano-fp-<24 hex>", String(id));
+  const d2 = world({ hash: "#/s3/buckets", fp: true });
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+  d2.advance(5000); d2.fire("click"); d2.setHash("#/ec2/instances"); d2.advance(31_000);
+  check(d2.sent[0] && d2.sent[0].body.iid === id, "same device -> same iid across page loads");
+  // e) opted out: no iid is computed or sent at all
+  const e = world({ hash: "#/s3/buckets", fp: true, dnt: "1" });
+  await Promise.resolve(); e.advance(40_000);
+  check(e.sent.length === 0 && e.beacons.length === 0, "opt-out still sends nothing (iid included)");
 }
 globalThis.Blob = origBlob;
 console.log(fails ? `\n${fails} FAILED` : "\nall passed");
