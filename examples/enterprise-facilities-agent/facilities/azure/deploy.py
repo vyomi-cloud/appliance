@@ -55,6 +55,9 @@ def call_function(ctx, app, fn, payload, timeout=120):
     import requests
     h = {"x-functions-key": ctx.state["func_key"]} if ctx.state.get("func_key") else {}
     r = requests.post(ctx.func_url(app, fn), json=payload, headers=h, timeout=timeout)
+    if r.status_code == 401 and h:
+        from .runtime import Blocked, LANE
+        raise Blocked(LANE["runtime"], f"the front door rejects the host key ARM list_host_keys returned (HTTP 401 for {app}/{fn}); the ARM key store and the serving key store differ")
     if r.status_code != 200:
         raise RuntimeError(f"function {app}/{fn} HTTP {r.status_code}: {r.text[-400:]}")
     return r.json()
