@@ -523,6 +523,7 @@ def _run_py_harness(code: str, spec: dict, timeout: int, env: dict | None, entry
                 os.makedirs(os.path.dirname(dest), exist_ok=True)
                 with open(dest, "w") as fh:
                     fh.write(text)
+        os.makedirs(os.path.join(workdir, "_shim"), exist_ok=True)
         os.makedirs(os.path.join(workdir, "_shim_az", "azure"))     # a namespace portion (no __init__): `azure.data.tables` etc. still resolve
         with open(os.path.join(workdir, "_shim_az", "azure", "functions.py"), "w") as fh:
             fh.write(_shims.AZ_FUNCTIONS_SHIM)
@@ -779,13 +780,24 @@ try:
     import azure.functions as func
     low = lambda v: str(v).lower() if v is not None else v
 
+    def _plain_val(v):
+        if isinstance(v, dict):
+            return {k: _plain_val(x) for k, x in v.items()}
+        if isinstance(v, (list, tuple)):
+            return [_plain_val(x) for x in v]
+        if hasattr(v, "name") and hasattr(v, "value") and not isinstance(v, (str, bytes)):      # an Enum (HttpMethod, AuthLevel, BindingDirection, ...)
+            return v.value if isinstance(v.value, str) else v.name
+        return v
+
     def _bindings_of(fn):
         out = []
         for b in fn.get_bindings():
-            d = dict(b.get_dict_repr()) if hasattr(b, "get_dict_repr") else dict(b)
-            d["direction"] = low(d.get("direction") if not hasattr(d.get("direction"), "name") else d["direction"].name)
+            raw = dict(b.get_dict_repr()) if hasattr(b, "get_dict_repr") else dict(b)
+            d = _plain_val(raw)
+            dr = raw.get("direction")
+            d["direction"] = low(dr.name if hasattr(dr, "name") else dr)
             if "authLevel" in d:
-                d["authLevel"] = low(d["authLevel"].name if hasattr(d["authLevel"], "name") else d["authLevel"])
+                d["authLevel"] = low(d["authLevel"])
             out.append(d)
         return out
 
