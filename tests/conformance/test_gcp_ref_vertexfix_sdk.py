@@ -181,7 +181,47 @@ def t_engine():
 
 
 def t_sessions():
-    pass
+    from datetime import datetime, timezone, timedelta
+    c = _vertex_client()
+    eng = c.agent_engines.create(config={"display_name": f"sess-{TAG}"})
+    ename = eng.api_resource.name
+    op = c.agent_engines.sessions.create(name=ename, user_id="maria", config={"session_state": {"site": "plant-3"}})
+    sname = op.response.name
+    check("sessions.create", sname.startswith(ename + "/sessions/"), sname)
+    t0 = datetime.now(timezone.utc)
+    inv = uuid.uuid4().hex[:8]
+    c.agent_engines.sessions.events.append(name=sname, author="user", invocation_id=inv, timestamp=t0,
+                                           config={"content": {"role": "user", "parts": [{"text": "Boiler B-12 is at 34 psi"}]}})
+    c.agent_engines.sessions.events.append(name=sname, author="facilities_supervisor", invocation_id=inv, timestamp=t0 + timedelta(seconds=2),
+                                           config={"content": {"role": "model", "parts": [{"text": "Raised work order WO-1"}]},
+                                                   "actions": {"state_delta": {"last_wo": "WO-1"}, "skip_summarization": True},
+                                                   "event_metadata": {"custom_metadata": {"route": "maintenance"}, "branch": "root"}})
+    # a float timestamp (what the reference app passes) is coerced by the SDK model and must work too
+    c.agent_engines.sessions.events.append(name=sname, author="user", invocation_id=inv + "x", timestamp=time.time() + 60,
+                                           config={"content": {"role": "user", "parts": [{"text": "thanks"}]}})
+    evs = list(c.agent_engines.sessions.events.list(name=sname))
+    check("events.list returns the 3 appended events in timestamp order", [e.author for e in evs] == ["user", "facilities_supervisor", "user"], [e.author for e in evs])
+    e1 = evs[1]
+    check("event fields round-trip (invocation_id, content, timestamp, name)",
+          e1.invocation_id == inv and e1.content.parts[0].text == "Raised work order WO-1" and e1.timestamp is not None and "/events/" in e1.name, e1)
+    check("actions + event_metadata round-trip typed (EventActions / EventMetadata)",
+          e1.actions.state_delta == {"last_wo": "WO-1"} and e1.actions.skip_summarization is True and e1.event_metadata.custom_metadata == {"route": "maintenance"}
+          and e1.event_metadata.branch == "root", (e1.actions, e1.event_metadata))
+    s2 = c.agent_engines.sessions.get(name=sname)
+    check("sessions.get still works and sees the session", s2.name == sname and s2.user_id == "maria")
+    try:
+        c.agent_engines.sessions.events.append(name=sname, author="user", invocation_id="", timestamp=t0); bad = False
+    except Exception as e:
+        bad = "400" in str(e) or "invocation" in str(e).lower()
+    check("append without invocation_id -> 400", bad)
+    try:
+        c.agent_engines.sessions.events.append(name=sname.rsplit("/", 1)[0] + "/nope", author="user", invocation_id="i", timestamp=t0); nf = False
+    except Exception as e:
+        nf = "404" in str(e) or "NOT_FOUND" in str(e)
+    check("append to an unknown session -> 404", nf)
+    c.agent_engines.sessions.delete(name=sname)
+    check("sessions.delete then list is empty", not list(c.agent_engines.sessions.list(name=ename)))
+    c.agent_engines.delete(name=ename, force=True)
 
 
 def t_models():
