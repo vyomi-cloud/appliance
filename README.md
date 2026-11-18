@@ -50,7 +50,7 @@ Everything below is cumulative — every capability shipped from v1.0 through v3
 | **Enterprise** | Multi-tenant RBAC, shared cohort sandboxes, cloud sandboxes on GitHub Codespaces, SSO, Helm + air-gapped install, audit sinks |
 | **Terraform** | Export simulator state to HCL and import it back |
 | **Verified every release** | Hourly conformance agent across Nano + offline (UI, SDK, CLI, API, cost savings), plus per-release install checks for MSI / DEB / RPM / Homebrew, a full startup + UI-status check, and a Windows end-to-end run — results on each `release/vX.Y.Z` branch |
-| **Privacy** | Anonymous install counting only; opt out with `VYOMI_NO_TELEMETRY=1` |
+| **Privacy** | Anonymous install counting; in the Nano consoles, anonymous per-view dwell times (route pattern + active seconds, never resource names or page content). Opt out with `VYOMI_NO_TELEMETRY=1`, `localStorage vyomi.telemetry=off`, or your browser's Do Not Track |
 
 ### Release history
 
