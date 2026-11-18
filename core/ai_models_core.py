@@ -1941,14 +1941,14 @@ def _az_fin(r_or_ev):
     return "tool_calls" if r_or_ev["tool_calls"] else ("length" if r_or_ev["finish_reason"] == "length" else "stop")
 
 
-def _az_stream(cid, now, model, it, include_usage):
+def _az_stream(cid, now, model, it, include_usage, context=None):
     def chunk(delta, fin=None, usage=None):
         d = {"id": cid, "object": "chat.completion.chunk", "created": now, "model": model,
              "choices": [] if usage else [{"index": 0, "delta": delta, "finish_reason": fin}]}
         if usage:
             d["usage"] = usage
         return "data: " + json.dumps(d) + "\n\n"
-    yield chunk({"role": "assistant", "content": ""})
+    yield chunk({"role": "assistant", "content": "", **({"context": context} if context else {})})
     try:
         for ev in it:
             if ev["type"] == "text":
@@ -2309,6 +2309,106 @@ def _foundry_project(arm_state, method, path, query, headers, body, net_state):
     return ag.project_dispatch(arm_state, method, rest, query or {}, p0) or _a_err(404, "404", "Resource not found")
 
 
+# ── Azure OpenAI "On Your Data": chat.completions + extra_body.data_sources[azure_search] grounded on the simulator's AI Search core ──────
+# Retrieval reuses core/azure_search_core.search() (same BM25 / filter / vector / semantic engine the native search data plane runs);
+# the grounding prompt carries numbered [docN] sources and the answer comes from the same local-LLM seam as plain chat. The response has
+# the real shape: message.context = {citations:[{content,title,url,filepath,chunk_id}], intent:'["rewritten query"]'}; [docN] stays in the text.
+_ODY_UNSUPPORTED = ("cosmos_db", "elasticsearch", "azure_ml_index", "mongo_db", "pinecone")
+
+
+def _ody_service(arm_state, endpoint):
+    try:
+        from core import azure_search_core as sc
+    except ImportError:  # pragma: no cover - Pyodide flat layout
+        import azure_search_core as sc  # type: ignore
+    from urllib.parse import urlparse
+    u = urlparse(str(endpoint or ""))
+    m = re.search(r"/searchServices/([^/]+)", u.path) or re.search(r"/azure-data/search/([^/]+)", u.path)
+    hint = m.group(1) if m else None
+    if hint is None and u.hostname and ".search." in u.hostname:
+        hint = u.hostname.split(".")[0]
+    svcs = sc._services(arm_state)
+    if hint:
+        svc = next((r for r in svcs if r["name"].lower() == hint.lower()), None)
+    else:
+        svc = svcs[0] if len(svcs) == 1 else None
+    return sc, svc
+
+
+def _az_on_your_data(arm_state, p, msgs):
+    """-> (messages with the grounding system prompt, context) or an error response."""
+    ds_all = p.get("data_sources")
+    if not isinstance(ds_all, list) or not ds_all:
+        return _a_err(400, "BadRequest", "'data_sources' must be a non-empty array.", "data_sources")
+    user_q = next((m["content"] for m in reversed(msgs) if m.get("role") == "user" and isinstance(m.get("content"), str)), "")
+    citations = []
+    for ds in ds_all:
+        typ = ds.get("type") if isinstance(ds, dict) else None
+        if typ != "azure_search":
+            return _a_err(400, "BadRequest", f"The data source type '{typ}' is not supported by this simulator; only 'azure_search' is "
+                          f"(unsupported: {', '.join(_ODY_UNSUPPORTED)}).", "data_sources")
+        pr = ds.get("parameters") or {}
+        sc, svc = _ody_service(arm_state, pr.get("endpoint"))
+        if svc is None:
+            return _a_err(400, "BadRequest", f"Azure Search service for endpoint '{pr.get('endpoint')}' was not found in this simulator.", "data_sources")
+        au = pr.get("authentication") or {}
+        if au.get("type") == "api_key":
+            if au.get("key") not in (svc["_admin"]["primary"], svc["_admin"]["secondary"]) and au.get("key") not in svc["_query"]:
+                return _a_err(400, "BadRequest", "Authentication to the Azure Search data source failed: invalid api-key.", "data_sources")
+        elif au.get("type") not in ("access_token", "system_assigned_managed_identity", "user_assigned_managed_identity"):
+            return _a_err(400, "BadRequest", "authentication.type must be api_key, access_token or a managed identity type.", "data_sources")
+        ix = svc["_indexes"].get(pr.get("index_name"))
+        if ix is None:
+            return _a_err(400, "BadRequest", f"Azure Search index '{pr.get('index_name')}' was not found.", "data_sources")
+        idx = ix["_def"]
+        strs = [f["name"] for f in idx["fields"] if f["type"] == "Edm.String"]
+        fmap = pr.get("fields_mapping") or {}
+        cf = fmap.get("content_fields") or [next((n for n in ("content", "chunk", "text") if n in strs), next((n for n in strs if n not in (fmap.get("title_field"),)), None))]
+        cf = [c for c in cf if c]
+        tf, uf, pf = fmap.get("title_field"), fmap.get("url_field"), fmap.get("filepath_field")
+        tf = tf or next((n for n in ("title", "name") if n in strs), None)
+        sel = list(dict.fromkeys(cf + [x for x in (tf, uf, pf) if x]))
+        qt = str(pr.get("query_type") or "simple").lower()
+        if qt not in ("simple", "semantic", "vector", "vector_simple_hybrid", "vector_semantic_hybrid"):
+            return _a_err(400, "BadRequest", f"Unsupported query_type '{qt}'.", "data_sources")
+        top = int(pr.get("top_n_documents") or 5)
+        sp = {"search": user_q or "*", "top": top, "select": ",".join(sel), "queryType": "simple"}
+        if pr.get("filter"):
+            sp["filter"] = pr["filter"]
+        if qt in ("semantic", "vector_semantic_hybrid"):
+            sp["queryType"] = "semantic"
+            if pr.get("semantic_configuration"):
+                sp["semanticConfiguration"] = pr["semantic_configuration"]
+        if qt.startswith("vector"):
+            vf = fmap.get("vector_fields") or [f["name"] for f in idx["fields"] if f["type"] == "Collection(Edm.Single)"]
+            if not vf:
+                return _a_err(400, "BadRequest", f"query_type '{qt}' needs a vector field in index '{pr.get('index_name')}'.", "data_sources")
+            dims = {f["name"]: f.get("dimensions") for f in idx["fields"]}
+            try:
+                e = llm.embed([user_q or " "])["vectors"][0]
+            except llm.LlmUnavailable as ex:
+                return _a_err(503, "ServiceUnavailable", f"{ex}")
+            sp["vectorQueries"] = [{"kind": "vector", "vector": llm._renorm(_fit_dims(e, dims[v] or len(e))), "fields": v, "k": top} for v in vf]
+            if qt == "vector":
+                sp["search"] = "*"
+        r = sc.search(ix, sp)
+        if r["status"] != 200:
+            return _a_err(400, "BadRequest", ((r["body"] or {}).get("error") or {}).get("message", "Azure Search query failed."), "data_sources")
+        for row in r["body"]["value"][:top]:
+            citations.append({"content": "\n".join(str(row.get(c) or "") for c in cf), "title": row.get(tf) if tf else None,
+                              "url": row.get(uf) if uf else None, "filepath": row.get(pf) if pf else None, "chunk_id": str(len(citations))})
+    if p.get("data_sources") and all((d.get("parameters") or {}).get("in_scope", True) is not False for d in ds_all):
+        rule = "Answer ONLY from the retrieved documents below; if they do not contain the answer, say the requested information is not in the data."
+    else:
+        rule = "Prefer the retrieved documents below; you may use general knowledge if they do not contain the answer."
+    block = "\n\n".join(f"[doc{i + 1}]: {c['content']}" for i, c in enumerate(citations)) or "(no documents were retrieved)"
+    sysmsg = (f"You are an AI assistant that helps people find information. {rule} Cite sources inline as [doc1], [doc2] matching the numbered "
+              f"documents.\n\n## Retrieved documents\n{block}")
+    first = msgs[0] if msgs and msgs[0].get("role") == "system" and isinstance(msgs[0].get("content"), str) else None
+    new = [{"role": "system", "content": (first["content"] + "\n\n" if first else "") + sysmsg}] + (msgs[1:] if first else list(msgs))
+    return new, {"citations": citations, "intent": json.dumps([user_q])}
+
+
 def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_state=None):
     if path.startswith("/api/projects/"):
         return _foundry_project(arm_state, method, path, query, headers, body, net_state)
@@ -2410,6 +2510,12 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         req = _az_chat_request(p)
         if len(req) == 2:
             return _a_err(400, "BadRequest", req[1], req[0])
+    ody = None
+    if op == "chat/completions" and p.get("data_sources") is not None:
+        g = _az_on_your_data(arm_state, p, req[0])
+        if not isinstance(g, tuple) or len(g) != 2 or isinstance(g[0], int):
+            return g
+        req, ody = (g[0],) + tuple(req[1:]), g[1]
     req = (req[0], req[1], req[2], req[3], req[4], _with_role("azure", model, dict(req[5], model=model)))
     blocked_in = _az_block_input(acct, dep, req)      # a user-managed content filter on the deployment (Foundry > Guardrails + controls)
     if blocked_in is not None:
@@ -2429,7 +2535,7 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         return _a_err(400, "BadRequest", str(e))
     if stream:
         return _stream_out(200, {"x-vyomi-local-model": llm.resolve_model(model)},
-                           _az_stream(cid, now, model, it, bool((p.get("stream_options") or {}).get("include_usage"))), "text/event-stream")
+                           _az_stream(cid, now, model, it, bool((p.get("stream_options") or {}).get("include_usage")), ody), "text/event-stream")
     fin = "length" if r["finish_reason"] == "length" else "stop"
     usage = {"prompt_tokens": r["input_tokens"], "completion_tokens": r["output_tokens"], "total_tokens": r["input_tokens"] + r["output_tokens"]}
     hh = {"x-vyomi-local-model": r["model"]}
@@ -2443,7 +2549,7 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
         return _j(200, {"id": cid, "object": "text_completion", "created": now, "model": model,
                         "choices": [{"text": r["text"], "index": 0, "finish_reason": fin, "logprobs": None}], "usage": usage}, hh)
     return _j(200, {"id": cid, "object": "chat.completion", "created": now, "model": model,
-                    "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": _az_msg(r)}],
+                    "choices": [{"index": 0, "finish_reason": _az_fin(r), "message": dict(_az_msg(r), **({"context": ody} if ody else {}))}],
                     "usage": usage, "system_fingerprint": "fp_vyomi_local",
                     **({"vyomiImported": True, "vyomiTrained": True} if _imported().is_import_id(model) else {})}, hh)
 
