@@ -1,29 +1,39 @@
 {
- "at": "2026-11-19T19:15:53+00:00",
+ "at": "2026-11-19T20:15:57+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "EventBridge",
+   "service": "Amazon EC2, CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:32bae8afa871",
-   "title": "AWS Health now supports resource and account tags",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-health-supports-tags/",
-   "detail": "AWS Health now supports resource and account tags in Health events. This new capability enables you to enrich Health events with resource tags and account tags, providing additional context to help you manage and respond to events more effectively. With this feature, you can now view resource tags directly within Health events for supported AWS services. This allows you to quickly identify which resources are affected and understand their business context without needing to navigate to individual service consoles. Additionally, account-level tags help you categorize and filter events across yo",
+   "key": "feed:aws:857ee925bc1b",
+   "title": "Amazon EC2 launches performance status checks and new utilization metrics for EC2 Detailed Monitoring",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-performance-status-checks/",
+   "detail": "Customers can now use Amazon EC2 performance status checks and new utilization metrics for EC2 Detailed Monitoring to observe and act on the performance of their EC2 workloads without setup within the instance, complementing their in-guest tooling. Customers running performance-sensitive EC2 workloads can use these signals to monitor their CPU and GPU resources, tune capacity needs, and troubleshoot application issues. EC2 performance status checks identify nonterminal hardware conditions that impact performance on accelerated computing instances. These checks also recommend an action, such as",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "CloudWatch",
+   "service": "AWS Lambda",
    "kind": "announcement",
-   "key": "feed:aws:de2ae82e13c1",
-   "title": "AWS AppConfig launches support for managing native AI model and AI prompt configuration ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-appconfig-native-ai-model-invocation-prompt-configurations/",
-   "detail": "Today, AWS AppConfig introduces two new configuration profile types to help you manage the settings for your generative AI applications: AI model invocation configurations, and AI prompt configurations. You can now change model settings and prompts while your application is running, without redeploying code. These updates use AWS AppConfig's safe deployment practices, including gradual rollouts and automatic rollback. This can allow you to move faster and safer, and avoid unexpected behaviors and tokenomics results with rapidly evolving AI solutions. AI model invocation configurations store th",
+   "key": "feed:aws:cad2be411d2f",
+   "title": "AWS Lambda Durable Execution SDK for Rust is now generally available",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-execution-sdk-rust/",
+   "detail": "Today, AWS announces the general availability of the open source AWS Lambda Durable Execution SDK for Rust. Rust developers can use the SDK to build resilient, long-running workflows using Lambda durable functions, to create multi-step applications like infrastructure automation, deployment rollouts with approval gates, and pipelines that call AI models and pause for human review directly in their Rust code without implementing custom progress tracking. Lambda durable functions extend Lambda's event-driven programming model with operations that checkpoint progress automatically and pause execu",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:a145398034d7",
+   "title": "AgentCore runtime instances now support privileged mode",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-elevated-privileges/",
+   "detail": "Amazon Bedrock AgentCore runtime instances now support privileged mode, which lets your agents install system-level software and run nested containers. Runtime instances run your agents on Amazon EC2 instances while AgentCore handles provisioning, patching, scaling, and lifecycle management. You turn on privileged mode when you create or update an agent runtime that runs on runtime instances. For example, a coding agent can start its service dependencies, such as Postgres and Redis, as containers and run its integration tests against them. A code-modernization agent can install the compilers a",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out"
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
  ]
 }

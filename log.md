@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-19T20:15:57+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` AWS Lambda Durable Execution SDK for Rust is now generally available ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-execution-sdk-rust/))
+- · `announcement` AgentCore runtime instances now support privileged mode ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-elevated-privileges/))
+- · `announcement` Amazon EC2 launches performance status checks and new utilization metrics for EC2 Detailed Monitoring ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-performance-status-checks/))
+
+Sources that failed this run (1): maven/com.azure:azure-security-keyvault-secrets: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-19T19:15:53+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,16 +3010,4 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-07T21:08:37+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-07T20:08:39+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
 
