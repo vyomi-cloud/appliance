@@ -39,7 +39,9 @@ try {
     await page.locator("#main button").filter({ hasText: /create|new [a-z]/i }).first().click();
     await sleep(1200);
     await page.locator("button").filter({ hasText: /create|save|submit/i }).filter({ hasNotText: /cancel/i }).last().click();
-    await sleep(2500);
+    // Cold first service (Cloud SQL) can take longer than a fixed sleep to answer: wait for the POST, up to 15s.
+    for (let i = 0; i < 30 && posts.length === 0; i++) await sleep(500);
+    await sleep(1000);
     page.off("response", onResp);
     check(`${svc}: create with defaults is accepted`, posts.some((c) => c < 300), JSON.stringify(posts) + " " + urls.filter((u) => !u.startsWith("2")).join(" "));
     await page.keyboard.press("Escape");
