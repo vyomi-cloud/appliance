@@ -1,6 +1,17 @@
 {
- "at": "2026-11-19T13:15:52+00:00",
+ "at": "2026-11-19T14:15:47+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:a3b38afae966",
+   "title": "AWS Systems Manager Parameter Store raises API throughput limits",
+   "link": "https://aws.amazon.com/aws.amazon.com/about-aws/whats-new/2026/11/parameter-store-raises-api-throughput-limits/",
+   "detail": "AWS Systems Manager Parameter Store has increased the default throughput limits for five API operations. For accounts that have turned on the higher throughput setting, the quotas have changed as follows, in transactions per second (TPS): GetParametersByPath (from 100 to 500 TPS) PutParameter (10 to 50) DeleteParameter (5 to 50) DescribeParameters (10 to 100) GetParameterHistory (10 to 100) Parameter Store provides powerful, hierarchical storage for configuration data. The higher quotas give more headroom to workloads that call these operations in bursts. Examples include applications that loa",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
