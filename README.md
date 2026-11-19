@@ -2,10 +2,11 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-19T04:15:44+00:00
+### Upstream watch — 2026-11-19T05:15:37+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**0 change(s), 0 actionable.**
+**1 change(s), 0 actionable.**
+- · `announcement` Amazon CloudWatch simplifies network performance monitoring for your Amazon Virtual Private Cloud (VPC) ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-network-path-monitoring/))
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
