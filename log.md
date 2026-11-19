@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-19T01:15:33+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` Cloud Key Management Service: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
+- · `announcement` Google Kubernetes Engine: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
+- · `announcement` Google Kubernetes Engine: Issue (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
+
+Sources that failed this run (4): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-19T00:15:39+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3011,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-07T00:08:12+00:00
 
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-06T23:08:14+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
