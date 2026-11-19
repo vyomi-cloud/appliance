@@ -50,6 +50,9 @@
     "#vy-md.c-aws{--md-cw:1280px;--md-px:24px}" +
     "#vy-md.c-azure{--md-cw:1052px;--md-px:24px}" +
     "#vy-md.c-gcp{--md-cw:996px;--md-px:72px}" +
+    /* AWS service pages (S3, DynamoDB, ...) put a side navigation beside the content: the section is the nav + content frame, edge to
+       edge with the console's 24px gutters, not the 1280px centred column of Home. The class is toggled by place(). */
+    "#vy-md.c-aws.nav .md-body{max-width:none;padding-left:24px;padding-right:24px}" +
     "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
     "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
     "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +
@@ -85,6 +88,7 @@
       open = !open; box.classList.toggle("open", open); this.setAttribute("aria-expanded", open); LS("s", open ? "1" : "0");
     };
     addEventListener("resize", place);
+    addEventListener("hashchange", function () { setTimeout(place, 150); setTimeout(place, 900); });
     if (window.ResizeObserver) { var ro = new ResizeObserver(publish); ro.observe(box); }
     publish();
     setInterval(place, 1500);   // React can re-create the header after us: keep the drawer right behind it
@@ -96,6 +100,11 @@
     var h = header();
     if (h && h.parentNode) { if (h.nextElementSibling !== box) h.parentNode.insertBefore(box, h.nextSibling); }
     else if (box.parentNode !== document.body) document.body.insertBefore(box, document.body.firstChild);
+    if (CLOUD === "aws") {   // side navigation open -> the drawer spans the whole section (nav + content), like the page below it
+      var nv = document.querySelector('[class*="awsui_navigation-container"]');
+      var on = !!(nv && nv.getBoundingClientRect().width > 40);
+      if (box.classList.contains("nav") !== on) box.classList.toggle("nav", on);
+    }
     publish();
   }
   function publish() { if (box) document.documentElement.style.setProperty("--mesh-drawer-h", box.offsetHeight + "px"); }
