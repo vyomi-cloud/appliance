@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-19T02:15:29+00:00
+
+Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (7): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: HTTP Error 403: Forbidden; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: HTTP Error 403: Forbidden
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-19T01:15:33+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,16 +3008,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **1 change(s), 1 actionable.**
 - 🔧 `spec-commit` Azure storage: [Storage] `2027-03-07` svc version for STG105 Rust releease TypeSpec Changes (#48016) ([link](https://github.com/Azure/azure-rest-api-specs/commit/3b64c3a12af9938128abcf05d04c323a518ea78a))
-
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-07T01:08:14+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-07T00:08:12+00:00
-

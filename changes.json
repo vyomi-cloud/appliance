@@ -1,42 +1,14 @@
 {
- "at": "2026-11-19T01:15:33+00:00",
+ "at": "2026-11-19T02:15:29+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "Cloud Key Management Service",
-   "kind": "announcement",
-   "key": "feed:gcp:4f105314cb54",
-   "title": "Cloud Key Management Service: Feature (November 18, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_18_2026",
-   "detail": "Preview: Cloud HSM for Google Workspace supports the following self-service operations by using the Workspace Key Access API: Create or update endpoint configs Create endpoints Update an endpoint to use a different config Disable and re-enable endpoints For more information about the Workspace Key Access API , see Onboard to Cloud HSM for Google Workspace .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:8f68bdffe0e3",
-   "title": "Google Kubernetes Engine: Issue (November 18, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_18_2026",
-   "detail": "In GKE versions 1.35, 1.36, and 1.37, enabling application-layer secrets encryption on a new or existing cluster whose control plane stores cluster state in Spanner encrypts only Kubernetes Secrets ( ENCRYPTED ) instead of all Kubernetes API objects ( ALL_OBJECTS_ENCRYPTION_ENABLED ). Clusters that already have encryption of all Kubernetes API objects enabled ( ALL_OBJECTS_ENCRYPTION_ENABLED ) continue to encrypt all objects. Clusters where application-layer secrets encryption is in the ENCRYPTED state encrypt only Secrets and require manual Secret re-encryption after a Cloud KMS key rotation.",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:975b854ae6a4",
-   "title": "Google Kubernetes Engine: Feature (November 18, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_18_2026",
-   "detail": "GKE Granular NAT is now available in Preview for Autopilot and Standard clusters running GKE version 1.37.1-gke.2611000 or later with GKE Dataplane V2 enabled. You can use GKE Granular NAT to control outbound traffic and assign dedicated egress source IP addresses at the Kubernetes namespace level using the CloudNATGateway and TrafficSelector custom resources. Instead of applying a single NAT policy to an entire cluster, you can route egress traffic from specific namespaces through dedicated external IP addresses for Public NAT or dedicated subnet IP address ranges for Private NAT, without man",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": [
-  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out",
-  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
+  "maven/software.amazon.awssdk:sqs: The read operation timed out",
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out",
+  "maven/com.azure:azure-cosmos: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: HTTP Error 403: Forbidden",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: HTTP Error 403: Forbidden"
  ]
 }

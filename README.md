@@ -2,15 +2,12 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-19T01:15:33+00:00
+### Upstream watch — 2026-11-19T02:15:29+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**3 change(s), 0 actionable.**
-- · `announcement` Cloud Key Management Service: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
-- · `announcement` Google Kubernetes Engine: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
-- · `announcement` Google Kubernetes Engine: Issue (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
+**0 change(s), 0 actionable.**
 
-Sources that failed this run (4): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out
+Sources that failed this run (7): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: HTTP Error 403: Forbidden; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: HTTP Error 403: Forbidden
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
