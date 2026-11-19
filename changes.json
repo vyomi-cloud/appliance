@@ -1,29 +1,29 @@
 {
- "at": "2026-11-19T18:15:55+00:00",
+ "at": "2026-11-19T19:15:53+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Aurora",
+   "service": "EventBridge",
    "kind": "announcement",
-   "key": "feed:aws:8e9069a7f00f",
-   "title": "Amazon Aurora DSQL now supports multi-Region peering across continents",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-intercontinental-multi-region-clusters/",
-   "detail": "Amazon Aurora DSQL now lets you create multi-Region clusters whose Regions are on different continents, such as US East (N. Virginia) and Europe (Ireland). Until now, the Regions in a multi-Region cluster had to be in the same geographic Region set. With intercontinental multi-Region clusters, applications on two continents read and write to one strongly consistent database. If a Region becomes unavailable, committed writes are preserved and applications keep reading and writing in the other Region. You choose the two peer Regions and the witness Region. Place your database close to users on e",
+   "key": "feed:aws:32bae8afa871",
+   "title": "AWS Health now supports resource and account tags",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-health-supports-tags/",
+   "detail": "AWS Health now supports resource and account tags in Health events. This new capability enables you to enrich Health events with resource tags and account tags, providing additional context to help you manage and respond to events more effectively. With this feature, you can now view resource tags directly within Health events for supported AWS services. This allows you to quickly identify which resources are affected and understand their business context without needing to navigate to individual service consoles. Additionally, account-level tags help you categorize and filter events across yo",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "EventBridge",
+   "service": "CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:7ee112fe3222",
-   "title": "Amazon Connect Customer enables Cases by default for new instances",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/connect-cases-enabled-by-default/",
-   "detail": "Amazon Connect Customer enables Cases by default for new instances, so operations teams can start tracking and resolving customer issues on day one without any setup work. New instances come with Cases connected to rules for setting SLAs, Customer Profiles for personalizing customer experiences, and Amazon EventBridge for triggering actions in other business applications when a case is updated. Administrators of existing instances can enable these integrations with one click in the AWS Management Console. Newly added case fields sync automatically, so admins don't have to update integrations e",
+   "key": "feed:aws:de2ae82e13c1",
+   "title": "AWS AppConfig launches support for managing native AI model and AI prompt configuration ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-appconfig-native-ai-model-invocation-prompt-configurations/",
+   "detail": "Today, AWS AppConfig introduces two new configuration profile types to help you manage the settings for your generative AI applications: AI model invocation configurations, and AI prompt configurations. You can now change model settings and prompts while your application is running, without redeploying code. These updates use AWS AppConfig's safe deployment practices, including gradual rollouts and automatic rollback. This can allow you to move faster and safer, and avoid unexpected behaviors and tokenomics results with rapidly evolving AI solutions. AI model invocation configurations store th",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure:azure-cosmos: The read operation timed out"
+  "maven/software.amazon.awssdk:sqs: The read operation timed out"
  ]
 }
