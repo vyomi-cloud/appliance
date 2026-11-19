@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-19T23:16:01+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `announcement` Amazon Inspector Code Security adds GitHub Enterprise Server and private connectivity ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/inspector-code-ghes-private-network/))
+- · `announcement` Amazon S3 Tables now support promoting replicas to writable tables ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-replication-writable-tables/))
+- · `spec-commit` Azure app: [ContainerApps] Fix no-resource-duplicates by removing redundant legacy interface templates (#48355) ([link](https://github.com/Azure/azure-rest-api-specs/commit/9be92ebb1e648caa5a2560c026404a48602bdd61))
+- · `announcement` Compute Engine: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
+- · `announcement` Identity and Access Management: Feature (November 16, 2026) ([link](https://docs.cloud.google.com/release-notes#November_16_2026))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-19T22:16:00+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,17 +3011,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-11-08T03:08:49+00:00
 
 Tracking 4259 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 1 actionable.**
-- 🔧 `operation-added` GCP sqladmin/v1beta4: new operation sql.projects.instances.reconcileNetworking
-
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-08T02:08:49+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
