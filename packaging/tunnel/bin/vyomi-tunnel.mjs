@@ -66,7 +66,7 @@ function friendlyError(e) {
 process.on("unhandledRejection", (e) => { console.error(`vyomi-tunnel: ${friendlyError(e)}`); if (process.env.VYOMI_DEBUG) console.error(e && e.stack); process.exit(1); });
 
 // Mesh / SSH client subcommands (no relay is started for these): login | config | connect <vm> | status | forward <target> <local>:<remote> | keep
-if (["login", "config", "connect", "status", "forward", "keep", "reset", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
+if (["login", "config", "connect", "status", "forward", "keep", "reset", "prune", "gh-login", "gateway-backend", "list", "ls", "help", "-h", "--help", "-help", "--version", "-v", "version"].includes(process.argv[2])) {
   const { main } = await import("./mesh-cli.mjs");
   try {
     process.exit(await main(process.argv.slice(2)));
@@ -86,7 +86,7 @@ if (process.argv[2]) {
 
 // The tunnel keeps running even when its key is missing, revoked or wrong (a service manager would crash-loop it otherwise): the state is
 // shown on /health, re-checked on a timer and when ~/.vyomi/credentials changes, and the Vyomi page can re-pair it (POST /reset).
-const VERSION = "1.3.1";
+const VERSION = "1.3.2";
 const credsSync = createCredsSync({ version: VERSION, log: (m) => console.log("[creds] " + m) });
 const PORT = Number(process.env.RELAY_PORT || 8090);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) { console.error(`vyomi-tunnel: ${friendlyError({ code: "ERR_SOCKET_BAD_PORT" })}`); process.exit(2); }
