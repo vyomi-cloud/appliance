@@ -1,3 +1,17 @@
+### Upstream watch — 2026-11-19T22:16:00+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**6 change(s), 0 actionable.**
+- · `announcement` AWS Lambda durable functions now supports OpenTelemetry tracing ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-otel/))
+- · `announcement` AWS WAF launches new Security Analytics Dashboard for real-time investigations ([link](https://aws.amazon.com/about-aws/whats-new/2026/02/aws-waf-security-analytics-dashboard/))
+- · `announcement` Amazon Aurora DSQL now delivers up to 50% higher write throughput  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-higher-write-throughput/))
+- · `announcement` Amazon Aurora DSQL now supports PL/pgSQL functions and procedures ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-plpgsql-support/))
+- · `announcement` Amazon Aurora now supports moving clusters to a different VPC ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-move-clusters-to-different-vpc/))
+- · `announcement` Amazon Cognito now supports AWS Secrets Manager for app client secrets ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/cognito-secrets-manager-integration/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-19T21:16:50+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,30 +3012,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
-### Upstream watch — 2026-11-08T01:08:50+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Sources that failed this run (1): maven/com.google.cloud:google-cloud-firestore: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-08T00:09:03+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Sources that failed this run (2): maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-07T23:08:51+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Sources that failed this run (2): maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out
