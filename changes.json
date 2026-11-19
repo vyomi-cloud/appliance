@@ -1,17 +1,6 @@
 {
- "at": "2026-11-19T05:15:37+00:00",
+ "at": "2026-11-19T06:15:37+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:6d37255dc20a",
-   "title": "Amazon CloudWatch simplifies network performance monitoring for your Amazon Virtual Private Cloud (VPC)",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-network-path-monitoring/",
-   "detail": "Amazon CloudWatch Network Monitoring now allows you to monitor the health of the AWS network paths that your workloads take by using performance monitors. Performance monitors provide near real-time visibility into whether the AWS network is healthy for your workloads, without installing any software. Performance monitors report per-path metrics such as latency, a network impact score that shows network health, and traffic volume across all flows in your VPCs. You simply select the VPCs you want to monitor, and metrics are available within minutes. Using telemetry AWS already collects, with no",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
