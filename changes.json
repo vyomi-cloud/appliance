@@ -1,61 +1,26 @@
 {
- "at": "2026-11-18T23:15:42+00:00",
+ "at": "2026-11-19T00:15:39+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Identity and Access Management",
+   "service": "DynamoDB",
    "kind": "announcement",
-   "key": "feed:aws:a88254116233",
-   "title": "Introducing the Apache Spark Optimization Agent for AWS Glue ETL",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/apache-spark-aws-glue-etl/",
-   "detail": "AWS Glue ETL now offers the Apache Spark Optimization Agent, which analyzes completed Spark job runs and delivers cost and performance optimization recommendations within minutes. You can select a cost or performance goal, and the agent returns specific configuration changes with the telemetry evidence and reasoning behind each suggestion. You can use the agent on any completed job run from the AWS Glue console, or from your own tools through the Amazon SageMaker Unified Studio MCP Server. The agent takes the job's configuration, logs, and Spark telemetry together with your chosen goal and ret",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:87608bb9475e",
-   "title": "Amazon CloudFront standard logging now supports CMCD and additional log fields",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudfront-standard-logging-cmcd-fields",
-   "detail": "Amazon CloudFront standard logging now supports additional access log fields that were previously available only in CloudFront real-time logs. You can now include these fields in your standard logs and deliver them to Amazon S3, Amazon CloudWatch Logs, or Amazon Data Firehose, without setting up an additional data stream for real-time logs. The new fields include the IP address of the CloudFront server that handled the request, identifiers that separate traffic on a primary distribution from traffic on a staging distribution, and a media quality confidence score. They also include Common Media",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "AWS IAM, Identity and Access Management, AWS KMS",
-   "kind": "announcement",
-   "key": "feed:aws:49f53e779bb0",
-   "title": "AWS IAM account access manager is now even easier to deploy and use",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-account-access-manager-easier/",
-   "detail": "Deploying and using AWS Identity and Access Management (IAM) account access manager is now even easier: you can use AWS managed policies to enable and administer it; you can include it in your infrastructure-as-code (IaC) configurations; and its role assignments are integrated in a growing number of third-party identity and entitlement management solutions. Administering workforce access with account access manager requires permissions across several services, including AWS IAM Identity Center, AWS Organizations, AWS KMS, and AWS IAM. Previously, defining administrative access required hand-as",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, AWS KMS, Key Management Service",
-   "kind": "announcement",
-   "key": "feed:aws:753b5cbe6e6c",
-   "title": "Amazon S3 Replication adds exclusions and Multi-Region key resolution",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-replication-exclusions-multi-region-key-resolution/",
-   "detail": "You can now replicate data in Amazon S3 buckets with fewer replication rules using two new S3 Replication capabilities, exclusions and Multi-Region key resolution. Buckets that many tenants or applications share often need many rules to skip certain data or to match encryption keys in each AWS Region. With these capabilities, customers who manage multi-tenant and shared buckets can replace many replication rules with a single rule. With exclusions, you can replicate an entire bucket while skipping specific prefixes or tagged objects, such as logs or experimental data. With Multi-Region key res",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon VPC",
-   "kind": "announcement",
-   "key": "feed:aws:d15b5cfdf417",
-   "title": "Amazon SageMaker HyperPod now supports higher pod density on EKS-orchestrated clusters",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-hyperpod-higher-pod-density/",
-   "detail": "Amazon SageMaker HyperPod now supports higher pod density per node on EKS-orchestrated clusters, allowing you to get more out of every instance. This leaves more room for your applications alongside system DaemonSets for monitoring, logging, and security, and helps increase GPU, CPU and memory utilization on nodes, allowing you to run the same work using fewer instances. As you schedule more pods, the Amazon VPC CNI automatically adds network capacity to the node. Autoscaling with Karpenter also supports the higher pod capacity, so new nodes take on more pods as your cluster scales out. Here a",
+   "key": "feed:aws:67dd2f51eb6d",
+   "title": "AWS announces ExtendDB 1.0  ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-extenddb-1-0/",
+   "detail": "Today, Amazon Web Services (AWS) announced version 1.0 of ExtendDB, the first release of the open source Amazon DynamoDB-compatible adapter for production use. ExtendDB is fully compatible with the DynamoDB API and runs on a database backend that you choose, so developers and infrastructure teams can run DynamoDB workloads in on-premises data centers, in private or public clouds, and at the edge without rewriting application code. ExtendDB 1.0 supports four storage backends, PostgreSQL, SQLite, Cassandra, and MongoDB. For local development and continuous integration (CI), the extenddb-dev cont",
    "actionable": false
   }
  ],
  "errors": [
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
+  "maven/software.amazon.awssdk:sqs: The read operation timed out",
   "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
   "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
