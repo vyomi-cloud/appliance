@@ -109,7 +109,8 @@ stage_package() {
     check package pack "npm pack" sh -c "cd '$ROOT/packaging/tunnel' && npm pack --pack-destination '$IT_DIR' --json > '$IT_DIR/pack.json'" || return 0
   fi
   tgz="$(ls "$IT_DIR"/vyomi-tunnel-*.tgz | head -1)"
-  check package tracked-clean "build left no tracked changes" sh -c "cd '$ROOT' && test -z \"\$(git status --porcelain --untracked-files=no)\""
+  check package tracked-clean "build left no tracked changes" sh -c "cd '$ROOT' && d=\$(git status --porcelain --untracked-files=no | tr '\n' ' '); [ -z \"\$d\" ] || { echo \"tracked changes: \$d\"; exit 1; }" \
+    || note "$(grep 'tracked changes:' "$IT_DIR/log.txt" | tail -1)"
   check package tarball-binaries "tarball has the 5 bundled binaries" sh -c \
     "tar tzf '$tgz' | grep -cE 'package/mcp/(darwin-arm64|darwin-x64|linux-arm64|linux-x64)/vyomi-mcp\$|package/mcp/win32-x64/vyomi-mcp.exe\$' | grep -qx 5"
   local bytes; bytes=$(wc -c < "$tgz" | tr -d ' ')
