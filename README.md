@@ -2,14 +2,14 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-19T17:15:54+00:00
+### Upstream watch — 2026-11-19T18:15:55+00:00
 
 Tracking 4298 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **2 change(s), 0 actionable.**
-- · `announcement` AWS Deadline Cloud now supports Amazon EC2 G7 instances in service-managed fleets ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/deadline-cloud-supports-ec2-g7/))
-- · `announcement` API Gateway: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
+- · `announcement` Amazon Aurora DSQL now supports multi-Region peering across continents ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-intercontinental-multi-region-clusters/))
+- · `announcement` Amazon Connect Customer enables Cases by default for new instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/connect-cases-enabled-by-default/))
 
-Sources that failed this run (2): maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+Sources that failed this run (1): maven/com.azure:azure-cosmos: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

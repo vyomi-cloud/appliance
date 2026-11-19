@@ -1,30 +1,29 @@
 {
- "at": "2026-11-19T17:15:54+00:00",
+ "at": "2026-11-19T18:15:55+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon EC2",
+   "service": "Aurora",
    "kind": "announcement",
-   "key": "feed:aws:41e36622730e",
-   "title": "AWS Deadline Cloud now supports Amazon EC2 G7 instances in service-managed fleets",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/deadline-cloud-supports-ec2-g7/",
-   "detail": "AWS Deadline Cloud now supports Amazon EC2 G7 instances in service-managed fleets. Deadline Cloud is a fully managed service that helps teams run compute-intensive workloads for visual effects, animation, product design, simulation, and gaming. G7 instances give customers more options to scale GPU capacity quickly. You can add G7 instances to your service-managed fleets in sizes from g7.2xlarge to g7.48xlarge, with On-Demand or Spot pricing on Linux or Windows workers. This lets you scale GPU rendering capacity to match your production schedule without managing your own render farm infrastruct",
+   "key": "feed:aws:8e9069a7f00f",
+   "title": "Amazon Aurora DSQL now supports multi-Region peering across continents",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-dsql-intercontinental-multi-region-clusters/",
+   "detail": "Amazon Aurora DSQL now lets you create multi-Region clusters whose Regions are on different continents, such as US East (N. Virginia) and Europe (Ireland). Until now, the Regions in a multi-Region cluster had to be in the same geographic Region set. With intercontinental multi-Region clusters, applications on two continents read and write to one strongly consistent database. If a Region becomes unavailable, committed writes are preserved and applications keep reading and writing in the other Region. You choose the two peer Regions and the witness Region. Place your database close to users on e",
    "actionable": false
   },
   {
-   "cloud": "gcp",
-   "service": "API Gateway",
+   "cloud": "aws",
+   "service": "EventBridge",
    "kind": "announcement",
-   "key": "feed:gcp:4ca23f8105b8",
-   "title": "API Gateway: Feature (November 18, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_18_2026",
-   "detail": "Model routers can route to Google API endpoints on different hosts A model router can now reference Google API backends on different hosts, for example the global aiplatform.googleapis.com endpoint and a regional endpoint such as us-central1-aiplatform.googleapis.com , and in different projects. Previously, every backend referenced by a router had to share one hostname. Every backend referenced by a router must use https . Creating an API config with a router that uses http for any of its backends now fails; existing deployed gateways aren't affected. For more information, see Configure model ",
+   "key": "feed:aws:7ee112fe3222",
+   "title": "Amazon Connect Customer enables Cases by default for new instances",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/connect-cases-enabled-by-default/",
+   "detail": "Amazon Connect Customer enables Cases by default for new instances, so operations teams can start tracking and resolving customer issues on day one without any setup work. New instances come with Cases connected to rules for setting SLAs, Customer Profiles for personalizing customer experiences, and Amazon EventBridge for triggering actions in other business applications when a case is updated. Administrators of existing instances can enable these integrations with one click in the AWS Management Console. Newly added case fields sync automatically, so admins don't have to update integrations e",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+  "maven/com.azure:azure-cosmos: The read operation timed out"
  ]
 }
