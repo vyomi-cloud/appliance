@@ -9,7 +9,8 @@
 #   tools/mcp-eval/prerelease-it.sh homes     # offline (:9000 if up), local mesh on :9100 (docker), fake Codespace
 #   tools/mcp-eval/prerelease-it.sh nano      # real Nano tab: needs `vyomi-tunnel` running + a tab on vyomi.cloud/nano
 #   tools/mcp-eval/prerelease-it.sh agent     # claude -p with --plugin-dir: scripted evals          (needs claude, signed in)
-#   tools/mcp-eval/prerelease-it.sh codespace # a REAL Mesh Codespace: forward api, serving, S3     (needs gh, a running Mesh, a Pro/Max key)
+#   tools/mcp-eval/prerelease-it.sh codespace # a REAL Mesh Codespace: forward api (+TLS), serving, S3, VMs/k3s if any (needs gh, a Mesh)
+#   tools/mcp-eval/prerelease-it.sh relay     # the Nano tab through the cloud relay       (needs IT_RELAY_URL = the URL in the Nano footer)
 #   tools/mcp-eval/prerelease-it.sh all       # package linux brew homes agent (+ nano / codespace when a tab / a Mesh is up)
 #   tools/mcp-eval/prerelease-it.sh clean     # remove everything this script created
 #
@@ -353,8 +354,61 @@ EOF
       "export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=''; E=http://127.0.0.1:$port; \
        aws --endpoint-url \$E s3 mb s3://it-cs-$$ && aws --endpoint-url \$E s3 ls | grep -q it-cs-$$ && aws --endpoint-url \$E s3 rb s3://it-cs-$$"
   else rec codespace s3 SKIP "aws CLI not installed"; fi
+  # the TLS endpoint (Cosmos, Key Vault): forward api <free>:9443, then a TLS handshake + /mesh/status over https
+  local tport tpid tcode=000
+  tport="$(python3 - "$o" <<'EOF'
+import json, re, sys
+for line in open(sys.argv[1]):
+    d = json.loads(line) if line.strip() else {}
+    if d.get("id") == 10:
+        st = json.loads(d["result"]["content"][0]["text"])
+        h = next((h for h in st["homes"] if h["id"] == "mesh-codespace"), {})
+        m = re.search(r" (\d+):9443$", h.get("detail", {}).get("forward_tls_command", "") or "")
+        print(m.group(1) if m else "", end="")
+EOF
+)"
+  if [ -n "$tport" ]; then
+    "$T" forward api "$tport:9443" > "$IT_DIR/cs-forward-tls.log" 2>&1 & tpid=$!
+    for _ in $(seq 1 30); do tcode=$(curl -sk -m 3 -o /dev/null -w '%{http_code}' "https://127.0.0.1:$tport/mesh/status"); [ "$tcode" != 000 ] && break; sleep 2; done
+    check codespace tls "forward api $tport:9443: TLS answers /mesh/status (HTTP $tcode)" test "$tcode" = 200
+    kill "$tpid" 2>/dev/null; wait "$tpid" 2>/dev/null
+  else rec codespace tls SKIP "no TLS forward suggested (see $o)"; fi
+  # Max extras, when the Mesh has them: a VM over ssh (needs `vyomi-tunnel config` once) and a k3s cluster's API
+  local vm k3s kp kpid kc=000
+  vm="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((r["name"] for r in d["rows"] if r["type"]=="instance"), ""), end="")' "$IT_DIR/cs-list.json" 2>/dev/null)"
+  k3s="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(next((r["name"] for r in d["rows"] if r["type"]=="k3s"), ""), end="")' "$IT_DIR/cs-list.json" 2>/dev/null)"
+  if [ -n "$vm" ] && grep -q '\.vyomi' "$HOME/.ssh/config" 2>/dev/null; then
+    check codespace vm-ssh "ssh $vm.vyomi runs a command" sh -c "ssh -o BatchMode=yes -o ConnectTimeout=30 '$vm.vyomi' true"
+  elif [ -n "$vm" ]; then rec codespace vm-ssh SKIP "VM $vm listed; run \`vyomi-tunnel config\` once to test ssh"
+  else rec codespace vm-ssh SKIP "no VM on this Mesh"; fi
+  if [ -n "$k3s" ]; then
+    kp=6443; curl -s -m 2 -o /dev/null "https://127.0.0.1:6443/" -k 2>/dev/null && kp=6543
+    "$T" forward "$k3s" "$kp:6443" > "$IT_DIR/cs-forward-k3s.log" 2>&1 & kpid=$!
+    for _ in $(seq 1 30); do kc=$(curl -sk -m 3 -o /dev/null -w '%{http_code}' "https://127.0.0.1:$kp/version"); [ "$kc" != 000 ] && break; sleep 2; done
+    check codespace k3s "forward $k3s $kp:6443: the Kubernetes API answers (HTTP $kc)" sh -c "[ '$kc' = 200 ] || [ '$kc' = 401 ] || [ '$kc' = 403 ]"
+    kill "$kpid" 2>/dev/null; wait "$kpid" 2>/dev/null
+  else rec codespace k3s SKIP "no k3s cluster on this Mesh"; fi
   kill "$fpid" 2>/dev/null; wait "$fpid" 2>/dev/null
-  rec codespace stopped PASS "test forward stopped (pid $fpid)"
+  rec codespace stopped PASS "test forwards stopped"
+}
+
+# ---------- the Nano tab through the cloud relay ----------
+stage_relay() {
+  say "relay: the Nano tab through the cloud relay (IT_RELAY_URL = the relay URL in the Nano footer)"
+  [ -x "$PREFIX/bin/vyomi-tunnel" ] || { rec relay prereq SKIP "run the package stage first"; return 0; }
+  [ -n "${IT_RELAY_URL:-}" ] || { rec relay prereq SKIP "set IT_RELAY_URL to the relay URL shown in the Nano footer (https://relay.vyomi.cloud/<session>)"; return 0; }
+  local u="${IT_RELAY_URL%/}" o="$IT_DIR/mcp-relay.jsonl"
+  check relay reachable "the relay answers ($u)" sh -c "curl -fsS -m 10 -o /dev/null '$u/'"
+  mcp_session "$o" VYOMI_ENDPOINT="$u" RELAY_PORT=$DEAD_PORT VYOMI_SIMULATOR_PORT=$DEAD_PORT VYOMI_MESH_URL=http://127.0.0.1:$DEAD_PORT VYOMI_TUNNEL_BIN=/nonexistent -- \
+    vyomi_status '{}' vyomi_env '{"cloud":"aws","lang":"python","home":"nano"}' vyomi_snippet '{"cloud":"aws","service":"s3","lang":"cli","home":"nano"}'
+  check relay selected "vyomi_status selects nano-cloud" js "$o" '"nano-cloud" in json.dumps(t(10).get("selected"))'
+  check relay env "AWS env points at the relay URL" js "$o" "'$u' in json.dumps(t(11))"
+  check relay snippet "S3 CLI snippet aimed at the relay, with s3api" js "$o" "'$u' in json.dumps(t(12)) and 's3api' in json.dumps(t(12))"
+  if have aws; then
+    check relay s3 "aws s3 mb/ls/rb through the relay" sh -c \
+      "export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=''; E='$u'; \
+       aws --endpoint-url \$E s3 mb s3://it-relay-$$ && aws --endpoint-url \$E s3 ls | grep -q it-relay-$$ && aws --endpoint-url \$E s3 rb s3://it-relay-$$"
+  else rec relay s3 SKIP "aws CLI not installed"; fi
 }
 
 # ---------- agent evals: real Claude Code + the plugin from this branch ----------
@@ -415,6 +469,17 @@ stage_agent() {
   eval_run A06-codespace "$aws" "Use my Mesh Codespace for this project's AWS calls." \
     'called("vyomi_status") and "vyomi-tunnel forward" in text and not any("forward" in c for c in bash)' \
     RELAY_PORT=$DEAD_PORT VYOMI_SIMULATOR_PORT=$DEAD_PORT VYOMI_MESH_URL=http://127.0.0.1:$DEAD_PORT VYOMI_TUNNEL_BIN="$ft" VYOMI_ACCESS_KEY_ID=it-dummy-presence-only
+  # A-07: a Free-tier appliance and a Pro feature -> the agent checks the capability and says it needs Pro; writes nothing
+  if curl -fsS --max-time 2 http://127.0.0.1:9000/healthz >/dev/null 2>&1; then
+    local only9000="RELAY_PORT=$DEAD_PORT VYOMI_TUNNEL_BIN=/nonexistent"   # Nano and the Codespace off, :9000 on
+    # shellcheck disable=SC2086
+    mcp_session "$IT_DIR/mcp-tier.jsonl" $only9000 -- vyomi_status '{}'
+    if js "$IT_DIR/mcp-tier.jsonl" '"\"active_tier\": \"free\"" in json.dumps(t(10))'; then
+      # shellcheck disable=SC2086
+      eval_run A07-free-asks-pro "$aws" "My app will use DynamoDB exports to S3. Does that work on my local Vyomi appliance?" \
+        '(called("vyomi_capability") or called("vyomi_services")) and "pro" in text and env_file==""' $only9000
+    else rec agent A07-free-asks-pro SKIP "the appliance on :9000 is not on the Free tier (see $IT_DIR/mcp-tier.jsonl)"; fi
+  else rec agent A07-free-asks-pro SKIP "needs the offline appliance on :9000 (Free tier)"; fi
   if nano_up; then
     # A-01: Nano -> :8090 env, asks before writing
     eval_run A01-nano-ask "$aws" "Set this project up to run against Vyomi, using the Nano tab." \
@@ -452,7 +517,7 @@ cmd="${1:-all}"
 # `all` starts a fresh results file; a single stage replaces only its own rows, so stages run one by one add up.
 case "$cmd" in
   all) : > "$RESULTS" ;;
-  package|linux|brew|homes|nano|agent|codespace)
+  package|linux|brew|homes|nano|agent|codespace|relay)
     if [ -f "$RESULTS" ]; then grep -v "^$cmd"$'\t' "$RESULTS" > "$RESULTS.tmp" || true; mv "$RESULTS.tmp" "$RESULTS"; fi ;;
 esac
 case "$cmd" in
@@ -463,8 +528,10 @@ case "$cmd" in
   nano)    stage_nano ;;
   agent)   stage_agent ;;
   codespace) stage_codespace ;;
+  relay)   stage_relay ;;
   all)     stage_package; stage_linux; stage_brew; stage_homes; if nano_up; then stage_nano; else rec nano prereq SKIP "no tab connected"; fi
-           if have gh && [ -n "$(mesh_codespace)" ]; then stage_codespace; else rec codespace prereq SKIP "no running Mesh Codespace"; fi; stage_agent ;;
+           if have gh && [ -n "$(mesh_codespace)" ]; then stage_codespace; else rec codespace prereq SKIP "no running Mesh Codespace"; fi
+           stage_relay; stage_agent ;;
   clean)   stage_clean; exit 0 ;;
   *) sed -n '2,20p' "$0"; exit 2 ;;
 esac

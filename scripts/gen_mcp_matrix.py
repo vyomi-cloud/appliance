@@ -351,13 +351,20 @@ def _by_lang(snips: list) -> dict:
     return out
 
 
+AWS_CLI_WRONG: list = []   # (file, api, have, want) seen while building; --check fails on any
+
+
+def _aws_cli_want(api: dict) -> str:
+    """The AWS CLI command for an API: botocore's service name (secretsmanager, logs, elbv2, events, stepfunctions);
+    low-level S3 is `s3api`."""
+    return "s3api" if api.get("id") == "s3" else api.get("id", "")
+
+
 def _aws_cli_fix(api: dict, text: str) -> str:
-    """wasm/docs derives an AWS API's `cli` word from botocore's serviceId (secrets-manager, api-gateway,
-    cloudwatch-logs, elastic-load-balancing-v2, sfn, s3), but the AWS CLI command is the botocore service
-    name (secretsmanager, apigateway, logs, elbv2, stepfunctions) and low-level S3 is `s3api`. Until
-    scripts/gen_nano_docs.py emits the right word, correct it here so the MCP hands out commands that run."""
-    want = "s3api" if api.get("id") == "s3" else api.get("id", "")
-    have = api.get("cli", "")
+    """Guard: wasm/docs once derived the `cli` word from botocore's serviceId (secrets-manager, cloudwatch-logs, s3) and the
+    Nano console's SDK & CLI tab showed commands that do not run. scripts/gen_nano_docs.py emits the right word now; this
+    still corrects the MCP's copy, and `--check` fails if a wrong word comes back."""
+    want, have = _aws_cli_want(api), api.get("cli", "")
     if not want or not have or want == have:
         return text
     return text.replace("aws --endpoint-url {sim} " + have + " ", "aws --endpoint-url {sim} " + want + " ")
@@ -385,6 +392,8 @@ def _docs() -> dict:
             apis = []
             for ai, a in enumerate(entry["apis"]):
                 raw_api = d["apis"][ai]
+                if cloud == "aws" and raw_api.get("cli") and raw_api.get("cli") != _aws_cli_want(raw_api):
+                    AWS_CLI_WRONG.append((f"wasm/docs/{cloud}/{stem}.json", raw_api.get("id"), raw_api.get("cli"), _aws_cli_want(raw_api)))
                 ops = []
                 for item in a["ops"]:
                     o = item["o"]
@@ -517,6 +526,9 @@ def main() -> int:
                     srcs = _stale_cap_sources(current, rendered)
                     why = (" (changed: " + ", ".join(srcs[:10]) + ("…" if len(srcs) > 10 else "") + ")") if srcs else ""
                 print(f"{path.relative_to(ROOT)} is stale{why}: run python3 scripts/gen_mcp_matrix.py", file=sys.stderr)
+        for f, api, have, want in sorted(set(AWS_CLI_WRONG)):
+            stale += 1
+            print(f"{f}: AWS API {api} has cli word {have!r}, the AWS CLI command is {want!r} (fix scripts/gen_nano_docs.py)", file=sys.stderr)
         if stale:
             return 1
         print("mcp knowledge up to date (mcp_matrix.json, mcp_caps.json.gz, mcp_docs.json.gz)")
