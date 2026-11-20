@@ -144,6 +144,8 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			Name:        "vyomi_write_env",
 			Title:       "Write .env.vyomi",
 			Description: "Writes a .env.vyomi file with the Vyomi env vars for the given clouds into a project directory. Never overwrites an existing file unless overwrite=true. Call ONLY after the user explicitly approved this exact file: show them the path and the contents (from vyomi_env) first and wait for their yes. A general request such as 'set this project up' is not approval.",
+			// The only tool that writes anything: one .env.vyomi* file in the user's project; overwrite=true can replace an existing one.
+			Destructive: true,
 			Schema: obj(map[string]any{
 				"path":      map[string]any{"type": "string", "description": "Absolute path of the project directory."},
 				"clouds":    map[string]any{"type": "array", "items": cloudEnum, "minItems": 1, "description": "Clouds to include (e.g. from vyomi_scan_repo)."},
