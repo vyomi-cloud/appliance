@@ -56,10 +56,11 @@ the pack catalog and `providers/{aws,gcp,azure}.py` `tool_response()`, plus
 (client env vars, TLS-only data planes, scan rules). CI runs `--check`, and release.yml
 regenerates it so each release embeds its own version.
 
-On macOS/Linux the packages ship this binary as `vyomi-mcp`
-(`share/vyomi-docker/mcp/<os>-<arch>/`, or `packaging/docker/mcp/` in the Max bundle) and the
-bash launchers exec it for `vyomi mcp`. Invoked under that name it only serves MCP. The
-Windows MSI's `vyomi.exe` handles `vyomi mcp` directly.
+The binary is distributed only inside the `vyomi-tunnel` npm package (`vyomi-tunnel mcp`; built per
+platform by `scripts/build_tunnel_mcp.sh` in tunnel-release.yml). The appliance release no longer builds or
+publishes standalone `vyomi-mcp` assets, and the deb/rpm/Homebrew `vyomi-docker` packages no longer carry it:
+their `vyomi mcp` launchers print where to get it (`VYOMI_MCP_BIN` still overrides, for development). Invoked
+under the name `vyomi-mcp` it only serves MCP. The Windows MSI's `vyomi.exe` handles `vyomi mcp` directly.
 Live state comes only from existing endpoints (`/healthz`, `/api/license/status`,
 `/api/spaces/active`, `/api/runtime/readiness`, `/api/providers/{cloud}/matrix`); the raw
 license block (tokens/claims) is never passed to the model.
