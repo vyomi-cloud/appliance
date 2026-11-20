@@ -141,3 +141,7 @@ NOT RUN here: nightly-gcp-tunnel-recovery and the bidi-/crawl-/validation- gcp l
 DECISION: Eventarc `destination.cloudFunction` is refused (core/gcp_eventarc_core.py ~L126, "1st-gen destinations are not simulated") but real Eventarc accepts a Cloud Functions (v1/v2) resource name. offline-post-create-gcp-event-delivery (probes/event_delivery.py gcp) uses exactly that, so 3 checks fail. Options: implement cloudFunction delivery (resolve to the function's invoker, deliver the CloudEvent) in shared core, or change the probe to cloudRun. Not guessed tonight.
 NOT REPRODUCED (green on re-run against the live stack, likely cold-start / fresh-stack timing): offline-api-gcp-vault-console-secrets (0 -> 0 savings on a fresh space; passes at 31 -> 32), nano-ui-gcp-create-defaults Cloud SQL (first service, fixed sleep too short; validator now waits for the POST).
 ENV (not run here): offline-ui-gcp-* Playwright suites timed out waiting for the offline console rail (60s) in the baseline.
+
+## Azure, 2026-11-20 nightly
+ENV on this runner (no Playwright module, no azure SDK, embedding model returns zero vectors, APIM backend proxy times out): offline-ui-azure-{metrics,rg-nav,resource-group-detail,apim-appinsights}, offline-sweepA-azure (APIM 502 timeout), offline-post-create-azure-openai (zero embeddings). Not product-verified; verify on the full runner stack.
+FIXED (harness): offline-sdk-python-azure-vm-runcommand assumed no guest runtime; with Docker the command really runs. Test now asserts real `uid=` output when a runtime exists, failed status otherwise.
