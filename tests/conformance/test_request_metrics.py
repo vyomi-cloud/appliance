@@ -40,7 +40,13 @@ def test_classify_console_and_wire_paths():
 
 
 def test_aws_consoles_draw_no_synthetic_series():
-    for f in ("static/aws-console.html", "wasm/aws-console.html"):
-        src = open(os.path.join(ROOT, f), encoding="utf-8").read()
+    # v4 removed static/aws-console.html (Nano is the only UI): check the legacy
+    # wasm console and every v4 console source file instead.
+    files = [os.path.join(ROOT, "wasm/aws-console.html")]
+    for base, _d, names in os.walk(os.path.join(ROOT, "consoles/src/aws")):
+        files += [os.path.join(base, n) for n in names if n.endswith((".js", ".jsx", ".html"))]
+    assert len(files) > 1
+    for f in files:
+        src = open(f, encoding="utf-8").read()
         assert "buildSparkline" not in src, f
         assert not re.search(r"seed\s*\*\s*1103515245", src), f
