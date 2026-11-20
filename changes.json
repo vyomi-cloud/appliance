@@ -1,49 +1,29 @@
 {
- "at": "2026-11-20T19:16:26+00:00",
+ "at": "2026-11-20T20:16:29+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "EventBridge",
+   "service": "Amazon S3",
    "kind": "announcement",
-   "key": "feed:aws:c65cd3b4bfe3",
-   "title": "Amazon EventBridge Scheduler adds 589 new API actions and event bus targets",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/eventbridge-scheduler-new-api-actions/",
-   "detail": "Amazon EventBridge Scheduler expands its AWS SDK integrations with 589 new API actions across 81 AWS services, and adds templated targets for the enhanced EventBridge Custom event bus. You can now schedule direct invocations of a broader set of AWS services without writing custom integration code. EventBridge Scheduler is a serverless scheduler that allows you to create, run, and manage billions of scheduled events and tasks across more than 270 AWS services, without provisioning or managing the underlying infrastructure. With a new templated target, you can schedule event delivery directly to",
+   "key": "feed:aws:0d9c7948a5a3",
+   "title": "AWS Glue Data Catalog introduces data quality monitoring for catalogs and databases",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/glue-catalog-data-quality-monitoring/",
+   "detail": "AWS Glue Data Catalog introduces data quality monitoring for catalogs and databases, powered by AWS Glue Data Quality, which profiles and evaluates your tables at catalog scale from a single configuration. You define data quality checks once for a catalog, a database, or a single table, and AWS Glue Data Quality evaluates every table in scope, including tables added later, on the cadence you choose. Quality issues surface as data changes, without per-table setup or manual runs, which helps keep bad data from reaching downstream consumers. You can use built-in profiling options that AWS Glue pr",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "EventBridge",
+   "cloud": "azure",
+   "service": "Virtual Machines",
    "kind": "announcement",
-   "key": "feed:aws:9b6d0ed8457a",
-   "title": "Amazon EventBridge Custom event bus now supports Webhook Events",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eventbridge-webhook-events",
-   "detail": "Amazon EventBridge now supports Webhook Events for the enhanced Custom event bus, so SaaS applications, AI agents, and custom integrations can send events to a bus over HTTPS. You no longer need to deploy and operate your own API endpoint and compute to receive webhooks and publish them to your bus. The EventBridge Custom event bus is a serverless event broker that enables you to create scalable event-driven applications by routing events between your applications, SaaS integrations, and AWS services. When you create a webhook event source on your bus, EventBridge provides a managed HTTPS URL ",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "EventBridge",
-   "kind": "announcement",
-   "key": "feed:aws:a38928be7bcb",
-   "title": "Amazon EventBridge Custom event bus now supports Amazon MSK as a target",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eventbridge-msk-target/",
-   "detail": "Amazon EventBridge now supports Amazon Managed Streaming for Apache Kafka (Amazon MSK) as a target for the enhanced Custom event bus, so you can deliver events to Kafka topics without running your own producer. The EventBridge Custom event bus is a serverless event broker that enables you to create scalable event-driven applications by routing events between your applications, SaaS integrations, and AWS services. To deliver events to MSK, you create a Subscriber that specifies the cluster ARN and topic. You can also configure Kafka producer settings such as partition key, acknowledgment level,",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon VPC, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:b31a92873f1a",
-   "title": "Amazon VPC Lattice now supports CloudWatch metrics for VPC resources",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/vpc-lattice-cloudwatch-metrics/",
-   "detail": "Amazon VPC Lattice now publishes Amazon CloudWatch metrics for VPC resources. Resource owners \u2014 those who share resources via VPC Lattice \u2014 and resource consumers \u2014 those who access those shared resources \u2014 can now see TCP traffic to resources such as databases, clusters, and on-premises endpoints. Resource owners get metrics for resource gateways and resource configurations. Consumers get metrics for resource endpoints, service network endpoints, and service network VPC associations. Previously, resource access logs were the primary way to see this traffic, but they required additional proces",
+   "key": "feed:azure:6d1e8b2e1a40",
+   "title": "[Launched] Generally Available: Azure Cobalt 200 Arm-based Dpsv7, Dplsv7, Epsv7, Mpsv4, and Lpsv5-series Virtual Machines ",
+   "link": "https://azure.microsoft.com/updates?id=564451",
+   "detail": "The general purpose Dpsv7 and Dplsv7, memory-optimized Epsv7, high-memory Mpsv4, and dense storage Lpsv5 VMs are now generally available. These virtual machines deliver significant enhancements over the previous generation Cobalt 100 VMs, offering improve",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:sqs: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
