@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-20T18:16:26+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` AWS CloudFormation Service-Managed StackSets adds custom execution roles with nested stacks support ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/stacksets-custom-execution-roles/))
+- · `announcement` Amazon Aurora MySQL 8.4.12 is now generally available ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-8412-available/))
+- · `announcement` Introducing Amazon EC2 T9g instances based on Graviton5  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-t9g-instances-ga/))
+
+Sources that failed this run (1): maven/com.google.cloud:google-cloud-firestore: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-20T17:17:15+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3011,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **0 change(s), 0 actionable.**
 
 Sources that failed this run (1): maven/com.azure:azure-data-appconfiguration: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-08T23:09:10+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
