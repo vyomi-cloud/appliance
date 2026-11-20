@@ -1,20 +1,6 @@
 {
- "at": "2026-11-20T03:16:05+00:00",
+ "at": "2026-11-20T04:16:12+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:297996cf521d",
-   "title": "AgentCore runtime instances now support Nested Virtualization",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-nested-virtualization/",
-   "detail": "Amazon Bedrock AgentCore runtime instances now support nested virtualization, so your agents can run their own virtual machines and emulators inside a session with Kernel-based Virtual Machine (KVM). Runtime instances run your agents on Amazon EC2 instances while AgentCore handles provisioning, patching, scaling, and lifecycle management. Nested virtualization serves agents that rely on tools that run in a virtual machine, such as mobile emulators or virtual machine sandboxes. You turn on nested virtualization when you create a Linux capacity provider, and agents in every session on its instan",
-   "actionable": false
-  }
- ],
- "errors": [
-  "maven/com.azure:azure-cosmos: The read operation timed out",
-  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
- ]
+ "changes": [],
+ "errors": []
 }
