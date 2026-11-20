@@ -1,8 +1,27 @@
 {
- "at": "2026-11-20T01:15:59+00:00",
+ "at": "2026-11-20T02:16:11+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:02d474d2d3",
+   "title": "Azure cognitiveservices: ContentSafety: provenance text support and Metadata result for 2026-07-01-preview (#48351)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/02d474d2d33a6c97edae203b4e7ad197e7361e51",
+   "actionable": true
+  },
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:6dd3803578",
+   "title": "Azure cognitiveservices: ContentSafety: provenance text support and Metadata result for 2026-09-01-preview (#48350)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/6dd38035785c61286e8202113090d6847729b09c",
+   "actionable": true
+  }
+ ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+  "maven/com.azure:azure-cosmos: The read operation timed out"
  ]
 }
