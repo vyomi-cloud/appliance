@@ -1,19 +1,16 @@
 {
- "at": "2026-11-20T16:16:24+00:00",
+ "at": "2026-11-20T17:17:15+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "gcp",
-   "service": "Cloud Run functions",
-   "kind": "announcement",
-   "key": "feed:gcp:5bacda8a5474",
-   "title": "Cloud Run functions: Security (November 20, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_20_2026",
-   "detail": "The following runtime language contains important security updates: Java 17 and later : 17.0.21.1+2 , 21.0.13.1+2 , 25.0.5.1+2 Functions with automatic base image updates enabled receive the patched runtime automatically with no action required. To refresh warm instances immediately, redeploy your function. For functions without automatic base image updates, redeploy your functions to pick up the patched runtime, and then remove any temporary JDK_JAVA_OPTIONS mitigation flags. For more information, see security bulletin GCP-2026-082 .",
-   "actionable": false
+   "cloud": "azure",
+   "service": "compute",
+   "kind": "spec-commit",
+   "key": "azure:compute:e4bf8ab03b",
+   "title": "Azure compute: [Compute] Add Bulk Actions GA API version 2026-10-16 (#47653)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/e4bf8ab03beb9a46c28a6f6a0e92e51ffec0c97d",
+   "actionable": true
   }
  ],
- "errors": [
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
- ]
+ "errors": []
 }
