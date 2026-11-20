@@ -1,29 +1,181 @@
 {
- "at": "2026-11-20T20:16:29+00:00",
+ "at": "2026-11-20T21:16:27+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:0d9c7948a5a3",
-   "title": "AWS Glue Data Catalog introduces data quality monitoring for catalogs and databases",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/glue-catalog-data-quality-monitoring/",
-   "detail": "AWS Glue Data Catalog introduces data quality monitoring for catalogs and databases, powered by AWS Glue Data Quality, which profiles and evaluates your tables at catalog scale from a single configuration. You define data quality checks once for a catalog, a database, or a single table, and AWS Glue Data Quality evaluates every table in scope, including tables added later, on the cadence you choose. Quality issues surface as data changes, without per-table setup or manual runs, which helps keep bad data from reaching downstream consumers. You can use built-in profiling options that AWS Glue pr",
+   "service": "ssm",
+   "kind": "operation-changed",
+   "key": "aws:ssm:CreateDocument:47673e65437b",
+   "title": "AWS ssm: operation CreateDocument changed",
+   "detail": {
+    "in": {
+     "was": [
+      "Attachments",
+      "Content",
+      "DisplayName",
+      "DocumentFormat",
+      "DocumentType",
+      "Name",
+      "Requires",
+      "Tags",
+      "TargetType",
+      "VersionName"
+     ],
+     "now": [
+      "Attachments",
+      "CloudProviders",
+      "Content",
+      "DisplayName",
+      "DocumentFormat",
+      "DocumentType",
+      "Name",
+      "Requires",
+      "Tags",
+      "TargetType",
+      "VersionName"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "aws",
+   "service": "ssm",
+   "kind": "operation-changed",
+   "key": "aws:ssm:UpdateDocument:11ab4bfee693",
+   "title": "AWS ssm: operation UpdateDocument changed",
+   "detail": {
+    "in": {
+     "was": [
+      "Attachments",
+      "Content",
+      "DisplayName",
+      "DocumentFormat",
+      "DocumentVersion",
+      "Name",
+      "TargetType",
+      "VersionName"
+     ],
+     "now": [
+      "Attachments",
+      "CloudProviders",
+      "Content",
+      "DisplayName",
+      "DocumentFormat",
+      "DocumentVersion",
+      "Name",
+      "TargetType",
+      "VersionName"
+     ]
+    }
+   },
+   "actionable": true
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:boto3",
+   "kind": "release",
+   "key": "ver:pypi:boto3:1.44.8",
+   "title": "pypi:boto3: 1.44.7 \u2192 1.44.8",
    "actionable": false
   },
   {
-   "cloud": "azure",
-   "service": "Virtual Machines",
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.44.8",
+   "title": "pypi:botocore: 1.44.7 \u2192 1.44.8",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.42.0",
+   "title": "cli:aws: 2.41.2 \u2192 2.42.0",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch Logs, CloudWatch",
    "kind": "announcement",
-   "key": "feed:azure:6d1e8b2e1a40",
-   "title": "[Launched] Generally Available: Azure Cobalt 200 Arm-based Dpsv7, Dplsv7, Epsv7, Mpsv4, and Lpsv5-series Virtual Machines ",
-   "link": "https://azure.microsoft.com/updates?id=564451",
-   "detail": "The general purpose Dpsv7 and Dplsv7, memory-optimized Epsv7, high-memory Mpsv4, and dense storage Lpsv5 VMs are now generally available. These virtual machines deliver significant enhancements over the previous generation Cobalt 100 VMs, offering improve",
+   "key": "feed:aws:736551a72fcd",
+   "title": "Amazon CloudWatch Observability EKS add-on now supports custom OpenTelemetry and Prometheus telemetry",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-eks-addon-custom-telemetry/",
+   "detail": "Today, Amazon CloudWatch announces support for your own application telemetry in the CloudWatch Observability EKS add-on. The CloudWatch agent you already run now accepts metrics, traces, and logs from your applications, so you don't deploy and operate a separate collector to get them into CloudWatch. Applications instrumented with an OpenTelemetry SDK send to an OTLP endpoint that the agent serves on every node, on by default. Metrics arrive as CloudWatch metrics you query with PromQL, traces go to AWS X-Ray and Transaction Search, and logs go to CloudWatch Logs. For Prometheus metrics, the a",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:de3f1c096690",
+   "title": "Amazon Transcribe announces a synchronous transcription API",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-transcribe-sync-api/",
+   "detail": "Amazon Transcribe now offers a synchronous transcription API, `TranscribeAudio`. Send a complete audio file in a single request and get the full transcript back in the same response. There is no job to start, no status to poll, no connection to manage. Add fast, accurate speech-to-text to interactive applications such as voice assistants, agent-assist tools and on-demand \"transcribe this clip\" features. The synchronous API supports the Amazon Transcribe features you already use, including: Word-level timestamps and smart formatting for numbers, dates, currency and phone numbers Automatic langu",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "DynamoDB",
+   "kind": "announcement",
+   "key": "feed:aws:04ab186efa02",
+   "title": "Amazon DynamoDB vector search now supports new inline filter operators ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/dynamodb-vector-filters/",
+   "detail": "Amazon DynamoDB vector search inline filters now support range comparisons, value lists, and logical operators in addition to the equality operator, so you can narrow a vector search to exactly the items you want. You can now filter on numeric ranges such as price, rating, or publish date, match an attribute against a list of values, check whether an attribute exists, and combine conditions with OR and NOT. Amazon DynamoDB vector indexes store vector embeddings alongside your operational data, and the SearchVectors API returns the items whose embeddings are most similar to your query vector. T",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:877cd20f4cba",
+   "title": "Amazon S3 Vectors raises the filterable metadata limit to 40 KB per vector",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-vectors-raises-filterable-metadata-40kb-per-vector/",
+   "detail": "Amazon S3 Vectors now supports up to 40 KB of filterable metadata per vector, up from 2 KB. You can attach and filter on more attributes per vector, such as category, permissions, timestamps, and descriptive tags, so your retrieval-augmented generation (RAG), agentic, and semantic-search applications can narrow results by more of the fields that matter to them. S3 Vectors provides native support to store and query vectors in Amazon S3, delivering purpose-built, cost-optimized vector storage and query at billion-vector scale. With this launch, indexes in new vector buckets support the higher li",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "AWS Lambda",
+   "kind": "announcement",
+   "key": "feed:aws:318f463298c6",
+   "title": "AWS Lambda MicroVMs is now available in 7 additional AWS regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-microvms-7-regions",
+   "detail": "AWS Lambda MicroVMs is now available in 7 additional AWS Regions: Asia Pacific (Osaka), Asia Pacific (Seoul), Canada (Central), Europe (London), Europe (Paris), South America (S\u00e3o Paulo), and US West (N. California). With this launch, you can use Lambda MicroVMs in a total of 21 AWS Regions. Lambda MicroVMs is a serverless compute primitive that provides VM-level isolation, near-instant launch and resume speeds, and state preservation for executing user or AI generated code. The service enables secure, stateful, and responsive code execution for applications including AI coding assistants, int",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon EC2",
+   "kind": "announcement",
+   "key": "feed:aws:35766aafbf80",
+   "title": "AgentCore runtime instances now support Amazon EC2 G7 instances",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-ec2-g7/",
+   "detail": "Amazon Bedrock AgentCore runtime instances now support Amazon EC2 G7 instances, powered by NVIDIA RTX PRO 4500 Blackwell Server Edition GPUs. Runtime instances run your agents on Amazon EC2 instances while AgentCore handles provisioning, patching, scaling, and lifecycle management. G7 instances give agents that do 3D rendering or model inference another GPU option, alongside families such as G6e and G7e. To use G7, add G7 instance types, from g7.2xlarge to g7.48xlarge, to the allowed instance types of your capacity provider. AgentCore installs the NVIDIA drivers on the instance, so standard co",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:ef8c667890ff",
+   "title": "Amazon Transcribe now available in AWS European Sovereign Cloud",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-transcribe-germany/",
+   "detail": "Amazon Transcribe is now available in the AWS European Sovereign Cloud (Germany) Region. Customers who need to keep data and operations within the EU for regulatory compliance and data sovereignty requirements can now use automatic speech recognition (ASR) in the Region to turn speech into text. Amazon Transcribe offers two ways to transcribe audio in this Region. Batch transcription processes media files stored in Amazon S3, and streaming transcription returns text in real time from live audio over HTTP/2 or WebSocket. Both support custom vocabularies, so you can improve recognition of domain",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Identity and Access Management",
+   "kind": "announcement",
+   "key": "feed:aws:e28c3ee18fef",
+   "title": "IAM Roles Anywhere now supports aliases to simplify workload configuration",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/iam-roles-anywhere-alias/",
+   "detail": "AWS Identity and Access Management (IAM) Roles Anywhere now supports aliases, which are readable names that you assign to trust anchors, profiles, and certificate revocation lists (CRLs). Your workloads can request temporary credentials using a trust anchor or profile alias Amazon Resource Name (ARN) instead of an ARN with a system-generated ID, and you can use alias ARNs in many of the operations that manage these resources. Aliases make configurations easier to read and review: an alias ARN that ends in alias/trust-anchor/production-ca can show which certificate authority (CA) a workload use",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
- ]
+ "errors": []
 }
