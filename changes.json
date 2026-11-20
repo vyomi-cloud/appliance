@@ -1,109 +1,58 @@
 {
- "at": "2026-11-20T22:16:37+00:00",
+ "at": "2026-11-20T23:16:41+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:6f1ff9aa4f21",
-   "title": "Amazon CloudWatch extends the PromQL query window to 30 days",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-promql-query-30days/",
-   "detail": "Amazon CloudWatch now supports a 30-day query window for PromQL queries against OpenTelemetry metrics, up from 7 days. You can query a month of data in a single request, chart month-over-month and week-over-week trends on one dashboard, and alarm on a 30-day baseline. Teams typically define service level objectives (SLOs) over a 30-day rolling window, longer than a 7-day query can measure. You can now calculate availability and remaining error budget for a full SLO period in one query, and alarm when a service is on track to exhaust its budget. A month of history also makes capacity forecasts ",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:3e056dd14922",
-   "title": "Amazon CloudWatch EKS Container Insights now offers built-in monitoring for open source Kubernetes tools",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-eks-kubernetes-tools/",
-   "detail": "Today, Amazon CloudWatch announces built-in monitoring for open source tools running on your Amazon EKS clusters, including Karpenter, KEDA, vLLM, KServe, SGLang, Ray and Knative Serving. You get dashboards for the tools you already use without running Prometheus or Grafana yourself. Monitoring starts automatically when you enable OTel Container Insights. For your AI inference workloads, you can see queued requests, time to first token, and KV cache usage for each model server. For autoscaling, you can see which scalers are failing and how long your scale loop takes. CloudWatch tags every metr",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:a10683dbdbd3",
-   "title": "AWS Quick introduces enterprise guardrails (preview)",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-quick-enterprise-guardrails-preview/",
-   "detail": "AWS Quick now includes enterprise guardrails, giving administrators configurable content safety and sensitive-information controls for user prompts. Administrators can apply guardrail policies to individual users or enterprise identity provider (IdP) groups or set a policy as the account default. User-level policies take precedence over group policies and account defaults. When multiple group policies apply, Quick combines their content restrictions, using the stricter setting when controls overlap. Administrators create guardrail policies in the Quick administration console using content filt",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:48f0f16a6322",
-   "title": "Amazon CloudWatch Observability EKS add-on now supports telemetry filtering",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudwatch-eks-otel-addon-filtering/",
-   "detail": "Today, Amazon CloudWatch announces telemetry filtering for the CloudWatch Observability EKS add-on, so you can stop paying to ingest telemetry you don't use. You can now set cluster-wide include and exclude lists for namespaces, metric names, and pod and node labels. Exclude the non-production namespaces you don't monitor, drop high-cardinality metrics by name, and keep only the labels you group by rather than every label on every resource. Because ingestion is billed per GB, collecting less lowers what you pay, and you can adjust filters with a single add-on configuration update as your clust",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, Amazon EC2, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:c5301ba91a27",
-   "title": "Amazon ECS Action Logs now cover tasks, container instances, and capacity providers",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ecs-action-logs-expanded-troubleshooting",
-   "detail": "Amazon Elastic Container Service (Amazon ECS) now extends Action Logs to include tasks, container instances, clusters, and capacity providers, so you can see why your tasks failed or why your clusters didn't scale as desired. Action Logs provide detailed, timestamped records of the actions Amazon ECS performs on your behalf, and until now covered service deployments and managed daemon updates. With the expanded coverage, you can diagnose task failures and scaling issues yourself, and resolve them faster than before, without contacting AWS support. If you use Action Logs already, you receive th",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:924b6cfc8385",
-   "title": "Amazon S3 increases the read request rate for general purpose buckets by up to 2x",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-increases-read-request-rate/",
-   "detail": "Amazon S3 now supports at least 11,000 GET/HEAD requests per second, up from 5,500, for general purpose buckets. With this higher request rate, you can retrieve data faster for read-intensive workloads such as machine learning training, data analytics, and data transfers. To maximize throughput, distribute your requests across multiple prefixes so that S3 can scale each one independently. This increase applies automatically to your existing read requests in all AWS Regions, with no changes required to your applications and at no additional charge beyond standard S3 request pricing. To learn mo",
-   "actionable": false
+   "cloud": "azure",
+   "service": "compute",
+   "kind": "spec-commit",
+   "key": "azure:compute:dc95922996",
+   "title": "Azure compute: Document planned deprecation of VM agent platform updates (#48364)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/dc95922996b3528c75a471eaa5e37b3e753dbed4",
+   "actionable": true
   },
   {
    "cloud": "aws",
    "service": "AWS Lambda",
    "kind": "announcement",
-   "key": "feed:aws:79a660e5fe75",
-   "title": "AWS Lambda adds support for Python 3.15",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-python-315/",
-   "detail": "AWS Lambda now supports creating serverless applications using Python 3.15. Python 3.15 is generally available for Lambda Event Functions and is available in public preview for Lambda Web Functions. This is the first Python runtime for Web Functions, which until now only supported Node.js. With this launch, developers can also build web applications and APIs on Web Functions in Python. Developers can use Python 3.15 as both a managed runtime and a base container image (Event Functions only), and AWS will automatically apply updates to the managed runtime and base image as they become available",
+   "key": "feed:aws:44144712ff70",
+   "title": "AWS Lambda adds support for Node.js 26",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-nodejs-26/",
+   "detail": "AWS Lambda now supports creating serverless applications using Node.js 26, for both Lambda Web Functions and Lambda Event Functions. Developers can use Node.js 26 as both a managed runtime and a base container image (Event Functions only). AWS will automatically apply updates to the managed runtime and base image as they become available. Node.js 26 is the latest long-term support release of Node.js and is expected to be supported for security and bug fixes until April 2029. With this release, you can use the latest Node.js 26 features in Lambda, such as the Temporal API for easier date, time,",
    "actionable": false
   },
   {
    "cloud": "aws",
    "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:be66f52bf43b",
-   "title": "\u200b\u200b\u200bAmazon RDS for Db2 now supports renaming databases\u200b ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-db2-supports-rename-databases",
-   "detail": "\u200b\u200bAmazon Relational Database Service (Amazon RDS) for Db2 now supports renaming databases in place. You can rename a database on your DB instance by calling the new rdsadmin.rename_database stored procedure. Previously, renaming a database required you to back it up and restore it under a new name. With rename, the database keeps its data in place, so it's faster than backing up and restoring the database.\u200b \u200b\u200bDatabase rename simplifies workflows such as replacing a database with a restored copy. For example, after you restore a copy of a database from a backup, you can rename the original data",
+   "key": "feed:aws:27965e946c8a",
+   "title": "Amazon RDS for Db2 now supports new Canadian time zones",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-db2-supports-new-canadian-time",
+   "detail": "\u200b\u200bAmazon RDS for Db2 now supports four new time zones, America/Vancouver, America/Edmonton, America/Inuvik, and America/Winnipeg, that reflect the updated local time rules for British Columbia, Alberta, the Northwest Territories, and Manitoba in Canada. As of November 1, 2026, these provinces and territories observe permanent daylight saving time and no longer set their clocks back by an hour.\u200b \u200bData stored in UTC is unaffected, but values based on the instance's local time, such as CURRENT TIMESTAMP, CURRENT DATE, default timestamp columns, scheduled jobs, and business-day batch logic, can be",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon S3, Amazon RDS",
+   "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:a08a83df251a",
-   "title": "Amazon RDS for Db2 now supports object-level audit policies",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-db2-supports-object-level-audit-policies",
-   "detail": "Amazon RDS for Db2 now supports object-level audit policies, giving you fine-grained control over which database objects are audited. You can create custom audit policies and attach them to specific tables, users, groups, roles, and authorities in your RDS for Db2 databases. With object-level audit policies, you can focus on auditing the objects that matter most \u2014 for example, a single table that contains sensitive data or a specific user \u2014 without generating audit records for your entire database. Object-level audit policies complement the existing database-level audit logging in Amazon RDS f",
+   "key": "feed:aws:1057f462c300",
+   "title": "Amazon RDS Custom now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-custom-supports-latest-cumulative-update-gdr-microsoft-sql-server/",
+   "detail": "Amazon Relational Database Service (Amazon RDS) Custom for SQL Server now supports the latest Cumulative Updates (CU) and General Distribution Release (GDR) updates for Microsoft SQL Server. This release includes support for SQL Server 2019 CU32 + GDR KB5128494 (RDS version 15.00.4500.2.v1) and SQL Server 2022 CU27 + GDR KB5126934 (RDS version 16.00.4305.5.v1). For additional information on the improvements and fixes included in these updates, see Microsoft documentation for KB5128494 and KB5126934. You can upgrade your Amazon RDS Custom for SQL Server instances to apply these recommended upda",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon S3",
+   "service": "AWS IAM, AWS KMS, Key Management Service, AWS Lambda",
    "kind": "announcement",
-   "key": "feed:aws:2e723d03b6da",
-   "title": "Amazon Textract Insights is now generally available",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/textract-insights-ga/",
-   "detail": "Amazon Textract Insights brings document understanding to Amazon Textract. It is a new generative AI feature of Amazon Textract, and is now generally available in the US East (N. Virginia) and US West (Oregon) AWS Regions. Amazon Textract Insights splits, classifies, and extracts structured data from documents in a single asynchronous request. Documents like insurance claims, tax packets, and onboarding packages often arrive as one long scan that holds many documents in no fixed order. Processing them has meant assembling and operating separate steps for text detection, splitting, classificati",
+   "key": "feed:aws:7586ed613602",
+   "title": "AWS Lambda MicroVMs now supports customer managed keys in AWS KMS",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-microvms-customer-managed-keys/",
+   "detail": "AWS Lambda MicroVMs now supports customer managed keys (CMK) in AWS Key Management Service (KMS) for data encryption at rest. CMK gives you full control over the lifecycle and usage of your KMS keys , helping meet compliance requirements in regulated industries like financial services and healthcare. Lambda MicroVMs is a serverless compute primitive that provides VM-level isolation, near-instant launch and resume, and state preservation for executing user or AI generated code. Use MicroVMs to build applications like AI coding assistants, interactive development environments, and vulnerability ",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
  ]
 }
