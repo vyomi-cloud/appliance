@@ -1,8 +1,20 @@
 {
- "at": "2026-11-20T07:16:11+00:00",
+ "at": "2026-11-20T08:16:14+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Amazon S3, Amazon EC2, Amazon VPC",
+   "kind": "announcement",
+   "key": "feed:aws:6fba6e27eb39",
+   "title": "Announcing the general availability of a new AWS Local Zone in Bogot\u00e1, Colombia",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-local-zone-bogota-colombia/",
+   "detail": "Today, AWS announces the general availability of a new Local Zone in Bogot\u00e1, Colombia, bringing AWS infrastructure closer to end users for applications that require single-digit millisecond latency. You can use the Bogot\u00e1 Local Zone for workloads such as real-time gaming, live video streaming, medical imaging, and financial transaction processing. AWS Local Zones are infrastructure deployments that place compute, storage, networking, and other select AWS services closer to metropolitan areas, with the same APIs and tools as AWS Regions. You pay only for what you use, with no minimum commitment",
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
