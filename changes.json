@@ -1,9 +1,8 @@
 {
- "at": "2026-11-20T09:16:12+00:00",
+ "at": "2026-11-20T10:16:23+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
-  "maven/software.amazon.awssdk:s3: The read operation timed out",
-  "maven/com.azure:azure-storage-blob: The read operation timed out"
+  "maven/software.amazon.awssdk:dynamodb: The read operation timed out"
  ]
 }
