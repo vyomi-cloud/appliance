@@ -2,15 +2,13 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-19T23:16:01+00:00
+### Upstream watch — 2026-11-20T00:16:06+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**5 change(s), 0 actionable.**
-- · `announcement` Amazon Inspector Code Security adds GitHub Enterprise Server and private connectivity ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/inspector-code-ghes-private-network/))
-- · `announcement` Amazon S3 Tables now support promoting replicas to writable tables ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-replication-writable-tables/))
-- · `spec-commit` Azure app: [ContainerApps] Fix no-resource-duplicates by removing redundant legacy interface templates (#48355) ([link](https://github.com/Azure/azure-rest-api-specs/commit/9be92ebb1e648caa5a2560c026404a48602bdd61))
-- · `announcement` Compute Engine: Feature (November 18, 2026) ([link](https://docs.cloud.google.com/release-notes#November_18_2026))
-- · `announcement` Identity and Access Management: Feature (November 16, 2026) ([link](https://docs.cloud.google.com/release-notes#November_16_2026))
+**3 change(s), 0 actionable.**
+- · `announcement` Amazon Bedrock AgentCore Identity adds private certificate authority support ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/bedrock-agentcore-identity-private-ca/))
+- · `spec-commit` Azure apimanagement: [ApiManagement] Fix no-resource-duplicates by aligning the legacy private endpoint connection resource name (#48359) ([link](https://github.com/Azure/azure-rest-api-specs/commit/64a98cb392e1225940ff20cbe8ee02bc922223ee))
+- · `spec-commit` Azure storage: [Storage] Fix no-resource-duplicates by removing redundant legacy interface templates (#48357) ([link](https://github.com/Azure/azure-rest-api-specs/commit/a9d2c9ee39f04fb1152e2691a278e561d8fb3881))
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

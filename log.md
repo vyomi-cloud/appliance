@@ -1,3 +1,14 @@
+### Upstream watch — 2026-11-20T00:16:06+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` Amazon Bedrock AgentCore Identity adds private certificate authority support ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/bedrock-agentcore-identity-private-ca/))
+- · `spec-commit` Azure apimanagement: [ApiManagement] Fix no-resource-duplicates by aligning the legacy private endpoint connection resource name (#48359) ([link](https://github.com/Azure/azure-rest-api-specs/commit/64a98cb392e1225940ff20cbe8ee02bc922223ee))
+- · `spec-commit` Azure storage: [Storage] Fix no-resource-duplicates by removing redundant legacy interface templates (#48357) ([link](https://github.com/Azure/azure-rest-api-specs/commit/a9d2c9ee39f04fb1152e2691a278e561d8fb3881))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-19T23:16:01+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,16 +3009,3 @@ Sources that failed this run (1): maven/com.azure:azure-security-keyvault-secret
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-08T04:08:48+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 1 actionable.**
-- 🔧 `operation-removed` GCP sqladmin/v1beta4: operation sql.projects.instances.reconcileNetworking removed
-
-Sources that failed this run (2): maven/software.amazon.awssdk:s3: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-08T03:08:49+00:00
-
-Tracking 4259 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.

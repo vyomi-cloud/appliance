@@ -1,54 +1,33 @@
 {
- "at": "2026-11-19T23:16:01+00:00",
+ "at": "2026-11-20T00:16:06+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "azure",
-   "service": "app",
+   "service": "storage",
    "kind": "spec-commit",
-   "key": "azure:app:9be92ebb1e",
-   "title": "Azure app: [ContainerApps] Fix no-resource-duplicates by removing redundant legacy interface templates (#48355)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/9be92ebb1e648caa5a2560c026404a48602bdd61",
+   "key": "azure:storage:a9d2c9ee39",
+   "title": "Azure storage: [Storage] Fix no-resource-duplicates by removing redundant legacy interface templates (#48357)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/a9d2c9ee39f04fb1152e2691a278e561d8fb3881",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "apimanagement",
+   "kind": "spec-commit",
+   "key": "azure:apimanagement:64a98cb392",
+   "title": "Azure apimanagement: [ApiManagement] Fix no-resource-duplicates by aligning the legacy private endpoint connection resource name (#48359)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/64a98cb392e1225940ff20cbe8ee02bc922223ee",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon VPC",
+   "service": "Amazon S3, Secrets Manager, Amazon VPC",
    "kind": "announcement",
-   "key": "feed:aws:989acf2a66e4",
-   "title": "Amazon Inspector Code Security adds GitHub Enterprise Server and private connectivity",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/inspector-code-ghes-private-network/",
-   "detail": "Amazon Inspector Code Security now supports GitHub Enterprise Server (GHES) integration and private network connectivity for GHES and GitLab Self-Managed. Code Security is also launching automatic fix pull requests in public preview. Organizations that host GHES or GitLab Self-Managed in private networks can now connect through Amazon Virtual Private Cloud (Amazon VPC) configurations or AWS CodeConnections, so they can scan repositories without opening their firewalls to the entire AWS IP address range. Amazon Inspector Code Security scans first-party application source code, third-party depen",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:7f436e0cd1fb",
-   "title": "Amazon S3 Tables now support promoting replicas to writable tables",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-replication-writable-tables/",
-   "detail": "Amazon S3 Tables replication now lets you make a read-only replica of your Apache Iceberg table a standalone, writable table with a single API call. S3 Tables replication keeps read-only replica tables in sync with your source tables across table buckets, AWS Regions, and accounts. Instead of copying a replica into a new table, you can promote it in place to move writes to another Region. When you disassociate a replica from replication, the standalone table keeps its namespace and table name, so your queries and pipeline code carry over when you point your applications at it. The promoted tab",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Compute Engine",
-   "kind": "announcement",
-   "key": "feed:gcp:e1ecb5942d84",
-   "title": "Compute Engine: Feature (November 18, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_18_2026",
-   "detail": "Preview : C4D bare metal instances support the creation of up to 10 network interfaces per instance. Preview : Two new C4D bare metal machine types are also available. These machine types provide 12,000 GiB of Titanium SSD and up to 200 Gbps network bandwidth with per VM Tier_1 networking performance: c4d-standard-384-lssd-metal c4d-highmem-384-lssd-metal For more information, see C4D machine series .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Identity and Access Management",
-   "kind": "announcement",
-   "key": "feed:gcp:402dca21f581",
-   "title": "Identity and Access Management: Feature (November 16, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_16_2026",
-   "detail": "Using System for Cross-domain Identity Management (SCIM) data as the source for both user and group claims ( enabled-for-users-groups mode) in Workforce Identity Federation is generally available for Gemini Enterprise and Looker across web sign-in and OAuth sign-in workflows. For more information, see the following documentation: SCIM provisioning for Workforce Identity Federation Configure SCIM with Microsoft Entra ID Configure SCIM with Okta Troubleshoot SCIM provisioning and synchronization",
+   "key": "feed:aws:e51c9e693d43",
+   "title": "Amazon Bedrock AgentCore Identity adds private certificate authority support",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/bedrock-agentcore-identity-private-ca/",
+   "detail": "Amazon Bedrock AgentCore Identity now supports private certificate authorities (CAs) for custom OAuth 2.0 credential providers. If you already connect your agents to identity providers (IdPs) hosted in your VPC, you can now configure those connections to trust certificates issued by your own CA \u2014 including AWS Private CA, enterprise CAs, and self-signed root CAs. AgentCore Identity has supported private IdP connectivity through Amazon VPC Lattice, but until now the IdP still had to present a publicly trusted TLS certificate over that private connection. With private CA support, you store your ",
    "actionable": false
   }
  ],
