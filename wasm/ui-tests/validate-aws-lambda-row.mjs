@@ -18,9 +18,14 @@ try {
   await page.locator("#main button").filter({ hasText: /create function/i }).first().click();
   await sleep(1200);
   await page.locator("#main button").filter({ hasText: /Create resource/ }).first().click();
-  await sleep(3000);
-  const cells = await page.locator("#main table tr").evaluateAll((trs) => trs.map((tr) => [...tr.children].map((c) => c.innerText.trim())));
-  const row = cells.find((r) => r.some((c) => c.startsWith("my-function")));
+  // The grid renders after the create round-trip through the in-browser backend; a slow CI runner needs more than a fixed 3 s
+  // (the release-checks nano-ui job saw an empty table, locally it passes): poll up to 30 s for the row instead.
+  let cells = [], row;
+  for (let i = 0; i < 60 && !row; i++) {
+    await sleep(500);
+    cells = await page.locator("#main table tr").evaluateAll((trs) => trs.map((tr) => [...tr.children].map((c) => c.innerText.trim())));
+    row = cells.find((r) => r.some((c) => c.startsWith("my-function")));
+  }
   check("created function is listed by name", !!row, JSON.stringify(cells.slice(-2)));
   check("no placeholder cells in the row", !!row && row.slice(1).every((c) => c && !/^[-—]$/.test(c)), JSON.stringify(row));
   await sleep(1500);   // let the store snapshot persist

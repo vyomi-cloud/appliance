@@ -577,6 +577,10 @@ async function crawlConsole(browser, base, con, needsSW) {
           const firstRow = page.locator("#main table tr:has(td)").nth(Math.max(0, own));
           tokens = await firstRow.locator("td").allInnerTexts().catch(() => []);
           tokens = tokens.map((t) => t.trim()).filter((t) => t.length >= 4 && /[a-z]/i.test(t) && /[\d_.:\/-]/.test(t)).slice(0, 6);
+          // A singleton resource is named "default" (Event Grid partnerConfigurations, ...): no digit, so the rule above drops
+          // it and every tab of a resource that DOES render its data read as static. The resource's own name link is its identity.
+          const ownName = ((await firstRow.locator("a").first().innerText().catch(() => "")) || "").trim();
+          if (ownName.length >= 4 && !tokens.includes(ownName)) tokens.push(ownName);
           if (process.env.DEBUG_CRAWL) console.log(`[debug] ${svc.label}: tokens=${JSON.stringify(tokens)}`);
           // Open the first resource so its detail tabs (where most unfilled
           // fields hide) get walked below.

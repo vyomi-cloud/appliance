@@ -131,6 +131,32 @@ test("pro key, live Codespace: the Mesh API row, one free port per row, 'already
   noSshEdits(sb);
 });
 
+test("--quick (the MCP's status probe): the Mesh API and forwards from the session alone, no gh / ssh; a stopped Mesh is reported, not woken",
+  { skip: process.platform === "win32" && "sh fakes" }, async () => {
+  const sb = sandbox(); const binDir = path.join(sb.home, "bin"); fs.mkdirSync(binDir);
+  const touched = path.join(sb.home, "touched");                 // any gh / ssh call leaves a mark
+  fs.writeFileSync(sb.gh, `#!/bin/sh\n[ "$1" = --version ] && { echo 'gh version 2.99.0 (2026-01-01)'; exit 0; }\necho gh >> ${touched}\nexit 1\n`, { mode: 0o755 });
+  fs.writeFileSync(path.join(binDir, "ssh"), `#!/bin/sh\necho ssh >> ${touched}\nexit 1\n`, { mode: 0o755 });
+  const fw = path.join(sb.home, ".vyomi", "forwards"); fs.mkdirSync(fw, { recursive: true });
+  fs.writeFileSync(path.join(fw, "1.json"), JSON.stringify({ pid: process.pid, target: "api", local: 9177, remote: 9000, codespace: "vyomi-mesh-stub" }));
+  const env = { ...PRO, RELAY_PORT: String(await deadPort()), PATH: binDir + path.delimiter + process.env.PATH };
+  const t0 = Date.now(); const r = await run(sb, ["mesh", "--json", "--quick"], env); const ms = Date.now() - t0;
+  assert.equal(r.status, 0, r.stderr + r.stdout); const j = shape(r.json);
+  assert.equal(j.rows.find((x) => x.name === "api" && x.type === "service").connect, "already forwarded: 127.0.0.1:9177");
+  assert.ok(j.rows.some((x) => x.type === "forward" && x.address === "127.0.0.1:9177"));
+  assert.ok(j.notes.some((n) => /^quick: /.test(n)), j.notes);
+  assert.ok(!fs.existsSync(touched), "--quick must not run gh or ssh: " + (fs.existsSync(touched) ? fs.readFileSync(touched, "utf8") : ""));
+  assert.ok(ms < 8000, `quick list took ${ms} ms`);
+  // a Mesh Codespace that is not running: a note, no api row, and nothing woken
+  const stopped = await startStubPortal({ codespace: "vyomi-mesh-stub", meshState: "Shutdown" }); servers.push({ close: stopped.close });
+  const r2 = await run(sb, ["mesh", "--json", "--quick"], { ...env, VYOMI_PORTAL_URL: stopped.url });
+  const j2 = shape(r2.json);
+  assert.ok(!j2.rows.some((x) => x.name === "api" && x.type === "service"), JSON.stringify(j2.rows));
+  assert.ok(j2.notes.some((n) => /vyomi-mesh-stub is Shutdown/.test(n)), j2.notes);
+  assert.ok(!fs.existsSync(touched), "a stopped Mesh is not woken");
+  noSshEdits(sb);
+});
+
 test("usage errors: exit 2, nothing on stdout", async () => {
   const sb = sandbox();
   for (const a of [["bogus", "--json"], ["nano", "k3s", "--json"]]) { const r = await run(sb, a, FREE); assert.equal(r.status, 2, a.join(" ")); assert.equal(r.stdout, ""); }

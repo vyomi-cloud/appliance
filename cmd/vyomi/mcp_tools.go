@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -532,10 +533,26 @@ func (s *mcpServer) toolReach(raw json.RawMessage) (any, error) {
 		}
 		cs := p.find(homeMeshCodespace)
 		if cs != nil {
-			for _, r := range asMaps(cs.Detail["targets"]) {
+			// The status probe lists the Codespace quickly (API + forwards only); reach wants everything (VMs, k3s, LLMs), so it
+			// asks the tunnel for the full list when the Codespace is there.
+			targets, csNotes := asMaps(cs.Detail["targets"]), asStrings(cs.Detail["notes"])
+			if cs.Reachable {
+				if bin := tunnelBin(); bin != "" && tunnelCredentialsExist() {
+					if l, _ := runTunnelList(context.Background(), bin, "mesh", false); l != nil {
+						targets, csNotes = nil, l.Notes
+						for _, r := range l.Rows {
+							targets = append(targets, map[string]any{"where": r.Where, "name": r.Name, "type": r.Type, "address": r.Address, "connect": r.Connect})
+						}
+					}
+				}
+			}
+			for _, r := range targets {
 				row(fmt.Sprint(r["where"]), fmt.Sprint(r["name"]), fmt.Sprint(r["type"]), fmt.Sprint(r["address"]), fmt.Sprint(r["connect"]))
 			}
-			for _, n := range asStrings(cs.Detail["notes"]) {
+			for _, n := range csNotes {
+				if strings.HasPrefix(n, "quick: ") {
+					continue
+				}
 				notes = append(notes, "mesh: "+n)
 			}
 			if n, _ := cs.Detail["note"].(string); n != "" {

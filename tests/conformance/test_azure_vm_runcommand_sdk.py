@@ -70,8 +70,15 @@ def main():
 
     s, r = call("POST", vm + "/runCommand", {"commandId": "RunShellScript", "script": ["id"]})
     check("runCommand action returns a status value[]", s == 200 and isinstance(r.get("value"), list) and r["value"], r)
-    check("no guest runtime -> failed status, nothing invented",
-          s == 200 and r["value"][0]["code"] == "ProvisioningState/failed", r)
+    # With a guest runtime (Docker socket present) the command really runs and its own output comes
+    # back; without one the status must be failed with nothing invented. Either way the result is real.
+    v0 = (r.get("value") or [{}])[0]
+    if v0.get("code") == "ProvisioningState/succeeded":
+        check("guest runtime present -> real command output (uid= from `id`)",
+              s == 200 and "uid=" in v0.get("message", ""), r)
+    else:
+        check("no guest runtime -> failed status, nothing invented",
+              s == 200 and v0.get("code") == "ProvisioningState/failed", r)
     s, r = call("POST", vm + "/runCommand", {"commandId": "RunShellScript"})
     check("runCommand without script is 400 InvalidParameter", s == 400 and r["error"]["code"] == "InvalidParameter", r)
     call("POST", vm + "/powerOff", {})

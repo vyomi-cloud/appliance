@@ -9,7 +9,8 @@
 #   tools/mcp-eval/prerelease-it.sh homes     # offline (:9000 if up), local mesh on :9100 (docker), fake Codespace
 #   tools/mcp-eval/prerelease-it.sh nano      # real Nano tab: needs `vyomi-tunnel` running + a tab on vyomi.cloud/nano
 #   tools/mcp-eval/prerelease-it.sh agent     # claude -p with --plugin-dir: scripted evals          (needs claude, signed in)
-#   tools/mcp-eval/prerelease-it.sh all       # package linux brew homes agent (+ nano when a tab is connected)
+#   tools/mcp-eval/prerelease-it.sh codespace # a REAL Mesh Codespace: forward api, serving, S3     (needs gh, a running Mesh, a Pro/Max key)
+#   tools/mcp-eval/prerelease-it.sh all       # package linux brew homes agent (+ nano / codespace when a tab / a Mesh is up)
 #   tools/mcp-eval/prerelease-it.sh clean     # remove everything this script created
 #
 # Knobs (env): IT_DIR (default /tmp/vyomi-prerelease-it), IT_MESH_PORT (9100), IT_RUNS (agent repetitions, 1),
@@ -108,7 +109,8 @@ stage_package() {
     check package pack "npm pack" sh -c "cd '$ROOT/packaging/tunnel' && npm pack --pack-destination '$IT_DIR' --json > '$IT_DIR/pack.json'" || return 0
   fi
   tgz="$(ls "$IT_DIR"/vyomi-tunnel-*.tgz | head -1)"
-  check package tracked-clean "build left no tracked changes" sh -c "cd '$ROOT' && test -z \"\$(git status --porcelain --untracked-files=no)\""
+  check package tracked-clean "build left no tracked changes" sh -c "cd '$ROOT' && d=\$(git status --porcelain --untracked-files=no | tr '\n' ' '); [ -z \"\$d\" ] || { echo \"tracked changes: \$d\"; exit 1; }" \
+    || note "$(grep 'tracked changes:' "$IT_DIR/log.txt" | tail -1)"
   check package tarball-binaries "tarball has the 5 bundled binaries" sh -c \
     "tar tzf '$tgz' | grep -cE 'package/mcp/(darwin-arm64|darwin-x64|linux-arm64|linux-x64)/vyomi-mcp\$|package/mcp/win32-x64/vyomi-mcp.exe\$' | grep -qx 5"
   local bytes; bytes=$(wc -c < "$tgz" | tr -d ' ')
@@ -294,6 +296,67 @@ stage_nano() {
   fi
 }
 
+# ---------- a real Mesh Codespace (the check run by hand on 2026-11-19 against 1.3.1) ----------
+mesh_codespace() { # the Codespace the tunnel would pick: VYOMI_MESH_CODESPACE, else the newest Available vyomi-mesh-*
+  [ -n "${VYOMI_MESH_CODESPACE:-}" ] && { printf '%s' "$VYOMI_MESH_CODESPACE"; return; }
+  gh codespace list --json name,state,createdAt 2>/dev/null | python3 -c '
+import json, sys
+cs = [c for c in json.load(sys.stdin) if c["name"].startswith("vyomi-mesh-") and c["state"] == "Available"]
+cs.sort(key=lambda c: c["createdAt"], reverse=True)
+print(cs[0]["name"] if cs else "", end="")' 2>/dev/null
+}
+stage_codespace() {
+  say "codespace: a real Mesh Codespace through the installed tunnel (start Mesh in the Vyomi console first)"
+  [ -x "$PREFIX/bin/vyomi-tunnel" ] || { rec codespace prereq SKIP "run the package stage first"; return 0; }
+  need codespace gh python3 curl || return 0
+  local T="$PREFIX/bin/vyomi-tunnel" cs port code fpid o="$IT_DIR/mcp-codespace-real.jsonl" o2="$IT_DIR/mcp-codespace-real2.jsonl"
+  cs="$(mesh_codespace)"
+  [ -n "$cs" ] || { rec codespace prereq SKIP "no Available vyomi-mesh-* Codespace (gh codespace list); start Mesh in the Vyomi console"; return 0; }
+  note "Codespace: $cs"
+  check codespace list "list mesh --json: the api row, no Vyomi core container names" sh -c \
+    "'$T' list mesh --json > '$IT_DIR/cs-list.json'; python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); n=[r[\"name\"] for r in d[\"rows\"]]; assert \"api\" in n, d; assert not any(\"simulator\" in x or x.startswith(\"vyomi-mesh-llm\") for x in n), n' '$IT_DIR/cs-list.json'"
+  check codespace list-quick "list mesh --json --quick: the api row within 5 s (no ssh)" sh -c \
+    "s=\$(date +%s); '$T' list mesh --json --quick > '$IT_DIR/cs-quick.json'; e=\$(( \$(date +%s) - s )); echo quick=\${e}s; [ \$e -le 5 ] && grep -q '\"name\": \"api\"' '$IT_DIR/cs-quick.json'"
+  mcp_session "$o" -- vyomi_status '{}'
+  check codespace detected "vyomi_status: Codespace reachable, hint is forward api on a free port" js "$o" \
+    'any(h["id"]=="mesh-codespace" and h["reachable"] and __import__("re").match(r"vyomi-tunnel forward api \d+:9000$", h["detail"].get("forward_command","") or "") for h in t(10)["homes"])'
+  port="$(python3 - "$o" <<'EOF'
+import json, re, sys
+for line in open(sys.argv[1]):
+    d = json.loads(line) if line.strip() else {}
+    if d.get("id") == 10:
+        st = json.loads(d["result"]["content"][0]["text"])
+        h = next((h for h in st["homes"] if h["id"] == "mesh-codespace"), {})
+        m = re.search(r" (\d+):9000$", h.get("detail", {}).get("forward_command", "") or "")
+        print(m.group(1) if m else "", end="")
+EOF
+)"
+  [ -n "$port" ] || { rec codespace forward SKIP "no forward suggested (see $o)"; return 0; }
+  if curl -s -m 2 -o /dev/null http://127.0.0.1:9000/ 2>/dev/null; then
+    check codespace busy-port "forward api 9000:9000 next to a local stack: refused, a free port named" sh -c \
+      "'$T' forward api 9000:9000 2>&1 | grep -q 'already in use'"
+  else rec codespace busy-port SKIP "nothing on :9000 here"; fi
+  check codespace core-refused "container names are refused (Mesh software protection)" sh -c \
+    "'$T' forward vyomi-mesh-simulator-1 9199:9000 2>&1 | grep -q \"Vyomi's own Mesh software\""
+  "$T" forward api "$port:9000" > "$IT_DIR/cs-forward.log" 2>&1 & fpid=$!
+  code=000; for _ in $(seq 1 30); do code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/mesh/status"); [ "$code" = 200 ] && break; sleep 2; done
+  check codespace forward "forward api $port:9000 answers /mesh/status (HTTP $code)" test "$code" = 200
+  mcp_session "$o2" -- vyomi_status '{}' vyomi_env '{"cloud":"aws","lang":"python","home":"mesh"}' vyomi_reach '{"scope":"mesh"}'
+  check codespace serving "vyomi_status: serving through the forward, unlocked, with a tier" js "$o2" \
+    'any(h["id"]=="mesh-codespace" and h["serving"] and h["detail"].get("locked") is False and h["detail"].get("tier") for h in t(10)["homes"])'
+  check codespace env "home=mesh env points at the forward" js "$o2" "'127.0.0.1:$port' in json.dumps(t(11))"
+  check codespace reach "vyomi_reach mesh: api + the live forward, no core names" js "$o2" \
+    '"already forwarded" in json.dumps(t(12)) and "simulator-1" not in json.dumps(t(12))'
+  check codespace already-forwarded "list mesh says 'already forwarded'" sh -c "'$T' list mesh --json | grep -q 'already forwarded: 127.0.0.1:$port'"
+  if have aws; then
+    check codespace s3 "aws s3 mb/ls/rb through the forward" sh -c \
+      "export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=us-east-1 AWS_PAGER=''; E=http://127.0.0.1:$port; \
+       aws --endpoint-url \$E s3 mb s3://it-cs-$$ && aws --endpoint-url \$E s3 ls | grep -q it-cs-$$ && aws --endpoint-url \$E s3 rb s3://it-cs-$$"
+  else rec codespace s3 SKIP "aws CLI not installed"; fi
+  kill "$fpid" 2>/dev/null; wait "$fpid" 2>/dev/null
+  rec codespace stopped PASS "test forward stopped (pid $fpid)"
+}
+
 # ---------- agent evals: real Claude Code + the plugin from this branch ----------
 fixture() { # fixture NAME KIND -> path of a fresh throwaway project
   local d="$IT_DIR/fixtures/$1"; rm -rf "$d"; mkdir -p "$d"
@@ -389,7 +452,7 @@ cmd="${1:-all}"
 # `all` starts a fresh results file; a single stage replaces only its own rows, so stages run one by one add up.
 case "$cmd" in
   all) : > "$RESULTS" ;;
-  package|linux|brew|homes|nano|agent)
+  package|linux|brew|homes|nano|agent|codespace)
     if [ -f "$RESULTS" ]; then grep -v "^$cmd"$'\t' "$RESULTS" > "$RESULTS.tmp" || true; mv "$RESULTS.tmp" "$RESULTS"; fi ;;
 esac
 case "$cmd" in
@@ -399,7 +462,9 @@ case "$cmd" in
   homes)   stage_homes ;;
   nano)    stage_nano ;;
   agent)   stage_agent ;;
-  all)     stage_package; stage_linux; stage_brew; stage_homes; if nano_up; then stage_nano; else rec nano prereq SKIP "no tab connected"; fi; stage_agent ;;
+  codespace) stage_codespace ;;
+  all)     stage_package; stage_linux; stage_brew; stage_homes; if nano_up; then stage_nano; else rec nano prereq SKIP "no tab connected"; fi
+           if have gh && [ -n "$(mesh_codespace)" ]; then stage_codespace; else rec codespace prereq SKIP "no running Mesh Codespace"; fi; stage_agent ;;
   clean)   stage_clean; exit 0 ;;
   *) sed -n '2,20p' "$0"; exit 2 ;;
 esac

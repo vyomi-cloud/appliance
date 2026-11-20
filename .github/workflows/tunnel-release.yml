@@ -211,6 +211,24 @@ jobs:
           # The exact bytes the gates installed and tested (npm publish of a .tgz does not re-pack).
           if [ "$DRY" = "true" ]; then npm publish "$TGZ" --access public --tag "$CH" --dry-run
           else npm publish "$TGZ" --access public --tag "$CH"; fi
+      - name: Keep `next` from pointing behind `latest`
+        # A final release moves `next` too when `next` is older (seen: next stayed 1.3.0-rc.3 after 1.3.1 went out, so
+        # `npm i vyomi-tunnel@next` installed an older build). A newer RC line on `next` (e.g. 1.4.0-rc.1) is left alone.
+        # Needs "Allow npm dist-tag" on the npm trusted publisher (off by default); without it this warns and the release stands.
+        if: env.CH == 'latest' && env.DRY != 'true'
+        continue-on-error: true
+        run: |
+          NEXT=$(npm view vyomi-tunnel dist-tags.next 2>/dev/null || true)
+          if [ -z "$NEXT" ]; then echo "no next tag"; exit 0; fi
+          # true when NEXT < VER (semver: core numbers, then a prerelease sorts before its release)
+          if node -e '
+            const [a, b] = process.argv.slice(1).map((v) => { const [c, pre] = v.split("-"); return { c: c.split(".").map(Number), pre }; });
+            for (let i = 0; i < 3; i++) if (a.c[i] !== b.c[i]) process.exit(a.c[i] < b.c[i] ? 0 : 1);
+            process.exit(a.pre && !b.pre ? 0 : 1);' "$NEXT" "$VER"; then
+            npm dist-tag add "vyomi-tunnel@$VER" next \
+              && echo "next: $NEXT -> $VER" \
+              || echo "::warning::could not move npm dist-tag next ($NEXT) to $VER: enable 'Allow npm dist-tag' on the trusted publisher (npmjs.com -> vyomi-tunnel -> Settings), or run: npm dist-tag add vyomi-tunnel@$VER next"
+          else echo "next ($NEXT) is not behind $VER; left alone"; fi
       - name: Bump the Homebrew tap (final releases only; formula rendered from packaging/brew/vyomi-tunnel.rb)
         if: env.CH == 'latest' && env.DRY != 'true'
         timeout-minutes: 35          # npm's CDN can take many minutes to serve a new tarball; the sha step waits for it (up to 25 min)

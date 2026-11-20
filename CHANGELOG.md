@@ -4,6 +4,26 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.10] — 2026-11-20
+
+Release-check fixes and the AWS Mesh drawer width, plus the endurance harness (AWS stages 7 and 8) and tunnel 1.3.2. Beta, Dev Simplified.
+
+### Fixed
+- **Nano console (AWS):** the Vyomi Mesh drawer spans the whole section (side navigation and content) on service pages, not the Home column.
+- **Release checks:** Nano relay ships `azure_security_automations_core.py` (Defender automations no longer HTTP 500); the local relay forwards account-addressed CORS preflights so the Cosmos CORS allow-list is enforced through the tunnel; tenant-level Resource Graph (`POST /providers/Microsoft.ResourceGraph/resources`) is routed as ARM; `nano-boot.js` lists `gcp_identityplatform_core.py`.
+- **Simulator (AWS):** CloudWatch composite alarm rules accept hyphenated alarm names; unset `DatapointsToAlarm` and SSM maintenance-window `ScheduleTimezone` are no longer invented on read-back.
+- **UI check harness:** the crawler treats a singleton resource's own name as its identity; the Lambda row validator waits for the grid.
+
+### Added
+- **AWS Budgets** and **Resource Groups** control planes (`core/aws_governance_core.py`), vendored to Nano.
+- **Endurance:** Terraform reference estate harness with AWS stage 7 (observability) and stage 8 (lifecycle) modules; regression suites `tests/conformance/test_endurance_*_core.py`; release gate draft `ci/v4/endurance-release-gate.yml` (owner installs under `.github/workflows`).
+- **Tunnel:** vyomi-tunnel 1.3.2 (npm).
+
+### Known limits
+- Full AWS estate cycle (`run_estate.sh`) not yet run end to end (the stage-2 EC2 instance needs disk headroom); the targeted stage 7/8 cycle passes.
+- Homebrew formula for vyomi-tunnel still serves 1.2.5 (release checklist `tunnel-version-sync`).
+- MCP guardrail enforcement (block, incident, TTL suspension) is design only.
+
 ## [4.0.9] — 2026-11-19
 
 Nano console fixes (Vyomi Mesh drawer, AWS prompt optimization), tunnel 1.3.1, and the release-checks SDK pass rate. Beta, Dev Simplified.

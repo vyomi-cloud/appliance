@@ -316,6 +316,42 @@ EOF`)
 	}
 }
 
+// The status probe asks the tunnel for the quick list (session only, no ssh); vyomi_reach asks for the full one (VMs, k3s, LLMs).
+func TestMCPStatusQuickReachFull(t *testing.T) {
+	s, _ := testMCPServer(t)
+	deadHomes(t)
+	isolateHomes(t)
+	dir := fakeTunnel(t, "")
+	args := filepath.Join(dir, "args")
+	_ = os.WriteFile(os.Getenv("VYOMI_TUNNEL_BIN"), []byte(`#!/bin/sh
+echo "$*" >> `+args+`
+case "$*" in
+  *--quick*) echo '{"schema":1,"rows":[{"where":"mesh","name":"api","type":"service","address":"","connect":"vyomi-tunnel forward api 9100:9000"}],"notes":["quick: VMs, k3s and LLM rows are not listed here"]}' ;;
+  *) echo '{"schema":1,"rows":[{"where":"mesh","name":"api","type":"service","address":"","connect":"vyomi-tunnel forward api 9100:9000"},{"where":"mesh","name":"web","type":"instance","address":"172.18.0.5:22","connect":"ssh web.vyomi"}],"notes":[]}' ;;
+esac
+`), 0o755)
+	_, homes := statusOf(t, s)
+	if homes[homeMeshCodespace]["reachable"] != true {
+		t.Fatalf("codespace: %v", homes[homeMeshCodespace])
+	}
+	raw, _ := os.ReadFile(args)
+	if lines := strings.Split(strings.TrimSpace(string(raw)), "\n"); len(lines) != 1 || !strings.Contains(lines[0], "--quick") {
+		t.Fatalf("status must run one quick list, got %q", raw)
+	}
+	res, isErr := callTool(t, s, "vyomi_reach", map[string]any{"scope": "mesh"})
+	if isErr {
+		t.Fatal(res)
+	}
+	js, _ := json.Marshal(res)
+	if !strings.Contains(string(js), `"name":"web"`) || strings.Contains(string(js), "quick:") {
+		t.Errorf("reach must use the full list and drop the quick note: %s", js)
+	}
+	raw, _ = os.ReadFile(args)
+	if !strings.Contains(string(raw), "list mesh --json\n") {
+		t.Errorf("reach must run the full list (no --quick): %q", raw)
+	}
+}
+
 func TestMCPHomesCodespaceTimeout(t *testing.T) {
 	s, _ := testMCPServer(t)
 	deadHomes(t)

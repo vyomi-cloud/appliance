@@ -92,3 +92,7 @@ wasm/vendor/pyodide/
 
 # Kubescape framework artifacts downloaded once by providers/kubescape_runner.py (appliance data)
 kubescape-artifacts/
+
+# Claude Code runtime files (rewritten by every session; never commit)
+.claude/*.lock
+.claude/settings.local.json
