@@ -5,8 +5,8 @@
 backend: it serves the SAME ASGI app (``server.app``) a second time on a TLS port with a generated self-signed certificate, so every
 route (Entra token / OIDC / JWKS, Key Vault, Search, ...) answers on https too, from the one engine.
 
-Start: ``VYOMI_AZURE_TLS_PORT=<port>`` (0 = any free port), or ``VYOMI_AZURE_TLS=1`` (port 9443) or ``VYOMI_AZURE_REAL_BACKENDS=1``;
-otherwise nothing starts and nothing changes. ``server.py`` calls ``maybe_start(app)`` once the app is built. Optional cert:
+Start: ``VYOMI_AZURE_TLS_PORT=<port>`` (0 = any free port), or ``VYOMI_AZURE_TLS=1`` (port 9443) or ``VYOMI_AZURE_REAL_BACKENDS=1``,
+or the Mesh role (``VYOMI_ROLE=mesh``, port 9443, off with ``VYOMI_AZURE_TLS=0``); otherwise nothing starts and nothing changes. ``server.py`` calls ``maybe_start(app)`` once the app is built. Optional cert:
 ``VYOMI_AZURE_TLS_CERT`` / ``_KEY`` (PEM paths); extra SANs: ``VYOMI_AZURE_TLS_HOSTS=a.example,b.example``.
 
 Contract for clients (also served at ``GET /_vyomi/azure-tls``):
@@ -35,8 +35,15 @@ def _truthy(v) -> bool:
 
 
 def wanted() -> bool:
-    return bool(os.environ.get("VYOMI_AZURE_TLS_PORT", "").strip()) or _truthy(os.environ.get("VYOMI_AZURE_TLS")) \
-        or _truthy(os.environ.get("VYOMI_AZURE_REAL_BACKENDS"))
+    # A Mesh (VYOMI_ROLE=mesh) serves https :9443 by default: the MCP / docs promise it, and the Mesh compose lives in vyomi-cloud/sandbox,
+    # so the default belongs in the image. It is reachable only through the user's ssh session (the Mesh publishes no ports) and
+    # serves the same app, so the Mesh session-token middleware guards it too. VYOMI_AZURE_TLS=0 turns it off.
+    flag = (os.environ.get("VYOMI_AZURE_TLS") or "").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return bool(os.environ.get("VYOMI_AZURE_TLS_PORT", "").strip())
+    mesh = (os.environ.get("VYOMI_ROLE") or "").strip().lower() == "mesh"
+    return bool(os.environ.get("VYOMI_AZURE_TLS_PORT", "").strip()) or _truthy(flag) \
+        or _truthy(os.environ.get("VYOMI_AZURE_REAL_BACKENDS")) or mesh
 
 
 def _self_signed(dirpath: str):

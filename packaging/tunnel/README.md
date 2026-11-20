@@ -69,15 +69,48 @@ ssh -i ~/.ssh/vyomi-<instance>.pem -p 22000 ec2-user@127.0.0.1
 `GET /health` lists `"vm-tcp"` in `features` and the bridged VMs under `vms`.
 Port range: `VM_PORT_MIN` / `VM_PORT_MAX`.
 
-## Agents: the Vyomi MCP server (1.3.0+)
+## Agents: the Vyomi MCP server (1.3.0+): Claude Code, Cursor, VS Code, Codex
 
 `vyomi-tunnel mcp` runs the Vyomi MCP server on stdin/stdout for Claude Code and
 other agents. The package bundles it for macOS (arm64, x64), Linux (arm64, x64) and Windows
 (x64), so there is nothing else to install:
 
+Claude Code (the Vyomi plugin adds this server plus setup skills: `claude plugin install vyomi@vyomi`):
+
 ```bash
 claude mcp add vyomi -- vyomi-tunnel mcp
 ```
+
+Cursor: `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project):
+
+```json
+{ "mcpServers": { "vyomi": { "command": "vyomi-tunnel", "args": ["mcp"] } } }
+```
+
+VS Code (Copilot agent mode): `.vscode/mcp.json` in the project, or `code --add-mcp '{"name":"vyomi","command":"vyomi-tunnel","args":["mcp"]}'`:
+
+```json
+{ "servers": { "vyomi": { "type": "stdio", "command": "vyomi-tunnel", "args": ["mcp"] } } }
+```
+
+The portable `.mcp.json` at the project root uses the Cursor shape (`mcpServers`) and works across tools that read it.
+
+OpenAI Codex (CLI, IDE extension and app share `~/.codex/config.toml`):
+
+```bash
+codex mcp add vyomi -- vyomi-tunnel mcp
+```
+
+```toml
+[mcp_servers.vyomi]
+command = "vyomi-tunnel"
+args = ["mcp"]
+```
+
+Editors started from the Dock or Start menu may not see your shell's `PATH`. If the server does not start, use the
+full path from `which vyomi-tunnel` (Windows: `where vyomi-tunnel`) as `command`. Every client gets the same tools and
+the same built-in instructions (including: never write `.env.vyomi` without your yes); the setup skills are Claude
+Code's plugin only.
 
 It finds your simulator (the Nano tab through this tunnel, a local mesh, or your
 Mesh Codespace), says which one it uses, and gives SDK settings, capability levels
