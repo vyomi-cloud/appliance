@@ -2,15 +2,16 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-20T18:16:26+00:00
+### Upstream watch — 2026-11-20T19:16:26+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**3 change(s), 0 actionable.**
-- · `announcement` AWS CloudFormation Service-Managed StackSets adds custom execution roles with nested stacks support ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/stacksets-custom-execution-roles/))
-- · `announcement` Amazon Aurora MySQL 8.4.12 is now generally available ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-8412-available/))
-- · `announcement` Introducing Amazon EC2 T9g instances based on Graviton5  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-t9g-instances-ga/))
+**4 change(s), 0 actionable.**
+- · `announcement` Amazon EventBridge Custom event bus now supports Amazon MSK as a target ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eventbridge-msk-target/))
+- · `announcement` Amazon EventBridge Custom event bus now supports Webhook Events ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eventbridge-webhook-events))
+- · `announcement` Amazon EventBridge Scheduler adds 589 new API actions and event bus targets ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/eventbridge-scheduler-new-api-actions/))
+- · `announcement` Amazon VPC Lattice now supports CloudWatch metrics for VPC resources ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/vpc-lattice-cloudwatch-metrics/))
 
-Sources that failed this run (1): maven/com.google.cloud:google-cloud-firestore: The read operation timed out
+Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

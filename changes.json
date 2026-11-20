@@ -1,39 +1,49 @@
 {
- "at": "2026-11-20T18:16:26+00:00",
+ "at": "2026-11-20T19:16:26+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "Amazon S3",
+   "service": "EventBridge",
    "kind": "announcement",
-   "key": "feed:aws:3f1d56f7c22a",
-   "title": "AWS CloudFormation Service-Managed StackSets adds custom execution roles with nested stacks support",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/stacksets-custom-execution-roles/",
-   "detail": "AWS CloudFormation StackSets now supports custom execution roles for service-managed stack sets, which enables you to scope the permissions StackSets uses in each target AWS account. StackSets deploys the same infrastructure, such as networking and security settings, across thousands of accounts and Regions in one operation. With a custom execution role, you can also use nested stacks, macros, and transforms in service-managed stack sets, which allows you to deploy the reusable templates you use for individual stacks across your organization. With a custom execution role, you define what Stack",
+   "key": "feed:aws:c65cd3b4bfe3",
+   "title": "Amazon EventBridge Scheduler adds 589 new API actions and event bus targets",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/eventbridge-scheduler-new-api-actions/",
+   "detail": "Amazon EventBridge Scheduler expands its AWS SDK integrations with 589 new API actions across 81 AWS services, and adds templated targets for the enhanced EventBridge Custom event bus. You can now schedule direct invocations of a broader set of AWS services without writing custom integration code. EventBridge Scheduler is a serverless scheduler that allows you to create, run, and manage billions of scheduled events and tasks across more than 270 AWS services, without provisioning or managing the underlying infrastructure. With a new templated target, you can schedule event delivery directly to",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Aurora",
+   "service": "EventBridge",
    "kind": "announcement",
-   "key": "feed:aws:239730c6389f",
-   "title": "Amazon Aurora MySQL 8.4.12 is now generally available",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-mysql-8412-available/",
-   "detail": "Starting today, Amazon Aurora MySQL-Compatible Edition 8.4 supports MySQL 8.4.12. This release includes several security enhancements and bug fixes. We recommend upgrading to the newer minor versions to accept fixes for Common Vulnerabilities and Exposures (CVEs) in prior versions of MySQL and to benefit from bug fixes, performance improvements, and new functionality added by community MySQL. For more details, refer to the Aurora MySQL 8.4 and MySQL 8.4.12 release notes. You can upgrade your databases during scheduled maintenance windows using automatic minor version upgrades. To simplify oper",
+   "key": "feed:aws:9b6d0ed8457a",
+   "title": "Amazon EventBridge Custom event bus now supports Webhook Events",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eventbridge-webhook-events",
+   "detail": "Amazon EventBridge now supports Webhook Events for the enhanced Custom event bus, so SaaS applications, AI agents, and custom integrations can send events to a bus over HTTPS. You no longer need to deploy and operate your own API endpoint and compute to receive webhooks and publish them to your bus. The EventBridge Custom event bus is a serverless event broker that enables you to create scalable event-driven applications by routing events between your applications, SaaS integrations, and AWS services. When you create a webhook event source on your bus, EventBridge provides a managed HTTPS URL ",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon EC2",
+   "service": "EventBridge",
    "kind": "announcement",
-   "key": "feed:aws:9ecf72d8264f",
-   "title": "Introducing Amazon EC2 T9g instances based on Graviton5 ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-t9g-instances-ga/",
-   "detail": "AWS is announcing the general availability of new low-cost burstable Amazon EC2 T9g instances, which offer the best price performance among general-purpose EC2 instances. These instances are powered by AWS Graviton5 processors and built on the latest sixth generation AWS Nitro cards. T9g instances deliver up to 45% better price performance compared to previous generation T4g instances, and offer four sizes: nano, micro, small, and medium. These instances are designed for workloads requiring low to moderate CPU utilization, including data processing, login gateways, small databases, microservic",
+   "key": "feed:aws:a38928be7bcb",
+   "title": "Amazon EventBridge Custom event bus now supports Amazon MSK as a target",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eventbridge-msk-target/",
+   "detail": "Amazon EventBridge now supports Amazon Managed Streaming for Apache Kafka (Amazon MSK) as a target for the enhanced Custom event bus, so you can deliver events to Kafka topics without running your own producer. The EventBridge Custom event bus is a serverless event broker that enables you to create scalable event-driven applications by routing events between your applications, SaaS integrations, and AWS services. To deliver events to MSK, you create a Subscriber that specifies the cluster ARN and topic. You can also configure Kafka producer settings such as partition key, acknowledgment level,",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon VPC, CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:b31a92873f1a",
+   "title": "Amazon VPC Lattice now supports CloudWatch metrics for VPC resources",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/vpc-lattice-cloudwatch-metrics/",
+   "detail": "Amazon VPC Lattice now publishes Amazon CloudWatch metrics for VPC resources. Resource owners \u2014 those who share resources via VPC Lattice \u2014 and resource consumers \u2014 those who access those shared resources \u2014 can now see TCP traffic to resources such as databases, clusters, and on-premises endpoints. Resource owners get metrics for resource gateways and resource configurations. Consumers get metrics for resource endpoints, service network endpoints, and service network VPC associations. Previously, resource access logs were the primary way to see this traffic, but they required additional proces",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
+  "maven/software.amazon.awssdk:sqs: The read operation timed out"
  ]
 }
