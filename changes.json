@@ -1,35 +1,8 @@
 {
- "at": "2026-11-20T00:16:06+00:00",
+ "at": "2026-11-20T01:15:59+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "azure",
-   "service": "storage",
-   "kind": "spec-commit",
-   "key": "azure:storage:a9d2c9ee39",
-   "title": "Azure storage: [Storage] Fix no-resource-duplicates by removing redundant legacy interface templates (#48357)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/a9d2c9ee39f04fb1152e2691a278e561d8fb3881",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "apimanagement",
-   "kind": "spec-commit",
-   "key": "azure:apimanagement:64a98cb392",
-   "title": "Azure apimanagement: [ApiManagement] Fix no-resource-duplicates by aligning the legacy private endpoint connection resource name (#48359)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/64a98cb392e1225940ff20cbe8ee02bc922223ee",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, Secrets Manager, Amazon VPC",
-   "kind": "announcement",
-   "key": "feed:aws:e51c9e693d43",
-   "title": "Amazon Bedrock AgentCore Identity adds private certificate authority support",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/bedrock-agentcore-identity-private-ca/",
-   "detail": "Amazon Bedrock AgentCore Identity now supports private certificate authorities (CAs) for custom OAuth 2.0 credential providers. If you already connect your agents to identity providers (IdPs) hosted in your VPC, you can now configure those connections to trust certificates issued by your own CA \u2014 including AWS Private CA, enterprise CAs, and self-signed root CAs. AgentCore Identity has supported private IdP connectivity through Amazon VPC Lattice, but until now the IdP still had to present a publicly trusted TLS certificate over that private connection. With private CA support, you store your ",
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+ ]
 }
