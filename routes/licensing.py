@@ -579,10 +579,10 @@ def register(app: FastAPI) -> None:
     @app.post("/api/runtime/budget/disable", include_in_schema=False)
     def api_runtime_budget_disable(request: Request):
         """Testing toggle: bypass the host-clamp gate."""
-        from core.admin_auth import require_admin_key
+        from core.admin_auth import admin_checks_apply, require_admin_key
         require_admin_key(request)
-        if ctx.appliance_mode_enabled():
-            raise HTTPException(status_code=403, detail="Budget bypass disabled in appliance mode")
+        if admin_checks_apply():     # appliance mode or a Mesh: the host-clamp gate is not a user toggle (guardrails item 7)
+            raise HTTPException(status_code=403, detail="Budget bypass disabled in appliance mode and on a Mesh")
         import server
         server._BUDGET_BYPASSED = True
         return {"bypassed": True, "message": "Budget gate disabled. Re-enable via POST /api/runtime/budget/enable."}
@@ -590,10 +590,10 @@ def register(app: FastAPI) -> None:
     @app.post("/api/runtime/budget/enable", include_in_schema=False)
     def api_runtime_budget_enable(request: Request):
         """Re-enable the host-clamp gate (undo /disable)."""
-        from core.admin_auth import require_admin_key
+        from core.admin_auth import admin_checks_apply, require_admin_key
         require_admin_key(request)
-        if ctx.appliance_mode_enabled():
-            raise HTTPException(status_code=403, detail="Budget bypass disabled in appliance mode")
+        if admin_checks_apply():     # appliance mode or a Mesh: the host-clamp gate is not a user toggle (guardrails item 7)
+            raise HTTPException(status_code=403, detail="Budget bypass disabled in appliance mode and on a Mesh")
         import server
         server._BUDGET_BYPASSED = False
         return {"bypassed": False, "message": "Budget gate re-enabled."}

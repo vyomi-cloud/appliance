@@ -79,8 +79,16 @@ jobs:
             echo "- Claude Code plugins : $(mask "$PLUGINS")"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ── Guardrail suite (hard gate: red blocks every artifact below; tools/guardrails/run.sh) ──
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
+
   # ── source tarball + deb + rpm ──────────────────────────────────────────
   build:
+    needs: guardrails
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}
