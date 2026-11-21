@@ -4,8 +4,8 @@
     python3 scripts/mesh-session-keygen.py [kid]          # kid defaults to portal-YYYY-MM
 
 Prints:
-  1. the PRIVATE key (base64url raw 32-byte seed) for the portal's secret VYOMI_MESH_SESSION_SIGNING_KEY. Put it in the
-     secret store and nowhere else: never in this repo, a Codespace, a Mesh image or a chat.
+  1. the PRIVATE key (base64url raw 32-byte seed) for the portal's secret MESH_SESSION_SIGNING_KEY (+ MESH_SESSION_SIGNING_KID).
+     Put it in the secret store and nowhere else: never in this repo, a Codespace, a Mesh image or a chat.
   2. the kid + PUBLIC key line to add to TRUSTED_KEYS in core/mesh_session.py AND wasm/relay/mesh-session.mjs.
 Nothing is written to disk.
 """
@@ -27,8 +27,9 @@ def main() -> None:
     seed = priv.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
     pub = priv.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     print("# 1. Portal secret (PRIVATE; secret store only):")
-    print(f"VYOMI_MESH_SESSION_SIGNING_KEY={b64(seed)}")
-    print(f"VYOMI_MESH_SESSION_SIGNING_KID={kid}")
+    print(f"MESH_SESSION_SIGNING_KEY={b64(seed)}")
+    print(f"MESH_SESSION_SIGNING_KID={kid}")
+    print("# then, only once a Mesh image + relay pinning this kid are live: MESH_SESSION_TOKEN_VERSION=v2")
     print()
     print("# 2. core/mesh_session.py TRUSTED_KEYS:")
     print(f'    "{kid}": "{b64(pub)}",')

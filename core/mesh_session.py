@@ -40,7 +40,9 @@ VERSION_V2 = "v2"
 # Ed25519 public keys of the portal's session signer: key id -> base64url raw 32-byte public key. PINNED IN CODE on
 # purpose (see the module docstring). Add a key with `python3 scripts/mesh-session-keygen.py`; keep the old one until no
 # live session uses it. wasm/relay/mesh-session.mjs carries the same set (tests/test_mesh_session_v2.py checks they match).
-TRUSTED_KEYS: dict[str, str] = {}
+TRUSTED_KEYS: dict[str, str] = {
+    "portal-2026-11": "gFxVrZy9w3W4r-qhGzAW-nkN0vUrUF6tnzSeAqCovrM",   # generated 2026-11-21 (owner); private seed only in the portal secret store
+}
 
 # HMAC (v1) tokens: still accepted until the portal mints v2 for every session. A code constant, not an env switch:
 # an env switch is under the Codespace owner's control and would reopen F2.

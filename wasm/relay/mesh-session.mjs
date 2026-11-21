@@ -9,7 +9,9 @@ import crypto from "node:crypto";
 
 export const AUD = "vyomi-mesh-session";
 // Same set as core/mesh_session.py TRUSTED_KEYS (tests/test_mesh_session_v2.py checks they match): kid -> base64url raw 32-byte key.
-export const TRUSTED_KEYS = Object.freeze({});
+export const TRUSTED_KEYS = Object.freeze({
+  "portal-2026-11": "gFxVrZy9w3W4r-qhGzAW-nkN0vUrUF6tnzSeAqCovrM",
+});
 // Same as core/mesh_session.py V1_ACCEPTED. A code constant: an env switch would let a Codespace owner reopen F2.
 export const V1_ACCEPTED = true;
 const SKEW_S = 30;
