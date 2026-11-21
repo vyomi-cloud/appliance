@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-21T10:16:50+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (2): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-21T09:16:47+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **1 change(s), 0 actionable.**
-- · `announcement` AWS STS now supports cross-partition federation for AWS identities ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-sts-cross-partition))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-09T21:59:19+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` Introducing an open-source UI for graph analytics over data lakes with Amazon Neptune Analytics ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-graphover-datalakes-generally-available))
