@@ -1,12 +1,12 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-21 05:20 UTC · refreshes after every pipeline run_
+_Updated 2026-11-21 06:19 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
 - **Released:** 55 services (AWS 19 · GCP 18 · Azure 18) of 1,068 the clouds publish
-- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 20/20 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 20/20 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 20/20 checks), Workflows API (GCP, 17/18 checks), Application Insights (Azure, 16/17 checks), Container Registry (Azure, 20/20 checks), Azure Kubernetes Service (Azure, 16/17 checks), Event Hubs (Azure, 16/17 checks)
-- **In the gate / releasing:** Managed Identities (Azure), Azure Cache for Redis (Azure)
+- **Building now:** Amazon Cognito Identity Provider (AWS, 18/18 checks), Amazon EC2 Container Service (AWS, 19/19 checks), Amazon Elastic Container Registry (AWS, 20/20 checks), Amazon ElastiCache (AWS, 20/20 checks), Amazon Kinesis (AWS, 20/20 checks), Amazon Route 53 (AWS, 20/20 checks), Amazon Simple Email Service (AWS, 20/20 checks), AWS CloudFormation (AWS, 20/20 checks), AWS Security Token Service (AWS, 18/18 checks), BigQuery API (GCP, 17/18 checks), Cloud DNS API (GCP, 17/18 checks), Cloud Logging API (GCP, 17/18 checks), Cloud Run Admin API (GCP, 19/19 checks), Cloud Tasks API (GCP, 20/20 checks), Workflows API (GCP, 17/18 checks), Application Insights (Azure, 16/17 checks), Container Registry (Azure, 20/20 checks), Azure Kubernetes Service (Azure, 16/17 checks), Event Hubs (Azure, 16/17 checks), Managed Identities (Azure, 17/17 checks), Azure Cache for Redis (Azure, 20/20 checks)
+- **In the gate / releasing:** nothing
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
@@ -18,7 +18,7 @@ _Updated 2026-11-21 05:20 UTC · refreshes after every pipeline run_
 |---|---|---|---|---|---|
 | AWS | 19 | 9 | 0 | 17 | 93% · 93% |
 | GCP | 18 | 6 | 0 | 12 | 100% · 100% |
-| Azure | 18 | 4 | 2 | 12 | 100% · 100% |
+| Azure | 18 | 6 | 0 | 12 | 100% · 100% |
 
 ## In progress
 
@@ -45,8 +45,8 @@ _Updated 2026-11-21 05:20 UTC · refreshes after every pipeline run_
 | Container Registry [#82](https://github.com/vyomi-cloud/appliance/issues/82) | Azure | 🛠 Building | 20/20 | registry · Lite | registry · 10 MB · Lite ✅ | — |
 | Azure Kubernetes Service [#83](https://github.com/vyomi-cloud/appliance/issues/83) | Azure | 🛠 Building | 16/17 | k3s · Max | in-process | backend is the recommended one, or a different real backend the manifest justifies |
 | Event Hubs [#85](https://github.com/vyomi-cloud/appliance/issues/85) | Azure | 🛠 Building | 16/17 | nats · Lite · + amqp protocol | in-process | backend is the recommended one, or a different real backend the manifest justifies |
-| Managed Identities [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🔍 In gate ([PR #226](https://github.com/vyomi-cloud/appliance/pull/226)) | 17/17 | in-process | in-process | — |
-| Azure Cache for Redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🔍 In gate ([PR #227](https://github.com/vyomi-cloud/appliance/pull/227)) | 20/20 | valkey · Lite | valkey · 8 MB · Lite ✅ | — |
+| Managed Identities [#87](https://github.com/vyomi-cloud/appliance/issues/87) | Azure | 🛠 Building | 17/17 | in-process | in-process | — |
+| Azure Cache for Redis [#89](https://github.com/vyomi-cloud/appliance/issues/89) | Azure | 🛠 Building | 20/20 | valkey · Lite | valkey · 8 MB · Lite ✅ | — |
 
 <details><summary><b>Backend evidence</b> — where each service's code reaches its backend, or why it runs in-process</summary>
 
