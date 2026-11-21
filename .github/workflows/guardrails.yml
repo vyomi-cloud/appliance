@@ -25,6 +25,8 @@ on:
       - packaging/tunnel/**
       - cmd/vyomi/**
       - tests/test_mcp_guardrails_server.py
+      - tests/test_mesh_session_v2.py
+      - scripts/mesh-session-keygen.py
       - tools/guardrails/**
       - .github/workflows/guardrails.yml
   pull_request:
@@ -51,10 +53,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
 
-      - name: Test dependencies (ws for the tunnel suite; fastapi/httpx/pytest for the simulator checks)
+      - name: Test dependencies (ws for the tunnel suite; fastapi/httpx/pytest/cryptography for the simulator checks)
         run: |
           mkdir -p "$RUNNER_TEMP/np" && npm i --prefix "$RUNNER_TEMP/np" --no-save ws@8 >/dev/null
-          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q fastapi httpx pytest
+          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q fastapi httpx pytest cryptography
 
       - name: Guardrail suite
         env:

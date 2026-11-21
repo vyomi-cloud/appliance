@@ -51,8 +51,12 @@ expire() {
 
 # Fetch the signed session token + this session's key from the portal (GitHub-verified by CODESPACE_NAME: the portal checks that
 # codespace is Available for the owning user). Retries while the portal learns the codespace is up. Needs no secret on this box.
+# A v2 (Ed25519) token needs no key on this box: the Mesh verifies it with the portal's public key pinned in its image.
+# A v1 (HMAC) token still needs the per-session key (core/mesh_session.py; docs/architecture/v4.0/MESH-SESSION-ED25519.md).
+token_usable() { [ -n "${1:-}" ] && { [ "${1%%.*}" = "v2" ] || [ -n "${2:-}" ]; }; }
+
 fetch_session() {
-  [ -n "${VYOMI_MESH_SESSION_TOKEN:-}" ] && [ -n "${VYOMI_MESH_SESSION_KEY:-}" ] && return 0
+  token_usable "${VYOMI_MESH_SESSION_TOKEN:-}" "${VYOMI_MESH_SESSION_KEY:-}" && return 0
   local out tok key end i body code tries="${VYOMI_MESH_TOKEN_TRIES:-40}"
   log "fetching the session token (codespace_id=$CODESPACE, portal=$PORTAL)."
   # Early in a boot the network is not always usable yet (2026-11-15: 10 instant failures in ~60 s, never reached the portal, and the
@@ -63,7 +67,7 @@ fetch_session() {
       tok=$(printf '%s' "$body" | sed -n 's/.*"token" *: *"\([^"]*\)".*/\1/p')
       key=$(printf '%s' "$body" | sed -n 's/.*"key" *: *"\([^"]*\)".*/\1/p')
       end=$(printf '%s' "$body" | sed -n 's/.*"session_end" *: *\([0-9]*\).*/\1/p')
-      if [ -n "$tok" ] && [ -n "$key" ]; then
+      if token_usable "$tok" "$key"; then
         export VYOMI_MESH_SESSION_TOKEN="$tok" VYOMI_MESH_SESSION_KEY="$key"
         [ -n "$end" ] && export VYOMI_MESH_SESSION_END="$end"
         log "session token fetched (try $i)."; return 0

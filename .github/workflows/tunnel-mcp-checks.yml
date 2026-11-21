@@ -82,6 +82,7 @@ jobs:
           RELAY_PORT=8792 node test-mesh-link.mjs
           RELAY_PORT=8802 node test-mesh-shell.mjs
           node test-mesh-session-derived.mjs
+          node test-mesh-session-v2.mjs
           node test-mesh-ssh.mjs
           node test-mesh-ssh-transport.mjs
           node test-tunnel-credentials.mjs

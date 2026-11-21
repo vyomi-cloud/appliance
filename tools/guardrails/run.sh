@@ -51,6 +51,15 @@ run "1, 8" "vyomi-gate: core containers, injection strings and unknown verbs nev
 run "1, 8" "tunnel: core names refused, \`api\` reaches only 9000/9443, nothing core is listed" "$NODE" wasm/relay/test-mesh-ssh-transport.mjs
 run "5, 7" "simulator: session token limits hold; admin controls closed on a Mesh" \
   "$PY" -m pytest -q -p no:cacheprovider tests/test_mcp_guardrails_server.py
+run "5" "Ed25519 session tokens: pinned keys only; a leaked-key v1 token is refused once v1 is retired (Mesh + relay agree)" \
+  "$PY" -m pytest -q -p no:cacheprovider tests/test_mesh_session_v2.py
+run "5" "relay: v2 verification, forged/unknown-kid/edited tokens refused" "$NODE" wasm/relay/test-mesh-session-v2.mjs
+# F2 stays a GAP until the code constant retires v1 (and a portal key is pinned). The env cannot change either value.
+if "$PY" -c 'import sys; sys.path.insert(0, "."); from core import mesh_session as m; sys.exit(0 if (not m.V1_ACCEPTED and m.TRUSTED_KEYS) else 1)' 2>/dev/null; then
+  rows+=("| 5 | v1 (HMAC) session tokens retired; portal key pinned | PASS |"); echo "PASS  [5] v1 (HMAC) session tokens retired; portal key pinned"
+else
+  gap "5" "v1 (HMAC) session tokens still accepted, so a Codespace owner can mint their own (F2)" "after ~8 h of v2-only minting (portal MESH_SESSION_TOKEN_VERSION=v2), set V1_ACCEPTED = False in core/mesh_session.py and wasm/relay/mesh-session.mjs"
+fi
 
 gap "2" "licence fingerprint tamper detection" "not built (portal integrity check, MESH-SOFTWARE-PROTECTION layer 6)"
 gap "3" "core egress only via the tunnel" "no network policy yet"
