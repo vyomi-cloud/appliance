@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-21T09:16:47+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-21T08:16:50+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **1 change(s), 0 actionable.**
 - · `announcement` Introducing an open-source UI for graph analytics over data lakes with Amazon Neptune Analytics ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-graphover-datalakes-generally-available))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-09T20:59:13+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**3 change(s), 0 actionable.**
-- · `release` cli:aws: 2.39.6 → 2.39.7
-- · `release` pypi:boto3: 1.43.126 → 1.43.127
