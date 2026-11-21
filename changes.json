@@ -1,8 +1,8 @@
 {
- "at": "2026-11-21T04:16:43+00:00",
+ "at": "2026-11-21T05:16:46+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
-  "pypi/azure-identity: <urlopen error _ssl.c:994: The handshake operation timed out>"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
  ]
 }
