@@ -1,19 +1,8 @@
 {
- "at": "2026-11-21T03:16:38+00:00",
+ "at": "2026-11-21T04:16:43+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Amazon SQS, Amazon SNS, AWS Lambda, EventBridge",
-   "kind": "announcement",
-   "key": "feed:aws:894205a9727f",
-   "title": "AWS Lambda now publishes Event Function state change events to Amazon EventBridge ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-function-state-events/",
-   "detail": "AWS Lambda now publishes Event Function state change events to Amazon EventBridge . Lambda emits an event each time an Event Function version changes state because of a customer action, such as creating, updating, publishing, or deleting a function. These events help platform and DevOps teams to trigger automation as soon as a function becomes ready to invoke, an update finishes, or an operation fails, without polling the GetFunction API. Customers use Lambda Event Functions to build APIs, event processing workloads, multi-step workflows, and data pipelines. As organizations grow to thousands ",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+  "pypi/azure-identity: <urlopen error _ssl.c:994: The handshake operation timed out>"
  ]
 }
