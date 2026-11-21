@@ -1,5 +1,5 @@
 {
- "at": "2026-11-20T23:16:41+00:00",
+ "at": "2026-11-21T00:16:35+00:00",
  "baseline": false,
  "changes": [
   {
@@ -13,46 +13,56 @@
   },
   {
    "cloud": "aws",
-   "service": "AWS Lambda",
-   "kind": "announcement",
-   "key": "feed:aws:44144712ff70",
-   "title": "AWS Lambda adds support for Node.js 26",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-nodejs-26/",
-   "detail": "AWS Lambda now supports creating serverless applications using Node.js 26, for both Lambda Web Functions and Lambda Event Functions. Developers can use Node.js 26 as both a managed runtime and a base container image (Event Functions only). AWS will automatically apply updates to the managed runtime and base image as they become available. Node.js 26 is the latest long-term support release of Node.js and is expected to be supported for security and bug fixes until April 2029. With this release, you can use the latest Node.js 26 features in Lambda, such as the Temporal API for easier date, time,",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
    "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:27965e946c8a",
-   "title": "Amazon RDS for Db2 now supports new Canadian time zones",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-db2-supports-new-canadian-time",
-   "detail": "\u200b\u200bAmazon RDS for Db2 now supports four new time zones, America/Vancouver, America/Edmonton, America/Inuvik, and America/Winnipeg, that reflect the updated local time rules for British Columbia, Alberta, the Northwest Territories, and Manitoba in Canada. As of November 1, 2026, these provinces and territories observe permanent daylight saving time and no longer set their clocks back by an hour.\u200b \u200bData stored in UTC is unaffected, but values based on the instance's local time, such as CURRENT TIMESTAMP, CURRENT DATE, default timestamp columns, scheduled jobs, and business-day batch logic, can be",
+   "key": "feed:aws:679ee5e5fd34",
+   "title": "Amazon RDS for Oracle now supports Primary Endpoint",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-primary-endpoint-v2/",
+   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now provides a Primary Endpoint, a DNS name that always resolves to the current primary DB instance in a replica configuration. When you switch over to an Oracle replica, Amazon RDS points the Primary Endpoint to the new primary DB instance, so you don't need to change your application connection strings. Previously, after each switchover, you had to update connection strings or DNS records to point to the new primary DB instance, which often required change approvals and coordination across teams. With Primary Endpoint, you can run pl",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon RDS",
+   "service": "AWS KMS",
    "kind": "announcement",
-   "key": "feed:aws:1057f462c300",
-   "title": "Amazon RDS Custom now supports the latest Cumulative Update and GDR updates for Microsoft SQL Server",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-custom-supports-latest-cumulative-update-gdr-microsoft-sql-server/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) Custom for SQL Server now supports the latest Cumulative Updates (CU) and General Distribution Release (GDR) updates for Microsoft SQL Server. This release includes support for SQL Server 2019 CU32 + GDR KB5128494 (RDS version 15.00.4500.2.v1) and SQL Server 2022 CU27 + GDR KB5126934 (RDS version 16.00.4305.5.v1). For additional information on the improvements and fixes included in these updates, see Microsoft documentation for KB5128494 and KB5126934. You can upgrade your Amazon RDS Custom for SQL Server instances to apply these recommended upda",
+   "key": "feed:aws:990e1ca120b2",
+   "title": "Amazon Cognito extends multi-Region replication to additional AWS Regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cognito-mrr-opt-in-regions/",
+   "detail": "Amazon Cognito multi-Region replication (MRR) now supports additional AWS Regions, extending the resilience benefits of MRR to more workloads. Amazon Cognito helps you implement secure sign-in and access control for users, AI agents, and microservices in minutes, and MRR lets you synchronize user and machine identity data, including credentials, user pool configurations, and federation setups, to a secondary user pool in a standby Region you designate in near real-time. With user data in the standby Region, you can redirect traffic and keep authentication available if there is a disruption in ",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "AWS IAM, AWS KMS, Key Management Service, AWS Lambda",
+   "service": "DynamoDB",
    "kind": "announcement",
-   "key": "feed:aws:7586ed613602",
-   "title": "AWS Lambda MicroVMs now supports customer managed keys in AWS KMS",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-microvms-customer-managed-keys/",
-   "detail": "AWS Lambda MicroVMs now supports customer managed keys (CMK) in AWS Key Management Service (KMS) for data encryption at rest. CMK gives you full control over the lifecycle and usage of your KMS keys , helping meet compliance requirements in regulated industries like financial services and healthcare. Lambda MicroVMs is a serverless compute primitive that provides VM-level isolation, near-instant launch and resume, and state preservation for executing user or AI generated code. Use MicroVMs to build applications like AI coding assistants, interactive development environments, and vulnerability ",
+   "key": "feed:aws:1d1b0c50c09c",
+   "title": "AWS Backup now supports incremental backups for Amazon DynamoDB",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-backup-incremental-backups-dynamodb/",
+   "detail": "AWS Backup now supports incremental backups of Amazon DynamoDB tables, enabling you to reduce backup storage while maintaining backup schedules as frequent as one hour. Until now, AWS Backup created a full copy of your DynamoDB tables. With this launch, after an initial full backup, each incremental backup now captures only the data that changed, and AWS Backup takes a new full backup every 15 days. This lets you store less data and back up more often. You can restore from any recovery point in the chain, and you can schedule incremental backups anywhere from hourly to weekly frequencies. You ",
    "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon S3",
+   "kind": "announcement",
+   "key": "feed:aws:35c5e6737175",
+   "title": "Amazon SageMaker adds new capabilities \u2013 improved blueprints and catalog experience, simplified data quality monitoring, and support for DuckDB 2.0 and DuckDB extensions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-adds-new-capabilities/",
+   "detail": "Improved blueprints: Amazon SageMaker Unified Studio now gives project teams more ownership of their data and resources, within governance policies that administrators set centrally. Additional releases include faster notebook queries through DuckDB 2.0 support and data quality monitoring at catalog scale. Improved data quality monitoring: Teams can also profile entire catalogs and databases to keep data statistics current. Project members can get email notifications for all supported notification types, including data quality and data profiling runs. Improved catalog experience: Administrator",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "lifecycle",
+   "key": "feed:azure:56f6a1307113",
+   "title": "Retirement: Support for\u202fAzure Functions OpenAI Extension\u202fends on\u202fApril 20, 2027",
+   "link": "https://azure.microsoft.com/updates?id=579952",
+   "detail": "Support for Azure Functions OpenAI extension will end on April 20, 2027. Please migrate to OpenAI, Microsoft Foundry, or Azure AI Search SDKs directly, depending on your scenario, by that date. Until you migrate to the appropriate scenario SDK, .NET app",
+   "actionable": true
   }
  ],
  "errors": [
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
  ]
 }
