@@ -1,59 +1,66 @@
 {
- "at": "2026-11-21T01:16:37+00:00",
+ "at": "2026-11-21T02:16:40+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "sdk",
-   "service": "cli:aws",
+   "service": "pypi:boto3",
    "kind": "release",
-   "key": "ver:cli:aws:2.42.1",
-   "title": "cli:aws: 2.42.0 \u2192 2.42.1",
+   "key": "ver:pypi:boto3:1.44.9",
+   "title": "pypi:boto3: 1.44.8 \u2192 1.44.9",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.44.9",
+   "title": "pypi:botocore: 1.44.8 \u2192 1.44.9",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon VPC",
+   "service": "CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:276e59b15270",
-   "title": "AWS Network Firewall introduces automated Internet firewall in public preview",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/network-firewall-automated-internet/",
-   "detail": "AWS Network Firewall announces the public preview of automated Internet firewall, a new centralized control that allows you to configure Network Firewall, with native network address translation (NAT) capability, on the internet gateways of all the Virtual Private Clouds (VPCs) in your environment. Using automated Internet firewall mode, you can centrally define your Network Firewall security rules and enforce them on all inbound and outbound traffic across the internet gateways of your VPCs. You are not required to make routing or architectural changes to deploy automated Internet firewall. Y",
+   "key": "feed:aws:cacfe15afcb4",
+   "title": "Amazon CloudWatch Omni now supports Microsoft Azure platform logs, metrics and traces",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-omni-microsoft-azure",
+   "detail": "Amazon CloudWatch Omni now supports collecting Azure resource logs, Azure Monitor platform metrics, virtual network (VNet) flow logs, and traces from Application Insights. Teams that run workloads on both AWS and Azure no longer need separate monitoring tools or custom pipelines to see their whole environment. Central operations, DevOps, and site reliability engineering (SRE) teams can now view Azure telemetry alongside their AWS telemetry in one place. To get started, connect a Microsoft Entra ID tenant to your AWS account and Region. You can choose the telemetry types, subscriptions, Azure r",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Amazon RDS",
+   "service": "AWS Lambda, Amazon EC2",
    "kind": "announcement",
-   "key": "feed:aws:7bf563d8c4ce",
-   "title": "Amazon RDS for Oracle now supports Replica First Patching for reduced downtime",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-replica-first-patching/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now supports Replica First Patching, which reduces downtime during minor version upgrades. Replica First Patching is available for Enterprise Edition DB instances. With Replica First Patching, you apply a minor version upgrade to a replica in the same AWS Region first while your primary DB instance continues to serve traffic, and then switch over to the replica when you're ready to complete the upgrade. If the replica is in read-only mode, you can validate the new minor engine version with your read traffic. Replica First Patching help",
+   "key": "feed:aws:907419ab3e0f",
+   "title": "AWS Lambda now provides cost optimization recommendations for Event Functions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-cost-optimization-recommendations/",
+   "detail": "AWS Lambda now provides cost optimization recommendations for Event Functions in AWS Trusted Advisor . These recommendations identify on-demand functions where moving to Lambda Managed Instances (LMI) is estimated to reduce costs, and provide configuration guidance for running on LMI. With these recommendations, you can lower your Lambda costs by focusing your efforts on the functions with the greatest estimated savings. LMI lets you run Lambda functions on Amazon EC2 instances while maintaining the operational simplicity of Lambda. With LMI, you can access specialized compute configurations a",
    "actionable": false
   },
   {
-   "cloud": "gcp",
-   "service": "Cloud Scheduler",
+   "cloud": "aws",
+   "service": "Amazon SQS, AWS Lambda",
    "kind": "announcement",
-   "key": "feed:gcp:cf5dc8ad5b58",
-   "title": "Cloud Scheduler: Feature (November 20, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_20_2026",
-   "detail": "Cloud Scheduler support for customer-managed encryption keys (CMEK) is generally available ( GA ). You can use symmetric keys that you manage in Cloud Key Management Service (Cloud KMS) to protect HTTP and Pub/Sub job data at rest.",
+   "key": "feed:aws:cef2e677d6e0",
+   "title": "AWS Lambda now supports a batch size of up to 10,000 messages for Amazon SQS FIFO queues",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-10K-batch-size-SQSFIFO/",
+   "detail": "AWS Lambda now supports a batch size of up to 10,000 messages for Amazon Simple Queue Service (Amazon SQS) FIFO queue event source mappings (ESMs) in provisioned mode , up from 10 messages previously. With larger batches, you can process high-volume, ordered workloads such as financial transactions, order processing, and inventory updates with fewer invocations and higher throughput. Lambda continues to preserve message ordering within each message group. Customers use SQS FIFO queues with Lambda to build event-driven applications that need strict message ordering and deduplication. With provi",
    "actionable": false
   },
   {
-   "cloud": "gcp",
-   "service": "Cloud Storage",
+   "cloud": "aws",
+   "service": "AWS Lambda, Amazon VPC",
    "kind": "announcement",
-   "key": "feed:gcp:ecaf97992478",
-   "title": "Cloud Storage: Feature (November 20, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_20_2026",
-   "detail": "In buckets with hierarchical namespace enabled, you can now use the JSON API folders.deleteRecursive method to delete a non-empty folder and all its contents in a single long-running operation. For more information, see Delete a folder .",
+   "key": "feed:aws:afb3f25e0cf6",
+   "title": "Amazon VPC IPAM policies now support automated internet firewall and AWS Lambda Web Functions and MicroVMs",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/vpc-ipam-policies-firewall-lambda/",
+   "detail": "Amazon Virtual Private Cloud (VPC) IP Address Manager (IPAM) policies now support AWS Network Firewall automated internet firewall and AWS Lambda Web Functions and MicroVMs. You can centrally configure IPAM policies across AWS accounts and AWS Regions to allocate public IPv4 addresses to these resources from specific IPAM pools, such as Bring Your Own IP (BYOIP) addresses or Amazon-provided contiguous IPv4 blocks. This enables a stronger security posture, simplifies network and security operations, and can reduce public IPv4 costs when you use BYOIP. Many customers allowlist the public IPs of ",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
  ]
 }

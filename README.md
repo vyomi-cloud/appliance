@@ -2,17 +2,18 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-21T01:16:37+00:00
+### Upstream watch — 2026-11-21T02:16:40+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**5 change(s), 0 actionable.**
-- · `announcement` AWS Network Firewall introduces automated Internet firewall in public preview ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/network-firewall-automated-internet/))
-- · `announcement` Amazon RDS for Oracle now supports Replica First Patching for reduced downtime ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-replica-first-patching/))
-- · `announcement` Cloud Scheduler: Feature (November 20, 2026) ([link](https://docs.cloud.google.com/release-notes#November_20_2026))
-- · `announcement` Cloud Storage: Feature (November 20, 2026) ([link](https://docs.cloud.google.com/release-notes#November_20_2026))
-- · `release` cli:aws: 2.42.0 → 2.42.1
+**6 change(s), 0 actionable.**
+- · `announcement` AWS Lambda now provides cost optimization recommendations for Event Functions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-cost-optimization-recommendations/))
+- · `announcement` AWS Lambda now supports a batch size of up to 10,000 messages for Amazon SQS FIFO queues ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-10K-batch-size-SQSFIFO/))
+- · `announcement` Amazon CloudWatch Omni now supports Microsoft Azure platform logs, metrics and traces ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-omni-microsoft-azure))
+- · `announcement` Amazon VPC IPAM policies now support automated internet firewall and AWS Lambda Web Functions and MicroVMs ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/vpc-ipam-policies-firewall-lambda/))
+- · `release` pypi:boto3: 1.44.8 → 1.44.9
+- · `release` pypi:botocore: 1.44.8 → 1.44.9
 
-Sources that failed this run (3): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
+Sources that failed this run (2): maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
