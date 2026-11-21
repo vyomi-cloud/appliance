@@ -145,3 +145,9 @@ ENV (not run here): offline-ui-gcp-* Playwright suites timed out waiting for the
 ## Azure, 2026-11-20 nightly
 ENV on this runner (no Playwright module, no azure SDK, embedding model returns zero vectors, APIM backend proxy times out): offline-ui-azure-{metrics,rg-nav,resource-group-detail,apim-appinsights}, offline-sweepA-azure (APIM 502 timeout), offline-post-create-azure-openai (zero embeddings). Not product-verified; verify on the full runner stack.
 FIXED (harness): offline-sdk-python-azure-vm-runcommand assumed no guest runtime; with Docker the command really runs. Test now asserts real `uid=` output when a runtime exists, failed status otherwise.
+
+## Azure nightly 2026-11-21 (nightly/azure-2026-11-21)
+FIXED: post_create/probes/azure_openai.py was not re-runnable: Cognitive Services accounts are soft-deleted, so a second run failed `FlagMustBeSetForRestore`. The probe now purges the deleted account before and after (real Azure flow).
+DECISION: the probe asserts a 1536-d embedding, but since dbb1b47cb deployments serve the booster-mesh model (`nomic-embed-text`, backend 768-d or hash fallback 256-d). Either the Azure embeddings op reports ada-002's 1536 dims, or the probe asserts the model's real dimension. Not changed (would loosen a test).
+ENV, not product: offline-sdk-java-azure* (Maven cannot fetch com.azure:azure-sdk-bom 1.2.31, Central returns 404 from this runner); offline-sweepA-azure APIM proxy (backend outbound timeout); azure-openai chat (no vyomi-llm sibling); offline-ui-azure-{metrics,rg-nav,resource-group-detail,apim-appinsights} Playwright boot timeouts on the runner, not reproduced as product bugs.
+Tunnel check (6): NOT RUN, no Codespace leg. Checks 2-5: only the existing suites ran; crawl-azure-ui, validation-azure-ui and bidi-azure-* are still `pending` in suites.json.

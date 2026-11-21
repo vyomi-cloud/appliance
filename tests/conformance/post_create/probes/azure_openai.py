@@ -29,6 +29,10 @@ def call(method, url, body=None, headers=None):
 
 
 call("PUT", f"/subscriptions/{SUB}/resourcegroups/{RG}?api-version=2021-04-01", {"location": "eastus"})
+# Azure soft-deletes Cognitive Services accounts: a previous run's account blocks re-creation (FlagMustBeSetForRestore)
+# until it is purged, so the probe purges first and again on cleanup (idempotent across runs).
+PURGE = f"/subscriptions/{SUB}/providers/Microsoft.CognitiveServices/locations/eastus/resourceGroups/{RG}/deletedAccounts/{ACC}?api-version=2024-10-01"
+call("DELETE", PURGE)
 A = f"/subscriptions/{SUB}/resourceGroups/{RG}/providers/Microsoft.CognitiveServices/accounts/{ACC}"
 try:
     s, acc = call("PUT", A + "?api-version=2024-10-01", {"location": "eastus", "kind": "OpenAI", "sku": {"name": "S0"}, "properties": {"customSubDomainName": ACC}})
@@ -51,4 +55,5 @@ try:
 finally:
     call("DELETE", A + "?api-version=2024-10-01")
     call("DELETE", f"/subscriptions/{SUB}/resourcegroups/{RG}?api-version=2021-04-01")
+    call("DELETE", PURGE)
 sys.exit(1 if fails else 0)
