@@ -1,0 +1,88 @@
+# Guardrail suite (docs/architecture/v4.0/MCP-GUARDRAILS-INCIDENT-DESIGN.md): one check per premise item, run by
+# tools/guardrails/run.sh. Deterministic: no network, no Docker, no secrets.
+#
+# A hard release gate: release.yml, release-candidate.yml, docker-publish.yml (the Mesh image) and tunnel-release.yml
+# call this workflow and their build/publish jobs `need` it, so red blocks the artifacts. Items with no automated check
+# yet are reported as GAP in the job summary, never as green.
+#
+# Notification: when the gate is red outside a pull request, an issue labelled `release-gate` is opened (or commented
+# on, if one is already open). GitHub notifies repo watchers. Add a chat webhook here once the owner picks a channel.
+name: Guardrails
+
+on:
+  push:
+    branches: [v4-on-main, 'v4/**']
+    paths:
+      - core/admin_auth.py
+      - core/mesh_session.py
+      - core/mesh.py
+      - core/app_context.py
+      - routes/**
+      - server.py
+      - codespace/.devcontainer/mesh/**
+      - wasm/relay/mesh-*.mjs
+      - wasm/relay/test-mesh-*.mjs
+      - packaging/tunnel/**
+      - cmd/vyomi/**
+      - tests/test_mcp_guardrails_server.py
+      - tools/guardrails/**
+      - .github/workflows/guardrails.yml
+  pull_request:
+    branches: [v4-on-main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Test dependencies (ws for the tunnel suite; fastapi/httpx/pytest for the simulator checks)
+        run: |
+          mkdir -p "$RUNNER_TEMP/np" && npm i --prefix "$RUNNER_TEMP/np" --no-save ws@8 >/dev/null
+          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q fastapi httpx pytest
+
+      - name: Guardrail suite
+        env:
+          WS_PKG: ${{ runner.temp }}/np/node_modules/ws
+          PY: ${{ runner.temp }}/venv/bin/python
+        run: bash tools/guardrails/run.sh
+
+      - name: Notify (gate is red)
+        if: failure() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REF: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          title="Release gate red: guardrail suite"
+          body="The guardrail suite failed on \`$REF\` (\`${SHA:0:12}\`). Artifacts gated on it were not published.
+
+          Run: $RUN_URL
+
+          Re-run locally: \`bash tools/guardrails/run.sh\` (see the job summary for the failing item)."
+          gh label create release-gate --repo "$REPO" --color B60205 \
+            --description "A release gate is red; publishing is blocked" 2>/dev/null || true
+          n="$(gh issue list --repo "$REPO" --label release-gate --state open --search "in:title \"$title\"" \
+            --json number --jq '.[0].number // empty')"
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --repo "$REPO" --body "$body"
+          else
+            gh issue create --repo "$REPO" --title "$title" --label release-gate --body "$body"
+          fi

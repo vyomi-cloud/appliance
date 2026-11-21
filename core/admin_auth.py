@@ -88,17 +88,29 @@ def verify_admin_key(request: Request) -> bool:
     return secrets.compare_digest(provided, expected)
 
 
+def admin_checks_apply() -> bool:
+    """True where Vyomi's internal controls must be admin-key protected: appliance mode, and every Mesh (VYOMI_ROLE=mesh).
+
+    A Mesh runs the *developer* distribution mode for its runtime defaults (docker compute backend, tunnelled console),
+    but it is a customer-operated host reached over the user's own tunnel: the developer-mode "no auth" shortcut must not
+    open the internal controls there (MCP-GUARDRAILS-INCIDENT-DESIGN.md, item 7)."""
+    from core.app_context import appliance_mode_enabled
+    if appliance_mode_enabled():
+        return True
+    from core.mesh_session import role_is_mesh
+    return role_is_mesh()
+
+
 def require_admin_key(request: Request) -> None:
     """Raise 403 if the request doesn't carry a valid admin key.
     Call this at the top of protected endpoints."""
-    from core.app_context import appliance_mode_enabled
-    if not appliance_mode_enabled():
-        return  # dev mode — no auth required
+    if not admin_checks_apply():
+        return  # local developer mode — no auth required
     if not verify_admin_key(request):
         raise HTTPException(
             status_code=403,
             detail={"ok": False, "code": "admin_key_required",
-                    "reason": f"This endpoint requires the {_HEADER_NAME} header in appliance mode."},
+                    "reason": f"This endpoint requires the {_HEADER_NAME} header in appliance mode and on a Mesh."},
         )
 
 

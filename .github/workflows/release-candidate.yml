@@ -46,8 +46,16 @@ env:
   GH_REPO:  appliance
 
 jobs:
+  # ── Guardrail suite (hard gate: red blocks every artifact below; tools/guardrails/run.sh) ──
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
+
   build:
     name: Build RC artifacts
+    needs: guardrails
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.ver.outputs.version }}

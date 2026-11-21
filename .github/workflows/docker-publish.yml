@@ -43,7 +43,15 @@ permissions:
   packages: write   # required to push to ghcr.io
 
 jobs:
+  # ── Guardrail suite (hard gate: red blocks every artifact below; tools/guardrails/run.sh) ──
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
+
   docker:
+    needs: guardrails
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

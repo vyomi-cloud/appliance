@@ -112,6 +112,12 @@ jobs:
   checks:
     uses: ./.github/workflows/tunnel-mcp-checks.yml
 
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
+
   linux:
     needs: build
     runs-on: ubuntu-latest
@@ -183,7 +189,7 @@ jobs:
 
   # ---- publish: only the tested tarball, only when every gate is green ----
   publish:
-    needs: [build, checks, linux, macos, windows]
+    needs: [build, checks, guardrails, linux, macos, windows]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
