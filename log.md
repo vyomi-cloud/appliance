@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-21T22:17:05+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-21T21:17:02+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3005,4 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-10T10:59:30+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 1 actionable.**
-- 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
-- · `spec-commit` Azure resources: Use ResourceIdentifier for deployment prediction IDs in C# (#48093) ([link](https://github.com/Azure/azure-rest-api-specs/commit/f1bb6dfcb60fb3ad38532243e140b3287889a884))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-10T09:59:28+00:00
 
