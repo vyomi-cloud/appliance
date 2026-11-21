@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-21T08:16:50+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (3): maven/software.amazon.awssdk:s3: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-21T07:16:43+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **3 change(s), 0 actionable.**
 - · `release` cli:aws: 2.39.6 → 2.39.7
 - · `release` pypi:boto3: 1.43.126 → 1.43.127
-- · `release` pypi:botocore: 1.43.126 → 1.43.127
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-09T19:59:13+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**5 change(s), 1 actionable.**
-- 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
