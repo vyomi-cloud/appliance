@@ -1,68 +1,59 @@
 {
- "at": "2026-11-21T00:16:35+00:00",
+ "at": "2026-11-21T01:16:37+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "compute",
-   "kind": "spec-commit",
-   "key": "azure:compute:dc95922996",
-   "title": "Azure compute: Document planned deprecation of VM agent platform updates (#48364)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/dc95922996b3528c75a471eaa5e37b3e753dbed4",
-   "actionable": true
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.42.1",
+   "title": "cli:aws: 2.42.0 \u2192 2.42.1",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "Amazon VPC",
+   "kind": "announcement",
+   "key": "feed:aws:276e59b15270",
+   "title": "AWS Network Firewall introduces automated Internet firewall in public preview",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/network-firewall-automated-internet/",
+   "detail": "AWS Network Firewall announces the public preview of automated Internet firewall, a new centralized control that allows you to configure Network Firewall, with native network address translation (NAT) capability, on the internet gateways of all the Virtual Private Clouds (VPCs) in your environment. Using automated Internet firewall mode, you can centrally define your Network Firewall security rules and enforce them on all inbound and outbound traffic across the internet gateways of your VPCs. You are not required to make routing or architectural changes to deploy automated Internet firewall. Y",
+   "actionable": false
   },
   {
    "cloud": "aws",
    "service": "Amazon RDS",
    "kind": "announcement",
-   "key": "feed:aws:679ee5e5fd34",
-   "title": "Amazon RDS for Oracle now supports Primary Endpoint",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-primary-endpoint-v2/",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now provides a Primary Endpoint, a DNS name that always resolves to the current primary DB instance in a replica configuration. When you switch over to an Oracle replica, Amazon RDS points the Primary Endpoint to the new primary DB instance, so you don't need to change your application connection strings. Previously, after each switchover, you had to update connection strings or DNS records to point to the new primary DB instance, which often required change approvals and coordination across teams. With Primary Endpoint, you can run pl",
+   "key": "feed:aws:7bf563d8c4ce",
+   "title": "Amazon RDS for Oracle now supports Replica First Patching for reduced downtime",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-replica-first-patching/",
+   "detail": "Amazon Relational Database Service (Amazon RDS) for Oracle now supports Replica First Patching, which reduces downtime during minor version upgrades. Replica First Patching is available for Enterprise Edition DB instances. With Replica First Patching, you apply a minor version upgrade to a replica in the same AWS Region first while your primary DB instance continues to serve traffic, and then switch over to the replica when you're ready to complete the upgrade. If the replica is in read-only mode, you can validate the new minor engine version with your read traffic. Replica First Patching help",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "AWS KMS",
+   "cloud": "gcp",
+   "service": "Cloud Scheduler",
    "kind": "announcement",
-   "key": "feed:aws:990e1ca120b2",
-   "title": "Amazon Cognito extends multi-Region replication to additional AWS Regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cognito-mrr-opt-in-regions/",
-   "detail": "Amazon Cognito multi-Region replication (MRR) now supports additional AWS Regions, extending the resilience benefits of MRR to more workloads. Amazon Cognito helps you implement secure sign-in and access control for users, AI agents, and microservices in minutes, and MRR lets you synchronize user and machine identity data, including credentials, user pool configurations, and federation setups, to a secondary user pool in a standby Region you designate in near real-time. With user data in the standby Region, you can redirect traffic and keep authentication available if there is a disruption in ",
+   "key": "feed:gcp:cf5dc8ad5b58",
+   "title": "Cloud Scheduler: Feature (November 20, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_20_2026",
+   "detail": "Cloud Scheduler support for customer-managed encryption keys (CMEK) is generally available ( GA ). You can use symmetric keys that you manage in Cloud Key Management Service (Cloud KMS) to protect HTTP and Pub/Sub job data at rest.",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "DynamoDB",
+   "cloud": "gcp",
+   "service": "Cloud Storage",
    "kind": "announcement",
-   "key": "feed:aws:1d1b0c50c09c",
-   "title": "AWS Backup now supports incremental backups for Amazon DynamoDB",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-backup-incremental-backups-dynamodb/",
-   "detail": "AWS Backup now supports incremental backups of Amazon DynamoDB tables, enabling you to reduce backup storage while maintaining backup schedules as frequent as one hour. Until now, AWS Backup created a full copy of your DynamoDB tables. With this launch, after an initial full backup, each incremental backup now captures only the data that changed, and AWS Backup takes a new full backup every 15 days. This lets you store less data and back up more often. You can restore from any recovery point in the chain, and you can schedule incremental backups anywhere from hourly to weekly frequencies. You ",
+   "key": "feed:gcp:ecaf97992478",
+   "title": "Cloud Storage: Feature (November 20, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_20_2026",
+   "detail": "In buckets with hierarchical namespace enabled, you can now use the JSON API folders.deleteRecursive method to delete a non-empty folder and all its contents in a single long-running operation. For more information, see Delete a folder .",
    "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:35c5e6737175",
-   "title": "Amazon SageMaker adds new capabilities \u2013 improved blueprints and catalog experience, simplified data quality monitoring, and support for DuckDB 2.0 and DuckDB extensions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-adds-new-capabilities/",
-   "detail": "Improved blueprints: Amazon SageMaker Unified Studio now gives project teams more ownership of their data and resources, within governance policies that administrators set centrally. Additional releases include faster notebook queries through DuckDB 2.0 support and data quality monitoring at catalog scale. Improved data quality monitoring: Teams can also profile entire catalogs and databases to keep data statistics current. Project members can get email notifications for all supported notification types, including data quality and data profiling runs. Improved catalog experience: Administrator",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Azure Functions",
-   "kind": "lifecycle",
-   "key": "feed:azure:56f6a1307113",
-   "title": "Retirement: Support for\u202fAzure Functions OpenAI Extension\u202fends on\u202fApril 20, 2027",
-   "link": "https://azure.microsoft.com/updates?id=579952",
-   "detail": "Support for Azure Functions OpenAI extension will end on April 20, 2027. Please migrate to OpenAI, Microsoft Foundry, or Azure AI Search SDKs directly, depending on your scenario, by that date. Until you migrate to the appropriate scenario SDK, .NET app",
-   "actionable": true
   }
  ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
+  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
  ]
 }

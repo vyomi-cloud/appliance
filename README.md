@@ -2,18 +2,17 @@
 
 Hourly diff of the real clouds for the services Vyomi simulates. Actionable changes are filed as [`upstream-drift` issues](https://github.com/vyomi-cloud/appliance/issues?q=label%3Aupstream-drift) and worked by the conformance agent. Every run: [log.md](log.md).
 
-### Upstream watch — 2026-11-21T00:16:35+00:00
+### Upstream watch — 2026-11-21T01:16:37+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**6 change(s), 2 actionable.**
-- 🔧 `spec-commit` Azure compute: Document planned deprecation of VM agent platform updates (#48364) ([link](https://github.com/Azure/azure-rest-api-specs/commit/dc95922996b3528c75a471eaa5e37b3e753dbed4))
-- 🔧 `lifecycle` Retirement: Support for Azure Functions OpenAI Extension ends on April 20, 2027 ([link](https://azure.microsoft.com/updates?id=579952))
-- · `announcement` AWS Backup now supports incremental backups for Amazon DynamoDB ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-backup-incremental-backups-dynamodb/))
-- · `announcement` Amazon Cognito extends multi-Region replication to additional AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/cognito-mrr-opt-in-regions/))
-- · `announcement` Amazon RDS for Oracle now supports Primary Endpoint ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-primary-endpoint-v2/))
-- · `announcement` Amazon SageMaker adds new capabilities – improved blueprints and catalog experience, simplified data quality monitoring, and support for DuckDB 2.0 and DuckDB extensions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-adds-new-capabilities/))
+**5 change(s), 0 actionable.**
+- · `announcement` AWS Network Firewall introduces automated Internet firewall in public preview ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/network-firewall-automated-internet/))
+- · `announcement` Amazon RDS for Oracle now supports Replica First Patching for reduced downtime ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-oracle-replica-first-patching/))
+- · `announcement` Cloud Scheduler: Feature (November 20, 2026) ([link](https://docs.cloud.google.com/release-notes#November_20_2026))
+- · `announcement` Cloud Storage: Feature (November 20, 2026) ([link](https://docs.cloud.google.com/release-notes#November_20_2026))
+- · `release` cli:aws: 2.42.0 → 2.42.1
 
-Sources that failed this run (1): maven/com.google.cloud:google-cloud-storage: The read operation timed out
+Sources that failed this run (3): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
 
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
