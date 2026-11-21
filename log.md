@@ -1,3 +1,14 @@
+### Upstream watch — 2026-11-21T03:16:38+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` AWS Lambda now publishes Event Function state change events to Amazon EventBridge  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-function-state-events/))
+
+Sources that failed this run (1): maven/com.google.cloud:google-cloud-storage: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-21T02:16:40+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,19 +3009,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **0 change(s), 0 actionable.**
-
-Sources that failed this run (1): maven/com.azure:azure-data-appconfiguration: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-09T13:10:47+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-09T12:10:34+00:00
-
-Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
