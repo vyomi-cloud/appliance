@@ -56,17 +56,20 @@ Run on macOS (darwin/arm64), 2026-11-22, Go 1.27.1.
 
 | What | Command | Result |
 |---|---|---|
-| Go suite | `RELAY_PORT=1 go -C cmd/vyomi test -count=1 ./...` | `ok` (whole package, local pin included) |
-| Guardrail suite | `RELAY_PORT=1 WS_PKG=... PY=... bash tools/guardrails/run.sh` | the six new hosted rows PASS; every pre-existing row PASS except the Mesh boot-script row (see below) |
+| Go suite | `go -C cmd/vyomi test -count=1 ./...` | `ok` (whole package, local pin included) |
+| Guardrail suite | `WS_PKG=... PY=... bash tools/guardrails/run.sh` | the six new hosted rows PASS; every pre-existing row PASS except the Mesh boot-script row (see below) |
 | Hosted server | `go -C cmd/vyomi build -o /tmp/vyomi . && /tmp/vyomi mcp --hosted --listen :8080` | serves 4 read-only tools, knowledge v4.0.10 |
 | Smoke | `tools/mcp-hosted-smoke.sh http://localhost:8080/mcp` | 22/22 PASS |
 
-Two environment notes, both pre-existing and reproduced on `HEAD` without this branch's changes:
-- `RELAY_PORT=1` is needed on a machine that has a `vyomi-tunnel` listening on 127.0.0.1:8090: without it
-  `TestMCPEnvRendersTargetAndWarnings` and `TestMCPScanRepo` resolve the auto home to the real tab and fail. They
-  pass unchanged in CI (nothing listens there) and with `RELAY_PORT=1` here.
-- `tools/guardrails/check-boot-mesh.sh` fails on macOS with `sed: 1: ...: invalid command code ^` (BSD sed; the
-  script's address form needs GNU sed). It runs on `ubuntu-latest` in CI. Untouched by this branch.
+One environment note, pre-existing and reproduced on `HEAD` without this branch's changes:
+`tools/guardrails/check-boot-mesh.sh` fails on macOS with `sed: 1: ...: invalid command code ^` (BSD sed; the
+script's address form needs GNU sed). It runs on `ubuntu-latest` in CI, where it is green. Untouched by this branch.
+
+`TestMCPEnvRendersTargetAndWarnings` and `TestMCPScanRepo` used to fail on a machine with a `vyomi-tunnel`
+listening on 127.0.0.1:8090, because they call tools with `home=auto` and the resolver then picked the real tab.
+They are hermetic now: `probelessHomes(t)` points the home-choosing probes at ports nothing listens on while
+keeping the rendering defaults, so the result no longer depends on what is running locally. Verified with the
+tunnel up and no environment overrides.
 
 Not run here: Docker, the real Docker stack, Nano on the localhost portal (:8099) — this PR is the HTTP transport
 and embedded knowledge only, and the hosted server by construction reaches neither. The container, staging and
