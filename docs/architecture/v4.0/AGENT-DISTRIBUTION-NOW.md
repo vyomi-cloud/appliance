@@ -40,7 +40,7 @@ Out of scope here: `vyomi-tunnel init`, cloud-agent recipes, inspection tools, a
 ## 2. Ground rules for the orchestrator (auto mode)
 
 - Follow the repo's `CLAUDE.md` and `docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md`. Start the session with `scripts/v4-session-start.sh agent-plugins`; never create branches by hand.
-- One appliance branch: `v4/agent-plugins`, one PR into `v4-on-main`. One portal branch: `agents-docs`, one PR into portal `main`.
+- One appliance branch: `v4/agent-plugins`, one PR into `v4-on-main`. One portal branch: `portal/agents-docs`, created by running `scripts/v4-session-start.sh agents-docs --portal` inside `~/projects/portal` (worktree `~/projects/portal-agents-docs`, base `origin/v4-nano-portal`), one PR into `v4-nano-portal`.
 - Sub-agents own disjoint files (table in §3). The orchestrator commits, with explicit paths only, never `git add -A`. Each sub-agent returns a short report: files changed, commands run, results.
 - **HUMAN GATE — stop and list it in `HUMAN-GATES.md` at the worktree root; never do it:**
   - merge any PR, push to `main` / `v4-on-main`, push or create tags;
@@ -191,7 +191,7 @@ Give F only this plan, the two branch names and the acceptance lists, not the im
 ### WP7 — PRs (orchestrator)
 
 - Appliance PR `v4/agent-plugins` → `v4-on-main`: summary, the tool-surface change called out for review (8 + 1), test evidence from `VERIFY.md`, the release steps from §5, and a link to `HUMAN-GATES.md`.
-- Portal PR `agents-docs` → `main`: screenshots, curl outputs, and a note that the merge deploys.
+- Portal PR `portal/agents-docs` → `v4-nano-portal`: screenshots and curl outputs. Note that promoting it to portal `main` is a paid deploy.
 - Do not merge either.
 
 ### WP8 — License + Claude directory kit (sub-agent G)
