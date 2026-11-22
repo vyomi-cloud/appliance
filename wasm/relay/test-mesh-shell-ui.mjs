@@ -9,7 +9,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve, extname } from "node:path";
-import { mint } from "./mesh-session.mjs";
+import { testToken, TEST_HOOK } from "./test-fixtures/mesh-testkey.mjs";   // v2, public test key (v1 retired, F2)
 import { dial } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
@@ -36,13 +36,13 @@ const web = http.createServer((req, res) => {
   res.writeHead(200, { "content-type": MIME[extname(f)] || "application/octet-stream" }); fs.createReadStream(f).pipe(res);
 }).listen(WEB, "127.0.0.1");
 
-spawnP(process.execPath, [join(here, "local-relay.mjs")], { RELAY_PORT: String(RELAY), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1" });
+spawnP(process.execPath, [...TEST_HOOK, join(here, "local-relay.mjs")], { RELAY_PORT: String(RELAY), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1" });
 spawnP(PY, [join(here, "test-fixtures/fake_mesh_sim.py"), String(SIM)], { APPLIANCE_ROOT: root, PYTHONPATH: root, VYOMI_ROLE: "mesh", VYOMI_MESH_SESSION_KEY: KEY,
   VYOMI_DOCKER_BIN: join(here, "test-fixtures/fake-docker.sh"), VYOMI_SHELL_NETWORK: "vyomi-net" });
 for (let i = 0; i < 80; i++) { try { if ((await fetch(`http://127.0.0.1:${RELAY}/health`)).ok) break; } catch {} await sleep(100); }
 for (let i = 0; i < 100; i++) { try { await fetch(`http://127.0.0.1:${SIM}/x`); break; } catch {} await sleep(100); }
 
-const token = mint(KEY, { sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "ui-sess", session_end: Math.floor(Date.now() / 1000) + 600 });
+const token = testToken({ sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "ui-sess", session_end: Math.floor(Date.now() / 1000) + 600 });
 let link = dial({ relayUrl: `ws://127.0.0.1:${RELAY}`, token, localUrl: `http://127.0.0.1:${SIM}`, WS, log: () => {} });
 for (let i = 0; i < 50 && !link.state.linked; i++) await sleep(100);
 

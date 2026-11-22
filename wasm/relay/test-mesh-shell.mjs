@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
 import fs from "node:fs";
 import os from "node:os";
-import { mint } from "./mesh-session.mjs";
+import { testToken, TEST_HOOK } from "./test-fixtures/mesh-testkey.mjs";   // v2, public test key (v1 retired, F2)
 import { dial } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
@@ -23,7 +23,7 @@ let bad = 0;
 const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 200) : ""}`); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const nowS = () => Math.floor(Date.now() / 1000);
-const tok = (o = {}) => mint(o.key ?? KEY, { sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "sess-1", session_end: nowS() + 3600, ...o });
+const tok = (o = {}) => testToken({ sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "sess-1", session_end: nowS() + 3600, ...o }, { forged: o.key !== undefined && o.key !== KEY });
 const dockerLog = join(os.tmpdir(), `fake-docker-${process.pid}.log`);
 try { fs.unlinkSync(dockerLog); } catch {}
 
@@ -32,7 +32,7 @@ const spawnP = (cmd, args, env) => { const p = spawn(cmd, args, { env: { ...proc
 const cleanup = () => { for (const p of procs) try { p.kill(); } catch {} };
 process.on("exit", cleanup);
 
-const relayProc = spawnP(process.execPath, [join(here, "local-relay.mjs")], { RELAY_PORT: String(RELAY), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_SHELL_IDLE_MS: "4000", VYOMI_SHELL_MAX_PER_SESSION: "3" });
+const relayProc = spawnP(process.execPath, [...TEST_HOOK, join(here, "local-relay.mjs")], { RELAY_PORT: String(RELAY), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_SHELL_IDLE_MS: "4000", VYOMI_SHELL_MAX_PER_SESSION: "3" });
 const startSim = (port = SIM) => spawnP(PY, [join(here, "test-fixtures/fake_mesh_sim.py"), String(port)], {
   APPLIANCE_ROOT: root, VYOMI_ROLE: "mesh", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_DOCKER_BIN: join(here, "test-fixtures/fake-docker.sh"),
   VYOMI_SHELL_NETWORK: "vyomi-net", VYOMI_FAKE_DOCKER: dockerLog, VYOMI_SHELL_IDLE_S: "3600", PYTHONPATH: root });

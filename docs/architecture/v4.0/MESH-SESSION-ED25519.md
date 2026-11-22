@@ -60,8 +60,8 @@ is MESH-SOFTWARE-PROTECTION layers 4 (compiled image) and 6 (portal integrity ch
 | Phase | Change | Who | F2 |
 |---|---|---|---|
 | 1 | Merge appliance #700 (accepts v2, pins `portal-2026-11`); release a Mesh image; redeploy the hosted relay with this `mesh-session.mjs` | owner | open |
-| 2 | Merge the portal PR; set `MESH_SESSION_SIGNING_KEY` + `MESH_SESSION_SIGNING_KID`; once phase 1 is live everywhere, set `MESH_SESSION_TOKEN_VERSION=v2` | owner | open (v1 still accepted) |
-| 3 | After the longest session lifetime (8 h cap) of v2-only minting: `V1_ACCEPTED = False` in both files; release the Mesh image; redeploy the relay | PR + owner | **closed** for Meshes on that image |
+| 2 | Merge the portal PR; set `MESH_SESSION_SIGNING_KEY` + `MESH_SESSION_SIGNING_KID`; once phase 1 is live everywhere, set `MESH_SESSION_TOKEN_VERSION=v2` | owner | **done** 2026-11-22 12:02 IST (portal #59/#60; first v2 Mesh joined) |
+| 3 | After the longest session lifetime (8 h cap) of v2-only minting: `V1_ACCEPTED = False` in both files; release the Mesh image; redeploy the relay | PR + owner | this PR (`v4/mesh-session-v1-retire`): both constants `False`; tests sign v2 with the public test vector (`tests/mesh_testkey.py`, `wasm/relay/test-fixtures/mesh-testkey.mjs` + `trust-test-key.mjs`). Closed once merged and the Mesh image is published |
 | 4 | Remove the v1 code paths, the portal's v1 branch and `MESH_SESSION_KEY` | PR | closed |
 
 Order matters: turning on `MESH_SESSION_TOKEN_VERSION=v2` before a Mesh image pinning the key is live makes every new session fail

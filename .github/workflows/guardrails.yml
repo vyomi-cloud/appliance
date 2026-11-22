@@ -26,6 +26,8 @@ on:
       - cmd/vyomi/**
       - tests/test_mcp_guardrails_server.py
       - tests/test_mesh_session_v2.py
+      - tests/mesh_testkey.py
+      - core/mesh_llm.py
       - scripts/mesh-session-keygen.py
       - tools/guardrails/**
       - .github/workflows/guardrails.yml

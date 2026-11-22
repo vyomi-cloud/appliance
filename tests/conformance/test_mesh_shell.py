@@ -15,6 +15,8 @@ def check(n, ok, d=""):
 
 import server
 from core import mesh_session as bs, mesh_shell as sh
+from tests import mesh_testkey as testkey
+testkey.trust(bs)                    # v2 tokens signed with the public test vector, trusted in this process only
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
@@ -36,7 +38,7 @@ try:
     check("resolver: unknown instance -> None", server._shell_container("aws", "i-none") is None)
 
     now = time.time()
-    tok = bs.mint("acct", "pro", now + 600, session_id="s1", key="shell-test-key")
+    tok = testkey.mint("acct", "pro", now + 600, session_id="s1")
     H = {"x-vyomi-session-token": tok}
     c = TestClient(server.app)
     r = c.get("/mesh/shell/target?cloud=gcp&ref=vm1", headers=H)
@@ -45,7 +47,7 @@ try:
     check("target: unknown instance -> ok:false InstanceNotFound", r.status_code == 200 and r.json().get("code") == "InstanceNotFound", r.text[:200])
     r = c.get("/mesh/shell/target?cloud=gcp&ref=vm1")
     check("target: no session token -> refused by the mesh session middleware", r.status_code in (401, 403), r.status_code)
-    r = c.get("/mesh/shell/target?cloud=gcp&ref=vm1", headers={"x-vyomi-session-token": bs.mint("a", "pro", now + 600, session_id="s", key="wrong")})
+    r = c.get("/mesh/shell/target?cloud=gcp&ref=vm1", headers={"x-vyomi-session-token": testkey.forged("a", "pro", now + 600, session_id="s")})
     check("target: bad-signature token -> refused", r.status_code in (401, 403), r.status_code)
     try:
         with c.websocket_connect("/mesh/shell?cloud=gcp&ref=vm1") as w:

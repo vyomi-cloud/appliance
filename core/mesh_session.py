@@ -19,8 +19,9 @@ own tokens - any tier, any session_end - for their own Mesh (MCP-GUARDRAILS-INCI
 v2 fixes that with Ed25519: the portal signs with a private key the Mesh never sees, and the Mesh verifies with a public
 key PINNED IN THIS FILE (TRUSTED_KEYS), never one read from the environment or a file, which the Codespace owner controls:
     v2.<b64url(payload-json, incl. "kid")>.<b64url(Ed25519 signature over "v2." + b64url(payload-json))>
-Rollout (docs/architecture/v4.0/MESH-SESSION-ED25519.md): the portal mints v2 -> every live session is v2 -> set
-V1_ACCEPTED = False here and in wasm/relay/mesh-session.mjs. Until then v1 is still accepted and F2 is still open.
+Rollout (docs/architecture/v4.0/MESH-SESSION-ED25519.md): the portal has minted v2 since 2026-11-22 12:02 IST, every live
+session is v2, so V1_ACCEPTED = False here and in wasm/relay/mesh-session.mjs: v1 tokens are refused (MeshSessionV1Retired)
+and F2 is closed. The v1 code stays until phase 4 removes it. Tests sign v2 with the public test vector: tests/mesh_testkey.py.
 """
 from __future__ import annotations
 
@@ -44,9 +45,9 @@ TRUSTED_KEYS: dict[str, str] = {
     "portal-2026-11": "gFxVrZy9w3W4r-qhGzAW-nkN0vUrUF6tnzSeAqCovrM",   # generated 2026-11-21 (owner); private seed only in the portal secret store
 }
 
-# HMAC (v1) tokens: still accepted until the portal mints v2 for every session. A code constant, not an env switch:
-# an env switch is under the Codespace owner's control and would reopen F2.
-V1_ACCEPTED = True
+# HMAC (v1) tokens: retired 2026-11-22 (the portal mints v2 for every session). A code constant, not an env switch: an env
+# switch is under the Codespace owner's control and would reopen F2. Tests that exercise the v1 code opt in explicitly.
+V1_ACCEPTED = False
 HEADER = "x-vyomi-session-token"
 CLOCK_SKEW_S = 30
 _EXEMPT_PATHS = ("/healthz",)
@@ -96,7 +97,6 @@ def mint_v2(account: str, tier: str, session_end: float, *, private_key: bytes, 
             session_id: str = "", now: Optional[float] = None, role: str = "", model: str = "") -> str:
     """Ed25519 (v2) minting: the portal's reference (docs/architecture/v4.0/MESH-SESSION-ED25519.md) and tests.
     `private_key` is the raw 32-byte Ed25519 seed. The Mesh never holds it."""
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     now = time.time() if now is None else now
     payload = {"aud": AUD, "kid": kid, "sub": account, "tier": tier, "primary_cloud": primary_cloud, "session_id": session_id,
                "iat": int(now), "session_end": int(session_end)}
@@ -104,7 +104,13 @@ def mint_v2(account: str, tier: str, session_end: float, *, private_key: bytes, 
         payload["role"] = role
     if model:
         payload["model"] = model
-    body = _b64(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode())
+    return sign_v2(payload, private_key=private_key, kid=kid)
+
+
+def sign_v2(payload: dict, *, private_key: bytes, kid: str) -> str:
+    """Ed25519-sign an arbitrary claims dict (adds "kid"). Used by mint_v2 and by core/mesh_llm.py node tokens."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    body = _b64(json.dumps({**payload, "kid": kid}, separators=(",", ":"), sort_keys=True).encode())
     sig = Ed25519PrivateKey.from_private_bytes(private_key).sign(f"{VERSION_V2}.{body}".encode())
     return f"{VERSION_V2}.{body}.{_b64(sig)}"
 

@@ -12,8 +12,9 @@ export const AUD = "vyomi-mesh-session";
 export const TRUSTED_KEYS = Object.freeze({
   "portal-2026-11": "gFxVrZy9w3W4r-qhGzAW-nkN0vUrUF6tnzSeAqCovrM",
 });
-// Same as core/mesh_session.py V1_ACCEPTED. A code constant: an env switch would let a Codespace owner reopen F2.
-export const V1_ACCEPTED = true;
+// Same as core/mesh_session.py V1_ACCEPTED: v1 retired 2026-11-22. A code constant: an env switch would let a Codespace owner
+// reopen F2. Tests sign v2 with the public test vector (test-fixtures/mesh-testkey.mjs; relays they start: --import hook).
+export const V1_ACCEPTED = false;
 const SKEW_S = 30;
 
 export class SessionError extends Error {

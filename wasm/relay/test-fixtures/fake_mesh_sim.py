@@ -11,6 +11,8 @@ MAP = {("aws", "i-good"): "vyomi-i-good", ("aws", "i-good2"): "vyomi-i-good2", (
        ("aws", "i-evil"): "nginx", ("aws", "i-evil2"): "vyomi-i-good; rm -rf /", ("aws", "i-vpc"): "vyomi-i-vpc1", ("aws", "i-lookalike"): "vyomi-i-lookalike", ("aws", "i-ghost"): "vyomi-i-ghost", ("aws", "i-real"): "vyomi-i-ngshelltest"}
 app = FastAPI()
 from core import mesh_session
+from tests import mesh_testkey
+mesh_testkey.trust(mesh_session)                     # TEST fixture: trust the public test-vector key (v1 HMAC retired, F2)
 app.add_middleware(mesh_session.SessionMiddleware)   # VYOMI_ROLE=mesh: the simulator re-verifies the same token
 @app.get('/mesh/status')
 def _status():

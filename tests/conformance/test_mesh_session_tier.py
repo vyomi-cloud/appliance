@@ -16,6 +16,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 import server  # noqa: E402
 from core import mesh_session as S  # noqa: E402
 from core import app_context as ctx  # noqa: E402
+from tests import mesh_testkey as testkey  # noqa: E402
+
+testkey.trust(S)                         # v2 tokens signed with the public test vector, trusted in this process only
 
 PASS = FAIL = 0
 
@@ -26,7 +29,7 @@ def check(name, ok, detail=""):
     print(f"[{'PASS' if ok else 'FAIL'}] {name}{' - ' + str(detail)[:300] if detail and not ok else ''}")
 
 
-os.environ["VYOMI_MESH_SESSION_TOKEN"] = S.mint("acct", "max", _t.time() + 3600, key=KEY)
+os.environ["VYOMI_MESH_SESSION_TOKEN"] = testkey.mint("acct", "max", _t.time() + 3600)
 c = TestClient(server.app, base_url="http://127.0.0.1:9000")
 c.__enter__()
 ctx.STATE.setdefault("license", {})["tier"] = "free"     # what an un-licensed mesh has
@@ -40,10 +43,12 @@ ddb = c.post("/", headers={"x-amz-target": "DynamoDB_20120810.ListTables", "cont
 check("Max session: DynamoDB (Max-only service) is not tier-locked", ddb.status_code == 200 and "tier_service_locked" not in ddb.text, ddb.text)
 check("licence state mirrors the session tier", ctx.STATE["license"]["tier"] == "max", ctx.STATE["license"])
 
-os.environ["VYOMI_MESH_SESSION_TOKEN"] = S.mint("acct", "pro", _t.time() + 3600, primary_cloud="aws", key=KEY)
+os.environ["VYOMI_MESH_SESSION_TOKEN"] = testkey.mint("acct", "pro", _t.time() + 3600, primary_cloud="aws")
 check("Pro token -> effective tier pro", S.effective_tier() == "pro", S.effective_tier())
 os.environ["VYOMI_MESH_SESSION_TOKEN"] = "garbage"
 check("bad token -> no effective tier (fails closed in middleware)", S.effective_tier() is None)
+os.environ["VYOMI_MESH_SESSION_TOKEN"] = S.mint("acct", "max", _t.time() + 3600, key=KEY)
+check("self-minted v1 Max token -> no effective tier (F2: v1 retired)", S.effective_tier() is None)
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

@@ -7,7 +7,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { mint } from "./mesh-session.mjs";
+import { testToken, TEST_HOOK } from "./test-fixtures/mesh-testkey.mjs";   // v2, public test key (v1 retired, F2)
 import { dial } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
@@ -20,7 +20,7 @@ let bad = 0;
 const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 160) : ""}`); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const nowS = () => Math.floor(Date.now() / 1000);
-const tok = (o = {}) => mint(o.key ?? KEY, { sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "sess-1", session_end: nowS() + 3600, ...o });
+const tok = (o = {}) => testToken({ sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "sess-1", session_end: nowS() + 3600, ...o }, { forged: o.key !== undefined && o.key !== KEY });
 
 // fake local simulator: echoes what it received and demands the session token
 const seen = [];
@@ -32,7 +32,7 @@ const sim = http.createServer((req, res) => {
   });
 }).listen(SIM, "127.0.0.1");
 
-const relay = spawn(process.execPath, [join(here, "local-relay.mjs")], {
+const relay = spawn(process.execPath, [...TEST_HOOK, join(here, "local-relay.mjs")], {
   env: { ...process.env, RELAY_PORT: String(RELAY), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY }, stdio: ["ignore", "pipe", "pipe"] });
 let relayLog = ""; relay.stdout.on("data", (d) => (relayLog += d)); relay.stderr.on("data", (d) => (relayLog += d));
 const cleanup = () => { try { relay.kill(); } catch {} try { sim.close(); } catch {} };
