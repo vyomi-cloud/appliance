@@ -48,6 +48,23 @@ run "A" "vyomi_write_env refuses paths outside the project and non-.env.vyomi na
 run "A" "vyomi_agents_md only proposes AGENTS.md text: it writes nothing, names no endpoints or credentials, and refuses symlinks and bad input" \
   go_tests TestAgentsMDNeverWrites TestAgentsMDSectionIsSafe
 
+# Threat A, hosted surface (docs/architecture/v4.0/HOSTED-MCP-IMPLEMENTATION-PLAN.md §4): the server at
+# https://vyomi.cloud/mcp answers from embedded knowledge only. It cannot see the caller's machine, so it has no
+# writer, no outbound network, no file access and no path input. Pinned here because the tool contract is what the
+# OpenAI and Claude directories review.
+run "A" "hosted MCP tool surface pinned (hosted: 4 read-only, 0 writers); annotations and tool names on the wire" \
+  go_tests TestHostedToolSurfaceIsPinned TestHostedToolAnnotationsOnTheWire
+run "A" "hosted MCP reaches no network (not even a URL a caller supplies) and touches no file; no path input" \
+  go_tests TestHostedToolsMakeNoOutboundRequests TestHostedServerCannotDial TestHostedToolsTouchNoFiles TestHostedSchemasHaveNoPath
+run "A" "hosted MCP homes are named, never probed; no resources; local stdio mode unchanged" \
+  go_tests TestNamedHomeNeverProbesOrReadsEnv TestHostedInitializeAndNoResources TestHostedKnowledgeMatchesLocal
+run "A" "hosted MCP descriptions state purpose, use, inputs and no side effects, with no tier pricing or upgrade wording" \
+  go_tests TestHostedDescriptionsAreComplete TestHostedTextHasNoPricingOrUpgradeWording
+run "A" "hosted MCP HTTP limits: 256 KiB body, no batches, POST only, Origin and protocol-version checks, panic contained" \
+  go_tests TestHostedHTTPPathsAcceptPostWithoutRedirect TestHostedHTTPMethodsOtherThanPost TestHostedHTTPBodyLimit TestHostedHTTPRejectsBatchesAndBadJSON TestHostedHTTPOriginAndProtocolVersionHeaders TestHostedHTTPRecoversFromPanic
+run "A, 7" "hosted MCP rate limits per client with hashed keys; the request log carries no arguments and no addresses" \
+  go_tests TestHostedHTTPRateLimit TestRateLimiterKeysAreHashed TestHostedHTTPLogHasNoArgumentsOrAddresses
+
 # Threat B: tampering with the core. Enforced on the Mesh host and in the tunnel, for every caller.
 run "1, 8" "vyomi-gate: core containers, injection strings and unknown verbs never reach docker" "$NODE" wasm/relay/test-mesh-gate.mjs
 run "1, 8" "tunnel: core names refused, \`api\` reaches only 9000/9443, nothing core is listed" "$NODE" wasm/relay/test-mesh-ssh-transport.mjs

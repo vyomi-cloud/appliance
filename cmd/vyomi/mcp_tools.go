@@ -668,7 +668,7 @@ func (s *mcpServer) toolServices(raw json.RawMessage) (any, error) {
 		"live":          reachable,
 	}
 	if a.Home != "" {
-		sel, err := s.resolveHome(a.Home)
+		sel, err := s.homeForArg(a.Home)
 		if err != nil {
 			return nil, err
 		}
@@ -738,6 +738,13 @@ func (s *mcpServer) toolEnv(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	return s.envResult(a.Cloud, a.Lang, a.Format, sel, t)
+}
+
+// envResult is the body of vyomi_env, after the home is resolved: the hosted get_sdk_settings calls it with a
+// named home (namedHome) so both tools answer from the same code and the same knowledge.
+func (s *mcpServer) envResult(cloud, lang, format string, sel homeSel, t mcpTarget) (any, error) {
+	a := struct{ Cloud, Lang, Format string }{cloud, lang, format}
 	c := s.matrix.Clouds[a.Cloud]
 	w := s.wiring(a.Cloud, sel.ID)
 	vars, warns := s.envVars(a.Cloud, sel.ID, t)
