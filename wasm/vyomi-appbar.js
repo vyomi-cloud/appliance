@@ -128,7 +128,8 @@
                      // Cloudscape's side panels are sticky to the window bottom (z-index 830): full height, running BEHIND the dock (the dock is
                      // z-index 1600, above these panels and the services flyouts), so nothing is cut short above it.
                      '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px) !important}',
-                gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}',
+                // collapsed service nav (64px rail): the service icon and the "Expand navigation" button shared one 48px row and overlapped (then the button was half cut off); stack them: icon above, button below
+                gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}nav.MuiBox-root>div:has(>button[aria-label="Expand navigation"]){flex-direction:column !important;align-items:center !important;justify-content:center !important;gap:6px !important;height:auto !important;min-height:0 !important;padding:10px 0 6px !important}',
                 azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:0 !important;height:auto !important}' };
     var st = document.createElement('style'); st.textContent = css + (RES[cloud] || ''); document.head.appendChild(st);
     if (cloud !== 'azure' && !document.getElementById('vy-spacer')) { var spc = document.createElement('div'); spc.id = 'vy-spacer'; spc.style.cssText = 'height:44px;flex:none'; document.body.appendChild(spc); }
