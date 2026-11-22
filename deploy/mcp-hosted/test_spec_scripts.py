@@ -201,6 +201,8 @@ check("GHCR_PULL_CREDENTIALS: ${{ secrets.GHCR_PULL_CREDENTIALS }}" in wf,
       "the pull credentials come from the GHCR_PULL_CREDENTIALS secret")
 check("grep -v registry_credentials" in wf, "the job summary diff never shows the credentials")
 check("environment: production" in wf, "the deploy job runs in the production environment (owner approval gate)")
+check("ActiveDeployment.Phase" not in wf and "InProgressDeployment.Phase" not in wf,
+      "it only uses doctl --format columns that exist (doctl 2.7.0 has no ActiveDeployment.Phase)")
 check("mcp-hosted-smoke.sh https://vyomi.cloud/mcp" in wf, "it smokes production after deploying")
 check(not any("mcp-hosted:latest" in l or l.strip().startswith("tags:") and "latest" in l
               for l in wf.splitlines()), "it never pushes a floating tag")
