@@ -242,12 +242,14 @@ services:
     ports: ["127.0.0.1:$MESH_PORT:9000"]
     environment:
       VYOMI_INSTANCE_NETWORK: vyomi-it-net
+      PYTHONPATH: /opt/vyomi-it          # TEST ONLY: sitecustomize.py trusts the public test key (v1 retired, F2)
+    volumes:
+      - $ROOT/tools/mcp-eval/it-trust-test-key:/opt/vyomi-it:ro
 EOF
   python3 - "$ROOT" > "$envf" <<'EOF'
-import sys, time, secrets
-sys.path.insert(0, sys.argv[1]); from core.mesh_session import mint
-k = secrets.token_hex(32)
-print("VYOMI_MESH_SESSION_KEY=" + k); print("VYOMI_MESH_SESSION_TOKEN=" + mint("local-max", "max", time.time() + 8 * 3600, key=k))
+import sys, time
+sys.path.insert(0, sys.argv[1]); from tests.mesh_testkey import mint   # v2, public test key (v1 retired, F2)
+print("VYOMI_MESH_SESSION_KEY="); print("VYOMI_MESH_SESSION_TOKEN=" + mint("local-max", "max", time.time() + 8 * 3600))
 EOF
   chmod 600 "$envf"
   check homes mesh-up "compose up ($proj, :$MESH_PORT)" docker compose -p "$proj" --env-file "$envf" \

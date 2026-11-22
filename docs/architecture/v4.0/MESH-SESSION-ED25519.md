@@ -64,15 +64,15 @@ At startup the portal logs `mesh session tokens: v2 kid=<kid> public_key=<b64url
 
 | Phase | Change | Who | F2 |
 |---|---|---|---|
-| 1 | Merge appliance #700 (accepts v2, pins `portal-2026-11`); release a Mesh image; merge the same `token_usable` rule into `vyomi-cloud/sandbox` `.devcontainer/mesh/boot-mesh.sh` (sandbox #7: Codespaces boot from that repo, not this one); redeploy the hosted relay with this `mesh-session.mjs` | owner | open |
-| 2 | Merge the portal PR; set `MESH_SESSION_SIGNING_KEY` + `MESH_SESSION_SIGNING_KID`; once phase 1 is live everywhere, set `MESH_SESSION_TOKEN_VERSION=v2` | owner | open (v1 still accepted) |
-| 3 | After the longest session lifetime (8 h cap) of v2-only minting: `V1_ACCEPTED = False` in both files; release the Mesh image; redeploy the relay | PR + owner | **closed** for Meshes on that image |
+| 1 | Merge appliance #700 (accepts v2, pins `portal-2026-11`); release a Mesh image; merge the same `token_usable` rule into `vyomi-cloud/sandbox` `.devcontainer/mesh/boot-mesh.sh` (sandbox #7: Codespaces boot from that repo, not this one); redeploy the hosted relay with this `mesh-session.mjs` | owner | **done** (#700 2026-11-21, Mesh image `v4-preview` baf83df; sandbox #7 2026-11-22) |
+| 2 | Merge the portal PR; set `MESH_SESSION_SIGNING_KEY` + `MESH_SESSION_SIGNING_KID`; once phase 1 is live everywhere, set `MESH_SESSION_TOKEN_VERSION=v2` | owner | **done** 2026-11-22 12:02 IST (portal #59/#60; first v2 Mesh joined) |
+| 3 | After the longest session lifetime (8 h cap) of v2-only minting: `V1_ACCEPTED = False` in both files; release the Mesh image; redeploy the relay | PR + owner | this PR (`v4/mesh-session-v1-retire`): both constants `False`; tests sign v2 with the public test vector (`tests/mesh_testkey.py`, `wasm/relay/test-fixtures/mesh-testkey.mjs` + `trust-test-key.mjs`). Closed once merged and the Mesh image is published |
 | 4 | Remove the v1 code paths, the portal's v1 branch and `MESH_SESSION_KEY` | PR | closed |
 
 Order matters: turning on `MESH_SESSION_TOKEN_VERSION=v2` before a Mesh image pinning the key is live makes every new session fail
 (`MeshSessionUnknownKey`), and before sandbox's `boot-mesh.sh` accepts a keyless token every Mesh loops on `/session/token` and
 never reports ready. Rolling back is the same switch set back to `v1`. The guardrail gate checks the sandbox copy
-(`tools/guardrails/check-sandbox-boot-mesh.sh`).
+(`tools/guardrails/check-boot-mesh.sh`, run on the sandbox copy in CI).
 
 Phase 3 only protects Meshes running the new image. `docker-compose.mesh.yml` pins `vyomi/appliance:v4-preview`
 (`pull_policy: always`), so new Codespaces pick it up on their next boot.

@@ -98,7 +98,8 @@ chat, emb = start_fake("chat"), start_fake("embed")
 
 # ---- the relay (hub) ---------------------------------------------------------------------------------------------------
 RELAY = free_port()
-relay = subprocess.Popen([node, os.path.join(ROOT, "wasm", "relay", "local-relay.mjs")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+TRUST_HOOK = ["--import", os.path.join(ROOT, "wasm", "relay", "test-fixtures", "trust-test-key.mjs")]   # relay trusts the public test key
+relay = subprocess.Popen([node, *TRUST_HOOK, os.path.join(ROOT, "wasm", "relay", "local-relay.mjs")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          env={**os.environ, "RELAY_PORT": str(RELAY), "RELAY_HOST": "127.0.0.1", "WS_PKG": ws_pkg,
                               "VYOMI_LLM_HB_STALE_MS": "4000"})
 HUB = f"http://127.0.0.1:{RELAY}"
@@ -123,13 +124,17 @@ import atexit  # noqa: E402
 atexit.register(cleanup)
 
 from core import mesh_session as BS  # noqa: E402
+from tests import mesh_testkey as testkey  # noqa: E402
+
+testkey.trust(BS)                        # v2 tokens signed with the public test vector (v1 HMAC retired, finding F2)
 
 SID = "sess-llm-1"
 now = int(time.time())
 
 
 def tok(role="", end=None, key=KEY, sid=SID, sub="acct-1"):
-    return BS.mint(sub, "pro", end or now + 3600, primary_cloud="aws", session_id=sid, key=key, role=role)
+    mint = testkey.mint if key == KEY else testkey.forged          # another key: a token this relay must not trust
+    return mint(sub, "pro", end or now + 3600, primary_cloud="aws", session_id=sid, role=role)
 
 
 MESH_TOKEN = tok()
@@ -230,7 +235,9 @@ check("status: AI chip reports remote (runner) + unavailable while the runner is
 check("dial-in: a MESH token cannot pose as the runner (403)", dial_status({"Authorization": f"Bearer {MESH_TOKEN}"}) == 403)
 check("dial-in: bad signature refused (401)", dial_status({"Authorization": f"Bearer {tok('llm-runner', key='another-key-entirely-0123456789')}"}) == 401)
 check("dial-in: missing token refused (401)", dial_status({}) == 401)
-check("dial-in: expired runner token refused (410)", dial_status({"Authorization": "Bearer " + BS.mint("acct-1", "pro", now - 5, session_id=SID, key=KEY, role="llm-runner", now=now - 100)}) == 410)
+check("dial-in: self-minted v1 runner token + the relay's key refused (401, F2)",
+      dial_status({"Authorization": "Bearer " + BS.mint("acct-1", "pro", now + 3600, session_id=SID, key=KEY, role="llm-runner")}) == 401)
+check("dial-in: expired runner token refused (410)", dial_status({"Authorization": "Bearer " + testkey.mint("acct-1", "pro", now - 5, session_id=SID, role="llm-runner", now=now - 100)}) == 410)
 code, _, _ = http("POST", HUB + "/llm/v1/chat/completions", {"x-vyomi-session-token": RUNNER_TOKEN}, {"a": 1})
 check("llm plane: a RUNNER token cannot call the LLM plane (403)", code == 403, code)
 code, _, _ = http("POST", HUB + "/llm/v1/chat/completions", {"x-vyomi-session-token": tok(sub="someone-else", sid="other")}, {"a": 1})
@@ -238,7 +245,7 @@ check("llm plane: another session sees no runner (502, never ours)", code == 502
 code, _, _ = http("POST", HUB + "/llm/v1/chat/completions", None, {"a": 1})
 check("llm plane: no token refused (401)", code == 401, code)
 try:
-    BS.mint("a", "pro", now + 60, session_id="s", key=KEY, role="llm-runner")
+    testkey.mint("a", "pro", now + 60, session_id="s", role="llm-runner")
     err = BS.authorise({"x-vyomi-session-token": RUNNER_TOKEN}, "/anything", "aws")
     ok = err is not None and err.code == "MeshSessionWrongRole"
 except Exception as e:
