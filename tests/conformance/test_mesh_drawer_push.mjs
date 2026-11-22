@@ -57,4 +57,7 @@ check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits
 check("AWS service pages: the drawer ends at the content column's right edge (breadcrumb row) via --md-pr, not at the window edge on wide screens",
   /padding-right:var\(--md-pr,24px\)/.test(css) && /main \[class\*="awsui_breadcrumbs_"\]/.test(src) && /setProperty\("--md-pr"/.test(src));
 
+check("AWS drawer tracks the real content column on wide windows: --md-pl (capped column's left edge) and --md-cw (Console Home wrapper width, 1620px beyond ~2000px) are measured, not fixed",
+  /padding-left:var\(--md-pl,24px\)/.test(css) && /setProperty\("--md-pl"/.test(src) && /setProperty\("--md-cw"/.test(src) && /querySelectorAll\("main > div"\)/.test(src));
+
 process.exit(failed ? 1 : 0);

@@ -57,7 +57,7 @@
     "#vy-md.c-gcp{--md-cw:996px;--md-px:72px}" +
     /* AWS service pages (S3, DynamoDB, ...) put a side navigation beside the content: the section is the nav + content frame, edge to
        edge with the console's 24px gutters, not the 1280px centred column of Home. The class is toggled by place(). */
-    "#vy-md.c-aws.nav .md-body{max-width:none;padding-left:24px;padding-right:var(--md-pr,24px)}" +
+    "#vy-md.c-aws.nav .md-body{max-width:none;padding-left:var(--md-pl,24px);padding-right:var(--md-pr,24px)}" +
     /* AWS service page with the side navigation open and the drawer collapsed: the tab row must not take height, or the nav's vertical
        divider starts 40px below the header. The tab hangs from the top edge of the page instead (the row is 0px tall). */
     "#vy-md.c-aws.nav:not(.open) .md-tabrow{height:0}" +
@@ -115,9 +115,22 @@
       if (box.classList.contains("nav") !== on) box.classList.toggle("nav", on);
       // the page content column is centred and capped (1280px) on wide windows: end the drawer at the column's right edge (the breadcrumb
       // row spans it), not at the window edge, so the drawer lines up with the cards below it. Falls back to the 24px gutter.
-      var bc = on && document.querySelector('main [class*="awsui_breadcrumbs_"]'), pr = 24;
-      if (bc) { var rr = bc.getBoundingClientRect().right; if (rr > 300) pr = Math.max(24, Math.round(document.documentElement.clientWidth - rr)); }
+      // When the column is capped (wide window: it floats clear of the nav) the drawer takes the column's left edge too, so it is exactly as
+      // wide as the section below it; on narrower windows the column runs from the nav to the edge and the drawer keeps the nav's gutter.
+      var bc = on && document.querySelector('main [class*="awsui_breadcrumbs_"]'), pr = 24, pl = 24;
+      if (bc) {
+        var bb = bc.getBoundingClientRect(); if (bb.right > 300) pr = Math.max(24, Math.round(document.documentElement.clientWidth - bb.right));
+        if (bb.width >= 1270 && bb.left > 330) pl = Math.round(bb.left);
+      }
       if (box.style.getPropertyValue("--md-pr") !== pr + "px") box.style.setProperty("--md-pr", pr + "px");
+      if (box.style.getPropertyValue("--md-pl") !== pl + "px") box.style.setProperty("--md-pl", pl + "px");
+      // Console Home (no side nav): the content column is capped at 1280px up to ~2000px and 1620px beyond it, so take the real width of
+      // the page's content wrapper instead of the fixed 1280px.
+      var cw = 1280;
+      if (!on) document.querySelectorAll("main > div").forEach(function (d) {
+        var hw = Math.round(d.getBoundingClientRect().width); if (cw === 1280 && hw >= 600 && hw <= 2400) cw = hw;
+      });
+      if (box.style.getPropertyValue("--md-cw") !== cw + "px") box.style.setProperty("--md-cw", cw + "px");
     }
     publish();
   }
