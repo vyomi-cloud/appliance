@@ -33,7 +33,7 @@ plan: `../AGENT-DISTRIBUTION-NOW.md`. Product context: `../AGENT-DISTRIBUTION-PR
 | MIT for `vyomi-cloud/claude-plugins` (D5) | No license | Open source is required by the Cursor Marketplace; the tunnel is MIT |
 
 ## Open issues
-- [ ] Claims row on the trunk: `| agent-plugins | v4/agent-plugins | appliance | integrations/claude-plugins/**, cmd/vyomi/mcp_agents_md*.go, cmd/vyomi/mcp_tunnel_sync*.go, wasm/relay/mcp-launch.mjs, packaging/tunnel/{package.json,server.json,README.md,bin/mcp-launch.mjs}, tools/guardrails/run.sh, scripts/check_*.py | 2026-11-22 |` (owner: Rohith)
+- [x] Claims row on the trunk (`fe04e4e48`, 2026-11-22)
 - [x] WP1-WP8 of `../AGENT-DISTRIBUTION-NOW.md` (2026-11-22; VERIFY.md GREEN)
 - [x] Windows and macOS handover verified in CI (`tunnel-npx-smoke.yml`, green on all four OSes)
 - [ ] Release dry run, npm/registry publish, merges and the Claude directory submission: `HUMAN-GATES.md` G2-G6 (owner: Rohith)
