@@ -12,8 +12,9 @@ package main
 // The tool never writes. It reads the project's AGENTS.md (and CLAUDE.md) and returns the section, the action
 // (created / appended / updated / unchanged), the exact old block to replace and the proposed file. The agent applies it
 // with its own file-edit tool, which shows the user a diff and asks first; that keeps the MCP's only write path
-// vyomi_write_env (guardrail, MCP-GUARDRAILS-INCIDENT-DESIGN.md threat A). Claude Code reads CLAUDE.md rather than
-// AGENTS.md only when there is no CLAUDE.md, so when a CLAUDE.md exists it also proposes an `@AGENTS.md` import.
+// vyomi_write_env (guardrail, MCP-GUARDRAILS-INCIDENT-DESIGN.md threat A). Claude Code reads AGENTS.md only when the
+// project has no Claude memory file (CLAUDE.md, .claude/CLAUDE.md or CLAUDE.local.md), so when one exists it also
+// proposes an `@AGENTS.md` import into it.
 
 import (
 	"encoding/json"
@@ -25,7 +26,6 @@ import (
 
 const (
 	agentsMDFile      = "AGENTS.md"
-	claudeMDFile      = "CLAUDE.md"
 	agentsMDStart     = "<!-- vyomi:start -->"
 	agentsMDEnd       = "<!-- vyomi:end -->"
 	agentsMDImport    = "@AGENTS.md"
@@ -104,20 +104,84 @@ func spliceAgentsMD(existing []byte, exists bool, section string) (string, strin
 	}
 }
 
-// spliceClaudeMD: Claude Code (2.1.277+) reads AGENTS.md only when the project has no CLAUDE.md; a CLAUDE.md hides it unless
-// it imports it. So: no CLAUDE.md -> not_needed (never create one); CLAUDE.md with an @AGENTS.md line -> unchanged;
-// CLAUDE.md without it -> prepended (propose the import).
-func spliceClaudeMD(existing []byte, exists bool) (string, string) {
-	if !exists {
-		return "", "not_needed"
-	}
-	old := string(existing)
-	for _, line := range strings.Split(old, "\n") {
-		if strings.TrimSpace(line) == agentsMDImport {
-			return old, "unchanged"
+// claudeMemoryFile is a project file Claude Code loads instead of AGENTS.md. Imports resolve relative to the importing
+// file, so .claude/CLAUDE.md needs `@../AGENTS.md`.
+type claudeMemoryFile struct {
+	name    string   // relative to the project directory
+	imports []string // import lines that pull in the project's AGENTS.md; imports[0] is the one proposed
+}
+
+// claudeMemoryFiles: Claude Code (2.1.277+) reads AGENTS.md only when the project has none of these; each one hides it
+// unless it imports it. Checked in this order; the first that exists gets the proposal.
+var claudeMemoryFiles = []claudeMemoryFile{
+	{"CLAUDE.md", []string{agentsMDImport, "@./AGENTS.md"}},
+	{filepath.Join(".claude", "CLAUDE.md"), []string{"@../AGENTS.md", "@./../AGENTS.md"}},
+	{"CLAUDE.local.md", []string{agentsMDImport, "@./AGENTS.md"}},
+}
+
+// importsAgentsMD reports whether a memory file already has one of the import lines on a line of its own.
+func importsAgentsMD(content string, imports []string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		for _, imp := range imports {
+			if strings.TrimSpace(line) == imp {
+				return true
+			}
 		}
 	}
-	return agentsMDImport + "\n\n" + old, "prepended"
+	return false
+}
+
+// symlinkToAgentsMD reports whether dir/name is a symlink whose target is the project's AGENTS.md (the common
+// `ln -s AGENTS.md CLAUDE.md`): Claude Code then reads AGENTS.md through it, so no import is needed.
+func symlinkToAgentsMD(dir, name string) bool {
+	p := filepath.Join(dir, name)
+	st, err := os.Lstat(p)
+	if err != nil || st.Mode()&os.ModeSymlink == 0 {
+		return false
+	}
+	tgt, err := os.Readlink(p)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(tgt) {
+		tgt = filepath.Join(filepath.Dir(p), tgt)
+	}
+	return filepath.Clean(tgt) == filepath.Join(dir, agentsMDFile)
+}
+
+// proposeClaudeMD returns the claude_md part of the result. No memory file -> not_needed (never create one); a memory file
+// that imports AGENTS.md (or is a symlink to it) -> unchanged; otherwise -> prepended, against the first file that exists.
+func proposeClaudeMD(dir string) (map[string]any, error) {
+	var first *claudeMemoryFile
+	var firstContent string
+	for i := range claudeMemoryFiles {
+		f := &claudeMemoryFiles[i]
+		if symlinkToAgentsMD(dir, f.name) {
+			return map[string]any{"path": filepath.Join(dir, f.name), "action": "unchanged"}, nil
+		}
+		b, exists, err := readProjectFile(dir, f.name)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			continue
+		}
+		if importsAgentsMD(string(b), f.imports) {
+			return map[string]any{"path": filepath.Join(dir, f.name), "action": "unchanged"}, nil
+		}
+		if first == nil {
+			first, firstContent = f, string(b)
+		}
+	}
+	if first == nil {
+		return map[string]any{"path": filepath.Join(dir, claudeMemoryFiles[0].name), "action": "not_needed"}, nil
+	}
+	return map[string]any{
+		"path":             filepath.Join(dir, first.name),
+		"action":           "prepended",
+		"proposed_content": first.imports[0] + "\n\n" + firstContent,
+		"why":              "This project has " + filepath.ToSlash(first.name) + ", so Claude Code ignores AGENTS.md unless that file imports it.",
+	}, nil
 }
 
 // readProjectFile reads dir/name for an in-place rewrite. Missing is fine; symlinks, non-regular files and oversized
@@ -205,20 +269,14 @@ func (s *mcpServer) toolAgentsMD(raw json.RawMessage) (any, error) {
 		am["replace_block"] = oldBlock
 	}
 	res := map[string]any{"agents_md": am, "section": section, "start_marker": agentsMDStart, "end_marker": agentsMDEnd}
-	cold, cexists, err := readProjectFile(a.Path, claudeMDFile)
+	cm, err := proposeClaudeMD(a.Path)
 	if err != nil {
 		return nil, err
-	}
-	cout, caction := spliceClaudeMD(cold, cexists)
-	cm := map[string]any{"path": filepath.Join(a.Path, claudeMDFile), "action": caction}
-	if caction == "prepended" {
-		cm["proposed_content"] = cout
-		cm["why"] = "This project has a CLAUDE.md, so Claude Code ignores AGENTS.md unless CLAUDE.md imports it."
 	}
 	res["claude_md"] = cm
 	res["next"] = "Nothing was written. Show the user the section and the action. Only after they approve, apply it with your own file-edit tool: " +
 		"created -> create the file with proposed_content; appended -> append the section; updated -> replace replace_block (from start_marker to end_marker) with the section; unchanged -> nothing to do. " +
-		"Never change text outside the markers. Then suggest committing AGENTS.md so teammates' agents pick it up."
+		"If claude_md.action is prepended, also write claude_md.proposed_content to claude_md.path (same approval). Never change text outside the markers. Then suggest committing AGENTS.md so teammates' agents pick it up."
 	return res, nil
 }
 
@@ -230,7 +288,7 @@ func (s *mcpServer) agentsMDTool() *mcpTool {
 		Description: "Read-only. Proposes a short 'Local cloud: Vyomi' section for the project's AGENTS.md (between <!-- vyomi:start --> and <!-- vyomi:end --> markers) so any coding agent " +
 			"that opens the repo runs against Vyomi with .env.vyomi and keeps away from the real cloud. Reads the existing AGENTS.md and returns the section, the action " +
 			"(created / appended / updated / unchanged), the block to replace and the proposed file; it never writes. The section names no endpoints (those stay in .env.vyomi). " +
-			"If the project has a CLAUDE.md without an @AGENTS.md line, it also proposes that import (Claude Code ignores AGENTS.md when CLAUDE.md exists). Apply the result with your own file-edit tool ONLY after the user explicitly approved this exact change; " +
+			"If the project has a CLAUDE.md, .claude/CLAUDE.md or CLAUDE.local.md that does not import AGENTS.md, it also proposes that import (Claude Code ignores AGENTS.md when one of those exists). Apply the result with your own file-edit tool ONLY after the user explicitly approved this exact change; " +
 			"a general request such as 'set this project up' is not approval.",
 		Schema: obj(map[string]any{
 			"path":     map[string]any{"type": "string", "description": "Absolute path of the project directory (where AGENTS.md lives or should live)."},

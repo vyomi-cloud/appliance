@@ -222,3 +222,119 @@ func TestAgentsMDNeverWrites(t *testing.T) {
 		}
 	}
 }
+
+// The section is committed and shared: no endpoints or credentials, at most 20 lines, and no user or machine paths,
+// whatever clouds and env file name it is rendered for.
+func TestAgentsMDSectionIsSafe(t *testing.T) {
+	s, _ := testMCPServer(t)
+	dir := t.TempDir()
+	home, _ := os.UserHomeDir()
+	leaks := []string{"127.0.0.1", "localhost", "0.0.0.0", ":9000", ":9443", ":8090", ":8099", "relay.vyomi.cloud",
+		"AWS_ACCESS_KEY", "AWS_SECRET", "_ENDPOINT", "_KEY=", "token", "password",
+		"/Users/", "/home/", "~/", `C:\`, `\Users\`, dir}
+	if home != "" {
+		leaks = append(leaks, home)
+	}
+	for _, clouds := range [][]string{{"aws"}, {"gcp"}, {"azure"}, {"aws", "gcp"}, {"azure", "gcp", "aws"}} {
+		for _, env := range []string{"", ".env.vyomi.local"} {
+			args := map[string]any{"path": dir, "clouds": clouds}
+			if env != "" {
+				args["env_file"] = env
+			}
+			res, isErr := propose(t, s, dir, args)
+			if isErr {
+				t.Fatal(res["error"])
+			}
+			sec := res["section"].(string)
+			for _, leak := range leaks {
+				if strings.Contains(strings.ToLower(sec), strings.ToLower(leak)) {
+					t.Errorf("%v %q: section must not contain %q:\n%s", clouds, env, leak, sec)
+				}
+			}
+			if n := strings.Count(sec, "\n"); n > 20 {
+				t.Errorf("%v %q: section is %d lines, want at most 20", clouds, env, n)
+			}
+		}
+	}
+}
+
+// Claude Code also ignores AGENTS.md when the project has .claude/CLAUDE.md or CLAUDE.local.md. The import is proposed
+// against the first memory file that exists (CLAUDE.md, then .claude/CLAUDE.md, then CLAUDE.local.md), and an import in
+// any of them is enough.
+func TestAgentsMDClaudeMemoryFiles(t *testing.T) {
+	s, _ := testMCPServer(t)
+	dotClaude := filepath.Join(".claude", "CLAUDE.md")
+	write := func(dir, name, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	claudeMD := func(dir string) map[string]any {
+		t.Helper()
+		res, isErr := propose(t, s, dir, map[string]any{"path": dir, "clouds": []string{"aws"}})
+		if isErr {
+			t.Fatal(res["error"])
+		}
+		return part(t, res, "claude_md")
+	}
+	for _, c := range []struct {
+		name    string
+		files   map[string]string
+		path    string // relative to the project
+		action  string
+		content string // proposed_content when prepended
+	}{
+		{"only .claude/CLAUDE.md", map[string]string{dotClaude: "# team\n"}, dotClaude, "prepended", "@../AGENTS.md\n\n# team\n"},
+		{"only CLAUDE.local.md", map[string]string{"CLAUDE.local.md": "# mine\n"}, "CLAUDE.local.md", "prepended", "@AGENTS.md\n\n# mine\n"},
+		{".claude/CLAUDE.md already imports", map[string]string{dotClaude: "@../AGENTS.md\n# team\n"}, dotClaude, "unchanged", ""},
+		{"CLAUDE.local.md already imports", map[string]string{"CLAUDE.local.md": "# mine\n  @AGENTS.md  \n"}, "CLAUDE.local.md", "unchanged", ""},
+		// Imports resolve relative to the importing file: @AGENTS.md in .claude/CLAUDE.md names .claude/AGENTS.md.
+		{".claude/CLAUDE.md with a wrong-relative import", map[string]string{dotClaude: "@AGENTS.md\n"}, dotClaude, "prepended", "@../AGENTS.md\n\n@AGENTS.md\n"},
+		{"root CLAUDE.md wins", map[string]string{"CLAUDE.md": "root\n", dotClaude: "team\n", "CLAUDE.local.md": "mine\n"}, "CLAUDE.md", "prepended", "@AGENTS.md\n\nroot\n"},
+		{".claude/CLAUDE.md before CLAUDE.local.md", map[string]string{dotClaude: "team\n", "CLAUDE.local.md": "mine\n"}, dotClaude, "prepended", "@../AGENTS.md\n\nteam\n"},
+		{"an import in a later file is enough", map[string]string{"CLAUDE.md": "root\n", "CLAUDE.local.md": "@AGENTS.md\n"}, "CLAUDE.local.md", "unchanged", ""},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			for name, body := range c.files {
+				write(dir, name, body)
+			}
+			cm := claudeMD(dir)
+			if cm["path"] != filepath.Join(dir, c.path) || cm["action"] != c.action {
+				t.Fatalf("claude_md = %v, want %s against %s", cm, c.action, c.path)
+			}
+			if c.action == "prepended" {
+				if cm["proposed_content"] != c.content || !strings.Contains(cm["why"].(string), filepath.ToSlash(c.path)) {
+					t.Errorf("claude_md = %v, want proposed_content %q and a why naming the file", cm, c.content)
+				}
+			} else if cm["proposed_content"] != nil {
+				t.Errorf("unchanged must not propose content: %v", cm)
+			}
+		})
+	}
+	if runtime.GOOS != "windows" {
+		// `ln -s AGENTS.md CLAUDE.md`: Claude Code reads AGENTS.md through the link, so nothing to import.
+		dir := t.TempDir()
+		write(dir, "AGENTS.md", "# Agents\n")
+		if err := os.Symlink("AGENTS.md", filepath.Join(dir, "CLAUDE.md")); err != nil {
+			t.Fatal(err)
+		}
+		if cm := claudeMD(dir); cm["action"] != "unchanged" || cm["path"] != filepath.Join(dir, "CLAUDE.md") {
+			t.Errorf("CLAUDE.md -> AGENTS.md symlink: %v, want unchanged", cm)
+		}
+		// A symlinked memory file pointing anywhere else is still refused (the agent would edit through it).
+		d := t.TempDir()
+		target := filepath.Join(t.TempDir(), "elsewhere.md")
+		write(filepath.Dir(target), "elsewhere.md", "outside\n")
+		if err := os.Symlink(target, filepath.Join(d, "CLAUDE.local.md")); err != nil {
+			t.Fatal(err)
+		}
+		if _, isErr := propose(t, s, d, map[string]any{"path": d, "clouds": []string{"aws"}}); !isErr {
+			t.Error("must refuse a CLAUDE.local.md symlinked outside the project")
+		}
+	}
+}

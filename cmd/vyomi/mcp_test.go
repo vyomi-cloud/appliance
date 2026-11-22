@@ -122,7 +122,10 @@ func TestMCPProtocolRoundTrip(t *testing.T) {
 		t.Errorf("should echo a supported client protocol version, got %v", init["protocolVersion"])
 	}
 	tools := msgs[1]["result"].(map[string]any)["tools"].([]any)
-	want := map[string]bool{"vyomi_status": true, "vyomi_services": true, "vyomi_capability": true, "vyomi_snippet": true, "vyomi_env": true, "vyomi_scan_repo": true, "vyomi_write_env": true, "vyomi_agents_md": true}
+	want := map[string]bool{"vyomi_status": true, "vyomi_services": true, "vyomi_capability": true, "vyomi_snippet": true, "vyomi_env": true, "vyomi_scan_repo": true, "vyomi_write_env": true, "vyomi_agents_md": true, "vyomi_reach": true}
+	if len(tools) != len(want) {
+		t.Errorf("tools/list returned %d tools, want %d", len(tools), len(want))
+	}
 	for _, tl := range tools {
 		delete(want, tl.(map[string]any)["name"].(string))
 	}
