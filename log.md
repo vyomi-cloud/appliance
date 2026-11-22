@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T09:17:19+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T08:17:15+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read ope
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
-### Upstream watch — 2026-11-10T19:59:44+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**5 change(s), 0 actionable.**
-- · `announcement` AWS Compute Optimizer now supports additional Amazon EC2 instance types in the AWS GovCloud (US) Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/10/aws-compute-optimizer-amazon-ec2/))
-- · `spec-commit` Azure cognitiveservices: Remove Cognitive Services JavaScript contract tests (#48108) ([link](https://github.com/Azure/azure-rest-api-specs/commit/e4d2d2ae2c8f429796350ca6b443159a8991ca42))
-- · `operation-removed` GCP storage/v1: operation storage.anywhereCaches.pause removed
