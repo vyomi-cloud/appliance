@@ -294,7 +294,7 @@ launch() {   # $1 = label for the banner
   wait_ready || true
   # LAUNCH-VIEW-READY (keep identical across launchers)
   printf '\n  %sReady.%s Open %s%s%s   ·   SDK/CLI: point --endpoint-url at %s\n' "$_b" "$_z" "$_c" "$VYOMI_URL" "$_z" "$VYOMI_URL"
-  printf '  %sPro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.%s\n\n' "$_d" "$_z"
+  printf '  %sPro tier: launch an EC2 instance with the CLI/SDK, then ssh ubuntu@<ip>.%s\n\n' "$_d" "$_z"
 }
 
 case "${1:-up}" in
