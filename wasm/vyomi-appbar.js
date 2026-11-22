@@ -19,7 +19,7 @@
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
   var css = '' +
-    '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:70;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
+    '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:1600;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
     'body:has(#nano-foot) #vy-appbar{bottom:34px}' +   /* Nano: sit above its relay-tunnel footer bar */
     '#vy-appbar::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#0f121c}' +   /* the line along the bottom edge */
     '#vy-appbar .vy-notch{width:auto !important;max-width:none !important;overflow:visible !important;pointer-events:auto;position:absolute;bottom:0;height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;isolation:isolate}' +
@@ -125,12 +125,11 @@
     // The drawer is fixed over the bottom 44px: reserve that strip so nothing is hidden or unclickable under it
     // (a 1280x720 window put e.g. the APIM "Metrics" sub-tab right under the drawer).
     var RES = { aws: '.page{min-height:calc(100vh - 40px - 36px - 44px) !important}' +
-                     // Cloudscape's side panels are sticky to the window bottom (z-index 830): they ran under the dock and hid its left end.
-                     // End them where the dock starts (44px dock, plus the 34px Nano relay footer when present).
-                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px - 44px) !important}' +
-                     'body:has(#nano-foot) [class*="awsui_navigation-container_"],body:has(#nano-foot) [class*="awsui_tools-container_"]{height:calc(100vh - 40px - 78px) !important}',
+                     // Cloudscape's side panels are sticky to the window bottom (z-index 830): full height, running BEHIND the dock (the dock is
+                     // z-index 1600, above these panels and the services flyouts), so nothing is cut short above it.
+                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px) !important}',
                 gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}',
-                azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:44px !important;height:auto !important}' };
+                azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:0 !important;height:auto !important}' };
     var st = document.createElement('style'); st.textContent = css + (RES[cloud] || ''); document.head.appendChild(st);
     if (cloud !== 'azure' && !document.getElementById('vy-spacer')) { var spc = document.createElement('div'); spc.id = 'vy-spacer'; spc.style.cssText = 'height:44px;flex:none'; document.body.appendChild(spc); }
     var bar = document.createElement('div'); bar.id = 'vy-appbar';
