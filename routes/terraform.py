@@ -33,6 +33,34 @@ def register(app: FastAPI) -> None:
         )
         return export
 
+    @app.get("/__vyomi/lambda-code/{name}")
+    def lambda_code_download(name: str):
+        """Serves a function's original deployment package: the target of GetFunction's Code.Location."""
+        import base64
+        from fastapi.responses import Response
+        from core import lambda_core as _lc
+        from core.appliance_stores import lambda_store
+        fn = _lc._find_fn(lambda_store(), _lc._norm_name(name))
+        if not fn or not fn.get("code_zip"):
+            raise HTTPException(404, detail="NoDeploymentPackage")
+        return Response(base64.b64decode(fn["code_zip"]), media_type="application/zip")
+
+    @app.get("/api/terraform/export/bundle")
+    def api_terraform_export_bundle(format: str = "zip", region: str = ""):
+        """Faithful export: the simulator's live AWS state as a Terraform bundle (HCL + variables + Lambda code) that rebuilds
+        the same stack. Reads through the simulator's own AWS API, the calls Terraform's provider makes."""
+        import os
+        from fastapi.responses import Response
+        from core.tf_export import build_aws, bundle_zip
+        ctx._enforce_tier_feature("terraform_export")
+        endpoint = os.environ.get("VYOMI_INTERNAL_ENDPOINT", "http://127.0.0.1:9000")
+        result = build_aws(endpoint, region or "us-east-1")
+        ctx._record_usage("terraform.export_bundle", {"resource_count": result["summary"]["resources"]})
+        if format == "json":
+            return {"files": result["files"], "summary": result["summary"]}
+        return Response(bundle_zip(result), media_type="application/zip",
+                        headers={"Content-Disposition": 'attachment; filename="vyomi-terraform-export.zip"'})
+
     @app.post("/api/terraform/import")
     async def api_terraform_import(request: Request):
         from core.terraform_export import export_space_to_terraform_json
