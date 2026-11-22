@@ -22,7 +22,7 @@ check("default state is EXPANDED (open unless the user stored an explicit collap
 check("only the collapse is the exception: the toggle still stores '1'/'0'", /LS\("s",\s*open\s*\?\s*"1"\s*:\s*"0"\)/.test(src));
 check("drawer root is in flow (position:relative, flex:none), not fixed", /#vy-md\{position:relative;flex:none/.test(css) && !/position:fixed/.test(css));
 // the one deliberate exception: AWS service page, side nav open, drawer COLLAPSED (see the check below)
-const cssNoNavCollapse = css.replace(/#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{[^}]*\}/, "");
+const cssNoNavCollapse = css.replace(/#vy-md\.c-(?:aws|gcp)\.nav:not\(\.open\) \.md-tab\{[^}]*\}/g, "");
 check("no absolute/fixed tab, no pointer-events overlay hacks (except the collapsed-with-nav tab)", !/\.md-tab\{[^}]*position:absolute/.test(cssNoNavCollapse) && !/pointer-events:auto/.test(css));
 check("AWS side nav + collapsed drawer: tab row is 0px tall so the nav's vertical divider starts at the header (no top gap)",
   /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{position:absolute;top:0;/.test(css));
