@@ -23,7 +23,7 @@ MUST_CONTAIN = [
     "local AWS · GCP · Azure — no cloud bill",                      # tagline
     "ready (S3 · KMS · SQL · NoSQL · queues · Pub/Sub · Blob)",     # backends line
     "SDK/CLI: point --endpoint-url at",                              # Ready line
-    "Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.",
+    "Pro tier: launch an EC2 instance with the CLI/SDK, then ssh ubuntu@<ip>.",
     "/api/runtime/readiness",                                        # live N/N readiness
     "VYOMI_NO_BANNER", "NO_COLOR",                                   # off-switches
     "LAUNCH-VIEW-MATRIX", "LAUNCH-VIEW-READY",
