@@ -1,6 +1,6 @@
 # Listing Vyomi in the OpenAI plugin directory (ChatGPT + Codex): plan
 
-Status: plan, not started · Written 2026-11-22 against `v4-on-main` · Owner: Rohith
+Status: plan; D-H2–D-H6, O-D2–O-D5 approved 2026-11-22, O-D1 (individual vs business) open · Written 2026-11-22 against `v4-on-main` · Owner: Rohith
 Builds on: `HOSTED-MCP-DESIGN.md` (D-H1 decided: build phase 1 now). Related: `AGENT-DISTRIBUTION-NOW.md`,
 `integrations/claude-plugins/SUBMISSION.md`, `HUMAN-GATES.md` G9.
 

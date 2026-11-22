@@ -1,6 +1,6 @@
 # Hosted Vyomi MCP: design
 
-Status: proposal; D-H1 decided (build phase 1 now), D-H2–D-H6 open · Written 2026-11-22 against `v4-on-main` @ `5d042d5f6` · Owner: Rohith
+Status: approved; D-H1–D-H6 decided 2026-11-22 (D-H5 refined by O-D2 verb names; build plan: HOSTED-MCP-IMPLEMENTATION-PLAN.md) · Written 2026-11-22 against `v4-on-main` @ `5d042d5f6` · Owner: Rohith
 Related: `AGENT-DISTRIBUTION-NOW.md` (the "Later" phase lists a hosted MCP), `integrations/claude-plugins/SUBMISSION.md` §0,
 `HUMAN-GATES.md` G9.
 

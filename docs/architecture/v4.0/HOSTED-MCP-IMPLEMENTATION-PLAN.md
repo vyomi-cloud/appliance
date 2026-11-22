@@ -1,6 +1,6 @@
 # Hosted Vyomi MCP server: implementation plan (phase 1)
 
-Status: plan, not started · Written 2026-11-22 against `v4-on-main` · Owner: Rohith
+Status: approved 2026-11-22 (Rohith: D-I1–D-I5, and D-H2–D-H6 / O-D2 / O-D4 as recommended); PRs 1–2 next · Written 2026-11-22 against `v4-on-main` · Owner: Rohith
 Design: `HOSTED-MCP-DESIGN.md` (D-H1: build now). Listing: `OPENAI-DIRECTORY-PLAN.md`. This doc is the build plan
 for the server itself: what code changes, in which PRs, and how each piece is tested.
 
@@ -177,7 +177,7 @@ growth (the server is stateless).
 
 ## 8. Decisions for this build
 
-| # | Decision | Recommendation |
+| # | Decision | Recommendation (all approved 2026-11-22) |
 |---|---|---|
 | D-I1 | Scan hits carry the captured service token (≤ 64 chars, validated against known aliases) | Yes: without it the server cannot map a hit to a service. Update `HOSTED-MCP-DESIGN.md` §4 and the privacy text |
 | D-I2 | Resources in hosted mode | None in v1 (tools only): a smaller surface for directory review |
