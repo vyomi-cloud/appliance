@@ -111,7 +111,7 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
   named in a request. `home: <relay URL>` is used only to render settings; the server does not connect to it.
 - **Hosting (D-H2, decided 2026-11-22: B′, same origin as the portal).** The server is a **separate service
   component inside the portal's DigitalOcean app**, routed by path: `vyomi.cloud/mcp` → the Go container, everything
-  else → the portal. It runs from a **pinned public image** (`ghcr.io/vyomi-cloud/mcp-hosted:<version>`, `linux/amd64`), not a source build, so
+  else → the portal. It runs from a **pinned private image** (`ghcr.io/vyomi-cloud/mcp-hosted:<version>`, `linux/amd64`; pulled with an encrypted `read:packages` token), not a source build, so
   portal deploys only re-pull the same image and an MCP build can never block a portal deploy. Why: `vyomi.cloud` is
   the most permanent origin (OpenAI treats a new origin as a new plugin), phase 2 OAuth is same-origin with the portal,
   no new DNS or app, same per-container cost. Trade-off: App Platform deploys all components together, so an MCP

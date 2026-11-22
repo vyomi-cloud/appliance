@@ -1,7 +1,7 @@
 # Hosted MCP: deploy runbook
 
 The hosted Vyomi MCP server runs as the **`mcp` component of the portal's DigitalOcean App Platform app**, routed
-at `vyomi.cloud/mcp` (D-H2 = B', `HOSTED-MCP-DESIGN.md` §5). It runs from a **pinned public image**,
+at `vyomi.cloud/mcp` (D-H2 = B', `HOSTED-MCP-DESIGN.md` §5). It runs from a **pinned private image**,
 `ghcr.io/vyomi-cloud/mcp-hosted:<version>`, `linux/amd64` only, so a portal deploy only re-pulls the same image
 and an MCP build can never block a portal deploy.
 
@@ -16,23 +16,21 @@ one-time steps are owner gates (`HOSTED-MCP-IMPLEMENTATION-PLAN.md` §9, O-G2 an
 
 ## 0. One-time, in this order
 
-### 0a. Publish the image and make the package public
+### 0a. Publish the image (it stays private)
 
-The first release tag builds and pushes `ghcr.io/vyomi-cloud/mcp-hosted:<version>`. A new GHCR package is
-**private** by default, and App Platform pulls it **anonymously** (the component carries no registry
-credentials), so the package must be public before the component is added:
+The first release tag builds the image, smoke-tests it, then pushes `ghcr.io/vyomi-cloud/mcp-hosted:<version>`.
+The GHCR package is **private** (decided 2026-11-23), so App Platform pulls it with credentials:
 
-1. Push the first release tag, `mcp-hosted-v0.1.0` (owner's call, plan §9). The release workflow's
-   build-and-push job succeeds; its deploy job fails or is skipped, which is expected on a first release,
-   because the portal app has no `mcp` component yet.
-2. github.com/orgs/vyomi-cloud → **Packages** → `mcp-hosted` → **Package settings** → **Change visibility** →
-   **Public**. Confirm with the package name.
-3. Check an anonymous pull works, from a machine with no GHCR login:
-   `docker pull ghcr.io/vyomi-cloud/mcp-hosted:0.1.0` (or
-   `curl -sI https://ghcr.io/v2/vyomi-cloud/mcp-hosted/manifests/0.1.0` → `200`, not `401`).
+1. Push the first release tag, `mcp-hosted-v0.1.0` (owner's call, plan §9; the repo's pre-push hook refuses
+   tags, so the owner pushes with `git push --no-verify origin <tag>`). The build, smoke and push succeed; the
+   deploy job fails, which is expected on a first release, because the portal app has no `mcp` component yet.
+2. Make a **pull token**: a GitHub **classic** personal access token with only `read:packages`, ideally on a
+   machine/bot account that is a member of `vyomi-cloud` (so it does not die with a person's account). Note its
+   expiry date in your calendar: an expired token makes every **portal** deploy fail on the image pull.
+3. Check the token can pull, without changing the package:
+   `echo "$TOKEN" | docker login ghcr.io -u <github-user> --password-stdin && docker pull ghcr.io/vyomi-cloud/mcp-hosted:0.1.0`
 
-Only then continue. If the component is added while the package is private, every deploy of the **whole portal
-app** fails on an image pull, and App Platform rolls the app back.
+Leave the package private. If it is ever made public, `add-component.py --public` drops the credentials.
 
 ### 0b. Add the component to the portal app (gate O-G2)
 
@@ -42,18 +40,26 @@ doctl apps spec get "$PORTAL_APP_ID" > /tmp/portal-app.yaml
 cp /tmp/portal-app.yaml /tmp/portal-app.yaml.bak             # keep the pre-change spec
 
 # Check first: prints what would change and which components are left alone.
+read -rs GHCR_TOKEN                                          # paste the pull token; it is not echoed
+export GHCR_PULL_CREDENTIALS="<github-user>:$GHCR_TOKEN"
 python3 deploy/mcp-hosted/add-component.py /tmp/portal-app.yaml
 
 # Then write it and apply.
 python3 deploy/mcp-hosted/add-component.py /tmp/portal-app.yaml --apply
-diff -u /tmp/portal-app.yaml.bak /tmp/portal-app.yaml        # read this diff before applying
-doctl apps update "$PORTAL_APP_ID" --spec /tmp/portal-app.yaml
+diff -u /tmp/portal-app.yaml.bak /tmp/portal-app.yaml | grep -v registry_credentials   # read this; never paste the token
+doctl apps update "$PORTAL_APP_ID" --spec /tmp/portal-app.yaml --wait
+rm -f /tmp/portal-app.yaml; unset GHCR_TOKEN GHCR_PULL_CREDENTIALS     # the file held the token in plain text
 doctl apps get "$PORTAL_APP_ID" --format ActiveDeployment.Phase,InProgressDeployment.Phase
 ```
 
 `add-component.py` adds or replaces **only** the `mcp` service and the `/mcp` ingress rule, refuses to write if
 anything else would change, and puts the rule before the portal's catch-all (`prefix: "/"` matches everything, so
-it has to stay last). Re-running it is a no-op.
+it has to stay last). It never prints the token and writes the file mode 600. App Platform stores the credentials
+encrypted: later `doctl apps spec get` shows `EV[...]`, which `add-component.py` (without the env) and
+`set-image-tag.py` keep as they are, so re-running is a no-op and releases never need the token.
+
+**Rotating the token** (before it expires): make a new one, then repeat 0b with `GHCR_PULL_CREDENTIALS` set to the
+new value; only the `mcp` component's credentials change.
 
 ### 0c. Let `/mcp*` through Cloudflare (gate O-G3)
 
@@ -106,7 +112,7 @@ roll the tag back rather than leaving it red.
 
 | Symptom | Likely cause | What to do |
 |---|---|---|
-| The whole app's deploy fails on an image pull | the GHCR package is private, or the tag does not exist | step 0a (visibility), or check the tag in the Packages tab |
+| The whole app's deploy fails on an image pull | the pull token expired or was revoked, or the tag does not exist | rotate the token (§0b), or check the tag in the Packages tab |
 | `/mcp` returns the portal's 404 page | the ingress rule is missing, or it is after the portal's `prefix: "/"` rule | re-run `add-component.py` (it inserts before the catch-all) |
 | `POST /mcp` answers `301`/`308` | something is redirecting to `/mcp/` in front of the component | the Go server never redirects; look at the Cloudflare rules and the ingress rule's `preserve_path_prefix` |
 | A challenge page instead of JSON | Cloudflare bot protection | gate O-G3 |
