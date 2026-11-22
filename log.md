@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T05:17:11+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T04:17:17+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **2 change(s), 1 actionable.**
 - 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
 - · `announcement` Amazon OpenSearch Service now lets you validate and roll back version upgrades ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-service/upgrades/))
-
-Sources that failed this run (2): maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-10T16:59:46+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
