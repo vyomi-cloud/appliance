@@ -70,7 +70,7 @@ fetch_session() {
       if token_usable "$tok" "$key"; then
         export VYOMI_MESH_SESSION_TOKEN="$tok" VYOMI_MESH_SESSION_KEY="$key"
         [ -n "$end" ] && export VYOMI_MESH_SESSION_END="$end"
-        log "session token fetched (try $i)."; return 0
+        log "session token fetched (${tok%%.*}, try $i)."; return 0
       fi
       log "token try $i: HTTP 200 but no token/key in the answer."
     else
@@ -158,7 +158,7 @@ start_stack() {
       # /healthz is served by ANY appliance image (the 2026-11-10 :latest was a v3 build with no Mesh code and still passed it).
       # Report ready only for a real Mesh: a session token in hand and the Mesh role answering /mesh/status.
       if ! mesh_verified; then
-        log "ERROR: the simulator is up but is not a working Mesh (session token: ${VYOMI_MESH_SESSION_TOKEN:+present}${VYOMI_MESH_SESSION_TOKEN:-MISSING}; image: $(docker compose -f "$COMPOSE" images -q simulator 2>/dev/null | head -1)). NOT reporting ready."
+        log "ERROR: the simulator is up but is not a working Mesh (session token: $([ -n "${VYOMI_MESH_SESSION_TOKEN:-}" ] && echo present || echo MISSING); image: $(docker compose -f "$COMPOSE" images -q simulator 2>/dev/null | head -1)). NOT reporting ready."
         return 1
       fi
       post /api/mesh/session/ready "{\"codespace_id\":\"$CODESPACE\",\"status\":\"ready\",\"session_end\":$(resolve_end)}"
