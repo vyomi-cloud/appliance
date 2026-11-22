@@ -1,0 +1,206 @@
+# Release the hosted Vyomi MCP server (https://vyomi.cloud/mcp).
+#
+# Trigger: a `mcp-hosted-v*` tag ONLY — never a branch push, never a merge (plan §7: deploys are deliberate).
+#   mcp-hosted-v0.1.1  ->  ghcr.io/vyomi-cloud/mcp-hosted:0.1.1  ->  the portal app's `mcp` component
+#
+# Steps: guardrails (hard gate) -> go test -> build and push the image (linux/amd64; App Platform runs amd64)
+# -> set ONLY the mcp component's image tag in the portal's App Platform spec -> `doctl apps update --spec`
+# -> wait for the deployment -> smoke https://vyomi.cloud/mcp.
+#
+# The image is public on GHCR and pushed with the workflow's own GITHUB_TOKEN (permissions: packages: write), so
+# there are no registry secrets. The deploy needs:
+#   DIGITALOCEAN_ACCESS_TOKEN  — a DO token that can read and update the portal app
+#   PORTAL_APP_ID              — the portal's App Platform app id (`doctl apps list`)
+#
+# App Platform deploys ALL components together, so this also redeploys the portal's current main from its own
+# source, and a failed component rolls the whole app back. See deploy/mcp-hosted/RUNBOOK.md, including the
+# one-time steps: make the GHCR package public, add the component, and let /mcp* through Cloudflare.
+name: Hosted MCP release
+
+on:
+  push:
+    tags: ['mcp-hosted-v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build and push (e.g. 0.1.1). Without deploy=true it only builds and pushes the image."
+        required: true
+      deploy:
+        description: "Also point the portal app's mcp component at this version"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # One release at a time: two `doctl apps update` calls racing on one spec would fight over the portal app.
+  group: mcp-hosted-release
+  cancel-in-progress: false
+
+jobs:
+  # ── Hard gate: the same guardrail suite every other release uses (tools/guardrails/run.sh) ──
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
+
+  test:
+    needs: guardrails
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cmd/vyomi/go.mod
+          cache-dependency-path: cmd/vyomi/go.mod
+      - name: go vet + go test
+        run: |
+          go -C cmd/vyomi vet ./...
+          go -C cmd/vyomi test -count=1 ./...
+      - name: gofmt
+        run: test -z "$(gofmt -l cmd/vyomi/)" || { gofmt -l cmd/vyomi/; exit 1; }
+
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write   # push to ghcr.io/vyomi-cloud/mcp-hosted
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the version
+        id: meta
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/mcp-hosted-v* ]]; then
+            VER="${GITHUB_REF#refs/tags/mcp-hosted-v}"
+          else
+            VER="${{ github.event.inputs.version }}"
+          fi
+          [[ -n "${VER}" ]] || { echo "no version"; exit 1; }
+          # A plain version, so it can be pinned in an App Platform spec and read in a package list.
+          [[ "${VER}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || { echo "version must look like 0.1.1 or 0.1.1-rc1, got ${VER}"; exit 1; }
+          IMAGE="ghcr.io/${{ github.repository_owner }}/mcp-hosted"
+          echo "version=${VER}"            >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE}"            >> "$GITHUB_OUTPUT"
+          {
+            echo "## Hosted MCP ${VER}"
+            echo
+            echo "- image: \`${IMAGE}:${VER}\` (linux/amd64)"
+            echo "- deploy: \`${{ github.event_name == 'push' || github.event.inputs.deploy == 'true' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No :latest. The portal app pins an exact version, and a floating tag would let a portal deploy pick up an
+      # MCP change nobody released.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/mcp-hosted/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            REVISION=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+          provenance: false
+          cache-from: type=gha,scope=mcp-hosted
+          cache-to: type=gha,mode=max,scope=mcp-hosted
+
+      # The image has to serve before it is pinned in the portal's spec.
+      - name: Smoke the image we just built
+        run: |
+          set -euo pipefail
+          docker run -d --name mcp-smoke -p 8080:8080 "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/healthz >/dev/null 2>&1 && break
+            sleep 1
+          done
+          bash tools/mcp-hosted-smoke.sh http://localhost:8080/mcp
+        continue-on-error: false
+      - name: Container log
+        if: always()
+        run: docker logs mcp-smoke 2>&1 | tail -40 || true
+
+  deploy:
+    needs: image
+    if: ${{ github.event_name == 'push' || github.event.inputs.deploy == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production   # a protection rule here is how an owner gates a production deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install -q pyyaml
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      # Only the mcp component's image tag changes: set-image-tag.py refuses to write if anything else would,
+      # and the step prints the diff into the job summary so a reviewer can see exactly what was applied.
+      - name: Pin the new version in the portal app spec
+        env:
+          PORTAL_APP_ID: ${{ secrets.PORTAL_APP_ID }}
+        run: |
+          set -euo pipefail
+          [[ -n "${PORTAL_APP_ID}" ]] || { echo "PORTAL_APP_ID is not set (see deploy/mcp-hosted/RUNBOOK.md §0d)"; exit 1; }
+          doctl apps spec get "${PORTAL_APP_ID}" > /tmp/portal-app.yaml
+          cp /tmp/portal-app.yaml /tmp/portal-app.before.yaml
+          python3 deploy/mcp-hosted/set-image-tag.py /tmp/portal-app.yaml "${{ needs.image.outputs.version }}"
+          {
+            echo "### Portal app spec change"
+            echo '```diff'
+            diff -u /tmp/portal-app.before.yaml /tmp/portal-app.yaml || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Apply it
+        env:
+          PORTAL_APP_ID: ${{ secrets.PORTAL_APP_ID }}
+        run: |
+          set -euo pipefail
+          # --wait blocks until the deployment finishes; App Platform rebuilds every component, so give it room.
+          doctl apps update "${PORTAL_APP_ID}" --spec /tmp/portal-app.yaml --wait --format ID,DefaultIngress,ActiveDeployment.Phase
+          doctl apps get "${PORTAL_APP_ID}" --format ActiveDeployment.Phase,InProgressDeployment.Phase
+
+      - name: Smoke production
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            curl -fsS https://vyomi.cloud/mcp/healthz >/dev/null 2>&1 && break
+            sleep 10
+          done
+          curl -s https://vyomi.cloud/mcp/healthz; echo
+          bash tools/mcp-hosted-smoke.sh https://vyomi.cloud/mcp
+          # The portal must still answer on its own routes.
+          code="$(curl -s -o /dev/null -w '%{http_code}' https://vyomi.cloud/)"
+          [[ "$code" == "200" ]] || { echo "the portal answered $code on / after the deploy"; exit 1; }
+
+      - name: If the smoke failed, say how to roll back
+        if: failure()
+        run: |
+          echo "::error::The hosted MCP smoke test failed. Roll back with deploy/mcp-hosted/RUNBOOK.md §3:"
+          echo "  doctl apps spec get \$PORTAL_APP_ID > /tmp/portal-app.yaml"
+          echo "  python3 deploy/mcp-hosted/set-image-tag.py /tmp/portal-app.yaml <last good version>"
+          echo "  doctl apps update \$PORTAL_APP_ID --spec /tmp/portal-app.yaml"
