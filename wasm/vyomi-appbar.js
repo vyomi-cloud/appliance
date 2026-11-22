@@ -129,7 +129,12 @@
     '#vy-cap .ctabs{margin-left:auto;display:flex;gap:0;align-items:center;padding:0;background:none;border:0}#vy-cap .ctab+.ctab{position:relative;margin-left:9px}#vy-cap .ctab+.ctab::before{content:"";position:absolute;left:-5px;top:50%;height:18px;width:1px;margin-top:-9px;background:#d4d4d8}#vy-cap .ctab{border:0;background:none;font-family:inherit;font-size:13px;font-weight:600;line-height:1;color:#52525b;padding:8px 16px;border-radius:8px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;transition:background .15s,color .15s}#vy-cap .ctab:hover{color:#000}#vy-cap .ctab.on{background:#000;color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2)}#vy-cap .ctabs+.cx{margin-left:12px}#vy-cap .cx{margin-left:auto;flex:none;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid #e4e4e7;border-radius:6px;background:#fff;color:#18181b;cursor:pointer}#vy-cap .cx:hover{border-color:#000}' +
     '#vy-cap .cx svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}' +
     '#vy-cap .cbody{flex:1;min-height:0;display:flex;background:#fff}#vy-cap .cbody iframe{flex:1;border:0;width:100%;background:#fff}' +
-    '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}';
+    '@media(max-width:900px){#vy-appbar .vy-notch a span{display:none}#vy-appbar .vy-cloud{display:none}}' +
+    /* phones: the notch is as wide as the screen (it grew past it and the dock scrolled sideways): flat bar, icons spread evenly, no slants */
+    '@media(max-width:640px){#vy-appbar .vy-notch{left:0;right:0;box-sizing:border-box;max-width:100vw !important;padding:0 6px;gap:0;justify-content:space-between}' +
+      '#vy-appbar .vy-notch::before{clip-path:none}#vy-appbar .vy-notch .vy-sep{display:none}' +
+      '#vy-appbar .vy-notch a{padding:0 7px}#vy-appbar .vy-notch button.vy-exp:not(.vy-ic){padding:0 8px;margin-left:0}#vy-appbar .vy-notch button.vy-exp .vy-exp-l{display:none}' +
+      '#vy-appbar #disk-widget-slot .disk-chip{padding:0 6px}}';
   function build() {
     if (document.getElementById('vy-appbar')) return;
     // The drawer is fixed over the bottom 44px: reserve that strip so nothing is hidden or unclickable under it

@@ -59,4 +59,7 @@ check("service pages are edge to edge on every console (own gutters: AWS 24, GCP
 check("GCP: collapsed drawer on a service page hangs from the header (no 44px row cutting the nav's top); collapsed nav rail stacks the service icon above the Expand button (they overlapped in the 48px row)",
   /#vy-md\.c-gcp\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /nav\.MuiBox-root>div:has\(>button\[aria-label="Expand navigation"\]\)\{flex-direction:column !important/.test(readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8")));
 
+check("phones (<=640px): the bottom dock is as wide as the screen (left:0;right:0), flat, icons spread evenly - it no longer grows past the viewport",
+  /@media\(max-width:640px\)\{#vy-appbar \.vy-notch\{left:0;right:0;box-sizing:border-box;max-width:100vw !important;padding:0 6px;gap:0;justify-content:space-between\}/.test(appbar) && /clip-path:none/.test(appbar));
+
 process.exit(failed ? 1 : 0);
