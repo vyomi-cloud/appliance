@@ -59,7 +59,7 @@ func agentsMDSection(clouds []string, envFile string) string {
 	fmt.Fprintf(&b, "- Run tests and local scripts with `%s` loaded. Never point local runs at a real cloud account, and do not use MCP servers or CLIs that act on one unless the developer asks.\n", envFile)
 	b.WriteString("- Never change production config, deployment manifests or secrets to make local runs work; add local overrides only.\n")
 	b.WriteString("- Services Vyomi does not emulate keep using the real cloud (or a stub). Check with `vyomi_scan_repo` before wiring anything new to Vyomi.\n")
-	fmt.Fprintf(&b, "- MCP server: `vyomi-tunnel mcp`. Agent plugins for Claude Code, Codex, Cursor and Copilot: %s\n", agentsMDPluginURL)
+	fmt.Fprintf(&b, "- MCP server: `npx -y vyomi-tunnel mcp` (or `vyomi-tunnel mcp` when installed). Agent plugins for Claude Code, Codex, Cursor and Copilot: %s\n", agentsMDPluginURL)
 	b.WriteString(agentsMDEnd + "\n")
 	return b.String()
 }
