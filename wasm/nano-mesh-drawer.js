@@ -53,6 +53,10 @@
     /* AWS service pages (S3, DynamoDB, ...) put a side navigation beside the content: the section is the nav + content frame, edge to
        edge with the console's 24px gutters, not the 1280px centred column of Home. The class is toggled by place(). */
     "#vy-md.c-aws.nav .md-body{max-width:none;padding-left:24px;padding-right:24px}" +
+    /* AWS service page with the side navigation open and the drawer collapsed: the tab row must not take height, or the nav's vertical
+       divider starts 40px below the header. The tab hangs from the top edge of the page instead (the row is 0px tall). */
+    "#vy-md.c-aws.nav:not(.open) .md-tabrow{height:0}" +
+    "#vy-md.c-aws.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:24px;border-radius:0 0 12px 12px;z-index:5}" +
     "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
     "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
     "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +

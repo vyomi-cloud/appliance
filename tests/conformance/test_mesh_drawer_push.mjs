@@ -21,7 +21,11 @@ const css = [...cssBlock.matchAll(/"((?:[^"\\]|\\.)*)"/g)].map((m) => m[1]).join
 check("default state is EXPANDED (open unless the user stored an explicit collapse)", /open\s*=\s*LS\("g"\)\s*!==\s*"0"/.test(src));
 check("only the collapse is the exception: the toggle still stores '1'/'0'", /LS\("s",\s*open\s*\?\s*"1"\s*:\s*"0"\)/.test(src));
 check("drawer root is in flow (position:relative, flex:none), not fixed", /#vy-md\{position:relative;flex:none/.test(css) && !/position:fixed/.test(css));
-check("no absolute/fixed tab, no pointer-events overlay hacks", !/\.md-tab\{[^}]*position:absolute/.test(css) && !/pointer-events:auto/.test(css));
+// the one deliberate exception: AWS service page, side nav open, drawer COLLAPSED (see the check below)
+const cssNoNavCollapse = css.replace(/#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{[^}]*\}/, "");
+check("no absolute/fixed tab, no pointer-events overlay hacks (except the collapsed-with-nav tab)", !/\.md-tab\{[^}]*position:absolute/.test(cssNoNavCollapse) && !/pointer-events:auto/.test(css));
+check("AWS side nav + collapsed drawer: tab row is 0px tall so the nav's vertical divider starts at the header (no top gap)",
+  /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{position:absolute;top:0;/.test(css));
 check("the tab row takes real height (no hanging pill over the console)", /\.md-tabrow\{[^}]*height:calc\(var\(--md-bh,32px\) \+ 8px\)/.test(css));
 check("no box-shadow value anywhere in the drawer CSS", !/box-shadow:(?!none)/.test(css) && !/--md-shadow:(?!none)/.test(css) && !/--md-bsh:(?!none)/.test(css), (css.match(/box-shadow:[^;}]*/g) || []).join(" | "));
 check("safety net: nothing inside #vy-md may cast a shadow / filter", /#vy-md,#vy-md \*\{box-shadow:none!important/.test(css) && /#vy-md\{filter:none!important\}/.test(css));
