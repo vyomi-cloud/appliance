@@ -19,4 +19,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | claude (mcp release fixes, private image) | v4/mcp-release-smoke-fix | appliance | tools/mcp-hosted-smoke.sh, .github/workflows/mcp-hosted-release.yml, deploy/mcp-hosted/*, HOSTED-MCP-{DESIGN,IMPLEMENTATION-PLAN}.md | 2026-11-23 |
 | claude (mcp deploy pipeline) | v4/mcp-deploy-pipeline | appliance | .github/workflows/mcp-hosted-release.yml, deploy/mcp-hosted/{RUNBOOK.md,test_spec_scripts.py}, HOSTED-MCP-IMPLEMENTATION-PLAN.md §9 | 2026-11-23 |
 | claude (doctl columns) | v4/mcp-doctl-columns | appliance | .github/workflows/mcp-hosted-release.yml, deploy/mcp-hosted/test_spec_scripts.py | 2026-11-23 |
-| claude (smoke root paths) | v4/mcp-smoke-root-paths | appliance | tools/mcp-hosted-smoke.sh | 2026-11-23 |
+| claude (smoke root paths + plugin sync) | v4/mcp-smoke-root-paths | appliance | tools/mcp-hosted-smoke.sh, .github/workflows/{claude-plugins-sync,tunnel-release}.yml, docs/architecture/v4.0/CLAUDE-PLUGINS-SYNC-RUNBOOK.md | 2026-11-23 |

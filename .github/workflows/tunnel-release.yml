@@ -310,6 +310,10 @@ jobs:
   plugin-sync:
     needs: [build, publish]
     if: needs.build.outputs.channel == 'latest'
+    # Shared with claude-plugins-sync.yml: only one workflow pushes to the mirror at a time.
+    concurrency:
+      group: claude-plugins-mirror
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

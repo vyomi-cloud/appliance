@@ -1,0 +1,85 @@
+# Mirror integrations/claude-plugins (the source of truth) into the public marketplace vyomi-cloud/claude-plugins.
+#
+# Trigger: a `claude-plugins-v*` tag ONLY (for example claude-plugins-v4.3.0), pushed by the owner. Plugin-only changes,
+# such as the hosted `vyomi-cloud` plugin, ship this way without a vyomi-tunnel release. tunnel-release.yml keeps
+# syncing after every final tunnel release too; both use scripts/sync_claude_plugins.py and share one concurrency
+# group, so they never push to the mirror at the same time.
+#
+# Guards (all in sync_claude_plugins.py, nothing new here):
+#   - changed plugin content needs a version bump (Claude Code only updates on a new version); a lower version is refused
+#   - the npx pin in the local `vyomi` plugin is set to packaging/tunnel/package.json's version, and the sync refuses
+#     if npm does not serve that version yet, so the mirror never names a tunnel users cannot install
+#   - unchanged content is a no-op (nothing is pushed)
+# Then `claude plugin validate` must pass on the mirrored marketplace before the push.
+#
+# Needs CLAUDE_PLUGINS_TOKEN (already used by tunnel-release.yml): push access to vyomi-cloud/claude-plugins.
+# Runbook: docs/architecture/v4.0/CLAUDE-PLUGINS-SYNC-RUNBOOK.md
+name: Claude plugins sync
+
+on:
+  push:
+    tags: ['claude-plugins-v*']
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: report and validate the mirror, push nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-plugins-mirror
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PLUGINS_TOKEN: ${{ secrets.CLAUDE_PLUGINS_TOKEN }}
+      DRY: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+
+      - name: Manifests are consistent
+        run: python3 scripts/check_agent_plugins.py
+
+      - name: Mirror into the marketplace checkout (version guard)
+        id: sync
+        run: |
+          set -euo pipefail
+          VER="$(python3 -c 'import json; print(json.load(open("packaging/tunnel/package.json"))["version"])')"
+          echo "tunnel=${VER}" >> "$GITHUB_OUTPUT"
+          git clone -q https://github.com/vyomi-cloud/claude-plugins.git marketplace
+          python3 scripts/sync_claude_plugins.py marketplace --apply --tunnel-version "$VER"
+
+      - name: The mirrored marketplace validates
+        if: steps.sync.outputs.changed == 'true'
+        run: npx -y @anthropic-ai/claude-code plugin validate marketplace
+
+      - name: Push to vyomi-cloud/claude-plugins
+        if: steps.sync.outputs.changed == 'true' && env.DRY != 'true'
+        run: |
+          set -euo pipefail
+          [ -n "$PLUGINS_TOKEN" ] || { echo "::error::CLAUDE_PLUGINS_TOKEN missing"; exit 1; }
+          cd marketplace
+          git config user.email "bot@vyomi.cloud"; git config user.name "Vyomi Release Bot"
+          git add -A && git commit -q -m "${{ steps.sync.outputs.version }} (${GITHUB_REF_NAME}; vyomi-tunnel ${{ steps.sync.outputs.tunnel }})"
+          git push "https://x-access-token:${PLUGINS_TOKEN}@github.com/vyomi-cloud/claude-plugins.git" HEAD:main
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Claude plugin marketplace"
+            if [ "${{ steps.sync.outputs.changed }}" = "true" ]; then
+              echo "- ${{ steps.sync.outputs.version }}: $([ "$DRY" = "true" ] && echo "would be pushed (dry run)" || echo "pushed") to vyomi-cloud/claude-plugins"
+            else echo "- unchanged (${{ steps.sync.outputs.version }})"; fi
+            echo "- vyomi-tunnel pin: ${{ steps.sync.outputs.tunnel }}"
+          } >> "$GITHUB_STEP_SUMMARY"
