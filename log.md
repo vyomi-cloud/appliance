@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T13:17:25+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T12:17:23+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3006,3 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **2 change(s), 0 actionable.**
 - · `announcement` Amazon S3 Access Grants now support listing grants across multiple AWS accounts ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-access-grants-list-across-regions/))
 - · `announcement` Amazon S3 Tables now support S3 server access logging ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-s3-tables-server-access-logging/))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-10T21:59:51+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**4 change(s), 0 actionable.**
-- · `announcement` Amazon RDS for MySQL 26.10 is now available in Amazon RDS Database Preview Environment  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-mysql-26-10-preview-environment/))

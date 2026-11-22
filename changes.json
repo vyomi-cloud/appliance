@@ -1,17 +1,6 @@
 {
- "at": "2026-11-22T12:17:23+00:00",
+ "at": "2026-11-22T13:17:25+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "gcp",
-   "service": "Cloud Run functions",
-   "kind": "announcement",
-   "key": "feed:gcp:11aabfdfd38c",
-   "title": "Cloud Run functions: Security (November 21, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_21_2026",
-   "detail": "The following runtime language contains important security updates: PHP 8.2 and later : 8.2.36 , 8.3.37 , 8.4.28 , 8.5.13 Functions with automatic base image updates enabled receive the patched runtime automatically with no action required. To refresh warm instances immediately, redeploy your function. For functions without automatic base image updates, redeploy your functions to pick up the patched runtime, and then remove any temporary session.upload_progress.enabled = 0 mitigation settings from the php.ini file. For more information, see security bulletin GCP-2026-090 .",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
