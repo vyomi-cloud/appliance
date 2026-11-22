@@ -26,6 +26,7 @@ on:
       - cmd/vyomi/**
       - tests/test_mcp_guardrails_server.py
       - tests/test_mesh_session_v2.py
+      - tests/test_mesh_session_keygen.py
       - tests/mesh_testkey.py
       - core/mesh_llm.py
       - scripts/mesh-session-keygen.py
@@ -46,6 +47,13 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      # The Mesh boot files Codespaces actually run live in this public repo (VYOMI_SANDBOX_REPO on the portal), not here.
+      - uses: actions/checkout@v4
+        with:
+          repository: vyomi-cloud/sandbox
+          ref: main
+          path: _sandbox
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: cmd/vyomi/go.mod
@@ -64,6 +72,7 @@ jobs:
         env:
           WS_PKG: ${{ runner.temp }}/np/node_modules/ws
           PY: ${{ runner.temp }}/venv/bin/python
+          VYOMI_SANDBOX_DIR: ${{ github.workspace }}/_sandbox
         run: bash tools/guardrails/run.sh
 
       - name: Notify (gate is red)

@@ -56,6 +56,29 @@ run "5, 7" "simulator: session token limits hold; admin controls closed on a Mes
 run "5" "Ed25519 session tokens: pinned keys only; a leaked-key v1 token is refused once v1 is retired (Mesh + relay agree)" \
   "$PY" -m pytest -q -p no:cacheprovider tests/test_mesh_session_v2.py
 run "5" "relay: v2 verification, forged/unknown-kid/edited tokens refused" "$NODE" wasm/relay/test-mesh-session-v2.mjs
+run "5" "keygen prints the exact portal setting names as paste-only values; refuses kids the portal refuses" \
+  "$PY" -m pytest -q -p no:cacheprovider tests/test_mesh_session_keygen.py
+run "5" "Mesh boot script (appliance copy): keyless v2 accepted first try, v1 needs its key, token never logged" \
+  bash tools/guardrails/check-boot-mesh.sh codespace/.devcontainer/mesh/boot-mesh.sh
+# Codespaces boot from vyomi-cloud/sandbox, not from this repo (2026-11-22: sandbox still required the v1 key, so every Mesh failed
+# under v2). CI checks that copy out and sets VYOMI_SANDBOX_DIR; this script never fetches it itself (no network).
+if [ -n "${VYOMI_SANDBOX_DIR:-}" ] && [ -f "$VYOMI_SANDBOX_DIR/.devcontainer/mesh/boot-mesh.sh" ]; then
+  run "5" "Mesh boot script (vyomi-cloud/sandbox, what Codespaces boot): same token rules" \
+    bash tools/guardrails/check-boot-mesh.sh "$VYOMI_SANDBOX_DIR/.devcontainer/mesh/boot-mesh.sh"
+  drift=""
+  for a in codespace/.devcontainer/mesh/*; do
+    [ -f "$a" ] || continue
+    b="$VYOMI_SANDBOX_DIR/.devcontainer/mesh/$(basename "$a")"
+    if [ ! -f "$b" ]; then drift="$drift $(basename "$a")(missing)"; elif ! cmp -s "$a" "$b"; then drift="$drift $(basename "$a")"; fi
+  done
+  if [ -z "$drift" ]; then
+    rows+=("| 5 | sandbox .devcontainer/mesh matches codespace/.devcontainer/mesh | PASS |"); echo "PASS  [5] sandbox .devcontainer/mesh matches codespace/.devcontainer/mesh"
+  else
+    gap "5" "sandbox .devcontainer/mesh differs from codespace/.devcontainer/mesh (Codespaces run the sandbox copy)" "port to vyomi-cloud/sandbox:${drift}"
+  fi
+else
+  skip "5" "Mesh boot script (vyomi-cloud/sandbox, what Codespaces boot)" "set VYOMI_SANDBOX_DIR to a sandbox checkout (CI does)"
+fi
 # F2 stays a GAP until the code constant retires v1 (and a portal key is pinned). The env cannot change either value.
 if "$PY" -c 'import sys; sys.path.insert(0, "."); from core import mesh_session as m; sys.exit(0 if (not m.V1_ACCEPTED and m.TRUSTED_KEYS) else 1)' 2>/dev/null; then
   rows+=("| 5 | v1 (HMAC) session tokens retired; portal key pinned | PASS |"); echo "PASS  [5] v1 (HMAC) session tokens retired; portal key pinned"
