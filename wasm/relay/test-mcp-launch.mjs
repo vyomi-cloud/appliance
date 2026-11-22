@@ -100,3 +100,77 @@ test("exit code and SIGTERM pass through", { skip: !posix && "signals" }, async 
   const code = await new Promise((r) => c.on("close", (code) => r(code)));
   assert.equal(code, 42, err);
 });
+
+/* Sync: `npx -y vyomi-tunnel mcp` hands over to an installed vyomi-tunnel (1.3.0+), so it runs the same server as `vyomi-tunnel mcp`. */
+
+/** An npx-style layout: <tmp>/_npx/abc/node_modules/{vyomi-tunnel/{bin,package.json}, .bin/vyomi-tunnel}. */
+function npxPkg(version = "1.4.0") {
+  const p = pkg();
+  const nm = path.join(p.dir, "_npx", "abc", "node_modules");
+  const pkgDir = path.join(nm, "vyomi-tunnel");
+  fs.cpSync(path.join(p.dir, "bin"), path.join(pkgDir, "bin"), { recursive: true });
+  fs.writeFileSync(path.join(pkgDir, "package.json"), JSON.stringify({ name: "vyomi-tunnel", version }));
+  const shimDir = path.join(nm, ".bin");
+  if (posix) { fs.mkdirSync(shimDir, { recursive: true }); fs.symlinkSync(path.join(pkgDir, "bin", "vyomi-tunnel.mjs"), path.join(shimDir, "vyomi-tunnel")); fs.chmodSync(path.join(pkgDir, "bin", "vyomi-tunnel.mjs"), 0o755); }
+  return { ...p, entry: fs.realpathSync(path.join(pkgDir, "bin", "vyomi-tunnel.mjs")), shimDir };
+}
+/** A fake installed vyomi-tunnel: answers --version, and for `mcp` prints its args and the sync env, then exits 7. */
+function fakeInstalled(dir, version) {
+  script(path.join(dir, "vyomi-tunnel"), `if [ "$1" = --version ]; then echo "vyomi-tunnel ${version}"; exit 0; fi
+echo "installed args=$* delegate=$VYOMI_MCP_DELEGATE version=$VYOMI_TUNNEL_VERSION latest=$VYOMI_TUNNEL_LATEST"; exit 7`);
+  return dir;
+}
+const mod = () => import(path.join(root, "packaging/tunnel/bin/mcp-launch.mjs"));
+
+test("sync: fromNpx and version helpers", async () => {
+  const m = await mod();
+  assert.ok(m.fromNpx("/home/u/.npm/_npx/9f2c/node_modules/vyomi-tunnel/bin/vyomi-tunnel.mjs"));
+  assert.ok(m.fromNpx("C:\\Users\\u\\AppData\\Local\\npm-cache\\_npx\\9f2c\\node_modules\\vyomi-tunnel\\bin\\vyomi-tunnel.mjs"));
+  assert.ok(!m.fromNpx("/opt/homebrew/lib/node_modules/vyomi-tunnel/bin/vyomi-tunnel.mjs"));
+  assert.deepEqual(m.parseVersion("vyomi-tunnel 1.3.3\n"), [1, 3, 3]);
+  assert.equal(m.cmpVersion([1, 4, 0], [1, 3, 9]), 1);
+  assert.equal(m.parseVersion("nope"), null);
+});
+
+test("sync: an installed tunnel (not npx) never hands over", { skip: !posix && "shell scripts" }, async () => {
+  const m = await mod(); const p = pkg();
+  const inst = fakeInstalled(path.join(p.dir, "inst"), "1.4.0");
+  assert.equal(m.installedTunnel({ entry: p.entry, env: env(p, { PATH: inst }) }), null);
+});
+
+test("sync: an npx copy hands over to the installed tunnel, skipping its own .bin shim", { skip: !posix && "shell scripts" }, async () => {
+  const m = await mod(); const p = npxPkg("1.4.0");
+  const inst = fakeInstalled(path.join(p.dir, "inst"), "1.3.3");
+  const r = m.installedTunnel({ entry: p.entry, env: env(p, { PATH: [p.shimDir, inst].join(path.delimiter) }) });
+  assert.equal(r.cmd, path.join(inst, "vyomi-tunnel")); assert.equal(r.version, "1.3.3"); assert.equal(r.self, "1.4.0");
+});
+
+test("sync: installed tunnel older than 1.3.0 -> npx copy runs, one note to upgrade", { skip: !posix && "shell scripts" }, async () => {
+  const m = await mod(); const p = npxPkg("1.4.0");
+  const inst = fakeInstalled(path.join(p.dir, "inst"), "1.2.9");
+  const r = m.installedTunnel({ entry: p.entry, env: env(p, { PATH: [p.shimDir, inst].join(path.delimiter) }) });
+  assert.equal(r.cmd, undefined); assert.match(r.note, /1\.2\.9.*older than 1\.3\.0.*npm i -g vyomi-tunnel@latest/);
+});
+
+test("sync: VYOMI_MCP_DELEGATE=0 turns the handover off", { skip: !posix && "shell scripts" }, async () => {
+  const m = await mod(); const p = npxPkg("1.4.0");
+  const inst = fakeInstalled(path.join(p.dir, "inst"), "1.4.0");
+  assert.equal(m.installedTunnel({ entry: p.entry, env: env(p, { PATH: inst, VYOMI_MCP_DELEGATE: "0" }) }), null);
+});
+
+test("sync end to end: npx copy runs the installed `vyomi-tunnel mcp`, passes args, exit code and the upgrade hint", { skip: !posix && "shell scripts" }, () => {
+  const p = npxPkg("1.4.0");
+  const inst = fakeInstalled(path.join(p.dir, "inst"), "1.3.3");
+  const r = run(p, ["mcp", "--x"], env(p, { PATH: [p.shimDir, inst, path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter) }));
+  assert.equal(r.status, 7, r.stderr);
+  assert.match(r.stdout, /^installed args=mcp --x delegate=0 version=1\.3\.3 latest=1\.4\.0$/m);
+  assert.match(r.stderr, /installed vyomi-tunnel 1\.3\.3 \(npm has 1\.4\.0\)/);
+});
+
+test("sync end to end: same version -> handover, no upgrade hint", { skip: !posix && "shell scripts" }, () => {
+  const p = npxPkg("1.4.0");
+  const inst = fakeInstalled(path.join(p.dir, "inst"), "1.4.0");
+  const r = run(p, ["mcp"], env(p, { PATH: [p.shimDir, inst, path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter) }));
+  assert.equal(r.status, 7, r.stderr);
+  assert.match(r.stdout, /latest=$/m); assert.equal(r.stderr, "");
+});

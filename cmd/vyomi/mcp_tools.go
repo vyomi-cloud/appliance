@@ -157,6 +157,7 @@ func (s *mcpServer) buildTools() []*mcpTool {
 			}, "path", "clouds"),
 			handler: s.toolWriteEnv,
 		},
+		s.agentsMDTool(),
 	}
 }
 
@@ -239,6 +240,9 @@ func (s *mcpServer) toolStatus(raw json.RawMessage) (any, error) {
 	}
 	if hint := s.homeHint(p); hint != "" {
 		out["hint"] = hint
+	}
+	if t := tunnelSync(); t != nil {
+		out["tunnel"] = t
 	}
 	switch {
 	case h == nil:

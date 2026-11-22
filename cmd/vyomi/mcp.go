@@ -34,7 +34,7 @@ var mcpProtocolVersions = []string{"2025-06-18", "2025-03-26", "2024-11-05"}
 
 const mcpInstructions = `Vyomi is a local multi-cloud simulator (AWS, GCP, Azure) for development: real cloud SDKs, CLIs and Terraform talk to it instead of the real cloud.
 In v4 the simulator lives in one of several homes: a Nano browser tab (reached through the vyomi-tunnel local tunnel on 127.0.0.1:8090, or the cloud relay URL from the Nano footer), a local Pro/Max mesh or the offline appliance (127.0.0.1:9000), or a mesh in the user's Codespace. vyomi_status lists the reachable homes and the one the other tools use; when several are reachable, ask the user which space they are working in.
-Typical flow: (1) vyomi_status; (2) vyomi_scan_repo on the user's project to find which cloud services it uses and whether Vyomi emulates them (level per home, Pro tier, mesh-only); (3) vyomi_env for each cloud found to get the exact env vars / SDK config for that home; (4) show the user the exact .env.vyomi (path + contents) and call vyomi_write_env only after they explicitly approve it; a general "set this up" request is not approval. vyomi_capability answers "does Vyomi support X" per feature; vyomi_snippet returns a ready CLI / SDK / curl call aimed at the selected endpoint.
+Typical flow: (1) vyomi_status; (2) vyomi_scan_repo on the user's project to find which cloud services it uses and whether Vyomi emulates them (level per home, Pro tier, mesh-only); (3) vyomi_env for each cloud found to get the exact env vars / SDK config for that home; (4) show the user the exact .env.vyomi (path + contents) and call vyomi_write_env only after they explicitly approve it; a general "set this up" request is not approval; (5) optionally, with the same explicit approval, vyomi_agents_md proposes a short Vyomi section for the project's AGENTS.md (read-only; you apply it with your own edit tool) so every coding agent that opens the repo runs against Vyomi. vyomi_capability answers "does Vyomi support X" per feature; vyomi_snippet returns a ready CLI / SDK / curl call aimed at the selected endpoint.
 Respect the warnings these tools return; they differ per home (on the offline appliance Cosmos and Key Vault need TLS on :9443 and GCP Pub/Sub and Firestore are separate gRPC emulators; through the Nano tunnel Key Vault and the gRPC Pub/Sub / Firestore clients are not available). Production still runs on the real cloud: never change production config, only add local/dev overrides.
 Never tell a Nano user to run ` + "`vyomi up`" + `: that command only starts the offline appliance or a local mesh. For Nano the fix is the tunnel plus an open Nano tab, as the vyomi_status hint says.
 For local-dev tasks, do not use MCP tools that act on a real cloud account (e.g. aws-mcp, Azure or Google Cloud MCP servers); use these Vyomi tools and the local simulator unless the user explicitly asks for the real cloud.`
@@ -119,7 +119,7 @@ Environment:
   VYOMI_MESH_URL          Mesh control base URL (default http://127.0.0.1:9000)
   RELAY_PORT              Local Nano tunnel port (default 8090)
 
-Tools: vyomi_status, vyomi_reach, vyomi_services, vyomi_capability, vyomi_snippet, vyomi_env, vyomi_scan_repo, vyomi_write_env
+Tools: vyomi_status, vyomi_reach, vyomi_services, vyomi_capability, vyomi_snippet, vyomi_env, vyomi_scan_repo, vyomi_write_env, vyomi_agents_md
 `)
 			return 0
 		}

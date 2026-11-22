@@ -11,7 +11,7 @@ import (
 // database, signed code or image; the only write is one .env.vyomi* file in the user's own project).
 func TestMCPToolSurfaceIsPinned(t *testing.T) {
 	s, _ := testMCPServer(t)
-	readOnly := []string{"vyomi_capability", "vyomi_env", "vyomi_reach", "vyomi_scan_repo", "vyomi_services", "vyomi_snippet", "vyomi_status"}
+	readOnly := []string{"vyomi_agents_md", "vyomi_capability", "vyomi_env", "vyomi_reach", "vyomi_scan_repo", "vyomi_services", "vyomi_snippet", "vyomi_status"}
 	writers := []string{"vyomi_write_env"}
 
 	var gotRO, gotW []string

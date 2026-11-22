@@ -60,6 +60,14 @@ def main(argv):
     new, old = versions(SRC), versions(dst)
     if not new:
         sys.exit("sync_claude_plugins: integrations/claude-plugins has no .claude-plugin/marketplace.json")
+    # Every agent's manifest (Agent Plugins, Claude Code, Codex, Cursor) must agree before anything is published.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("check_agent_plugins", pathlib.Path(__file__).with_name("check_agent_plugins.py"))
+    cap = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cap)
+    drift = cap.check(SRC)
+    if drift:
+        sys.exit("sync_claude_plugins: manifests disagree:\n  " + "\n  ".join(drift))
 
     def emit(changed_flag):
         lines = [f"changed={'true' if changed_flag else 'false'}", "version=" + " ".join(f"{k}@{v}" for k, v in sorted(new.items()))]

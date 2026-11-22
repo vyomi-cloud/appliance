@@ -13,6 +13,7 @@ on:
       - scripts/build_tunnel_mcp.sh
       - scripts/sync_tunnel_bin.py
       - scripts/sync_claude_plugins.py
+      - scripts/check_agent_plugins.py
       - scripts/mcp_knowledge_drift.py
       - core/capabilities/**
       - wasm/docs/**
@@ -89,6 +90,22 @@ jobs:
 
       - name: Claude plugin validates
         run: npx -y @anthropic-ai/claude-code plugin validate integrations/claude-plugins
+
+      - name: Agent plugin manifests agree (Agent Plugins, Claude Code, Codex, Cursor)
+        run: python3 scripts/check_agent_plugins.py
+
+      # Pinned so a schema change upstream shows up as a deliberate bump here, not as a red run on an unrelated push.
+      - name: Agent plugin manifests match the published JSON Schemas (Agent Plugins 1.0.0, Cursor)
+        env:
+          SPEC_SHA: 6395e8906b30e2f333b792bfaa981d790993d56f    # agentplugins/agent-plugins-spec, 2026-11-13
+          CURSOR_SHA: 7a583913eb1b8d1a0ee76753d1a2cf072e7b54f9  # cursor/plugins, 2026-11-21
+        run: |
+          set -e
+          fetch() { git init -q "$2" && git -C "$2" fetch -q --depth 1 "https://github.com/$1.git" "$3" && git -C "$2" checkout -q FETCH_HEAD; }
+          fetch agentplugins/agent-plugins-spec "$RUNNER_TEMP/agent-plugins-spec" "$SPEC_SHA"
+          fetch cursor/plugins "$RUNNER_TEMP/cursor-plugins" "$CURSOR_SHA"
+          python3 -m venv "$RUNNER_TEMP/schema-venv" && "$RUNNER_TEMP/schema-venv/bin/pip" install -q 'jsonschema>=4.18'
+          "$RUNNER_TEMP/schema-venv/bin/python" scripts/check_agent_plugins.py --schemas "$RUNNER_TEMP/agent-plugins-spec" "$RUNNER_TEMP/cursor-plugins"
 
       - name: Plugin changes carry a version bump (vs the public marketplace)
         run: |

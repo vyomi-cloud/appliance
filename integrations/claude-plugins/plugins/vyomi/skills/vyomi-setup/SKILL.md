@@ -1,6 +1,6 @@
 ---
 name: vyomi-setup
-description: Use when the user wants to run, test or develop cloud code locally instead of against real AWS, GCP or Azure - "run this against Vyomi", "test locally without the cloud", "set up a local cloud", "use Vyomi instead of LocalStack", or asks whether Vyomi supports the services a project uses.
+description: Use when the user wants to run, test or develop cloud code locally instead of against real AWS, GCP or Azure - "run this against Vyomi", "test locally without the cloud", "set up a local cloud", "use Vyomi instead of LocalStack", "add Vyomi to AGENTS.md", "tell my team's agents about Vyomi" - or asks whether Vyomi supports the services a project uses.
 ---
 
 # Set a project up to run against Vyomi
@@ -11,9 +11,12 @@ keeps running on the real cloud. The `vyomi` MCP server (bundled with this
 plugin) knows what Vyomi emulates, where the user's simulator lives and how to
 point code at it.
 
-**Requires `vyomi-tunnel` 1.3.0 or newer**: the plugin runs its MCP server as
-`vyomi-tunnel mcp`, which first shipped in 1.3.0 (check with
-`vyomi-tunnel --version`).
+The plugin starts its MCP server with `npx -y vyomi-tunnel mcp`, which needs
+Node.js 18+ (`npx` on the PATH). When the user has `vyomi-tunnel` installed
+(1.3.0 or newer), that command runs the installed one, so it is the same server
+as `vyomi-tunnel mcp`; without an install it runs the npm copy. The tunnel is
+still needed to reach Nano; the `vyomi-nano` skill covers installing it. If
+`vyomi_status` returns `tunnel.upgrade`, pass that suggestion to the user.
 
 In v4 the simulator lives in one of these **homes**:
 
@@ -74,14 +77,51 @@ In v4 the simulator lives in one of these **homes**:
    gives a one-line CLI / SDK / curl call aimed at the home's endpoint for a
    quick check. If a failure looks like a missing API in Vyomi, say so plainly
    rather than working around it.
+6. **Offer the AGENTS.md section.** Once local runs work, offer to add a short
+   "Local cloud: Vyomi" section to the project's `AGENTS.md`, the instructions
+   file Codex, Cursor, Copilot, Gemini CLI and most other coding agents read on
+   their own. Committed, it tells every agent that opens the repo (a teammate's,
+   or a cloud / PR agent with no plugin) to load `.env.vyomi`, leave the
+   simulator for the developer to start, and keep away from the real cloud.
+   - Call `vyomi_agents_md` with the absolute project `path` and the `clouds`
+     from the scan. It is read-only: it writes nothing and returns the
+     proposal.
+   - Show the user the returned `section` and `agents_md.action` (`created`,
+     `appended`, `updated` or `unchanged`; `unchanged` means there is nothing
+     to do). If `claude_md.action` is `prepended`, also show
+     `claude_md.path`, the `@AGENTS.md` import line it adds and its `why`:
+     that file hides `AGENTS.md` from Claude Code unless it imports it.
+     (`not_needed` and `unchanged` need nothing.)
+   - **Stop and wait** for the user's explicit yes to that exact change. Only
+     then apply it with your own file-edit tool, so that the file ends up
+     exactly as `agents_md.proposed_content`:
+     - `created`: create `agents_md.path` with `agents_md.proposed_content`;
+     - `appended`: append the `section` to the end of the existing file;
+     - `updated`: replace `agents_md.replace_block` (from `start_marker` to
+       `end_marker`) with the `section` (without its final newline);
+     - `claude_md` `prepended` (same approval): add the import line at the
+       top of `claude_md.path`, giving `claude_md.proposed_content`.
+     In `AGENTS.md`, never change any text outside the
+     `<!-- vyomi:start -->` / `<!-- vyomi:end -->` markers; in the Claude
+     memory file, add only the import line. If a file changed since the call,
+     call `vyomi_agents_md` again rather than editing from a stale proposal.
+   - Then suggest committing `AGENTS.md` (and the Claude memory file, if it
+     changed) so teammates' agents pick it up.
+   - If `vyomi_agents_md` is not available (`vyomi-tunnel` older than 1.4.0),
+     suggest upgrading the tunnel, or show a section of the same shape,
+     wrapped in those markers, and with the user's OK write it yourself:
+     only between the markers, no endpoints or keys (those stay in
+     `.env.vyomi`).
 
 ## Rules
 
 - Never modify production configuration, deployment manifests or secrets. Add
   local/dev overrides only.
-- Writing `.env.vyomi` (or any file), editing code and installing packages each
-  need the user's explicit OK to that specific change, shown first. A general
-  "set this up" request is not that OK.
+- Writing `.env.vyomi`, `AGENTS.md`, `CLAUDE.md` (or any file), editing code
+  and installing packages each need the user's explicit OK to that specific
+  change, shown first. A general "set this up" request is not that OK.
+- Never put endpoints, access keys or credentials in `AGENTS.md`: it is
+  committed and shared.
 - For local-dev work, do not use MCP tools that act on a real cloud account
   (for example AWS's `aws-mcp`, or Azure / Google Cloud MCP servers) to create,
   read or change resources. Use the Vyomi tools and the local simulator; reach
@@ -94,8 +134,13 @@ In v4 the simulator lives in one of these **homes**:
   never through Bash, not even in the background. The MCP never starts them
   either. Give the user the exact command (use the one `vyomi_status` gives:
   it picks a free local port) and let them run it in their own terminal.
-- If the `vyomi` MCP tools are unavailable: install or upgrade the tunnel
-  (`brew install vyomi-cloud/tap/vyomi-tunnel` or `npm i -g vyomi-tunnel`;
-  version 1.3.0 or newer, the first with `vyomi-tunnel mcp`; check with
-  `vyomi-tunnel --version`), then restart Claude Code. v4.0.0 offline users:
-  `vyomi mcp` from the `vyomi-docker` install keeps working.
+- If the `vyomi` MCP tools are unavailable: the agent could not start
+  `npx -y vyomi-tunnel mcp`. Ask the user to check `node --version` (18 or
+  newer) and that `npx` is on the PATH the coding agent sees (GUI editors
+  started from the Dock may not see an nvm or Homebrew Node), and that npm can
+  reach the registry on the first start. Then restart the coding agent (Claude
+  Code, Codex, Cursor, Copilot, ...). On native Windows, an agent that cannot
+  start `npx` directly needs it registered as `cmd /c npx -y vyomi-tunnel mcp`.
+  Offline machines: install the tunnel (`npm i -g vyomi-tunnel`) and register
+  `vyomi-tunnel mcp` instead. v4.0.0 offline users: `vyomi mcp` from the
+  `vyomi-docker` install keeps working.
