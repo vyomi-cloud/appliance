@@ -48,4 +48,6 @@ for (const c of ["aws", "gcp", "azure"]) {
 const build = readFileSync(join(ROOT, "consoles/build.mjs"), "utf8");
 check("consoles/build.mjs derives the drawer cache-buster from the file (no manual hash to forget)", /nano-mesh-drawer\.js\?v=\$\{_bootHash\("nano-mesh-drawer\.js"\)\}/.test(build));
 
+check("EXPANDED tab sits on the bottom border: flat bottom edge (radius 0 at the bottom), overlapping the 1px line", /#vy-md\.open \.md-tabrow\{align-items:flex-end\}/.test(css) && /#vy-md\.open \.md-tab\{margin-bottom:-1px;border-radius:var\(--md-br\) var\(--md-br\) 0 0/.test(css));
+
 process.exit(failed ? 1 : 0);

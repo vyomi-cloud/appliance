@@ -21,6 +21,9 @@
     "#vy-md.open .md-panel{grid-template-rows:1fr}" +
     /* expanded: a 1px bottom border closes the section so the console below it never looks like it has a margin; collapsed stays borderless */
     "#vy-md.open{border-bottom:1px solid var(--md-line)}" +
+    /* expanded: the tab sits ON that bottom border, same flat-edge style as the collapsed tab (flat bottom, rounded top; collapsed = flat top, rounded bottom) */
+    "#vy-md.open .md-tabrow{align-items:flex-end}" +
+    "#vy-md.open .md-tab{margin-bottom:-1px;border-radius:var(--md-br) var(--md-br) 0 0;z-index:2}" +
     "#vy-md .md-clip{overflow:hidden;min-height:0}" +
     "#vy-md .md-body{box-sizing:border-box;max-width:calc(var(--md-cw,1272px) + 2 * var(--md-px,24px));margin:0 auto;padding:16px var(--md-px,24px) 18px;max-height:min(56vh,calc(100vh - 220px));overflow:auto}" +
     "#vy-md:not(.open) .md-body{visibility:hidden}" +
