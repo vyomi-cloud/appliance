@@ -54,4 +54,7 @@ const appbar = readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8");
 check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits above every panel (z-index 1600 > AWS flyout 1500, GCP drawer 1200, nav 830) and nothing caps the navs above it",
   /#vy-appbar\{position:fixed;[^}]*z-index:1600/.test(appbar) && /awsui_navigation-container_"\],\[class\*="awsui_tools-container_"\]\{height:calc\(100vh - 40px\) !important\}/.test(appbar) && /#blade\{bottom:0 !important/.test(appbar) && !/function fit\(\)/.test(src) && !/--vy-dock/.test(src));
 
+check("AWS service pages: the drawer ends at the content column's right edge (breadcrumb row) via --md-pr, not at the window edge on wide screens",
+  /padding-right:var\(--md-pr,24px\)/.test(css) && /main \[class\*="awsui_breadcrumbs_"\]/.test(src) && /setProperty\("--md-pr"/.test(src));
+
 process.exit(failed ? 1 : 0);
