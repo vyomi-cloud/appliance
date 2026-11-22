@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -66,15 +67,16 @@ func hostedCalls() []hostedCall {
 	calls = append(calls,
 		call{"get_scan_rules", map[string]any{}},
 		call{"get_scan_rules", map[string]any{"languages": []string{"python", "terraform"}}},
-		call{"propose_env_file", map[string]any{"clouds": []string{"aws"}, "filename": ".env.vyomi.local", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc123"}},
+		call{"propose_env_file", map[string]any{"clouds": []string{"aws"}, "filename": ".env.vyomi.local", "home": "nano"}},
 		call{"propose_agents_md_section", map[string]any{"clouds": []string{"aws"}}},
 		call{"propose_agents_md_section", map[string]any{"clouds": []string{"aws", "gcp"}, "agents_md": "# Agents\n", "claude_md": "# notes\n", "env_file": ".env.vyomi.local"}},
 		call{"check_capability", map[string]any{"query": "bucket versioning"}},
 		call{"check_capability", map[string]any{"query": "aks.cluster", "cloud": "azure"}},
 		call{"list_services", map[string]any{}},
-		// A caller-supplied URL must be rendered into the answer and never fetched (plan §4 rule 4).
-		call{"get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc123"}},
-		call{"get_code_snippet", map[string]any{"cloud": "aws", "service": "s3", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc123"}},
+		// The Nano cloud relay: no URL is ever sent, and the answer carries the placeholder (plan §4 rule 4).
+		call{"get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "nano_access": "relay"}},
+		call{"get_code_snippet", map[string]any{"cloud": "aws", "service": "s3", "home": "nano", "nano_access": "relay"}},
+		call{"propose_env_file", map[string]any{"clouds": []string{"aws", "azure"}, "home": "nano", "nano_access": "relay"}},
 	)
 	return calls
 }
@@ -157,19 +159,24 @@ func TestHostedTextHasNoPricingOrUpgradeWording(t *testing.T) {
 	s := testHostedServer(t)
 	banned := []string{"upgrade", "pricing", "price", "paid", "purchase", "subscribe", "subscription",
 		"free plan", "pro tier", "pro plan", "pro licence", "pro license", "pro/max", "trial", "billing"}
-	check := func(what, text string, extra ...string) {
+	// An amount of money, rather than a bare "$": the scan token pattern anchors with one and the Nano relay
+	// placeholder is ${VYOMI_RELAY_URL}.
+	currency := regexp.MustCompile(`[$€£₹]\s*\d|\d\s*(usd|eur|inr|/month|per month|a month)`)
+	check := func(what, text string) {
 		low := strings.ToLower(text)
-		for _, b := range append(banned, extra...) {
+		for _, b := range banned {
 			if strings.Contains(low, b) {
 				t.Errorf("%s mentions %q; the hosted surface carries no tier pricing or upgrade wording", what, b)
 			}
 		}
+		if m := currency.FindString(low); m != "" {
+			t.Errorf("%s mentions a price (%q); the hosted surface carries no pricing", what, m)
+		}
 	}
-	// Prose also carries no currency symbol; a schema may ("$" is a regex anchor in the scan token pattern).
-	check("the hosted instructions", mcpHostedInstructions, "$")
+	check("the hosted instructions", mcpHostedInstructions)
 	for _, tool := range s.tools {
-		check(tool.Name+" title", tool.Title, "$")
-		check(tool.Name+" description", tool.Description, "$")
+		check(tool.Name+" title", tool.Title)
+		check(tool.Name+" description", tool.Description)
 		schema, _ := json.Marshal(tool.Schema)
 		check(tool.Name+" schema", string(schema))
 	}
@@ -185,6 +192,12 @@ func TestHostedSchemasHaveNoPath(t *testing.T) {
 	s := testHostedServer(t)
 	banned := map[string]bool{"path": true, "file_path": true, "filepath": true, "dir": true, "directory": true,
 		"cwd": true, "root": true, "project": true, "project_path": true, "workspace": true, "paths": true, "files": true}
+	// A hosted input never carries a URL, a token, a key or a secret: the server must not be able to receive a
+	// bearer capability (the Nano cloud relay URL is one) or a credential, by accident or by a prompt injection.
+	credentialish := []string{"url", "uri", "token", "key", "secret", "password", "credential", "auth", "session"}
+	// The one exception, reviewed: a scan hit's `token` is the service identifier a rule captured (`s3`,
+	// `storage-blob`), validated against scanTokenPattern, never a credential (D-I1).
+	allowedSensitiveNames := map[string]bool{"summarize_scan_hits.hits[].token": true}
 	allowedFileNames := map[string]bool{
 		"summarize_scan_hits.hits[].file":          true, // where a hit was found: shown to the user, never opened
 		"propose_env_file.filename":                true, // the name of the proposed .env.vyomi
@@ -206,6 +219,11 @@ func TestHostedSchemasHaveNoPath(t *testing.T) {
 				}
 				if (strings.Contains(low, "file") || strings.Contains(low, "path")) && !allowedFileNames[tool+strings.TrimPrefix(at, "root")] {
 					t.Errorf("%s: schema %s looks like a file input and is not in the reviewed list", tool, at)
+				}
+				for _, c := range credentialish {
+					if strings.Contains(low, c) && !allowedSensitiveNames[tool+strings.TrimPrefix(at, "root")] {
+						t.Errorf("%s: schema %s contains %q; a hosted input must never be able to carry a URL, token, key or secret", tool, at, c)
+					}
 				}
 				walk(tool, at, sub)
 			}
@@ -247,16 +265,10 @@ func TestHostedToolsMakeNoOutboundRequests(t *testing.T) {
 	if len(rt.dial) > 0 {
 		t.Fatalf("hosted handlers dialled out %d time(s): %v", len(rt.dial), rt.dial)
 	}
-	// The relay URL is rendered into the settings, exactly as given, and nothing fetched it.
-	res, isErr := callTool(t, s, "get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc123"})
-	if isErr {
-		t.Fatal(res["error"])
-	}
-	if ep, _ := res["endpoint"].(string); ep != "https://relay.vyomi.cloud/abc123" {
-		t.Errorf("relay_url should be echoed as the endpoint, got %q", ep)
-	}
-	if home, _ := res["home"].(string); home != homeNanoCloud {
-		t.Errorf("relay_url should select the %s home, got %q", homeNanoCloud, home)
+	// There is no input that could carry a URL to fetch: the relay is a placeholder (see
+	// TestHostedNanoRelayIsAPlaceholderNeverAnInput).
+	if res, isErr := callTool(t, s, "get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc123"}); !isErr {
+		t.Errorf("relay_url must not be an input any more: %v", res)
 	}
 }
 
@@ -433,5 +445,120 @@ func sameJSON(t *testing.T, what string, want, got any) {
 	g, _ := json.MarshalIndent(got, "", "  ")
 	if string(w) != string(g) {
 		t.Errorf("%s differ:\nlocal:  %s\nhosted: %s", what, w, g)
+	}
+}
+
+// The Nano cloud relay URL is a bearer capability for the user's tab: the hosted server has no input that can
+// carry it, and renders the placeholder instead, with instructions to substitute it locally.
+func TestHostedNanoRelayIsAPlaceholderNeverAnInput(t *testing.T) {
+	s := testHostedServer(t)
+
+	// No schema takes a relay URL under any name.
+	for _, tool := range s.tools {
+		schema, _ := json.Marshal(tool.Schema)
+		for _, banned := range []string{"relay_url", "relayUrl", "endpoint_url", "vyomi_endpoint"} {
+			if strings.Contains(string(schema), banned) {
+				t.Errorf("%s: schema takes %q; the relay URL must never be an input", tool.Name, banned)
+			}
+		}
+	}
+	if res, isErr := callTool(t, s, "get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc"}); !isErr {
+		t.Errorf("an unknown relay_url argument must be refused: %v", res)
+	}
+	// A URL cannot be smuggled through host either.
+	for _, host := range []string{"https://relay.vyomi.cloud/abc", "relay.vyomi.cloud/abc"} {
+		if res, isErr := callTool(t, s, "get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "host": host}); !isErr {
+			t.Errorf("host %q must be refused: %v", host, res)
+		}
+	}
+
+	// nano_access=relay renders the placeholder, selects the nano-cloud home, and says what to do with it.
+	for _, c := range []struct {
+		tool string
+		args map[string]any
+		key  string // where the endpoint appears
+	}{
+		{"get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "nano_access": "relay"}, "endpoint"},
+		{"get_code_snippet", map[string]any{"cloud": "aws", "service": "s3", "home": "nano", "nano_access": "relay"}, "endpoint"},
+		{"propose_env_file", map[string]any{"clouds": []string{"aws"}, "home": "nano", "nano_access": "relay"}, "endpoint"},
+	} {
+		res, isErr := callTool(t, s, c.tool, c.args)
+		if isErr {
+			t.Fatalf("%s: %v", c.tool, res["error"])
+		}
+		if ep, _ := res[c.key].(string); ep != nanoRelayPlaceholder {
+			t.Errorf("%s: %s = %q, want the literal %s", c.tool, c.key, ep, nanoRelayPlaceholder)
+		}
+		if home, _ := res["home"].(string); home != homeNanoCloud {
+			t.Errorf("%s: home = %q, want %s", c.tool, home, homeNanoCloud)
+		}
+		sub, _ := res["substitute"].(string)
+		if !strings.Contains(sub, nanoRelayPlaceholder) || !strings.Contains(strings.ToLower(sub), "footer") {
+			t.Errorf("%s: the answer must tell the agent to substitute the placeholder from the Nano footer, got %q", c.tool, sub)
+		}
+		if strings.Contains(strings.ToLower(sub), "send") && !strings.Contains(strings.ToLower(sub), "do not send") {
+			t.Errorf("%s: the note must not invite sending the URL: %q", c.tool, sub)
+		}
+		// Whatever the answer renders, it never names a concrete session URL (only the generic form, in the note).
+		raw, _ := json.Marshal(res)
+		body := strings.NewReplacer(`\u003c`, "<", `\u003e`, ">").Replace(string(raw))
+		for _, part := range strings.Split(body, "relay.vyomi.cloud/")[1:] {
+			if !strings.HasPrefix(part, "<session>") {
+				t.Errorf("%s: the answer contains a concrete relay URL (relay.vyomi.cloud/%.20s...)", c.tool, part)
+			}
+		}
+	}
+
+	// The generated settings and the snippet carry the placeholder, so the agent substitutes one value.
+	res, isErr := callTool(t, s, "get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano", "nano_access": "relay", "format": "dotenv"})
+	if isErr {
+		t.Fatal(res["error"])
+	}
+	if txt, _ := res["env_text"].(string); !strings.Contains(txt, "AWS_ENDPOINT_URL="+nanoRelayPlaceholder) {
+		t.Errorf("env_text should point AWS_ENDPOINT_URL at the placeholder:\n%s", txt)
+	}
+	res, isErr = callTool(t, s, "get_code_snippet", map[string]any{"cloud": "aws", "service": "s3", "home": "nano", "nano_access": "relay"})
+	if isErr {
+		t.Fatal(res["error"])
+	}
+	if sn, _ := res["snippet"].(string); !strings.Contains(sn, nanoRelayPlaceholder) {
+		t.Errorf("the snippet should aim at the placeholder:\n%s", sn)
+	}
+	res, isErr = callTool(t, s, "propose_env_file", map[string]any{"clouds": []string{"aws", "gcp"}, "home": "nano", "nano_access": "relay"})
+	if isErr {
+		t.Fatal(res["error"])
+	}
+	if content, _ := res["content"].(string); !strings.Contains(content, nanoRelayPlaceholder) || strings.Contains(content, "127.0.0.1:8090") {
+		t.Errorf("the proposed file should use the placeholder and no local tunnel endpoint:\n%s", content)
+	}
+
+	// nano_access only applies to nano, and only takes the two documented values.
+	for _, bad := range []map[string]any{
+		{"cloud": "aws", "home": "mesh", "nano_access": "relay"},
+		{"cloud": "aws", "home": "offline", "nano_access": "relay"},
+		{"cloud": "aws", "home": "nano", "nano_access": "https://relay.vyomi.cloud/abc"},
+		{"cloud": "aws", "home": "nano", "nano_access": "relay", "host": "192.168.64.5"},
+	} {
+		if res, isErr := callTool(t, s, "get_sdk_settings", bad); !isErr {
+			t.Errorf("should refuse %v: %v", bad, res)
+		}
+	}
+	// The default is the local tunnel, which is the common case.
+	res, isErr = callTool(t, s, "get_sdk_settings", map[string]any{"cloud": "aws", "home": "nano"})
+	if isErr {
+		t.Fatal(res["error"])
+	}
+	if ep, _ := res["endpoint"].(string); ep != "http://127.0.0.1:8090" {
+		t.Errorf("home=nano without nano_access should be the local tunnel, got %q", ep)
+	}
+	if res["substitute"] != nil {
+		t.Errorf("the tunnel answer needs no substitution note: %v", res["substitute"])
+	}
+	// The instructions tell the agent the rule.
+	low := strings.ToLower(mcpHostedInstructions)
+	for _, want := range []string{"nano_access=relay", strings.ToLower(nanoRelayPlaceholder), "never"} {
+		if !strings.Contains(low, want) {
+			t.Errorf("the hosted instructions should mention %q", want)
+		}
 	}
 }

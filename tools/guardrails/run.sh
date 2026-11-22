@@ -66,6 +66,8 @@ run "A, 7" "hosted MCP rate limits per client with hashed keys; the request log 
   go_tests TestHostedHTTPRateLimit TestRateLimiterKeysAreHashed TestHostedHTTPLogHasNoArgumentsOrAddresses
 run "A" "hosted MCP scan and proposals: no source text accepted, hits and texts bounded, answers equal the local tools" \
   go_tests TestHostedScanHitsRejectSourceText TestHostedScanParityWithLocalScan TestHostedProposeEnvFileMatchesWriteEnv TestHostedProposeAgentsMDMatchesLocal
+run "A" "hosted MCP takes no URL, token, key or secret: the Nano relay URL stays on the user's machine (placeholder only)" \
+  go_tests TestHostedNanoRelayIsAPlaceholderNeverAnInput
 
 # Threat B: tampering with the core. Enforced on the Mesh host and in the tunnel, for every caller.
 run "1, 8" "vyomi-gate: core containers, injection strings and unknown verbs never reach docker" "$NODE" wasm/relay/test-mesh-gate.mjs

@@ -61,6 +61,11 @@ done
 has '"readOnlyHint":true' || bad "tools carry readOnlyHint" "$BODY"
 case "$BODY" in (*'"destructiveHint":true'*) bad "no hosted tool may be destructive" "$BODY";; esac
 case "$BODY" in (*'"path"'*) bad "no hosted tool may take a path" "$BODY";; esac
+# No hosted input may carry a URL, a token, a key or a secret (the Nano relay URL is a bearer capability).
+# hits[].token is the captured service identifier and is the one reviewed exception.
+for word in url uri secret password credential; do
+  case "$BODY" in (*"\"$word\""*) bad "no hosted tool may take a $word input" "$BODY";; esac
+done
 
 call() { # call <tool> <arguments-json>
   post "tools/call $1" 200 "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}" || return
@@ -71,7 +76,9 @@ for tool in $EXPECT_TOOLS; do
     list_services)              call "$tool" '{"cloud":"aws","home":"nano"}';;
     check_capability)           call "$tool" '{"query":"bucket versioning"}';;
     get_code_snippet)           call "$tool" '{"cloud":"aws","service":"s3","lang":"cli","home":"nano"}';;
-    get_sdk_settings)           call "$tool" '{"cloud":"aws","home":"nano","format":"dotenv"}';;
+    get_sdk_settings)           call "$tool" '{"cloud":"aws","home":"nano","format":"dotenv"}'
+                                call "$tool" '{"cloud":"aws","home":"nano","nano_access":"relay"}'
+                                has '${VYOMI_RELAY_URL}' || bad "nano_access=relay must render the \${VYOMI_RELAY_URL} placeholder" "$BODY";;
     get_scan_rules)             call "$tool" '{"languages":["python"]}';;
     summarize_scan_hits)        call "$tool" '{"home":"nano","hits":[{"rule":"aws-python-1","file":"app.py","line":3,"token":"s3"}]}';;
     propose_env_file)           call "$tool" '{"clouds":["aws"],"home":"nano"}';;

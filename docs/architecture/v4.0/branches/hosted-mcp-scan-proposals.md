@@ -31,6 +31,7 @@ per-service report. No source line and no file content is ever sent — only a r
 | `summarize_scan_hits` validates the token against `^[A-Za-z0-9_.\-/]{1,64}$` and refuses anything else | Accepting any string and sanitising it | D-I1 is that only an identifier is sent. Refusing makes it visible when a client tries to send a matched line |
 | The `already-wired` rule takes `{rule, file, line}` and **no** token | Reusing the token field for the matched text | The local scan clips the line into `already_wired[].text`; the hosted report must not carry it, so the field is simply never filled (D-I1) |
 | `propose_env_file` keeps the caller's cloud order, de-duplicated | Canonical `aws, gcp, azure` order | `vyomi_write_env` writes them in the order given; the plan requires the proposal to equal the file, so the order has to match too. `propose_agents_md_section` canonicalises, because the local tool does |
+| The Nano cloud relay is a `nano_access: tunnel \| relay` switch, and the relay endpoint renders as the literal `${VYOMI_RELAY_URL}` | An earlier `relay_url` input that the server echoed but never fetched | That URL is a bearer capability for the user's tab: whoever holds it can drive their simulator. A hosted server must not be able to receive one at all — not by a prompt injection, not in a log, not in a crash dump. A placeholder the agent substitutes locally gives the same answer and the server never learns the URL |
 | `claude_md_file` is an enum of the three Claude memory files | Taking a path; always assuming `CLAUDE.md` | The import line is relative to the importing file (`.claude/CLAUDE.md` needs `@../AGENTS.md`), so the server has to know which one it is; a fixed enum is not a path and nothing is opened |
 | Parity is asserted on the report with the mode-specific fields stripped | Comparing raw JSON | `root` / `files_scanned` (local) and `hits_received` (hosted), the examples' source text, and the `next_steps` tool names cannot match by design; everything else must, per service |
 
@@ -73,6 +74,11 @@ Run on macOS (darwin/arm64), 2026-11-22, Go 1.27.1.
 | Guardrail suite | `WS_PKG=... PY=... bash tools/guardrails/run.sh` | all seven hosted rows PASS; every pre-existing row PASS except the Mesh boot-script row (macOS BSD sed, see PR 1's branch doc) |
 | Hosted server | `/tmp/vyomi mcp --hosted --listen :8080` | 8 read-only tools, knowledge v4.0.10 |
 | Smoke | `tools/mcp-hosted-smoke.sh http://localhost:8080/mcp` | 26/26 PASS |
+
+`TestHostedNanoRelayIsAPlaceholderNeverAnInput` covers the relay rule: no schema takes a URL (or a token, key or
+secret) under any name, a URL smuggled through `host` is refused, `nano_access=relay` renders the placeholder in
+the endpoint, the env text, the snippet and the proposed file, the answer carries the substitution note, and the
+answer never contains a concrete relay URL. The default stays the local tunnel, which is the common case.
 
 Parity evidence: `TestHostedScanParityWithLocalScan` runs `get_scan_rules` + a Go-regexp grep of
 `cmd/vyomi/testdata/scan/` + `summarize_scan_hits` against the local `scanRepo` for `home=nano|mesh|offline` and

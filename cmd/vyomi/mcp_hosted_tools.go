@@ -13,7 +13,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 	"time"
 )
@@ -30,9 +29,17 @@ var hostedHostProp = map[string]any{
 	"description": "Host, or host:port, to write into the settings when the simulator is not on 127.0.0.1 as seen from where the code runs (e.g. a VM IP, or a container's host alias). Default 127.0.0.1 with the home's standard port.",
 }
 
-var hostedRelayProp = map[string]any{
-	"type":        "string",
-	"description": "With home=nano, the Nano cloud relay URL from the Nano footer (https://relay.vyomi.cloud/<session>) to write into the settings instead of the local tunnel. Rendered into the output only: this server never connects to it.",
+// nanoRelayPlaceholder is what the hosted server renders where the Nano cloud relay URL belongs. That URL
+// (https://relay.vyomi.cloud/<session>) is a bearer capability for the user's own tab: anyone holding it can
+// drive their simulator, so the hosted server never asks for it, never receives it and never stores it. The
+// agent substitutes the placeholder locally from the Nano footer.
+const nanoRelayPlaceholder = "${VYOMI_RELAY_URL}"
+
+// hostedNanoAccessProp says HOW the code reaches a Nano tab, without naming anything: through the local
+// vyomi-tunnel (the default) or through the cloud relay, whose URL stays on the user's machine.
+var hostedNanoAccessProp = map[string]any{
+	"type": "string", "enum": []string{"tunnel", "relay"},
+	"description": "With home=nano, how the code reaches the tab: tunnel (the vyomi-tunnel on 127.0.0.1:8090, the default) or relay (the Nano cloud relay). For relay the endpoint comes back as the literal placeholder " + nanoRelayPlaceholder + ", which you substitute with the URL from the Nano footer on the user's machine; never send that URL here.",
 }
 
 func (s *mcpServer) buildHostedTools() []*mcpTool {
@@ -72,17 +79,17 @@ func (s *mcpServer) buildHostedTools() []*mcpTool {
 			Title: "Code example for a Vyomi operation",
 			Description: "Returns one ready-to-run CLI, Python, JavaScript or curl call for a single service operation, already pointed at the chosen home's endpoint. " +
 				"Use it when the user asks how to call a service against Vyomi, or when you need a correct first call to verify their setup; the snippets come from the API documentation of the operations Vyomi really answers. " +
-				"Inputs: cloud, service (s3, dynamodb, pubsub, storage, cosmos...), optionally op (the operation name; a representative one is picked when absent), lang (cli, python, javascript or curl; default cli), home, host and relay_url. " +
+				"Inputs: cloud, service (s3, dynamodb, pubsub, storage, cosmos...), optionally op (the operation name; a representative one is picked when absent), lang (cli, python, javascript or curl; default cli), home, nano_access and host. " +
 				"Returns the snippet, the endpoint it targets, the operation's method and path, and the other languages available for it. " +
 				"Generated text only: this server runs nothing, reaches no machine, and has no side effects.",
 			Schema: obj(map[string]any{
-				"cloud":     cloudEnum,
-				"service":   map[string]any{"type": "string", "description": "Service id (e.g. s3, dynamodb, pubsub, storage, cosmos); list_services lists them."},
-				"op":        map[string]any{"type": "string", "description": "Operation name (PutObject, put_object, put-object, storage.buckets.insert). Default: a representative operation for the service."},
-				"lang":      langProp,
-				"home":      hostedHomeProp,
-				"host":      hostedHostProp,
-				"relay_url": hostedRelayProp,
+				"cloud":       cloudEnum,
+				"service":     map[string]any{"type": "string", "description": "Service id (e.g. s3, dynamodb, pubsub, storage, cosmos); list_services lists them."},
+				"op":          map[string]any{"type": "string", "description": "Operation name (PutObject, put_object, put-object, storage.buckets.insert). Default: a representative operation for the service."},
+				"lang":        langProp,
+				"home":        hostedHomeProp,
+				"host":        hostedHostProp,
+				"nano_access": hostedNanoAccessProp,
 			}, "cloud", "service"),
 			ReadOnly: true,
 			handler:  s.hostedGetCodeSnippet,
@@ -92,17 +99,17 @@ func (s *mcpServer) buildHostedTools() []*mcpTool {
 			Title: "SDK settings for Vyomi",
 			Description: "Returns the exact environment variables, SDK client settings and Terraform provider block that point one cloud's code at a Vyomi simulator, plus the gotchas for that home (data planes that need TLS, services that run as separate emulators, transports that are not available). " +
 				"Use it when setting a project up to run against Vyomi, or when an SDK call fails and you need the settings the simulator expects; show the user the values and let them apply them. " +
-				"Inputs: cloud, optionally lang (python, nodejs, java, go, cli or terraform), format for the env text (dotenv, shell or powershell), home, host, account and relay_url. " +
+				"Inputs: cloud, optionally lang (python, nodejs, java, go, cli or terraform), format for the env text (dotenv, shell or powershell), home, nano_access, host and account. " +
 				"Returns the variables with notes, the formatted env text, per-SDK client settings, the Terraform block and any warnings. The credentials are the simulator's fixed dummy values; it never asks for or returns a real secret. " +
 				"Generated text only: it writes no file, reaches no machine, and has no side effects.",
 			Schema: obj(map[string]any{
-				"cloud":     cloudEnum,
-				"lang":      map[string]any{"type": "string", "enum": []string{"python", "nodejs", "java", "go", "cli", "terraform"}, "description": "Only return the settings for this SDK or tool."},
-				"format":    map[string]any{"type": "string", "enum": []string{"dotenv", "shell", "powershell"}, "description": "Format of env_text (default dotenv)."},
-				"home":      hostedHomeProp,
-				"host":      hostedHostProp,
-				"account":   accountArg,
-				"relay_url": hostedRelayProp,
+				"cloud":       cloudEnum,
+				"lang":        map[string]any{"type": "string", "enum": []string{"python", "nodejs", "java", "go", "cli", "terraform"}, "description": "Only return the settings for this SDK or tool."},
+				"format":      map[string]any{"type": "string", "enum": []string{"dotenv", "shell", "powershell"}, "description": "Format of env_text (default dotenv)."},
+				"home":        hostedHomeProp,
+				"host":        hostedHostProp,
+				"account":     accountArg,
+				"nano_access": hostedNanoAccessProp,
 			}, "cloud"),
 			ReadOnly: true,
 			handler:  s.hostedGetSDKSettings,
@@ -151,16 +158,16 @@ func (s *mcpServer) buildHostedTools() []*mcpTool {
 			Title: "Propose a .env.vyomi file",
 			Description: "Returns the exact .env.vyomi file that points a project's cloud SDKs at a Vyomi simulator: the file name and the full contents, with a header, the per-cloud warnings and the dummy credentials the simulator expects. " +
 				"Use it once you know which clouds a project uses, to show the user the file before anything is written; you create the file yourself with your own edit tool, and only after they say yes. A general request such as \"set this project up\" is not approval. " +
-				"Inputs: clouds (one or more of aws, gcp, azure), home, filename (a plain name starting with .env.vyomi), host and account. " +
+				"Inputs: clouds (one or more of aws, gcp, azure), home, nano_access, filename (a plain name starting with .env.vyomi), host and account. " +
 				"Returns {filename, content} plus the home and endpoint it was rendered for. " +
 				"It writes nothing, reads nothing and has no side effects.",
 			Schema: obj(map[string]any{
-				"clouds":    map[string]any{"type": "array", "items": cloudEnum, "minItems": 1, "description": "Clouds to include (e.g. the ones summarize_scan_hits found)."},
-				"filename":  map[string]any{"type": "string", "description": "File name for the proposal, starting with .env.vyomi (default .env.vyomi). A plain name, not a path."},
-				"home":      hostedHomeProp,
-				"host":      hostedHostProp,
-				"account":   accountArg,
-				"relay_url": hostedRelayProp,
+				"clouds":      map[string]any{"type": "array", "items": cloudEnum, "minItems": 1, "description": "Clouds to include (e.g. the ones summarize_scan_hits found)."},
+				"filename":    map[string]any{"type": "string", "description": "File name for the proposal, starting with .env.vyomi (default .env.vyomi). A plain name, not a path."},
+				"home":        hostedHomeProp,
+				"host":        hostedHostProp,
+				"account":     accountArg,
+				"nano_access": hostedNanoAccessProp,
 			}, "clouds"),
 			ReadOnly: true,
 			handler:  s.hostedProposeEnvFile,
@@ -190,38 +197,40 @@ func (s *mcpServer) buildHostedTools() []*mcpTool {
 // hostedTargetArgs are the endpoint arguments a hosted tool may carry. No `path`: the hosted server never sees a
 // file system (plan §4 rule 2).
 type hostedTargetArgs struct {
-	Home     string `json:"home"`
-	Host     string `json:"host"`
-	Account  string `json:"account"`
-	RelayURL string `json:"relay_url"`
+	Home       string `json:"home"`
+	Host       string `json:"host"`
+	Account    string `json:"account"`
+	NanoAccess string `json:"nano_access"`
 }
 
-// hostedTarget names the home (never probes it) and applies the caller's host / account / relay_url to the
-// endpoint that is rendered into the answer. relay_url is parsed only to render it: nothing here dials.
+// hostedTarget names the home (never probes it) and applies the caller's host / account / nano_access to the
+// endpoint that is rendered into the answer. Nothing here dials, and no caller-supplied URL exists to dial.
 func (s *mcpServer) hostedTarget(a hostedTargetArgs) (homeSel, mcpTarget, error) {
 	sel, err := s.namedHome(a.Home)
 	if err != nil {
 		return homeSel{}, mcpTarget{}, err
 	}
 	t := sel.target
-	if ru := strings.TrimSpace(a.RelayURL); ru != "" {
+	switch strings.ToLower(strings.TrimSpace(a.NanoAccess)) {
+	case "", "tunnel":
+	case "relay":
 		if wiringHome(sel.ID) != "nano" {
-			return homeSel{}, mcpTarget{}, fmt.Errorf("relay_url applies to home=nano only (the cloud relay serves a Nano tab); got home=%s", a.Home)
+			return homeSel{}, mcpTarget{}, fmt.Errorf("nano_access applies to home=nano only (the cloud relay serves a Nano tab); got home=%s", a.Home)
 		}
-		u, err := url.Parse(ru)
-		if err != nil || u.Scheme != "https" || u.Hostname() == "" {
-			return homeSel{}, mcpTarget{}, fmt.Errorf("relay_url must be an https URL such as https://relay.vyomi.cloud/<session> (got %q)", a.RelayURL)
+		if strings.TrimSpace(a.Host) != "" {
+			return homeSel{}, mcpTarget{}, fmt.Errorf("host does not apply with nano_access=relay: the relay is one URL, which you substitute for %s yourself", nanoRelayPlaceholder)
 		}
-		if u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-			return homeSel{}, mcpTarget{}, fmt.Errorf("relay_url must be a plain https URL with no query, fragment or credentials")
-		}
-		t = endpointTarget(u, t)
+		// The relay URL never reaches this server: the endpoint is the placeholder, rendered verbatim.
+		t = mcpTarget{Literal: nanoRelayPlaceholder, Account: t.Account}
 		sel.ID = homeNanoCloud
-		sel.Why = "home=nano with the cloud relay URL the caller gave; it is written into the settings and never contacted"
+		sel.Why = "home=nano through the cloud relay; the endpoint is the placeholder " + nanoRelayPlaceholder +
+			", which you replace with the URL from the Nano footer on the user's machine"
+	default:
+		return homeSel{}, mcpTarget{}, fmt.Errorf("nano_access must be tunnel or relay (got %q)", a.NanoAccess)
 	}
 	if h := strings.TrimSpace(a.Host); h != "" {
 		if strings.Contains(h, "/") || strings.Contains(h, " ") {
-			return homeSel{}, mcpTarget{}, fmt.Errorf("host must be a host or host:port, not a URL (got %q); for the Nano cloud relay use relay_url", a.Host)
+			return homeSel{}, mcpTarget{}, fmt.Errorf("host must be a host or host:port, not a URL (got %q); for the Nano cloud relay pass nano_access=relay and substitute %s yourself", a.Host, nanoRelayPlaceholder)
 		}
 		if hh, pp, ok := strings.Cut(h, ":"); ok {
 			h = hh
@@ -237,6 +246,17 @@ func (s *mcpServer) hostedTarget(a hostedTargetArgs) (homeSel, mcpTarget, error)
 		t.Account = acc
 	}
 	return sel, t, nil
+}
+
+// withRelayNote tells the agent what to do with the placeholder, on every answer that carries it.
+func withRelayNote(res any, t mcpTarget) any {
+	if t.Literal == "" {
+		return res
+	}
+	if m, ok := res.(map[string]any); ok {
+		m["substitute"] = nanoRelayPlaceholder + " is a placeholder, not an endpoint. Replace it with the Nano cloud relay URL from the footer of the user's Nano tab (https://relay.vyomi.cloud/<session>) on their machine, or have them export VYOMI_RELAY_URL so their shell or dotenv loader substitutes it. Do not send that URL to this server: it is a bearer capability for their tab, and nothing here needs it."
+	}
+	return res
 }
 
 func parsePort(s string) (int, error) {
@@ -299,7 +319,11 @@ func (s *mcpServer) hostedGetCodeSnippet(raw json.RawMessage) (any, error) {
 		return nil, err
 	}
 	sel.target = t
-	return s.snippetResult(a.Cloud, a.Service, a.Op, a.Lang, sel)
+	res, err := s.snippetResult(a.Cloud, a.Service, a.Op, a.Lang, sel)
+	if err != nil {
+		return nil, err
+	}
+	return withRelayNote(res, t), nil
 }
 
 func (s *mcpServer) hostedGetSDKSettings(raw json.RawMessage) (any, error) {
@@ -319,7 +343,11 @@ func (s *mcpServer) hostedGetSDKSettings(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.envResult(a.Cloud, a.Lang, a.Format, sel, t)
+	res, err := s.envResult(a.Cloud, a.Lang, a.Format, sel, t)
+	if err != nil {
+		return nil, err
+	}
+	return withRelayNote(res, t), nil
 }
 
 func (s *mcpServer) hostedGetScanRules(raw json.RawMessage) (any, error) {
@@ -419,7 +447,7 @@ func (s *mcpServer) hostedProposeEnvFile(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{
+	return withRelayNote(map[string]any{
 		"filename": name,
 		"content":  content,
 		"home":     sel.ID,
@@ -427,7 +455,7 @@ func (s *mcpServer) hostedProposeEnvFile(raw json.RawMessage) (any, error) {
 		"clouds":   clouds,
 		"next": "Nothing was written. Show the user the file name and the contents, and create the file yourself with your own edit tool only after they explicitly approve it; a general request such as \"set this project up\" is not approval. " +
 			"Load it for local runs only (e.g. `set -a; . ./" + name + "; set +a`, docker compose --env-file, or the framework's dotenv loader), and leave production config untouched.",
-	}, nil
+	}, t), nil
 }
 
 func (s *mcpServer) hostedProposeAgentsMD(raw json.RawMessage) (any, error) {
