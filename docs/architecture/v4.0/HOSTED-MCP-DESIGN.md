@@ -68,20 +68,22 @@ the agent applies after a yes.
 | `vyomi_capability` | Same | none | the search text |
 | `vyomi_snippet` | Same, for a home the agent names | none | cloud, service, operation, home |
 | `vyomi_env` | Same, for a home the agent names (`nano`, `mesh`, `appliance`, or a relay URL the user gives) | none | cloud, language, home |
-| `vyomi_scan_repo` | Split in two (below) | Runs the returned rules with Grep over the project | rule ids with `file:line`; **no file contents, no matched text** |
+| `vyomi_scan_repo` | Split in two (below) | Runs the returned rules with Grep over the project | rule ids with `file:line` and the **captured service token** (regex group 1, e.g. `s3`); **no file contents and no matched text**. The token is what maps a hit to a service (D-I1); it is validated against `^[A-Za-z0-9_.\-/]{1,64}$`, so only an identifier is accepted. The "already wired" rule sends `file:line` alone — the local scan's clipped line text is never sent |
 | `vyomi_write_env` | Becomes **`vyomi_env_file`**: returns the proposed `.env.vyomi` text, writes nothing | Writes the file with its edit tool after a yes | cloud list, home |
 | `vyomi_agents_md` | Same proposal, from text the agent passes in | Reads `AGENTS.md` / `CLAUDE.md`, passes their text; applies after a yes | the current text of those files (they are meant to be committed and shared) |
 | `vyomi_status` | Account view (signed-in users, §6 phase 2): tier, Codespace mesh state from `mesh_session` | Checks the local homes itself: `curl -s 127.0.0.1:8090/health`, `curl -s 127.0.0.1:9000/healthz`, or `vyomi-tunnel list --json` | nothing about the local machine |
 | `vyomi_reach` | Account view: the Codespace mesh and its forward commands | Runs the forward commands the user approves | nothing about the local machine |
 
 **Scan, in two calls, without sending code:**
-1. `vyomi_scan_rules(languages)` returns the scan rules: id, language, file globs and a regular expression, from the
-   same table `mcp_scan.go` uses.
-2. The agent runs them locally (Grep, which every agent has) and calls `vyomi_scan_report(hits: [{rule, file, line}])`.
-   The report maps rule ids to services, adds coverage and warnings for the home, and returns the same shape as today's
-   `vyomi_scan_repo`.
+1. `get_scan_rules(languages)` returns the scan rules: id, cloud, language, file globs, a regular expression and which
+   capture group holds the service token, from the same table `mcp_scan.go` uses.
+2. The agent runs them locally (Grep, which every agent has) and calls `summarize_scan_hits(home, hits: [{rule, file,
+   line, token}])`, at most 2,000 hits per call. The report maps each token to a service through the same alias table
+   the local scan uses, reports unknown tokens as unrecognized, adds coverage and warnings for the home, and returns
+   the same shape as today's `vyomi_scan_repo`.
 
-File paths and line numbers do reach the server, so the privacy policy and the plugin README must say so (§8).
+File paths, line numbers and the captured service tokens do reach the server, so the privacy policy and the plugin
+README must say so (§8).
 
 **Writers:** the hosted server has **no** writer. Its surface is 9 or 10 read-only tools (D-H5), which keeps it simpler
 than the local guardrail (8 + 1).
@@ -157,7 +159,7 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
   - `.mcp.json`: `{"mcpServers": {"vyomi": {"type": "http", "url": "https://vyomi.cloud/mcp"}}}`. Phase 2 adds
     `oauth` fields only if Claude's discovery needs them.
   - The same three skills. To avoid two copies drifting, each skill branches on the tools it finds: with
-    `vyomi_status` (local), the current steps; with `vyomi_scan_rules` (hosted), the local Grep/curl/Edit steps. One
+    `vyomi_status` (local), the current steps; with `get_scan_rules` (hosted), the local Grep/curl/Edit steps. One
     source; `check_agent_plugins.py` checks both folders.
   - A README in the folder disclosing the host, what each tool receives (§8), and that nothing is stored.
 - Submit **only `plugins/vyomi-cloud`** to the directory: one submission per folder. The local folder stays
@@ -169,7 +171,7 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
 | Input | From | Kept |
 |---|---|---|
 | Tool arguments (cloud, language, home, search text) | every call | Not stored. Request logs keep method, tool name, status and latency only, for 30 days (proposed, D-H6) |
-| Scan report: rule ids, file paths, line numbers | `vyomi_scan_report` | Not stored, and not logged |
+| Scan hits: rule ids, file paths, line numbers, captured service tokens | `summarize_scan_hits` | Not stored, and not logged. The token is an identifier such as `s3` or `storage-blob`, never source text; "already wired" hits carry no text at all |
 | `AGENTS.md` / `CLAUDE.md` text | `vyomi_agents_md` | Not stored, and not logged |
 | Account id, tier, mesh state | phase 2 token | Read from the portal per call; not copied |
 
