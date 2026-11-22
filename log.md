@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T21:17:36+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T20:17:36+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **0 change(s), 0 actionable.**
 
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-11T04:00:01+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `spec-commit` Azure monitor: [Monitor] Restore .NET GA diagnostic setting names and fix tenant act… (#47977) ([link](https://github.com/Azure/azure-rest-api-specs/commit/727b3250d559076c6a30513dc6ac11e52decd292))
