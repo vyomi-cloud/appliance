@@ -11,6 +11,12 @@ Executor: Claude Code CLI in auto mode, one orchestrator session dispatching sub
 - Still open from WP0: the claims row on the trunk (HUMAN GATE).
 - Start at WP1 (verify + tighten) and run WP1–WP8 from here; do not re-apply the patches.
 
+**Progress (2026-11-22, later): WP1–WP8 done and released; the Claude directory submission is blocked.**
+- PR #702 merged (`6d50c4606`); WP6 `VERIFY.md` GREEN; `tunnel-v1.4.0` released: npm 1.4.0, MCP Registry `io.github.vyomi-cloud/vyomi`, Homebrew, plugin 4.2.0 mirrored to `vyomi-cloud/claude-plugins`.
+- Portal PR #62 (`/docs/agents`, `/llms.txt`) is open, not merged (HUMAN-GATES G5, G10).
+- The directory's Validate refused 4.2.0: a local MCP server and a non-allowlisted manifest field (`network`) are accepted only from Verified organizations, plus an icon warning. Anthropic's pre-submission checklist adds an unpinned npx launcher and a missing plugin-folder README.
+- `v4/directory-fixes` (plugin 4.2.1) fixes the four this repo controls: `network` removed, `npx -y vyomi-tunnel@1.4.0 mcp` pinned and kept equal to `packaging/tunnel/package.json` by `check_agent_plugins.py`, a disclosure README in `plugins/vyomi/`, and a re-encoded icon. The sync refuses to mirror a pin npm does not serve. Verified-organization status stays with the owner (G9). Status per finding: `integrations/claude-plugins/SUBMISSION.md` §0.
+
 ## 0. Outcome
 
 When this plan is done:
