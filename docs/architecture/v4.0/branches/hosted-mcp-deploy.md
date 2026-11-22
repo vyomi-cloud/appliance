@@ -46,7 +46,7 @@ Run on macOS (darwin/arm64), 2026-11-23.
 
 | What | Command | Result |
 |---|---|---|
-| Deploy spec checks | `python3 deploy/mcp-hosted/test_spec_scripts.py` | 36/36 PASS |
+| Deploy spec checks | `python3 deploy/mcp-hosted/test_spec_scripts.py` | 36/36 PASS (also run by the release workflow's test job, which is the only automation over these paths: no existing workflow watches `deploy/**`, and a stacked PR's base is not `v4-on-main`, so neither guardrails nor the tunnel checks fire on this branch) |
 | Workflow + spec YAML parse | `python3 -c "import yaml, sys; [yaml.safe_load(open(f)) for f in (...)]"` | both parse |
 | Dockerfile build stage, natively | `cp -R cmd <ctx>/ && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w"` | a statically linked `ELF 64-bit x86-64`, stripped, 8.7 MB — so `distroless/static` is the right base and the context needs only `cmd/` |
 | The image's own build-stage check | `vyomi mcp --help \| grep -- --hosted` | passes |
