@@ -1,6 +1,6 @@
 # v4/agent-plugins
 
-Owner: Rohith (prepared by Claude, 2026-11-22) - Started: 2026-11-22 - Base: origin/v4-on-main (0df22d4e0) - Status: in progress (WP0 done; WP1-WP8 per the plan)
+Owner: Rohith (prepared by Claude, 2026-11-22) - Started: 2026-11-22 - Base: origin/v4-on-main (0df22d4e0) - Status: in review (WP0-WP8 done; WP6 GREEN, see `../../../../VERIFY.md`; human gates in `../../../../HUMAN-GATES.md`)
 
 ## Purpose
 Put Vyomi into every major coding agent, not just Claude Code. One plugin package (MCP server + three skills) installs with one
@@ -34,8 +34,9 @@ plan: `../AGENT-DISTRIBUTION-NOW.md`. Product context: `../AGENT-DISTRIBUTION-PR
 
 ## Open issues
 - [ ] Claims row on the trunk: `| agent-plugins | v4/agent-plugins | appliance | integrations/claude-plugins/**, cmd/vyomi/mcp_agents_md*.go, cmd/vyomi/mcp_tunnel_sync*.go, wasm/relay/mcp-launch.mjs, packaging/tunnel/{package.json,server.json,README.md,bin/mcp-launch.mjs}, tools/guardrails/run.sh, scripts/check_*.py | 2026-11-22 |` (owner: Rohith)
-- [ ] WP1-WP8 of `../AGENT-DISTRIBUTION-NOW.md`; notably the `vyomi-setup` step 6 and plugin README still name the old writer tool (WP2) (owner: CLI session)
-- [ ] Windows and macOS handover (npm `.cmd` shims) verified only in CI (WP4 smoke) (owner: CLI session)
+- [x] WP1-WP8 of `../AGENT-DISTRIBUTION-NOW.md` (2026-11-22; VERIFY.md GREEN)
+- [x] Windows and macOS handover verified in CI (`tunnel-npx-smoke.yml`, green on all four OSes)
+- [ ] Release dry run, npm/registry publish, merges and the Claude directory submission: `HUMAN-GATES.md` G2-G6 (owner: Rohith)
 - [ ] Cursor Marketplace and OpenAI directory submissions paused (plan §7) (owner: Rohith)
 
 ## Testing
