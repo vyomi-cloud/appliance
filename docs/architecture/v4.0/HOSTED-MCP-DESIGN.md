@@ -1,6 +1,6 @@
 # Hosted Vyomi MCP: design
 
-Status: proposal, not approved · Written 2026-11-22 against `v4-on-main` @ `5d042d5f6` · Owner: Rohith
+Status: proposal; D-H1 decided (build phase 1 now), D-H2–D-H6 open · Written 2026-11-22 against `v4-on-main` @ `5d042d5f6` · Owner: Rohith
 Related: `AGENT-DISTRIBUTION-NOW.md` (the "Later" phase lists a hosted MCP), `integrations/claude-plugins/SUBMISSION.md` §0,
 `HUMAN-GATES.md` G9.
 
@@ -11,10 +11,19 @@ Related: `AGENT-DISTRIBUTION-NOW.md` (the "Later" phase lists a hosted MCP), `in
   organization. Validate on 2026-11-22 (`d9fb835`, plugin 4.2.1) left exactly that one block.
 - **A local server never reaches claude.ai or Cowork.** The directory notes it: "Local MCP server: not on claude.ai". A
   remote server works there, and in Claude Code, Codex, Cursor and Copilot.
+- **The OpenAI (ChatGPT/Codex) directory has the same wall, and a stricter one.** Its desktop-only guide says "Local
+  MCP submissions are limited to approved partners": the submitting org must be allowlisted by an OpenAI
+  representative, which Vyomi doesn't have. It also asks to "Include the server and its dependencies in the package",
+  so the `npx` launcher wouldn't qualify even if allowlisted. Its default route is a remote server: "If your MCP server
+  runs locally, deploy it to a public HTTPS URL." Every OpenAI submission also needs a verified individual or business
+  identity on the OpenAI Platform (sources: developers.openai.com/plugins/deploy/desktop-only,
+  developers.openai.com/codex/submit-plugins, read 2026-11-22).
+- **Cursor doesn't need it.** cursor.directory has no documented organization or local-MCP rule, so the local plugin is
+  submitted there as it is.
 - **It needs no Node.js, npx or tunnel install** for the knowledge part.
 
-If Anthropic grants G9, the local plugin is accepted as it is, and this design is about claude.ai reach only. Decide
-D-H1 (§11) with that in mind.
+If Anthropic grants G9, the local plugin is accepted by Claude as it is, but OpenAI and claude.ai/Cowork/ChatGPT
+reach still need a remote server. D-H1 (§11) is therefore decided: build phase 1 now, and still send the G9 request.
 
 ## 2. Goals and non-goals
 
@@ -183,11 +192,12 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
 
 | Phase | Delivers | Size | Clears |
 |---|---|---|---|
-| 0 | This doc approved; D-H1–D-H6 decided | — | — |
+| 0 | This doc approved; D-H1 decided 2026-11-22 (build now); D-H2–D-H6 to decide | — | — |
 | 1a | `vyomi mcp --http` with hosted mode, scan rules/report split, `vyomi_env_file`; tests and guardrail rows for the hosted surface (no writer, no outbound fetch of caller URLs) | M | — |
 | 1b | DigitalOcean app on `mcp.vyomi.cloud`, deploy workflow on a tag, rate limits, uptime check | S | — |
 | 1c | `plugins/vyomi-cloud` folder, skills branching on tools, README, drift-check support | S | — |
 | 1d | Privacy policy update (human), then directory Validate and submission (human) | — | Directory block (a) without G9; claude.ai and Cowork |
+| 1e | OpenAI identity verification (human), then OpenAI submission of `plugins/vyomi-cloud` as "With MCP" (human) | — | OpenAI directory (ChatGPT and Codex) without an approved-partner allowlist |
 | 2 | Portal as OAuth authorization server; account-aware `vyomi_status` / `vyomi_reach` | L | Account features in the hosted plugin |
 | 3 | Nano relay binding (only if wanted) | M | Nano status from the hosted server |
 
@@ -197,7 +207,7 @@ Phase 1 alone is enough for the directory. Phases 2 and 3 are optional.
 
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
-| D-H1 | Build now, or wait for G9 | Build phase 1 now / wait for Anthropic's answer | Ask Anthropic first (G9 costs nothing). Build phase 1 if G9 is refused, or if claude.ai/Cowork reach is wanted anyway |
+| D-H1 | Build now, or wait for G9 | Build phase 1 now / wait for Anthropic's answer | **Decided 2026-11-22 (Rohith): build phase 1 now.** OpenAI limits local MCP to approved partners and wants bundled servers, so only a remote server reaches its directory whatever G9 says. Still send the G9 request (free) |
 | D-H2 | Hosting | A separate DO app / B inside the portal / C Cloudflare Worker | A |
 | D-H3 | Phase 1 without sign-in | Anonymous / sign-in from day one | Anonymous: nothing account-specific is exposed in phase 1 |
 | D-H4 | Folder and listing name | `vyomi-cloud` / `vyomi-remote` / other | `vyomi-cloud` (check the directory's look-alike rule against `vyomi`) |
@@ -210,4 +220,5 @@ Phase 1 alone is enough for the directory. Phases 2 and 3 are optional.
 - Creating `mcp.vyomi.cloud` (DNS) and the DigitalOcean app (billing).
 - The privacy policy change.
 - The directory submission of `plugins/vyomi-cloud`.
+- OpenAI Platform identity verification (individual or business) and the OpenAI submission.
 - Phase 2: the portal's authorization-server endpoints go live on portal `main` (a paid deploy).
