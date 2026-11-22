@@ -25,7 +25,7 @@
       "onboardingSkill": "./skills/vyomi-setup/SKILL.md",
       "interface": {
         "displayName": "Vyomi",
-        "shortDescription": "Run AWS, GCP and Azure code locally against the Vyomi simulator",
+        "shortDescription": "Run cloud code on your machine",
         "longDescription": "Scan a repo for AWS / GCP / Azure usage, see which services Vyomi emulates in your Nano tab or Pro/Max mesh, write a dev-only .env.vyomi, and add a Vyomi section to AGENTS.md so every coding agent runs against the simulator instead of the real cloud.",
         "developerName": "Vyomi",
         "category": "Productivity",
@@ -34,6 +34,7 @@
           "Write"
         ],
         "websiteURL": "https://vyomi.cloud",
+        "supportURL": "https://vyomi.cloud/support",
         "privacyPolicyURL": "https://vyomi.cloud/privacy",
         "termsOfServiceURL": "https://vyomi.cloud/terms",
         "defaultPrompt": [

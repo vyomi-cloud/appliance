@@ -12,6 +12,11 @@
       "name": "vyomi",
       "source": "plugins/vyomi",
       "description": "Run and test cloud code locally against Vyomi (Nano in the browser, or a Pro/Max mesh): scan a repo for AWS/GCP/Azure usage, see what is emulated where, wire SDKs to it, and add it to AGENTS.md. Needs vyomi-tunnel 1.3.0+ (1.4.0+ for the AGENTS.md step)."
+    },
+    {
+      "name": "vyomi-cloud",
+      "source": "plugins/vyomi-cloud",
+      "description": "Run and test cloud code locally against Vyomi through its hosted MCP server at https://vyomi.cloud/mcp: ask what the AWS/GCP/Azure simulator emulates, get the SDK settings and code for your simulator, scan a repo with rules it hands you, and get a .env.vyomi and an AGENTS.md section to apply yourself. No install and no tunnel; read-only, and it never sees your machine or your code."
     }
   ]
 }

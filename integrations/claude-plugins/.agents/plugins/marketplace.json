@@ -16,6 +16,19 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity"
+    },
+    {
+      "name": "vyomi-cloud",
+      "source": {
+        "source": "local",
+        "path": "./plugins/vyomi-cloud"
+      },
+      "description": "Run and test cloud code locally against Vyomi through its hosted MCP server at https://vyomi.cloud/mcp: ask what the AWS/GCP/Azure simulator emulates, get the SDK settings and code for your simulator, scan a repo with rules it hands you, and get a .env.vyomi and an AGENTS.md section to apply yourself. No install and no tunnel; read-only, and it never sees your machine or your code.",
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "NONE"
+      },
+      "category": "Developer Tools"
     }
   ]
 }
