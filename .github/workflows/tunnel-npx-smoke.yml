@@ -113,11 +113,11 @@ jobs:
           set -euo pipefail
           if command -v vyomi-tunnel; then echo "::error::vyomi-tunnel is already on PATH; the plain case needs a clean runner"; exit 1; fi
           node tools/npx-smoke/handshake.mjs --tarball "$RUNNER_TEMP/tgz/dist/vyomi-tunnel-*.tgz" --cache "$RUNNER_TEMP/npx-cold" \
-            --label "plain, cold (${{ matrix.os }})"
+            --min-tools 9 --expect-tool vyomi_status --expect-tool vyomi_agents_md --label "plain, cold (${{ matrix.os }})"
       - name: plain, warm (same npm cache)
         run: |
           node tools/npx-smoke/handshake.mjs --tarball "$RUNNER_TEMP/tgz/dist/vyomi-tunnel-*.tgz" --cache "$RUNNER_TEMP/npx-cold" \
-            --label "plain, warm (${{ matrix.os }})"
+            --min-tools 9 --expect-tool vyomi_status --expect-tool vyomi_agents_md --label "plain, warm (${{ matrix.os }})"
 
       - name: sync (a) installed vyomi-tunnel@${{ env.INSTALLED }}, npx = this build ${{ env.VER }}
         run: |

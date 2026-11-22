@@ -75,8 +75,9 @@ Port range: `VM_PORT_MIN` / `VM_PORT_MAX`.
 other agents. The package bundles it for macOS (arm64, x64), Linux (arm64, x64) and Windows
 (x64). Agents start it with `npx -y vyomi-tunnel mcp`, so the MCP needs Node.js 18+ and
 no install. If `vyomi-tunnel` is installed (1.3.0+), that command runs your installed copy, so
-`npx -y vyomi-tunnel mcp` and `vyomi-tunnel mcp` are always the same server, and
-`vyomi_status` tells the agent when npm has a newer tunnel.
+`npx -y vyomi-tunnel mcp` and `vyomi-tunnel mcp` are always the same server. Keep it at 1.4.0+
+(`npm i -g vyomi-tunnel`): an older installed tunnel serves its older MCP, without `vyomi_agents_md`.
+From 1.4.0, `vyomi_status` tells the agent when npm has a newer tunnel.
 
 Claude Code (the Vyomi plugin adds this server plus setup skills: `claude plugin install vyomi@vyomi`):
 

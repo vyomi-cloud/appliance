@@ -40,7 +40,7 @@ claude mcp add vyomi -- vyomi mcp                      # Claude Code
 
 | Tool | What it does | Writes? |
 |---|---|---|
-| `vyomi_status` | Running? endpoint, tier/trial, active space, readiness, substrate; `tunnel` says when the installed `vyomi-tunnel` is behind npm | no |
+| `vyomi_status` | Running? endpoint, tier/trial, active space, readiness, substrate; `tunnel` says when the installed `vyomi-tunnel` is behind npm (served by tunnel 1.4.0+; an npx run hands over to an installed tunnel, so an older install serves its older MCP) | no |
 | `vyomi_reach` | What is reachable from this machine (Nano tunnel, in-browser VMs/DBs, mesh hosts) and the command to connect to each | no |
 | `vyomi_capability` | Searches the capability registry for a feature: level on Nano and offline/mesh, limitations, tests | no |
 | `vyomi_snippet` | Ready-to-run CLI / Python / JavaScript / curl call for one operation, pointed at the active home | no |
