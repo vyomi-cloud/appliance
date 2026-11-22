@@ -204,7 +204,7 @@ jobs:
         run: |
           set -euo pipefail
           # --wait blocks until the deployment finishes; App Platform rebuilds every component, so give it room.
-          # Only columns doctl really has (checked with doctl 2.7.0): ActiveDeployment.Phase is not one, and an
+          # Only columns doctl really has (checked with doctl 2.7.0): there is no deployment-phase column, and an
           # unknown --format column fails the command.
           doctl apps update "${PORTAL_APP_ID}" --spec /tmp/portal-app.yaml --wait --format ID,DefaultIngress
           doctl apps list-deployments "${PORTAL_APP_ID}" --format ID,Phase,Progress,Created | head -4
