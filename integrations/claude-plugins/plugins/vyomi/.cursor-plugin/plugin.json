@@ -9,6 +9,7 @@
   },
   "homepage": "https://vyomi.cloud",
   "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "license": "MIT",
   "logo": "./.claude-plugin/icon.png",
   "keywords": [
     "cursor-plugin",

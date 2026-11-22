@@ -6,3 +6,24 @@ Each needs the owner (Rohith). Work on everything else continued.
 | # | Gate | Why it is a human step | Logged | Status |
 |---|---|---|---|---|
 | G1 | Add the claims row to `docs/architecture/v4.0/SESSION-CLAIMS.md` on `v4-on-main`: `\| agent-plugins \| v4/agent-plugins \| appliance \| integrations/claude-plugins/**, cmd/vyomi/mcp_agents_md*.go, cmd/vyomi/mcp_tunnel_sync*.go, wasm/relay/mcp-launch.mjs, packaging/tunnel/{package.json,server.json,README.md,bin/mcp-launch.mjs}, tools/guardrails/run.sh, scripts/check_*.py \| 2026-11-22 \|` | Pushing to the trunk is the integrator's step | WP0 | open |
+| G2 | Trigger `tunnel-release.yml` as a `workflow_dispatch` dry run on `v4/agent-plugins` (or on `v4-on-main` after the merge) and confirm every gate is green, including the guardrail gate and the new `mcp-publisher validate` step | Running the release workflow is a human step (plan §2, §4 "Release dry run") | WP3 | open |
+| G3 | Merge the appliance PR `v4/agent-plugins` → `v4-on-main` | Merges are the integrator's step | WP7 | open |
+| G4 | Tag `tunnel-v1.4.0`: the workflow publishes npm `vyomi-tunnel@1.4.0`, then the MCP Registry (`io.github.vyomi-cloud/vyomi`), bumps the tap and syncs plugin 4.2.0 to `vyomi-cloud/claude-plugins` | Tags, `npm publish` and `mcp-publisher publish` are human gates | WP3 | open |
+| G5 | Merge the portal PR `portal/agents-docs` → `v4-nano-portal`, then promote to portal `main` | Every portal `main` merge is a paid DigitalOcean deploy | WP5 | open |
+| G6 | Submit `plugins/vyomi` to the Claude directory from `integrations/claude-plugins/SUBMISSION.md` (claude.ai/directory/manage; paid plan, GitHub connected) | Directory submissions are human gates | WP8 | open |
+| G7 | Cursor Marketplace and OpenAI directory submissions | Paused (plan §6 D8, D9; §7) | — | paused |
+| G8 | Enable GitHub branch protection on `v4-on-main` / `main` (repo CLAUDE.md) | Org settings | — | open (pre-existing) |
+
+## Review notes for the owner (not blocking; the orchestrator chose a default)
+
+- **`.claude/CLAUDE.md` import form (WP1).** Claude Code resolves `@` imports relative to the importing file, so `vyomi_agents_md` proposes `@../AGENTS.md` for `.claude/CLAUDE.md` (root `CLAUDE.md` and `CLAUDE.local.md` get `@AGENTS.md`). The plan said "`@AGENTS.md`" literally; the relative form is the one that works.
+- **mcp-publisher pin (WP3).** `tunnel-release.yml` pins mcp-publisher 1.8.12 (released 2026-11-22) by version and sha256. If you prefer an older pin, 1.8.10 has the same publisher behaviour; change version + hash together.
+- **Registry step position (WP3).** It runs after the Homebrew tap bump (still after npm publish), so npm is already serving the tarball when the registry checks `mcpName`. A Homebrew failure therefore skips the registry until a re-run.
+- **macOS x64 runner (WP4).** `tunnel-npx-smoke.yml` uses `macos-15-intel` instead of the plan's `macos-13` (retired by GitHub).
+- **Smoke sync assertion (WP4).** An installed 1.3.3 bundles an MCP without `vyomi_status.tunnel`, so the 1.3.3 case asserts the handover line, 8 tools and clean stderr; the `tunnel` field is asserted in a second case (this build installed, a one-patch-up copy through npx).
+- **Follow-up (WP4).** `mesh-cli --version` prints `$VYOMI_TUNNEL_VERSION` when set, and the launcher uses the same variable to pass the version to the Go server; a parent shell with it set would skew the version check. Not changed here.
+- **WP8 copyright holder.** `integrations/claude-plugins/LICENSE` says `Copyright (c) 2026 Vyomi`; swap in the legal entity name if there is one.
+- **WP8 `SUBMISSION.md` is public.** `sync_claude_plugins.py` mirrors the whole tree, so the kit appears in `vyomi-cloud/claude-plugins`. It holds only listing copy and a checklist; add an exclude to the sync if you want it private.
+- **WP8 submission timing (G6).** Submit only after `tunnel-v1.4.0` has synced 4.2.0 to the public repo: the published 4.1.2 fails the directory check with `LICENSE_MISSING`; 4.2.0 passes `claude plugin validate --strict --profile directory`. Use https://vyomi.cloud/docs/agents as the support URL only once the portal PR is live (G5).
+- **WP8 `network.hosts`.** The Claude manifest declares `registry.npmjs.org`, `127.0.0.1`, `relay.vyomi.cloud`, `api.github.com` (display only). Claude Code 2.1.309 warns "Unknown field 'network'" (plain validate passes; `--strict` on that old version fails); 2.1.330 is clean.
+- **WP5 portal.** Merge only after G4 (npm 1.4.0 and plugin 4.2.0 public), since the page names both. Gemini CLI's `~/.gemini/settings.json` `mcpServers` shape was not re-checked against current docs. Pre-existing broken footer anchors (`/docs#sdks`, `#terraform`, `#changelog`) left alone. 6 portal tests fail on the untouched base too.

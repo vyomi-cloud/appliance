@@ -9,6 +9,7 @@
   },
   "homepage": "https://vyomi.cloud",
   "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "license": "MIT",
   "keywords": [
     "aws",
     "gcp",
@@ -16,5 +17,13 @@
     "local-cloud",
     "emulator",
     "testing"
-  ]
+  ],
+  "network": {
+    "hosts": [
+      "registry.npmjs.org",
+      "127.0.0.1",
+      "relay.vyomi.cloud",
+      "api.github.com"
+    ]
+  }
 }

@@ -10,6 +10,7 @@
   },
   "homepage": "https://vyomi.cloud",
   "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "license": "MIT",
   "keywords": [
     "aws",
     "gcp",
@@ -33,6 +34,8 @@
           "Write"
         ],
         "websiteURL": "https://vyomi.cloud",
+        "privacyPolicyURL": "https://vyomi.cloud/privacy",
+        "termsOfServiceURL": "https://vyomi.cloud/terms",
         "defaultPrompt": [
           "Set this project up to run against Vyomi."
         ],

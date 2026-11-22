@@ -14,7 +14,8 @@ One package serves several coding agents, each through its own manifest:
 
 A version bumped in one but not the others means some agents never update; an MCP server changed in one means some
 agents run the old command; a "Needs vyomi-tunnel ..." note changed in one means some listings promise the wrong
-tunnel. Icon paths (logo, composerIcon) must exist inside the plugin. This script fails on any such drift. Stdlib only.
+tunnel. Icon paths (logo, composerIcon) must exist inside the plugin, manifests that state a license agree on it, and the
+root has LICENSE and SECURITY.md. This script fails on any such drift. Stdlib only.
 
   python3 scripts/check_agent_plugins.py [root]     # default root: integrations/claude-plugins
 
@@ -108,6 +109,11 @@ def check(root):
             if m.get("version") != ver:
                 errors.append(f"{where}: {rel} version {m.get('version')} != marketplace {ver}")
 
+        # License: the same SPDX id in every manifest that states one (the Claude directory refuses a plugin without one).
+        licenses = {rel: m["license"] for rel, m in manifests.items() if m is not None and "license" in m}
+        if len(set(licenses.values())) > 1:
+            errors.append(f"{where}: manifests disagree on the license: {licenses}")
+
         portable = manifests["plugin.json"]
         if portable is not None and portable.get("$schema") != PLUGIN_SCHEMA:
             errors.append(f"{where}: plugin.json $schema must be {PLUGIN_SCHEMA}")
@@ -196,6 +202,11 @@ def check(root):
             ue = cursor_entries.get(name)
             if not ue or (root / ue["source"]).resolve() != src:
                 errors.append(f"{where}: .cursor-plugin/marketplace.json must list it at {entry['source']}")
+
+    # The marketplace repo root carries the license and the security policy (directory listings link to both).
+    for f in ("LICENSE", "SECURITY.md"):
+        if not (root / f).is_file():
+            errors.append(f"{root}/{f} is missing")
 
     for label, entries in ((".agents/plugins/marketplace.json", codex_entries), (".cursor-plugin/marketplace.json", cursor_entries)):
         extra = set(entries) - {p["name"] for p in cmp.get("plugins", [])}
