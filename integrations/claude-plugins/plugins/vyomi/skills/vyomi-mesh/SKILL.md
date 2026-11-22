@@ -13,7 +13,7 @@ in the user's own **GitHub Codespace**, reached from this machine through
 
 **Requires `vyomi-tunnel` 1.3.0 or newer** (`vyomi-tunnel --version`): it
 lists and forwards the Codespace mesh. (This plugin's MCP server runs through
-`npx -y vyomi-tunnel mcp` and does not need the install.) A
+`npx -y vyomi-tunnel@1.4.0 mcp` and does not need the install.) A
 Codespace mesh also needs a Pro or Max access key in `~/.vyomi/credentials`;
 ask the user, never read the file.
 
