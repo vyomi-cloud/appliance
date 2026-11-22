@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T16:17:40+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T15:17:23+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3006,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-11-11T00:59:56+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**5 change(s), 0 actionable.**
-- · `announcement` AWS Network Firewall launches next-generation firewall policy ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/network-firewall-launches-ngfw-policy/))
-- · `announcement` Amazon DocumentDB (with MongoDB compatibility) now supports post-quantum TLS, wildcard indexes, and $unionWith in version 8.0.3  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-documentdb-8-0-3/))
-- · `announcement` Amazon EC2 G7 instances now available in additional regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-g7-additional-regions/))
-- · `announcement` Amazon GameLift Servers now supports Game Session Placement Insights ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/gamelift-game-session-insights/))
-- · `announcement` Amazon OpenSearch Service announces managed cross-Region disaster recovery ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-service-managed-cross-region-disaster-recovery/))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.

@@ -1,15 +1,6 @@
 {
- "at": "2026-11-22T15:17:23+00:00",
+ "at": "2026-11-22T16:17:40+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "sdk",
-   "service": "cli:gcloud",
-   "kind": "release",
-   "key": "ver:cli:gcloud:594.0.1",
-   "title": "cli:gcloud: 594.0.0 \u2192 594.0.1",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
