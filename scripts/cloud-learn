@@ -870,7 +870,7 @@ launch_success_banner() {
   # LAUNCH-VIEW-READY (keep identical across launchers)
   _emit ""
   _emit "  ${_C_BOLD}Ready.${_C_RESET} Open ${_C_CYAN}${url}${_C_RESET}   ·   SDK/CLI: point --endpoint-url at ${url}"
-  _emit "  ${_C_DIM}Pro tier: launch an EC2 instance in the console, then ssh ubuntu@<ip>.${_C_RESET}"
+  _emit "  ${_C_DIM}Pro tier: launch an EC2 instance with the CLI/SDK, then ssh ubuntu@<ip>.${_C_RESET}"
   if [ -n "$fallback_url" ]; then
     _emit "  Alternate URL:    ${_C_CYAN}${fallback_url}${_C_RESET}"
   fi
