@@ -57,7 +57,7 @@
     "#vy-md.c-gcp{--md-cw:996px;--md-px:72px}" +
     /* AWS service pages (S3, DynamoDB, ...) put a side navigation beside the content: the section is the nav + content frame, edge to
        edge with the console's 24px gutters, not the 1280px centred column of Home. The class is toggled by place(). */
-    "#vy-md.c-aws.nav .md-body{max-width:none;padding-left:24px;padding-right:24px}" +
+    "#vy-md.c-aws.nav .md-body{max-width:none;padding-left:24px;padding-right:var(--md-pr,24px)}" +
     /* AWS service page with the side navigation open and the drawer collapsed: the tab row must not take height, or the nav's vertical
        divider starts 40px below the header. The tab hangs from the top edge of the page instead (the row is 0px tall). */
     "#vy-md.c-aws.nav:not(.open) .md-tabrow{height:0}" +
@@ -120,6 +120,11 @@
       var nv = document.querySelector('[class*="awsui_navigation-container"]');
       var on = !!(nv && nv.getBoundingClientRect().width > 40);
       if (box.classList.contains("nav") !== on) box.classList.toggle("nav", on);
+      // the page content column is centred and capped (1280px) on wide windows: end the drawer at the column's right edge (the breadcrumb
+      // row spans it), not at the window edge, so the drawer lines up with the cards below it. Falls back to the 24px gutter.
+      var bc = on && document.querySelector('main [class*="awsui_breadcrumbs_"]'), pr = 24;
+      if (bc) { var rr = bc.getBoundingClientRect().right; if (rr > 300) pr = Math.max(24, Math.round(document.documentElement.clientWidth - rr)); }
+      if (box.style.getPropertyValue("--md-pr") !== pr + "px") box.style.setProperty("--md-pr", pr + "px");
     }
     if (CLOUD === "azure") {   // service page = any route but the home dashboard
       var az = location.hash.replace(/^#\/?/, "").replace(/^home$/, "") !== "";

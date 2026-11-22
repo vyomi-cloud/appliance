@@ -62,4 +62,7 @@ check("GCP: collapsed drawer on a service page hangs from the header (no 44px ro
 check("phones (<=640px): the bottom dock is as wide as the screen (left:0;right:0), flat, icons spread evenly - it no longer grows past the viewport",
   /@media\(max-width:640px\)\{#vy-appbar \.vy-notch\{left:0;right:0;box-sizing:border-box;max-width:100vw !important;padding:0 6px;gap:0;justify-content:space-between\}/.test(appbar) && /clip-path:none/.test(appbar));
 
+check("AWS service pages: the drawer ends at the content column's right edge (breadcrumb row) via --md-pr, not at the window edge on wide screens",
+  /padding-right:var\(--md-pr,24px\)/.test(css) && /main \[class\*="awsui_breadcrumbs_"\]/.test(src) && /setProperty\("--md-pr"/.test(src));
+
 process.exit(failed ? 1 : 0);
