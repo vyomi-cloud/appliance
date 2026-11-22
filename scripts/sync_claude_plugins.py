@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mirror integrations/claude-plugins/ (the source of truth, minus PRIVATE) into a checkout of the public marketplace repo
+"""Mirror integrations/claude-plugins/ (the source of truth) into a checkout of the public marketplace repo
 vyomi-cloud/claude-plugins, with a version guard.
 
 Claude Code updates an installed plugin only when its version changes, so publishing changed content under a
@@ -21,8 +21,6 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "integrations" / "claude-plugins"
-# Kept in this repo only, never mirrored (the Claude directory submission kit).
-PRIVATE = {"SUBMISSION.md"}
 
 
 def vtuple(v):
@@ -56,7 +54,7 @@ def main(argv):
     if len(argv) < 2 or argv[1].startswith("-"):
         sys.exit(__doc__)
     dst, apply = pathlib.Path(argv[1]), "--apply" in argv[2:]
-    src_files, dst_files = files(SRC) - PRIVATE, files(dst)
+    src_files, dst_files = files(SRC), files(dst)
     changed = sorted(f for f in src_files & dst_files if not filecmp.cmp(SRC / f, dst / f, shallow=False))
     added, removed = sorted(src_files - dst_files), sorted(dst_files - src_files)
     new, old = versions(SRC), versions(dst)
