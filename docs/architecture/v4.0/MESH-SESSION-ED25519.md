@@ -35,19 +35,24 @@ The public keys and `V1_ACCEPTED` are code constants on purpose. Anything the Me
 under the Codespace owner's control: an env-supplied public key or an env switch for v1 would reopen F2. A test
 (`test_the_environment_cannot_add_a_trusted_key`) pins this.
 
-Generate a key: `python3 scripts/mesh-session-keygen.py [kid]`. It prints the private seed for the portal secret and the
-public-key line for both files, and writes nothing to disk.
+Generate a key: `python3 scripts/mesh-session-keygen.py [kid]`. It prints the three portal settings as NAME / VALUE /
+Encrypt / Scope blocks shaped like the DigitalOcean form (paste only the VALUE text), the public-key line for both files, and
+the exact line the portal logs at startup for that key. It refuses a kid outside `[A-Za-z0-9._-]{1,64}`, as the portal does,
+and writes nothing to disk.
 
 Residual risk, stated plainly: a Codespace owner can still run a modified simulator image with their own key pinned. That
 is MESH-SOFTWARE-PROTECTION layers 4 (compiled image) and 6 (portal integrity check), not this change.
 
 ## 4. Portal changes (`app/mesh_session.py`, branch `portal/mesh-session-ed25519`)
 
-| Env (portal, DigitalOcean, encrypted) | Value |
-|---|---|
-| `MESH_SESSION_SIGNING_KEY` | the private seed from `scripts/mesh-session-keygen.py` |
-| `MESH_SESSION_SIGNING_KID` | `portal-2026-11` (must equal the pinned kid) |
-| `MESH_SESSION_TOKEN_VERSION` | `v1` (default) until the pinned Mesh image and relay are live, then `v2` |
+| Env (portal, DigitalOcean, scope Run time) | Value | Encrypt |
+|---|---|---|
+| `MESH_SESSION_SIGNING_KEY` | the private seed from `scripts/mesh-session-keygen.py` | yes |
+| `MESH_SESSION_SIGNING_KID` | `portal-2026-11` (must equal the pinned kid; no quotes) | no (public; keep it readable) |
+| `MESH_SESSION_TOKEN_VERSION` | `v1` (default) until the pinned Mesh image, sandbox `boot-mesh.sh` and relay are live, then `v2` | no |
+
+At startup the portal logs `mesh session tokens: v2 kid=<kid> public_key=<b64url>` (or why it mints v1). Compare it with the
+`TRUSTED_KEYS` entry: a different kid gives `MeshSessionUnknownKey`, a different public key `MeshSessionBadSignature`.
 
 - With all three set and valid, `_sign_token` mints v2 (session and runner tokens); anything else mints v1 and logs an error once.
   Setting the key without the switch changes nothing, so the secret can go in with any deploy.
@@ -59,20 +64,33 @@ is MESH-SOFTWARE-PROTECTION layers 4 (compiled image) and 6 (portal integrity ch
 
 | Phase | Change | Who | F2 |
 |---|---|---|---|
-| 1 | Merge appliance #700 (accepts v2, pins `portal-2026-11`); release a Mesh image; redeploy the hosted relay with this `mesh-session.mjs` | owner | open |
-| 2 | Merge the portal PR; set `MESH_SESSION_SIGNING_KEY` + `MESH_SESSION_SIGNING_KID`; once phase 1 is live everywhere, set `MESH_SESSION_TOKEN_VERSION=v2` | owner | open (v1 still accepted) |
-| 3 | After the longest session lifetime (8 h cap) of v2-only minting: `V1_ACCEPTED = False` in both files; release the Mesh image; redeploy the relay | PR + owner | **closed** for Meshes on that image |
+| 1 | Merge appliance #700 (accepts v2, pins `portal-2026-11`); release a Mesh image; merge the same `token_usable` rule into `vyomi-cloud/sandbox` `.devcontainer/mesh/boot-mesh.sh` (sandbox #7: Codespaces boot from that repo, not this one); redeploy the hosted relay with this `mesh-session.mjs` | owner | **done** (#700 2026-11-21, Mesh image `v4-preview` baf83df; sandbox #7 2026-11-22) |
+| 2 | Merge the portal PR; set `MESH_SESSION_SIGNING_KEY` + `MESH_SESSION_SIGNING_KID`; once phase 1 is live everywhere, set `MESH_SESSION_TOKEN_VERSION=v2` | owner | **done** 2026-11-22 12:02 IST (portal #59/#60; first v2 Mesh joined) |
+| 3 | After the longest session lifetime (8 h cap) of v2-only minting: `V1_ACCEPTED = False` in both files; release the Mesh image; redeploy the relay | PR + owner | this PR (`v4/mesh-session-v1-retire`): both constants `False`; tests sign v2 with the public test vector (`tests/mesh_testkey.py`, `wasm/relay/test-fixtures/mesh-testkey.mjs` + `trust-test-key.mjs`). Closed once merged and the Mesh image is published |
 | 4 | Remove the v1 code paths, the portal's v1 branch and `MESH_SESSION_KEY` | PR | closed |
 
 Order matters: turning on `MESH_SESSION_TOKEN_VERSION=v2` before a Mesh image pinning the key is live makes every new session fail
-(`MeshSessionUnknownKey`). Rolling back is the same switch set back to `v1`.
+(`MeshSessionUnknownKey`), and before sandbox's `boot-mesh.sh` accepts a keyless token every Mesh loops on `/session/token` and
+never reports ready. Rolling back is the same switch set back to `v1`. The guardrail gate checks the sandbox copy
+(`tools/guardrails/check-boot-mesh.sh`, run on the sandbox copy in CI).
 
 Phase 3 only protects Meshes running the new image. `docker-compose.mesh.yml` pins `vyomi/appliance:v4-preview`
 (`pull_policy: always`), so new Codespaces pick it up on their next boot.
 
 The guardrail gate (`tools/guardrails/run.sh`) shows F2 as GAP until phase 3, and turns it PASS by itself after that.
 
-## 6. Test vector (test only: never pin this key)
+## 6. Production rollout, 2026-11-22
+
+v2 went live on vyomi.cloud at 12:02 IST (first Mesh: token on the first try, ready, health checks, joined). Three slips on the
+way, each now guarded:
+
+| Slip | Symptom | Guard |
+|---|---|---|
+| Seed stored as `VYOMI_MESH_SESSION_SIGNING_KEY` | portal silently stayed on v1 | keygen prints form-shaped NAME/VALUE blocks; portal logs its token version at startup |
+| Kid stored with two extra characters | `MeshSessionUnknownKey` at the tunnel health check | portal refuses a kid outside `[A-Za-z0-9._-]` (falls back to v1, logs why) and logs the kid + public key |
+| Sandbox `boot-mesh.sh` still required the v1 key | every Mesh looped on `/session/token`, never ready | sandbox #7; guardrail compares the sandbox copy with `codespace/.devcontainer/mesh/boot-mesh.sh` |
+
+## 7. Test vector (test only: never pin this key)
 
 ```
 seed (base64url)  AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8      (bytes 0x00..0x1f)

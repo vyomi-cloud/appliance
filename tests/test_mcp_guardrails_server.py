@@ -29,6 +29,8 @@ from fastapi.testclient import TestClient  # noqa: E402
 KEY = "k" * 43
 SESSION_KEY = "test-session-key"
 
+from tests import mesh_testkey as testkey  # noqa: E402  (v2 tokens signed with the public test vector)
+
 
 def _load_ctx():
     try:
@@ -56,7 +58,8 @@ def _env(monkeypatch):
     monkeypatch.setattr(admin_auth, "_cached_key", KEY)
     monkeypatch.delenv("VYOMI_ROLE", raising=False)
     monkeypatch.delenv("VYOMI_MESH_SESSION_TOKEN", raising=False)
-    monkeypatch.setenv("VYOMI_MESH_SESSION_KEY", SESSION_KEY)
+    monkeypatch.setenv("VYOMI_MESH_SESSION_KEY", SESSION_KEY)        # a v1-era key in the env must change nothing (v1 retired)
+    monkeypatch.setattr(mesh_session, "TRUSTED_KEYS", testkey.trusted(mesh_session))   # tests sign with the public test vector
     monkeypatch.setenv("CLOUDLEARN_DISTRIBUTION_MODE", "developer")
     if hasattr(CTX, "host_config"):                       # the real module: a host config file must not decide the mode
         monkeypatch.setattr(CTX, "host_config", lambda: {})
@@ -135,8 +138,7 @@ def test_item7_budget_toggle_still_works_in_local_developer_mode(monkeypatch):
 # ---------------------------------------------------------------- item 5: upstream limits hold through the API
 
 def _tok(tier="pro", end_in=3600, **kw):
-    from core import mesh_session
-    return mesh_session.mint("acct-1", tier, time.time() + end_in, key=SESSION_KEY, **kw)
+    return testkey.mint("acct-1", tier, time.time() + end_in, **kw)
 
 
 def _authorise(token="", provider="aws", path="/"):
@@ -152,8 +154,10 @@ def test_item5_no_token_nothing_served():
 
 def test_item5_forged_token_refused():
     from core import mesh_session
-    forged = mesh_session.mint("acct-1", "max", time.time() + 3600, key="not-the-key")
+    forged = testkey.forged("acct-1", "max", time.time() + 3600)          # claims the trusted kid, another key signed it
     assert _authorise(forged).code == "MeshSessionBadSignature"
+    v1 = mesh_session.mint("acct-1", "max", time.time() + 3600, key=SESSION_KEY)   # F2: minted with the key the Codespace holds
+    assert _authorise(v1).code == "MeshSessionV1Retired"
 
 
 def test_item5_free_tier_token_refused():

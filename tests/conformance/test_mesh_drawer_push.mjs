@@ -22,7 +22,7 @@ check("default state is EXPANDED (open unless the user stored an explicit collap
 check("only the collapse is the exception: the toggle still stores '1'/'0'", /LS\("s",\s*open\s*\?\s*"1"\s*:\s*"0"\)/.test(src));
 check("drawer root is in flow (position:relative, flex:none), not fixed", /#vy-md\{position:relative;flex:none/.test(css) && !/position:fixed/.test(css));
 // the one deliberate exception: AWS service page, side nav open, drawer COLLAPSED (see the check below)
-const cssNoNavCollapse = css.replace(/#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{[^}]*\}/, "");
+const cssNoNavCollapse = css.replace(/#vy-md\.c-(?:aws|gcp)\.nav:not\(\.open\) \.md-tab\{[^}]*\}/g, "");
 check("no absolute/fixed tab, no pointer-events overlay hacks (except the collapsed-with-nav tab)", !/\.md-tab\{[^}]*position:absolute/.test(cssNoNavCollapse) && !/pointer-events:auto/.test(css));
 check("AWS side nav + collapsed drawer: tab row is 0px tall so the nav's vertical divider starts at the header (no top gap)",
   /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{position:absolute;top:0;/.test(css));
@@ -50,9 +50,13 @@ check("consoles/build.mjs derives the drawer cache-buster from the file (no manu
 
 check("EXPANDED tab sits on the bottom border: flat bottom edge (radius 0 at the bottom), overlapping the 1px line", /#vy-md\.open \.md-tabrow\{align-items:flex-end\}/.test(css) && /#vy-md\.open \.md-tab\{margin-bottom:-1px;border-radius:var\(--md-br\) var\(--md-br\) 0 0/.test(css));
 
-check("side navs end where the bottom dock starts (AWS nav/tools containers, GCP nav; Azure blade) and are re-fitted on scroll/resize", /function fit\(\)/.test(src) && /#vy-appbar \.vy-notch/.test(src) && /innerHeight - dock - Math\.max\(e\.getBoundingClientRect\(\)\.top, cfg\.top\)/.test(src) && /setProperty\("bottom", dock \+ "px", "important"\)/.test(src) && /addEventListener\("scroll", fitSoon/.test(src));
+const appbar = readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8");
+check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits above every panel (z-index 1600 > AWS flyout 1500, GCP drawer 1200, nav 830) and nothing caps the navs above it",
+  /#vy-appbar\{position:fixed;[^}]*z-index:1600/.test(appbar) && /awsui_navigation-container_"\],\[class\*="awsui_tools-container_"\]\{height:calc\(100vh - 40px\) !important\}/.test(appbar) && /#blade\{bottom:0 !important/.test(appbar) && !/function fit\(\)/.test(src) && !/--vy-dock/.test(src));
 
-check("services / navigation flyouts (AWS .vy-dark-chrome panel, GCP MuiDrawer paper, Azure .vy-portal-menu) end at the dock via --vy-dock; the AWS header (also .vy-dark-chrome, position:relative) is NOT touched",
-  /--vy-dock/.test(src) && /\.vy-dark-chrome\[style\*=\\"position: fixed\\"\]\{bottom:var\(--vy-dock,0px\)!important\}/.test(css) && /\.MuiDrawer-paper\{height:calc\(100vh - var\(--vy-dock,0px\)\)!important/.test(css) && /\.vy-portal-menu\{bottom:var\(--vy-dock,0px\)!important\}/.test(css) && /setProperty\("--vy-dock"/.test(src));
+check("service pages are edge to edge on every console (own gutters: AWS 24, GCP 16, Azure 20) while each home keeps its own column width",
+  /#vy-md\.c-aws\.nav \.md-body\{max-width:none;padding-left:24px/.test(css) && /#vy-md\.c-gcp\.nav \.md-body\{max-width:none;padding-left:16px;padding-right:16px\}/.test(css) && /#vy-md\.c-azure\.nav \.md-body\{max-width:none;padding-left:20px;padding-right:20px\}/.test(css) && /CLOUD === "azure"/.test(src) && /CLOUD === "gcp"/.test(src));
+check("GCP: collapsed drawer on a service page hangs from the header (no 44px row cutting the nav's top); collapsed nav rail stacks the service icon above the Expand button (they overlapped in the 48px row)",
+  /#vy-md\.c-gcp\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /nav\.MuiBox-root>div:has\(>button\[aria-label="Expand navigation"\]\)\{flex-direction:column !important/.test(readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8")));
 
 process.exit(failed ? 1 : 0);

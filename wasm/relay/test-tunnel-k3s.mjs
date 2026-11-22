@@ -11,7 +11,7 @@ import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mint } from "./mesh-session.mjs";
+import { testToken, TEST_HOOK } from "./test-fixtures/mesh-testkey.mjs";   // v2, public test key (v1 retired, F2)
 import { dial, resolveReserved } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
@@ -23,7 +23,7 @@ let bad = 0;
 const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 140) : ""}`); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const nowS = () => Math.floor(Date.now() / 1000);
-const tok = (o = {}) => mint(KEY, { sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "mesh-k", session_end: nowS() + 3600, ...o });
+const tok = (o = {}) => testToken({ sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "mesh-k", session_end: nowS() + 3600, ...o });
 
 // 1. pure resolver
 const env = { VYOMI_HOST_SSH_ADDR: "10.0.0.5:2222", VYOMI_K3S_ADDR: "k3s-single:6443" };
@@ -44,7 +44,7 @@ const hostSrv = mk("HOST:"), k3sSrv = mk("K3S:"), vmSrv = mk("VM:");
 for (const s of [hostSrv, k3sSrv, vmSrv]) await new Promise((r) => s.listen(0, "127.0.0.1", r));
 const hostPort = hostSrv.address().port, k3sPort = k3sSrv.address().port, vmPort = vmSrv.address().port;
 
-const child = spawn(process.execPath, [path.join(here, "local-relay.mjs")], {
+const child = spawn(process.execPath, [...TEST_HOOK, path.join(here, "local-relay.mjs")], {
   env: { ...process.env, RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1", NODE_PATH: process.env.NODE_PATH || "" },
   stdio: ["ignore", "pipe", "pipe"] });
 let up = false; child.stdout.on("data", (d) => { if (String(d).includes("listening") || String(d).includes(String(PORT))) up = true; });

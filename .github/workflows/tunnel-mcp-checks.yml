@@ -52,10 +52,10 @@ jobs:
       - name: vyomi CLI + MCP server (go vet, go test -race)
         run: go -C cmd/vyomi vet ./... && go -C cmd/vyomi test -race -count=1 ./...
 
-      - name: Test dependencies (ws for the relay tests, fastapi/uvicorn for the fake mesh simulator)
+      - name: Test dependencies (ws for the relay tests, fastapi/uvicorn/cryptography for the fake mesh simulator)
         run: |
           mkdir -p "$RUNNER_TEMP/np" && npm i --prefix "$RUNNER_TEMP/np" --no-save ws@8 >/dev/null
-          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q fastapi 'uvicorn[standard]'
+          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install -q fastapi 'uvicorn[standard]' cryptography   # cryptography: the fake Mesh sim verifies Ed25519 (v2) tokens, as the image does
 
       - name: The two tunnel copies match (wasm/relay vs packaging/tunnel/bin, version stamps aside)
         run: python3 scripts/sync_tunnel_bin.py

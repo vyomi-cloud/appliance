@@ -1,5 +1,6 @@
-"""Mesh ROLE server-side enforcement: signed session token (HMAC, shared key), Pro = primary_cloud only, Max = all,
-everything refused after session_end, fail-closed without key/token. Role is opt-in (VYOMI_ROLE=mesh)."""
+"""Mesh ROLE server-side enforcement: portal-signed session token (Ed25519 v2, pinned keys; HMAC v1 retired, finding F2),
+Pro = primary_cloud only, Max = all, everything refused after session_end, fail-closed without a token. Role is opt-in
+(VYOMI_ROLE=mesh). Tokens are signed with the public test vector (tests/mesh_testkey.py), trusted in this process only."""
 import os
 import sys
 import tempfile
@@ -15,6 +16,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 import server  # noqa: E402
 from core import mesh_session as S  # noqa: E402
 from core import app_context as ctx  # noqa: E402
+from tests import mesh_testkey as testkey  # noqa: E402
+
+testkey.trust(S)
 
 PASS = FAIL = 0
 
@@ -55,8 +59,9 @@ def code(r):
         return None
 
 
-def tok(tier, primary="", ends_in=3600, key=KEY, **kw):
-    return S.mint("acct-1", tier, _t.time() + ends_in, primary_cloud=primary, session_id="s1", key=key, **kw)
+def tok(tier, primary="", ends_in=3600, forged=False, **kw):
+    mint = testkey.forged if forged else testkey.mint
+    return mint("acct-1", tier, _t.time() + ends_in, primary_cloud=primary, session_id="s1", **kw)
 
 
 # ---- the verifier itself
@@ -65,7 +70,8 @@ cl = S.verify(tok("pro", "aws"), key=KEY)
 check("verify: valid token returns claims", cl["tier"] == "pro" and cl["primary_cloud"] == "aws" and cl["sub"] == "acct-1")
 for name, t, kw, want in [
     ("tampered payload", tok("pro", "aws").split(".")[0] + "." + tok("max", "").split(".")[1] + "." + tok("pro", "aws").split(".")[2], {}, "MeshSessionBadSignature"),
-    ("wrong key", tok("pro", "aws", key="other-key"), {}, "MeshSessionBadSignature"),
+    ("wrong key", tok("pro", "aws", forged=True), {}, "MeshSessionBadSignature"),
+    ("v1 (HMAC) token, even with the right key", S.mint("acct-1", "max", _t.time() + 3600, key=KEY), {}, "MeshSessionV1Retired"),
     ("garbage", "not-a-token", {}, "MeshSessionMalformed"),
     ("expired", tok("pro", "aws", ends_in=-5), {}, "MeshSessionExpired"),
     ("free tier not eligible", tok("free"), {}, "MeshTierNotEligible"),
@@ -75,11 +81,12 @@ for name, t, kw, want in [
         check(f"verify rejects {name}", False)
     except S.SessionError as e:
         check(f"verify rejects {name}", e.code == want, e.code)
+check("verify: a v2 token needs no shared key", S.verify(tok("pro", "aws"), key="")["tier"] == "pro")
 try:
-    S.verify(tok("pro", "aws"), key="")
-    check("verify without a key fails closed", False)
+    S.verify(S.mint("acct-1", "pro", _t.time() + 3600, key="any"), key="")
+    check("verify: a v1 token without a key is refused", False)
 except S.SessionError as e:
-    check("verify without a key fails closed", e.code == "MeshSessionKeyMissing", e.code)
+    check("verify: a v1 token without a key is refused", e.code == "MeshSessionV1Retired", e.code)
 check("verify: the session end is evaluated at the supplied clock", (lambda: [S.verify(tok("pro", "aws", ends_in=10), key=KEY, now=now + 5), True][1])())
 try:
     S.verify(tok("pro", "aws", ends_in=10), key=KEY, now=now + 11)
@@ -110,7 +117,7 @@ check("Pro primary=aws: Azure refused", r.status_code == 403 and code(r) == "tie
 check("/healthz served while the session is valid", c.get("/healthz").status_code == 200)
 
 # a forged header token cannot widen the session (bad signature) ...
-r = gcp({S.HEADER: tok("max", "", key="attacker-key")})
+r = gcp({S.HEADER: tok("max", "", forged=True)})
 check("forged header token rejected (bad signature)", r.status_code == 401 and code(r) == "MeshSessionBadSignature", f"{r.status_code} {r.text[:150]}")
 # ... but a genuine header token is honoured over the env one
 S.reset_for_tests()
@@ -148,10 +155,18 @@ check("ended session stays ended (latched) even if a new token appears", gcp().s
 S.reset_for_tests()
 check("(new session after restart) fresh token works again", gcp().status_code != 410)
 
-# key missing
+# no shared key at all (what a v2 Mesh gets): the v2 token is still enough; no token is still nothing
 os.environ.pop("VYOMI_MESH_SESSION_KEY")
+check("mesh role without a key: v2 token still served (no shared key needed)", gcp().status_code not in (401, 410, 503))
+os.environ.pop("VYOMI_MESH_SESSION_TOKEN")
+S.reset_for_tests()
 r = gcp()
-check("mesh role without a key: refused (fail closed)", r.status_code in (401, 503) and r.status_code != 200, f"{r.status_code} {r.text[:100]}")
+check("mesh role without a token: refused (fail closed)", r.status_code == 401 and code(r) == "MeshSessionRequired", f"{r.status_code} {r.text[:100]}")
+os.environ["VYOMI_MESH_SESSION_TOKEN"] = S.mint("acct-1", "max", _t.time() + 3600, key=KEY)     # F2: a self-minted v1 token
+os.environ["VYOMI_MESH_SESSION_KEY"] = KEY
+S.reset_for_tests()
+r = gcp()
+check("mesh role, self-minted v1 token + its key: refused (F2)", r.status_code == 401 and code(r) == "MeshSessionV1Retired", f"{r.status_code} {r.text[:100]}")
 
 os.environ.pop("VYOMI_ROLE", None)
 print(f"\n{PASS} passed, {FAIL} failed")

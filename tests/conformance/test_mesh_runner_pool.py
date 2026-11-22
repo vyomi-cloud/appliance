@@ -87,7 +87,8 @@ def fake_for(rid, gen):
 
 
 RELAY = free_port()
-relay = subprocess.Popen([node, os.path.join(ROOT, "wasm", "relay", "local-relay.mjs")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+TRUST_HOOK = ["--import", os.path.join(ROOT, "wasm", "relay", "test-fixtures", "trust-test-key.mjs")]   # relay trusts the public test key
+relay = subprocess.Popen([node, *TRUST_HOOK, os.path.join(ROOT, "wasm", "relay", "local-relay.mjs")], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          env={**os.environ, "RELAY_PORT": str(RELAY), "RELAY_HOST": "127.0.0.1", "WS_PKG": ws_pkg, "VYOMI_LLM_HB_STALE_MS": "6000"})
 HUB = f"http://127.0.0.1:{RELAY}"
 for _ in range(60):
@@ -113,9 +114,11 @@ from core import mesh as B  # noqa: E402
 from core import mesh_remote_llm as R  # noqa: E402
 from core import mesh_runner_pool as P  # noqa: E402
 from core import mesh_session as BS  # noqa: E402
+from tests import mesh_testkey as testkey  # noqa: E402
 
 SID, now = "sess-pool-1", int(time.time())
-BTOK = BS.mint("acct-1", "pro", now + 3600, primary_cloud="aws", session_id=SID, key=KEY)
+testkey.trust(BS)                        # v2 tokens signed with the public test vector (v1 HMAC retired, finding F2)
+BTOK = testkey.mint("acct-1", "pro", now + 3600, primary_cloud="aws", session_id=SID)
 os.environ["VYOMI_MESH_SESSION_TOKEN"] = BTOK
 
 
@@ -128,7 +131,7 @@ class FakeDispatcher:
         self.started.append((rid, rotation, spec["ollama_tags"]))
         g = self.gen[rid] = self.gen.get(rid, 0) + 1
         fk = fake_for(rid, g)
-        rt = BS.mint("acct-1", "pro", now + 3600, session_id=SID, key=KEY, role="llm-runner", model=rid)       # FRESH token per runner
+        rt = testkey.mint("acct-1", "pro", now + 3600, session_id=SID, role="llm-runner", model=rid)       # FRESH token per runner
         env = {**os.environ, "VYOMI_RELAY_URL": HUB.replace("http", "ws") + "/llm-runner", "VYOMI_RUNNER_TOKEN": rt, "WS_PKG": ws_pkg,
                "CHAT_URL": f"http://127.0.0.1:{fk.server_address[1]}", "EMBED_URL": f"http://127.0.0.1:{fk.server_address[1]}"}
 

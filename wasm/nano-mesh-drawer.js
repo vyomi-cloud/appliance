@@ -62,14 +62,16 @@
        divider starts 40px below the header. The tab hangs from the top edge of the page instead (the row is 0px tall). */
     "#vy-md.c-aws.nav:not(.open) .md-tabrow{height:0}" +
     "#vy-md.c-aws.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:24px;border-radius:0 0 12px 12px;z-index:5}" +
+    /* GCP service page (left nav present): the drawer spans nav + content like the section below it (16px gutters), and a collapsed drawer
+       hangs from the header instead of reserving a 44px row above the nav (which cut the nav's top). */
+    "#vy-md.c-gcp.nav .md-body{max-width:none;padding-left:16px;padding-right:16px}" +
+    /* Azure: every page except the home dashboard is a service page: the drawer runs edge to edge with the page's own 20px gutters */
+    "#vy-md.c-azure.nav .md-body{max-width:none;padding-left:20px;padding-right:20px}" +
+    "#vy-md.c-gcp.nav:not(.open) .md-tabrow{height:0}" +
+    "#vy-md.c-gcp.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:24px;border-radius:0 0 12px 12px;z-index:5}" +
     "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
     "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
     "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +
-    /* the services / navigation flyouts (AWS "Recently visited" panel, GCP drawer, Azure portal menu) end at the top of the bottom dock;
-       --vy-dock = px from the window bottom to the dock top, published by fit() */
-    "body .vy-dark-chrome[style*=\"position: fixed\"]{bottom:var(--vy-dock,0px)!important}" +
-    "body .MuiDrawer-root.MuiDrawer-modal .MuiDrawer-paper{height:calc(100vh - var(--vy-dock,0px))!important;max-height:none!important}" +
-    "body .vy-portal-menu{bottom:var(--vy-dock,0px)!important}" +
     "@media(max-width:700px){#vy-md .md-tab{padding:0 12px}}";
 
   function header() { return document.querySelector(HEADER[CLOUD] || "header"); }
@@ -102,8 +104,6 @@
       open = !open; box.classList.toggle("open", open); this.setAttribute("aria-expanded", open); LS("s", open ? "1" : "0");
     };
     addEventListener("resize", place);
-    addEventListener("scroll", fitSoon, { passive: true, capture: true });
-    addEventListener("resize", fitSoon);
     addEventListener("hashchange", function () { setTimeout(place, 150); setTimeout(place, 900); });
     if (window.ResizeObserver) { var ro = new ResizeObserver(publish); ro.observe(box); }
     publish();
@@ -121,30 +121,24 @@
       var on = !!(nv && nv.getBoundingClientRect().width > 40);
       if (box.classList.contains("nav") !== on) box.classList.toggle("nav", on);
     }
-    publish();
-    fit();
-  }
-  // The drawer pushes the console down, but each console's side nav was sized as if it started at the header, so its bottom ran under
-  // the bottom dock (#vy-appbar; z-index above the dock on AWS) and covered the dock's left end. Keep every side nav ending where the
-  // dock starts: height = viewport - dock - the nav's visible top (its top once the page has scrolled to stick it under the header).
-  var NAV = { aws: { sel: '[class*="awsui_navigation-container"],[class*="awsui_tools-container"]', top: 40, prop: "height" },
-              gcp: { sel: "nav.MuiBox-root", top: 56, prop: "max-height" } };
-  function fit() {
-    var n = document.querySelector("#vy-appbar .vy-notch"), dock = n ? Math.max(0, innerHeight - n.getBoundingClientRect().top) : 0;
-    document.documentElement.style.setProperty("--vy-dock", dock + "px");
-    if (CLOUD === "azure") {   // the resource blade is fixed to the window: end it at the dock, not at a hard-coded 44px
-      var bl = document.getElementById("blade"); if (bl && dock) bl.style.setProperty("bottom", dock + "px", "important");
-      return;
+    if (CLOUD === "azure") {   // service page = any route but the home dashboard
+      var az = location.hash.replace(/^#\/?/, "").replace(/^home$/, "") !== "";
+      if (box.classList.contains("nav") !== az) box.classList.toggle("nav", az);
     }
-    var cfg = NAV[CLOUD]; if (!cfg || !dock) return;
-    document.querySelectorAll(cfg.sel).forEach(function (e) {
-      if (e.getBoundingClientRect().width < 40) return;   // collapsed side nav
-      var h = innerHeight - dock - Math.max(e.getBoundingClientRect().top, cfg.top);
-      if (h > 120) e.style.setProperty(cfg.prop, h + "px", "important");
-    });
+    if (CLOUD === "aws") {   // Console Home (no side nav): the content column is 1280px up to ~2000px wide and 1620px beyond; follow it
+      var cw = 1280;
+      if (!box.classList.contains("nav")) document.querySelectorAll("main > div").forEach(function (d) {
+        var hw = Math.round(d.getBoundingClientRect().width); if (cw === 1280 && hw >= 600 && hw <= 2400) cw = hw;
+      });
+      if (box.style.getPropertyValue("--md-cw") !== cw + "px") box.style.setProperty("--md-cw", cw + "px");
+    }
+    if (CLOUD === "gcp") {   // GCP service pages have a left nav (expanded 256px or collapsed 64px rail): same nav mode as AWS
+      var gn = document.querySelector("nav.MuiBox-root");
+      var gon = !!(gn && gn.getBoundingClientRect().width > 40);
+      if (box.classList.contains("nav") !== gon) box.classList.toggle("nav", gon);
+    }
+    publish();
   }
-  var fitQ = 0;
-  function fitSoon() { if (!fitQ) fitQ = requestAnimationFrame(function () { fitQ = 0; fit(); }); }
   function publish() { if (box) document.documentElement.style.setProperty("--mesh-drawer-h", box.offsetHeight + "px"); }
   function init() {
     if (document.getElementById("vy-md")) return;
