@@ -729,6 +729,14 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-aws-lambda-function-url",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_lambda_function_url_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-aws-wire-routes",
       "target": "offline",
       "cloud": "aws",
