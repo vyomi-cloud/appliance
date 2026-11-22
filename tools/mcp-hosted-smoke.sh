@@ -36,12 +36,23 @@ has() { case "$BODY" in (*"$1"*) return 0;; (*) return 1;; esac; }
 echo "Hosted Vyomi MCP smoke test: $BASE"
 
 # ── health ───────────────────────────────────────────────────────────────────
+# ROOT_IS_MCP: does the server also answer without the /mcp prefix? Locally and in Docker it does (one process). In
+# production the root is the PORTAL (App Platform sends only /mcp* to this component), so the root shapes below are
+# checked only when ROOT is this server.
+ROOT_IS_MCP=0
 for url in "$BASE/healthz" "$ROOT/healthz"; do
   out="$(curl -sS -o /tmp/mcp-smoke.$$ -w '%{http_code}' --max-time 20 "$url" 2>&1)" || { bad "GET $url" "curl: $out"; continue; }
   BODY="$(cat /tmp/mcp-smoke.$$ 2>/dev/null)"; rm -f /tmp/mcp-smoke.$$
-  if [ "$out" = "200" ] && has '"ok":true' && has '"version"'; then pass "GET $url -> $BODY"
-  elif [ "$out" = "404" ] && [ "$url" = "$ROOT/healthz" ]; then pass "GET $url -> 404 (no prefix trimming here; fine locally)"
-  else bad "GET $url" "status $out: $BODY"; fi
+  if [ "$url" = "$BASE/healthz" ]; then
+    if [ "$out" = "200" ] && has '"ok":true' && has '"version"' && has '"tools":'; then pass "GET $url -> $BODY"
+    else bad "GET $url" "status $out: $BODY"; fi
+  elif [ "$ROOT" = "$BASE" ]; then
+    ROOT_IS_MCP=1
+  elif [ "$out" = "200" ] && has '"tools":'; then
+    ROOT_IS_MCP=1; pass "GET $url -> $BODY (the same server also answers without /mcp)"
+  else
+    pass "GET $url -> $out (another service owns the root, e.g. the portal in production; root shapes skipped)"
+  fi
 done
 
 # ── initialize, tools/list, one call per tool ────────────────────────────────
@@ -92,7 +103,9 @@ post "resources/list is empty" 200 '{"jsonrpc":"2.0","id":3,"method":"resources/
 has '"resources":[]' || bad "hosted resources/list must be empty" "$BODY"
 
 # ── D-I6: every path shape takes POST, with no redirect ──────────────────────
-for url in "$BASE" "$BASE/" "$ROOT" "$ROOT/"; do
+shapes=("$BASE" "$BASE/")
+[ "$ROOT_IS_MCP" = 1 ] && [ "$ROOT" != "$BASE" ] && shapes+=("$ROOT" "$ROOT/")
+for url in "${shapes[@]}"; do
   out="$(curl -sS -o /dev/null -w '%{http_code} %{num_redirects} %{redirect_url}' --max-time 20 \
          -X POST -H 'Content-Type: application/json' \
          --data-binary '{"jsonrpc":"2.0","id":4,"method":"ping"}' "$url" 2>&1)" || { bad "POST $url" "curl: $out"; continue; }
