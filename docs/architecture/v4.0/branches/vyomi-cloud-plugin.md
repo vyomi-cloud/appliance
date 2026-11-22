@@ -50,7 +50,7 @@ rules, and writes files itself after a yes.
 | A remote plugin must NOT carry the "Needs vyomi-tunnel ..." note, and a stdio plugin still must | One rule for both | The hosted plugin needs no tunnel and no install; promising one in a listing would be wrong in exactly the place a user reads before installing. The checker now derives which rule applies from the plugin's own `mcp.json` |
 | Remote server URLs must be `https` on a `vyomi.cloud` host | Any URL | A listing must never be able to point an installed plugin at someone else's server |
 | `vyomi-cloud` is listed in all three marketplaces | Only shipping the folder | It has to be installable, and `check_agent_plugins.py` only covers plugins the marketplace lists |
-| Version 4.2.1, the same as `vyomi` | Its own version line | The marketplace's `metadata.version` must equal every plugin entry's version; one package, one version |
+| Version **4.3.0** for both plugins | Keeping 4.2.1 | The marketplace's `metadata.version` must equal every plugin entry's version (one package, one version), and `sync_claude_plugins.py` fails when plugin content changes without a bump — installed copies would never update. Adding `vyomi-cloud` and touching `vyomi`'s listing fields is such a change |
 
 ## Open issues
 - [ ] O-D1: the verified OpenAI identity, which decides `developerName` (owner: Rohith)
@@ -58,6 +58,8 @@ rules, and writes files itself after a yes.
   owner gates (plan §9, WP-O5); nothing here submits anything
 - [ ] `vyomi.cloud/support` is referenced as `supportURL` by both plugins; it must exist before submission
   (owner: Rohith)
+- [ ] `scripts/sync_claude_plugins.py` unpacks `check()`'s `(errors, notes)` now and prints the notes; that
+  caller broke on the first CI run of this branch and is fixed in the same commit range
 - [ ] `scripts/check_agent_plugins.py` and `integrations/claude-plugins/**` are also claimed by
   `v4/agent-plugins` and `v4/directory-fixes` (owner: Rohith to sequence the merges)
 - [ ] The three WP-O4 negative cases ("deploy to production AWS", "the weather in Bangalore", "store my real AWS
@@ -75,6 +77,7 @@ Run on macOS (darwin/arm64), 2026-11-23, against the hosted server built from th
 | `claude plugin validate integrations/claude-plugins` (marketplace) | **Validation passed** |
 | `bash scripts/package_openai_plugin.sh` | `dist/vyomi-cloud-openai.zip`, 20 entries, one plugin root, no hooks or git metadata |
 | `claude mcp add --transport http vyomi-hosted http://localhost:8080/mcp` → `claude mcp list` | `✔ Connected` |
+| `python3 scripts/sync_claude_plugins.py <a clone of vyomi-cloud/claude-plugins>` | `vyomi 4.2.1 -> 4.3.0, vyomi-cloud (new) -> 4.3.0`, `changed=true` |
 
 The five WP-O4 positive prompts, each run with `claude -p` against that server, with only the hosted MCP tools
 allowed (no Bash, Read, Write, Grep), four of them from an empty temporary directory:
