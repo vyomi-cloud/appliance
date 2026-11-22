@@ -50,4 +50,6 @@ check("consoles/build.mjs derives the drawer cache-buster from the file (no manu
 
 check("EXPANDED tab sits on the bottom border: flat bottom edge (radius 0 at the bottom), overlapping the 1px line", /#vy-md\.open \.md-tabrow\{align-items:flex-end\}/.test(css) && /#vy-md\.open \.md-tab\{margin-bottom:-1px;border-radius:var\(--md-br\) var\(--md-br\) 0 0/.test(css));
 
+check("side navs end where the bottom dock starts (AWS nav/tools containers, GCP nav; Azure blade) and are re-fitted on scroll/resize", /function fit\(\)/.test(src) && /#vy-appbar \.vy-notch/.test(src) && /innerHeight - dock - Math\.max\(e\.getBoundingClientRect\(\)\.top, cfg\.top\)/.test(src) && /setProperty\("bottom", dock \+ "px", "important"\)/.test(src) && /addEventListener\("scroll", fitSoon/.test(src));
+
 process.exit(failed ? 1 : 0);

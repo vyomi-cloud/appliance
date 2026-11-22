@@ -97,6 +97,8 @@
       open = !open; box.classList.toggle("open", open); this.setAttribute("aria-expanded", open); LS("s", open ? "1" : "0");
     };
     addEventListener("resize", place);
+    addEventListener("scroll", fitSoon, { passive: true, capture: true });
+    addEventListener("resize", fitSoon);
     addEventListener("hashchange", function () { setTimeout(place, 150); setTimeout(place, 900); });
     if (window.ResizeObserver) { var ro = new ResizeObserver(publish); ro.observe(box); }
     publish();
@@ -115,7 +117,28 @@
       if (box.classList.contains("nav") !== on) box.classList.toggle("nav", on);
     }
     publish();
+    fit();
   }
+  // The drawer pushes the console down, but each console's side nav was sized as if it started at the header, so its bottom ran under
+  // the bottom dock (#vy-appbar; z-index above the dock on AWS) and covered the dock's left end. Keep every side nav ending where the
+  // dock starts: height = viewport - dock - the nav's visible top (its top once the page has scrolled to stick it under the header).
+  var NAV = { aws: { sel: '[class*="awsui_navigation-container"],[class*="awsui_tools-container"]', top: 40, prop: "height" },
+              gcp: { sel: "nav.MuiBox-root", top: 56, prop: "max-height" } };
+  function fit() {
+    var n = document.querySelector("#vy-appbar .vy-notch"), dock = n ? Math.max(0, innerHeight - n.getBoundingClientRect().top) : 0;
+    if (CLOUD === "azure") {   // the resource blade is fixed to the window: end it at the dock, not at a hard-coded 44px
+      var bl = document.getElementById("blade"); if (bl && dock) bl.style.setProperty("bottom", dock + "px", "important");
+      return;
+    }
+    var cfg = NAV[CLOUD]; if (!cfg || !dock) return;
+    document.querySelectorAll(cfg.sel).forEach(function (e) {
+      if (e.getBoundingClientRect().width < 40) return;   // collapsed side nav
+      var h = innerHeight - dock - Math.max(e.getBoundingClientRect().top, cfg.top);
+      if (h > 120) e.style.setProperty(cfg.prop, h + "px", "important");
+    });
+  }
+  var fitQ = 0;
+  function fitSoon() { if (!fitQ) fitQ = requestAnimationFrame(function () { fitQ = 0; fit(); }); }
   function publish() { if (box) document.documentElement.style.setProperty("--mesh-drawer-h", box.offsetHeight + "px"); }
   function init() {
     if (document.getElementById("vy-md")) return;
