@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-22T15:17:23+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `release` cli:gcloud: 594.0.0 → 594.0.1
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T14:17:26+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2996,13 +3005,5 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `announcement` Amazon EC2 G7 instances now available in additional regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-g7-additional-regions/))
 - · `announcement` Amazon GameLift Servers now supports Game Session Placement Insights ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/gamelift-game-session-insights/))
 - · `announcement` Amazon OpenSearch Service announces managed cross-Region disaster recovery ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-opensearch-service-managed-cross-region-disaster-recovery/))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-10T23:59:59+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
