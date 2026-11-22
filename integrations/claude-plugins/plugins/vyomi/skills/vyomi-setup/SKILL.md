@@ -83,19 +83,35 @@ In v4 the simulator lives in one of these **homes**:
    their own. Committed, it tells every agent that opens the repo (a teammate's,
    or a cloud / PR agent with no plugin) to load `.env.vyomi`, leave the
    simulator for the developer to start, and keep away from the real cloud.
-   - Call `vyomi_write_agents_md` with `dry_run: true`, the project `path` and
-     the `clouds` from the scan. Show the user the returned `section` and the
-     planned action (`created`, `appended` or `updated`; text outside the
-     `<!-- vyomi:start -->` / `<!-- vyomi:end -->` markers is never changed).
-   - If the project has a `CLAUDE.md`, or the team uses Claude Code (which reads
-     `CLAUDE.md`, not `AGENTS.md`), offer `claude_md: true` as well: it adds an
-     `@AGENTS.md` import line to `CLAUDE.md`.
-   - Only after the user approves that exact change, call it again with
-     `dry_run: false`, then suggest they commit the file(s).
-   - If `vyomi_write_agents_md` is not available (an older `vyomi-tunnel`),
-     show the same kind of section, wrapped in those markers, and with the
-     user's OK write it yourself: only between the markers, no endpoints or
-     keys (those stay in `.env.vyomi`).
+   - Call `vyomi_agents_md` with the absolute project `path` and the `clouds`
+     from the scan. It is read-only: it writes nothing and returns the
+     proposal.
+   - Show the user the returned `section` and `agents_md.action` (`created`,
+     `appended`, `updated` or `unchanged`; `unchanged` means there is nothing
+     to do). If `claude_md.action` is `prepended`, also show
+     `claude_md.path`, the `@AGENTS.md` import line it adds and its `why`:
+     that file hides `AGENTS.md` from Claude Code unless it imports it.
+     (`not_needed` and `unchanged` need nothing.)
+   - **Stop and wait** for the user's explicit yes to that exact change. Only
+     then apply it with your own file-edit tool, so that the file ends up
+     exactly as `agents_md.proposed_content`:
+     - `created`: create `agents_md.path` with `agents_md.proposed_content`;
+     - `appended`: append the `section` to the end of the existing file;
+     - `updated`: replace `agents_md.replace_block` (from `start_marker` to
+       `end_marker`) with the `section` (without its final newline);
+     - `claude_md` `prepended` (same approval): add the import line at the
+       top of `claude_md.path`, giving `claude_md.proposed_content`.
+     In `AGENTS.md`, never change any text outside the
+     `<!-- vyomi:start -->` / `<!-- vyomi:end -->` markers; in the Claude
+     memory file, add only the import line. If a file changed since the call,
+     call `vyomi_agents_md` again rather than editing from a stale proposal.
+   - Then suggest committing `AGENTS.md` (and the Claude memory file, if it
+     changed) so teammates' agents pick it up.
+   - If `vyomi_agents_md` is not available (`vyomi-tunnel` older than 1.4.0),
+     suggest upgrading the tunnel, or show a section of the same shape,
+     wrapped in those markers, and with the user's OK write it yourself:
+     only between the markers, no endpoints or keys (those stay in
+     `.env.vyomi`).
 
 ## Rules
 

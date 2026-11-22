@@ -13,9 +13,18 @@ One package serves several coding agents, each through its own manifest:
   .cursor-plugin/marketplace.json          Cursor team marketplaces
 
 A version bumped in one but not the others means some agents never update; an MCP server changed in one means some
-agents run the old command. This script fails on any such drift. Stdlib only.
+agents run the old command; a "Needs vyomi-tunnel ..." note changed in one means some listings promise the wrong
+tunnel. Icon paths (logo, composerIcon) must exist inside the plugin. This script fails on any such drift. Stdlib only.
 
   python3 scripts/check_agent_plugins.py [root]     # default root: integrations/claude-plugins
+
+With --schemas, it also validates the files against the published JSON Schemas (needs the `jsonschema` package):
+plugin.json and mcp.json against Agent Plugins 1.0.0 (github.com/agentplugins/agent-plugins-spec, schemas/1.0.0), and
+.cursor-plugin/plugin.json and .cursor-plugin/marketplace.json against Cursor's (github.com/cursor/plugins, schemas/).
+Claude Code's files are covered by `claude plugin validate`; Codex publishes no JSON Schema for .codex-plugin/ or
+.agents/plugins/ (its loader is codex-rs/core-plugins in openai/codex).
+
+  python3 scripts/check_agent_plugins.py [root] --schemas <agent-plugins-spec checkout> <cursor-plugins checkout>
 """
 import json
 import pathlib
@@ -26,6 +35,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 DEFAULT = ROOT / "integrations" / "claude-plugins"
 PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json"
 MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
+# The tunnel requirement every description repeats, e.g. "Needs vyomi-tunnel 1.3.0+ (1.4.0+ for the AGENTS.md step)".
+TUNNEL_NOTE_RE = re.compile(r"Needs vyomi-tunnel [0-9][^\s]*(?: \([^)]*\))?")
 NAME_RE = re.compile(r"^(?!.*--)(?!.*\.\.)[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$")
 
 
@@ -126,6 +137,38 @@ def check(root):
             if m.get("skills") and not (pdir / m["skills"]).is_dir():
                 errors.append(f"{where}: {rel} skills path {m['skills']} does not exist")
 
+        # Descriptions: every manifest and marketplace entry carries the same tunnel requirement note.
+        notes = {}
+        described = [(rel, m) for rel, m in manifests.items() if m is not None]
+        described += [(".claude-plugin/marketplace.json entry", entry)]
+        if cursor_mp is not None and name in cursor_entries:
+            described.append((".cursor-plugin/marketplace.json entry", cursor_entries[name]))
+        if codex_mp is not None and name in codex_entries:
+            described.append((".agents/plugins/marketplace.json entry", codex_entries[name]))
+        for rel, m in described:
+            found = TUNNEL_NOTE_RE.findall(m.get("description") or "")
+            if len(found) != 1:
+                errors.append(f"{where}: {rel} description needs exactly one 'Needs vyomi-tunnel ...' note, found {found}")
+            else:
+                notes[rel] = found[0]
+        if len(set(notes.values())) > 1:
+            errors.append(f"{where}: descriptions disagree on the tunnel requirement: {notes}")
+
+        # Icons: logo / composerIcon paths stay inside the plugin and exist. Codex ignores paths without a leading './'.
+        icons = {".cursor-plugin/plugin.json logo": (manifests[".cursor-plugin/plugin.json"] or {}).get("logo")}
+        for rel, iface in (("plugin.json extensions.com.openai.interface", ((portable or {}).get("extensions", {}).get("com.openai", {}).get("interface") or {})),
+                           (".codex-plugin/plugin.json interface", ((manifests[".codex-plugin/plugin.json"] or {}).get("interface") or {}))):
+            for key in ("logo", "logoDark", "composerIcon"):
+                icons[f"{rel}.{key}"] = iface.get(key)
+                if iface.get(key) and not iface[key].startswith("./"):
+                    errors.append(f"{where}: {rel}.{key} must start with './' (Codex ignores it otherwise)")
+        for label, icon in icons.items():
+            if not icon or re.match(r"^https?://", icon):
+                continue
+            ip = (pdir / icon).resolve()
+            if pdir not in ip.parents or not ip.is_file():
+                errors.append(f"{where}: {label} {icon} is not a file inside the plugin")
+
         # Skills (Agent Skills): skills/<dir>/SKILL.md with name == dir and a description.
         skills = sorted((pdir / "skills").glob("*/SKILL.md"))
         if not skills:
@@ -161,14 +204,45 @@ def check(root):
     return errors
 
 
+def check_schemas(root, spec_dir, cursor_dir):
+    """Validate the portable and Cursor files against their published JSON Schemas."""
+    import jsonschema  # only needed for --schemas
+
+    root, errors = pathlib.Path(root), []
+    spec, cursor = pathlib.Path(spec_dir) / "schemas" / "1.0.0", pathlib.Path(cursor_dir) / "schemas"
+    mp = json.loads((root / ".claude-plugin" / "marketplace.json").read_text())
+    jobs = [(root / ".cursor-plugin" / "marketplace.json", cursor / "marketplace.schema.json")]
+    for entry in mp.get("plugins", []):
+        pdir = root / entry["source"]
+        jobs += [(pdir / "plugin.json", spec / "plugin.schema.json"), (pdir / "mcp.json", spec / "mcp.schema.json"),
+                 (pdir / ".cursor-plugin" / "plugin.json", cursor / "plugin.schema.json")]
+    for doc, sch in jobs:
+        if not doc.exists():
+            continue
+        schema = json.loads(sch.read_text())
+        validator = jsonschema.validators.validator_for(schema)(schema, format_checker=jsonschema.FormatChecker())
+        for e in validator.iter_errors(json.loads(doc.read_text())):
+            errors.append(f"{doc.relative_to(root)} vs {sch.name}: {'/'.join(map(str, e.path)) or '(root)'}: {e.message}")
+    return errors
+
+
 def main(argv):
-    root = pathlib.Path(argv[1]) if len(argv) > 1 else DEFAULT
+    args = argv[1:]
+    schemas = None
+    if "--schemas" in args:
+        i = args.index("--schemas")
+        schemas, args = args[i + 1:i + 3], args[:i] + args[i + 3:]
+        if len(schemas) != 2:
+            sys.exit("check_agent_plugins: --schemas needs <agent-plugins-spec dir> <cursor-plugins dir>")
+    root = pathlib.Path(args[0]) if args else DEFAULT
     errors = check(root)
+    if schemas and not errors:
+        errors = check_schemas(root, *schemas)
     for e in errors:
         print(f"check_agent_plugins: {e}", file=sys.stderr)
     if errors:
         return 1
-    print(f"agent plugin manifests consistent ({root})")
+    print(f"agent plugin manifests consistent ({root})" + (" and valid against the published schemas" if schemas else ""))
     return 0
 
 
