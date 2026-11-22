@@ -209,20 +209,30 @@ provider "aws" {
 
 ## Use with AI coding agents (MCP)
 
-`vyomi mcp` is a [Model Context Protocol](https://modelcontextprotocol.io) server, so Claude Code, Claude Desktop, Cursor or VS Code can check the simulator, see which services Vyomi emulates, scan your project and wire its SDKs to the simulator.
+The Vyomi MCP server ([Model Context Protocol](https://modelcontextprotocol.io)) lets Claude Code, Codex, Cursor, VS Code and other agents check the simulator, see which services Vyomi emulates, scan your project and wire its SDKs to the simulator. Agents start it with `npx -y vyomi-tunnel mcp` (Node.js 18+, nothing to install; if `vyomi-tunnel` is installed, that runs your installed copy).
 
 ```sh
-claude mcp add --scope user vyomi -- vyomi mcp          # Claude Code: MCP server only
+claude mcp add --scope user vyomi -- npx -y vyomi-tunnel mcp      # Claude Code
+codex mcp add vyomi -- npx -y vyomi-tunnel mcp                    # Codex
+code --add-mcp '{"name":"vyomi","command":"npx","args":["-y","vyomi-tunnel","mcp"]}'   # VS Code
 ```
 
-Or install the Claude Code plugin (the MCP server plus a setup skill):
+Any other MCP client (Cursor `~/.cursor/mcp.json`, a project `.mcp.json`, ...):
+
+```json
+{ "mcpServers": { "vyomi": { "command": "npx", "args": ["-y", "vyomi-tunnel", "mcp"] } } }
+```
+
+Or install the plugin (the MCP server plus setup skills) in Claude Code:
 
 ```
 /plugin marketplace add vyomi-cloud/claude-plugins
 /plugin install vyomi@vyomi
 ```
 
-Then, in any project: *"Set this project up to run against Vyomi."* Claude scans the code for AWS / GCP / Azure usage, reports what is emulated and what isn't, and asks before writing a `.env.vyomi` with the local endpoints. Your production config is not touched. Tools: `vyomi_status`, `vyomi_services`, `vyomi_env`, `vyomi_scan_repo`, `vyomi_write_env`. Details: [`cmd/vyomi/README.md`](cmd/vyomi/README.md#mcp-server-vyomi-mcp).
+Offline, or with the tunnel installed: register `vyomi-tunnel mcp` instead; v4.0.0 offline appliance users: `vyomi mcp` (`claude mcp add --scope user vyomi -- vyomi mcp`).
+
+Then, in any project: *"Set this project up to run against Vyomi."* The agent scans the code for AWS / GCP / Azure usage, reports what is emulated and what isn't, and asks before writing a `.env.vyomi` with the local endpoints. Your production config is not touched. Tools: `vyomi_status`, `vyomi_reach`, `vyomi_services`, `vyomi_capability`, `vyomi_snippet`, `vyomi_env`, `vyomi_scan_repo`, `vyomi_agents_md` (read-only) and `vyomi_write_env` (writes only after your yes). Details: [`cmd/vyomi/README.md`](cmd/vyomi/README.md#mcp-server-vyomi-mcp), [`packaging/tunnel/README.md`](packaging/tunnel/README.md).
 
 ## Reference apps
 

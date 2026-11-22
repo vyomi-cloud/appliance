@@ -333,8 +333,13 @@ Targets are your own VMs and k3s clusters, plus 'api' (the simulator's API ports
 (simulator, llm*) are not forwarded or listed. A local port that is already in use is refused, with a free one suggested.`,
   mcp: `vyomi-tunnel mcp
 
-Runs the Vyomi MCP server (vyomi-mcp, bundled with this package) on stdin/stdout, for Claude Code and other agents:
-  claude mcp add vyomi -- vyomi-tunnel mcp
+Runs the Vyomi MCP server (vyomi-mcp, bundled with this package) on stdin/stdout, for Claude Code and other agents.
+Agents start it with npx (Node.js 18+; when vyomi-tunnel is installed, npx hands over to it, so both run one server):
+  claude mcp add --scope user vyomi -- npx -y vyomi-tunnel mcp
+  codex mcp add vyomi -- npx -y vyomi-tunnel mcp
+  code --add-mcp '{"name":"vyomi","command":"npx","args":["-y","vyomi-tunnel","mcp"]}'
+  JSON (Cursor, .mcp.json, others): {"command": "npx", "args": ["-y", "vyomi-tunnel", "mcp"]}
+Offline: register 'vyomi-tunnel mcp' itself (v4.0.0 offline appliance: 'vyomi mcp').
 It finds your simulator (the Nano tab through this tunnel, a local mesh, or your Mesh Codespace), and answers what Vyomi
 supports and how to point your SDKs at it. It needs no key; only live Mesh Codespace details need one (through 'list').
 Without a bundled binary for this platform it runs 'vyomi-mcp' or 'vyomi mcp' from your PATH.`,
