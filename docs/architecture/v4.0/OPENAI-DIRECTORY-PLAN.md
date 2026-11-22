@@ -12,7 +12,7 @@ not reach ChatGPT at all. The only route in is a **remote MCP server** submitted
 - OpenAI limits local MCP submissions to approved partners, and asks for bundled servers (no `npx`).
 - A skills-only listing is a trap: "Adding an MCP server to an existing skills-only plugin is not currently supported."
 
-So this plan ships phase 1 of the hosted MCP (`https://mcp.vyomi.cloud/mcp`, anonymous, read-only), a
+So this plan ships phase 1 of the hosted MCP (`https://vyomi.cloud/mcp`, anonymous, read-only), a
 `plugins/vyomi-cloud` package that meets OpenAI's listing rules, and the review pack OpenAI asks for. The same server
 also clears the Claude directory block (G9) and reaches claude.ai and Cowork.
 
@@ -22,7 +22,7 @@ What is different from today:
 |---|---|---|
 | Codex | Installs from our marketplace repo (local `npx` server) | Also listed in the OpenAI directory; installs in one click |
 | ChatGPT | Not possible | Listed; knowledge tools work on web and mobile |
-| MCP server | Local stdio only (`vyomi-tunnel mcp`) | Plus a hosted Streamable HTTP server on `mcp.vyomi.cloud` |
+| MCP server | Local stdio only (`vyomi-tunnel mcp`) | Plus a hosted Streamable HTTP server at `vyomi.cloud/mcp` |
 | Writers | `vyomi_write_env` writes `.env.vyomi` locally | Hosted server has **no writer**; it proposes, the agent writes after a yes |
 
 ## 1. What OpenAI requires (read 2026-11-22)
@@ -31,9 +31,9 @@ What is different from today:
 |---|---|---|
 | Verified individual or business identity; publishing under an unverified name is rejected | app-review | Gate O-G1 (you) |
 | Owner or "Apps Management: Write" role for the submitter | submit-plugins | Gate O-G1 |
-| Server "hosted on a publicly accessible domain"; no local or test endpoints | app-review | `https://mcp.vyomi.cloud/mcp` (WP-O2) |
+| Server "hosted on a publicly accessible domain"; no local or test endpoints | app-review | `https://vyomi.cloud/mcp` (WP-O2) |
 | Connection, scan and domain verification pass; findings resolved | submit-plugins | WP-O6 |
-| Changing the origin (scheme, host, port) later needs a **new plugin** | app-review | Lock `mcp.vyomi.cloud` before submitting |
+| Changing the origin (scheme, host, port) later needs a **new plugin** | app-review | Origin is `vyomi.cloud` (D-H2 = B′): the most permanent one we have |
 | `readOnlyHint`, `destructiveHint`, `openWorldHint` as explicit booleans on every tool; must match behaviour | guidelines 6.3, app-review | WP-O1 + a test |
 | Tool names: unique, plain-language verbs (e.g. `get_order_status`); descriptions say purpose, behaviour, when to use, side effects | guidelines 6.1 | WP-O1 (decision O-D2) |
 | Each public tool operates independently; no generic executor | guidelines 6.2 | WP-O1 (scan split: see risk R2) |
@@ -56,7 +56,7 @@ What is different from today:
 
 | # | Decision | Recommendation |
 |---|---|---|
-| D-H2..D-H6 | Remaining hosted-MCP decisions (separate DO app, anonymous phase 1, folder `vyomi-cloud`, new names for changed tools, logs) | Approve as recommended in `HOSTED-MCP-DESIGN.md` §11, with O-D2 and O-D4 below |
+| D-H2..D-H6 | Remaining hosted-MCP decisions (D-H2 = B′: `/mcp` component in the portal app, anonymous phase 1, folder `vyomi-cloud`, new names for changed tools, logs) | Approve as recommended in `HOSTED-MCP-DESIGN.md` §11, with O-D2 and O-D4 below |
 | O-D1 | Publish as individual or business | Business ("Vyomi") if Vyomi is a registered company; else individual. `developerName` must match |
 | O-D2 | Hosted tool names | Verb names, per OpenAI 6.1: `list_services`, `check_capability`, `get_code_snippet`, `get_sdk_settings`, `get_scan_rules`, `summarize_scan_hits`, `propose_env_file`, `propose_agents_md_section`. The local server keeps its `vyomi_*` names |
 | O-D3 | Surfaces | ChatGPT + Codex. If the portal lets us choose, still pick both: the knowledge tools work everywhere, and test cases use only those on ChatGPT |
@@ -72,7 +72,7 @@ Owner key: **CLI** = Claude Code session in auto mode on a topic branch; **You**
   submitter the Apps Management: Write role if it isn't the owner.
 - Open the plugin submission portal once and confirm "Create plugin → With MCP" is offered, and note the surface and
   country fields it shows (closes open question Q1).
-- Approve a new DigitalOcean App Platform app (one basic container) and add DNS for `mcp.vyomi.cloud` when WP-O2 asks.
+- Approve adding the `/mcp` component to the portal's DigitalOcean app (one basic container) and a Cloudflare rule for `/mcp*` when WP-O2 asks. No DNS change.
 
 ### WP-O1 — Hosted mode of the MCP server (CLI, size M)
 Branch `v4/hosted-mcp` via `scripts/v4-session-start.sh hosted-mcp`.
@@ -94,16 +94,16 @@ Branch `v4/hosted-mcp` via `scripts/v4-session-start.sh hosted-mcp`.
   and writes no file; JSON-RPC round trips over HTTP; `tools/guardrails/run.sh` rows for the hosted surface (0
   writers). Local mode unchanged: the existing 8 + 1 pin still passes.
 
-### WP-O2 — Deploy (CLI, size S; DNS and billing are your gates)
-- Container build of the Go binary (distroless/static), `.do/mcp-hosted.yaml` app spec, one basic instance, health
+### WP-O2 — Deploy (CLI, size S; the portal app change and Cloudflare rule are your gates)
+- Container image of the Go binary (distroless/static) pushed as `vyomi/mcp-hosted:<version>`; a service component in the portal's app spec routed at `/mcp`, one basic instance, health
   check `/healthz`, region near the portal.
 - `mcp-hosted-release.yml`: deploys on tag `mcp-hosted-v*` only (not on merges), after guardrails and Go tests.
-- Uptime check on `https://mcp.vyomi.cloud/healthz`; logs per O-D4.
+- Uptime check on `https://vyomi.cloud/mcp/healthz`; logs per O-D4.
 - Smoke after deploy: MCP Inspector or a scripted `initialize` + `tools/list` + one call per tool against the public URL.
 
 ### WP-O3 — The `vyomi-cloud` plugin package (CLI, size S)
 In `integrations/claude-plugins/plugins/vyomi-cloud/` (synced to `vyomi-cloud/claude-plugins`):
-- `mcp.json` / `.mcp.json`: `{"mcpServers": {"vyomi": {"type": "http", "url": "https://mcp.vyomi.cloud/mcp"}}}`.
+- `mcp.json` / `.mcp.json`: `{"mcpServers": {"vyomi": {"type": "http", "url": "https://vyomi.cloud/mcp"}}}`.
 - `.codex-plugin/plugin.json` with OpenAI listing fields, within limits:
   - `displayName`: "Vyomi"; `shortDescription` (≤ 30): "Local AWS, GCP, Azure simulator"
   - `longDescription`: what it answers and proposes, and that it never reads or sends source code
@@ -158,7 +158,7 @@ In `integrations/claude-plugins/plugins/vyomi-cloud/` (synced to `vyomi-cloud/cl
 You:  O-G1 identity ─────────────────────────────────────────────┐
 You:  approve D-H2..D-H6, O-D1..O-D5 ──┐                         │
 CLI:                                   WP-O1 ── WP-O3 ──┐        │
-You:  O-G2 DO app + O-G3 DNS ──────────── WP-O2 deploy ─┤        │
+You:  O-G2 portal app + O-G3 Cloudflare ── WP-O2 deploy ─┤        │
 Me:                                    WP-O4 drafts ────┤        │
 You:                                   O-G4 privacy, O-G5 demo ──┤
 You:                                                    WP-O6 submit ── review ── WP-O7
@@ -167,8 +167,8 @@ You:                                                    WP-O6 submit ── revi
 | Gate | What | Owner | Blocks |
 |---|---|---|---|
 | O-G1 | OpenAI identity verification + role | You | WP-O6 |
-| O-G2 | DigitalOcean app (billing) | You | WP-O2 |
-| O-G3 | DNS `mcp.vyomi.cloud` | You | WP-O2 |
+| O-G2 | `/mcp` component in the portal's DigitalOcean app (billing for one container) | You | WP-O2 |
+| O-G3 | Cloudflare rule letting `/mcp*` through bot protection | You | WP-O2 |
 | O-G4 | Privacy policy update live | You | WP-O6 |
 | O-G5 | Demo video link | You | WP-O6 |
 | O-G6 | Final submit click | You | Review |
@@ -193,7 +193,7 @@ You:                                                    WP-O6 submit ── revi
 | R1 | ChatGPT has no local file tools, so scan and file proposals are weaker there | Test cases use knowledge tools on ChatGPT; scan flow is documented as Codex-first |
 | R2 | Reviewers read the two-step scan (`get_scan_rules` → `summarize_scan_hits`) as tools that don't operate independently | Each returns a complete, useful answer alone (rules list; summary of any hits passed in); if challenged, drop the scan pair from the hosted surface for v1 |
 | R3 | Tier wording read as upgrade promotion | Hosted text states availability only; reviewed in WP-O1 |
-| R4 | Origin change later forces a new listing | Lock `mcp.vyomi.cloud` before WP-O6 |
+| R4 | Origin change later forces a new listing | Origin `vyomi.cloud`, path `/mcp`; never move it |
 | R5 | Anonymous endpoint abuse | Size limits, rate limits, no outbound calls, no state |
 | R6 | Review time unknown ("Review timelines may vary") | Submit early; WP-O7 Claude submission runs in parallel |
 

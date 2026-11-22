@@ -28,7 +28,7 @@ reach still need a remote server. D-H1 (§11) is therefore decided: build phase 
 ## 2. Goals and non-goals
 
 Goals:
-- A remote MCP server at `https://mcp.vyomi.cloud/mcp` that the directory accepts from an unverified organization.
+- A remote MCP server at `https://vyomi.cloud/mcp` that the directory accepts from an unverified organization.
 - The same user experience as the local plugin for "Set this project up to run against Vyomi": find the simulator,
   scan, propose `.env.vyomi`, propose the `AGENTS.md` section, write nothing without a yes.
 - No new data on our side beyond what each call needs; nothing stored by default.
@@ -92,7 +92,7 @@ than the local guardrail (8 + 1).
 agent (Claude Code, claude.ai, Cowork, Codex, Cursor, Copilot)
    │  Streamable HTTP, JSON-RPC over POST (HTTPS)
    ▼
-mcp.vyomi.cloud/mcp ── Go `vyomi mcp --http` (stateless; knowledge embedded)
+vyomi.cloud/mcp ── Go `vyomi mcp --hosted` (portal app component; stateless; knowledge embedded)
    │  phase 2 only: token check, account lookups
    ▼
 vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
@@ -107,13 +107,21 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
   tools each mode exposes.
 - **Never fetch a URL the caller supplies (SSRF).** Unlike the local server, the hosted one must never probe a host
   named in a request. `home: <relay URL>` is used only to render settings; the server does not connect to it.
-- **Hosting (D-H2):**
+- **Hosting (D-H2, decided 2026-11-22: B′, same origin as the portal).** The server is a **separate service
+  component inside the portal's DigitalOcean app**, routed by path: `vyomi.cloud/mcp` → the Go container, everything
+  else → the portal. It runs from a **pinned image** (`vyomi/mcp-hosted:<version>` on Docker Hub), not a source build, so
+  portal deploys only re-pull the same image and an MCP build can never block a portal deploy. Why: `vyomi.cloud` is
+  the most permanent origin (OpenAI treats a new origin as a new plugin), phase 2 OAuth is same-origin with the portal,
+  no new DNS or app, same per-container cost. Trade-off: App Platform deploys all components together, so an MCP
+  release (bumping the image tag) also redeploys the portal's current `main`, and a failed component rolls the whole
+  app back. Cloudflare in front of `vyomi.cloud` needs a rule that lets `/mcp*` through bot protection.
 
 | Option | For | Against |
 |---|---|---|
-| **A. Separate DigitalOcean App Platform app**, one small container from the same Go build (recommended) | Same vendor as the portal; reuses the Go code as is; deploys on its own trigger, not on portal merges | One more service to watch |
-| B. Inside the portal app | No new app | Couples MCP uptime to portal deploys, and every portal merge is a paid deploy |
-| C. Cloudflare Worker next to the relay | Cheap, global, already in use | Needs the Go server ported to JavaScript or WebAssembly; the knowledge files would have to fit Worker limits |
+| A. Separate DigitalOcean App Platform app on `mcp.vyomi.cloud` | Independent deploys and rollbacks | New DNS and app; a second origin |
+| **B′. Service component in the portal app, path `/mcp`, pinned image (chosen)** | Origin `vyomi.cloud`; no DNS; same-origin OAuth later | Deploys coupled at the app level; portal app spec changes |
+| B. Inside the portal's FastAPI process | No new container | Rewrite in Python or proxy to Go; shared failures |
+| C. Cloudflare Worker next to the relay | Cheap, global | Port Go to JS/Wasm; Worker limits |
 
 - **Versioning:** the hosted server reports `serverInfo.version` = the appliance knowledge version it was built from.
   It deploys from `v4-on-main` with the same gates as the tunnel (guardrails, Go tests). A release tag such as
@@ -127,14 +135,14 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
   scan report and the `AGENTS.md` text are the large inputs).
 - **Phase 2: OAuth 2.1 with the portal as the authorization server**, for account-aware tools (tier, Codespace mesh).
   It follows the MCP authorization spec:
-  - `mcp.vyomi.cloud` serves protected-resource metadata (`/.well-known/oauth-protected-resource`) naming
+  - `vyomi.cloud` (the portal, same origin) serves protected-resource metadata (`/.well-known/oauth-protected-resource`) naming
     `vyomi.cloud` as its authorization server. Unauthenticated calls to account tools get `401` with
     `WWW-Authenticate`.
   - `vyomi.cloud` adds authorization-server metadata (`/.well-known/oauth-authorization-server`), an authorization
     endpoint (authorization code + PKCE) and a token endpoint. It supports dynamic client registration, so Claude and
     other clients can register without a manual step.
   - The consent page reuses the portal's existing sign-in (Google, GitHub, LinkedIn, email), as `/activate` does.
-  - Tokens: short-lived access tokens (JWT from the existing `jwt_signer` key, audience `https://mcp.vyomi.cloud`),
+  - Tokens: short-lived access tokens (JWT from the existing `jwt_signer` key, audience `https://vyomi.cloud/mcp`),
     one scope `vyomi.read`, and refresh tokens the user can revoke from the account page.
   - Effort: this is the largest single piece. It is a new security surface on the portal and needs its own review and
     guardrail rows.
@@ -146,7 +154,7 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
 
 - Keep `plugins/vyomi` (local, `npx -y vyomi-tunnel@<pin> mcp`) for every marketplace install.
 - Add `plugins/vyomi-cloud` (name: D-H4) in `vyomi-cloud/claude-plugins`:
-  - `.mcp.json`: `{"mcpServers": {"vyomi": {"type": "http", "url": "https://mcp.vyomi.cloud/mcp"}}}`. Phase 2 adds
+  - `.mcp.json`: `{"mcpServers": {"vyomi": {"type": "http", "url": "https://vyomi.cloud/mcp"}}}`. Phase 2 adds
     `oauth` fields only if Claude's discovery needs them.
   - The same three skills. To avoid two copies drifting, each skill branches on the tools it finds: with
     `vyomi_status` (local), the current steps; with `vyomi_scan_rules` (hosted), the local Grep/curl/Edit steps. One
@@ -186,7 +194,7 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
 | 3D Test account with sample data | Phase 1: none needed (anonymous). Phase 2: a Free account with a stopped Codespace mesh record |
 | 3E Three working prompts | "Set this project up to run against Vyomi."; "Which AWS services does Vyomi emulate on Nano?"; "Show me how to call SQS on Vyomi from Python." |
 | 3F Own the endpoint domain | `vyomi.cloud` |
-| Remote MCP `https` URL | `https://mcp.vyomi.cloud/mcp` |
+| Remote MCP `https` URL | `https://vyomi.cloud/mcp` |
 
 ## 10. Plan
 
@@ -194,7 +202,7 @@ vyomi.cloud (portal): OAuth authorization server, mesh_session, tiers
 |---|---|---|---|
 | 0 | This doc approved; D-H1 decided 2026-11-22 (build now); D-H2–D-H6 to decide | — | — |
 | 1a | `vyomi mcp --http` with hosted mode, scan rules/report split, `vyomi_env_file`; tests and guardrail rows for the hosted surface (no writer, no outbound fetch of caller URLs) | M | — |
-| 1b | DigitalOcean app on `mcp.vyomi.cloud`, deploy workflow on a tag, rate limits, uptime check | S | — |
+| 1b | `/mcp` component in the portal's DigitalOcean app (pinned image), deploy workflow on a tag, rate limits, uptime check | S | — |
 | 1c | `plugins/vyomi-cloud` folder, skills branching on tools, README, drift-check support | S | — |
 | 1d | Privacy policy update (human), then directory Validate and submission (human) | — | Directory block (a) without G9; claude.ai and Cowork |
 | 1e | OpenAI identity verification (human), then OpenAI submission of `plugins/vyomi-cloud` as "With MCP" (human) | — | OpenAI directory (ChatGPT and Codex) without an approved-partner allowlist |
@@ -208,7 +216,7 @@ Phase 1 alone is enough for the directory. Phases 2 and 3 are optional.
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
 | D-H1 | Build now, or wait for G9 | Build phase 1 now / wait for Anthropic's answer | **Decided 2026-11-22 (Rohith): build phase 1 now.** OpenAI limits local MCP to approved partners and wants bundled servers, so only a remote server reaches its directory whatever G9 says. Still send the G9 request (free) |
-| D-H2 | Hosting | A separate DO app / B inside the portal / C Cloudflare Worker | A |
+| D-H2 | Hosting | A separate DO app / B′ component in the portal app / B inside FastAPI / C Cloudflare Worker | **B′, decided 2026-11-22** (`https://vyomi.cloud/mcp`) |
 | D-H3 | Phase 1 without sign-in | Anonymous / sign-in from day one | Anonymous: nothing account-specific is exposed in phase 1 |
 | D-H4 | Folder and listing name | `vyomi-cloud` / `vyomi-remote` / other | `vyomi-cloud` (check the directory's look-alike rule against `vyomi`) |
 | D-H5 | Hosted tool names | Keep `vyomi_scan_repo` with a new input shape / new `vyomi_scan_rules` + `vyomi_scan_report`; `vyomi_write_env` -> `vyomi_env_file` | New names: different behaviour should not hide behind the same name |
@@ -217,7 +225,7 @@ Phase 1 alone is enough for the directory. Phases 2 and 3 are optional.
 ## 12. Human gates
 
 - Approving this doc and D-H1–D-H6.
-- Creating `mcp.vyomi.cloud` (DNS) and the DigitalOcean app (billing).
+- Adding the `/mcp` component and route to the portal's DigitalOcean app (production config, billing for one container), and a Cloudflare rule that lets `/mcp*` through bot protection.
 - The privacy policy change.
 - The directory submission of `plugins/vyomi-cloud`.
 - OpenAI Platform identity verification (individual or business) and the OpenAI submission.
