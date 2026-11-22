@@ -50,9 +50,8 @@ check("consoles/build.mjs derives the drawer cache-buster from the file (no manu
 
 check("EXPANDED tab sits on the bottom border: flat bottom edge (radius 0 at the bottom), overlapping the 1px line", /#vy-md\.open \.md-tabrow\{align-items:flex-end\}/.test(css) && /#vy-md\.open \.md-tab\{margin-bottom:-1px;border-radius:var\(--md-br\) var\(--md-br\) 0 0/.test(css));
 
-check("side navs end where the bottom dock starts (AWS nav/tools containers, GCP nav; Azure blade) and are re-fitted on scroll/resize", /function fit\(\)/.test(src) && /#vy-appbar \.vy-notch/.test(src) && /innerHeight - dock - Math\.max\(e\.getBoundingClientRect\(\)\.top, cfg\.top\)/.test(src) && /setProperty\("bottom", dock \+ "px", "important"\)/.test(src) && /addEventListener\("scroll", fitSoon/.test(src));
-
-check("services / navigation flyouts (AWS .vy-dark-chrome panel, GCP MuiDrawer paper, Azure .vy-portal-menu) end at the dock via --vy-dock; the AWS header (also .vy-dark-chrome, position:relative) is NOT touched",
-  /--vy-dock/.test(src) && /\.vy-dark-chrome\[style\*=\\"position: fixed\\"\]\{bottom:var\(--vy-dock,0px\)!important\}/.test(css) && /\.MuiDrawer-paper\{height:calc\(100vh - var\(--vy-dock,0px\)\)!important/.test(css) && /\.vy-portal-menu\{bottom:var\(--vy-dock,0px\)!important\}/.test(css) && /setProperty\("--vy-dock"/.test(src));
+const appbar = readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8");
+check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits above every panel (z-index 1600 > AWS flyout 1500, GCP drawer 1200, nav 830) and nothing caps the navs above it",
+  /#vy-appbar\{position:fixed;[^}]*z-index:1600/.test(appbar) && /awsui_navigation-container_"\],\[class\*="awsui_tools-container_"\]\{height:calc\(100vh - 40px\) !important\}/.test(appbar) && /#blade\{bottom:0 !important/.test(appbar) && !/function fit\(\)/.test(src) && !/--vy-dock/.test(src));
 
 process.exit(failed ? 1 : 0);
