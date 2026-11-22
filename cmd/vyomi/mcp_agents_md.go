@@ -25,12 +25,14 @@ import (
 )
 
 const (
-	agentsMDFile      = "AGENTS.md"
-	agentsMDStart     = "<!-- vyomi:start -->"
-	agentsMDEnd       = "<!-- vyomi:end -->"
-	agentsMDImport    = "@AGENTS.md"
-	agentsMDMaxBytes  = 1 << 20 // refuse to rewrite an AGENTS.md / CLAUDE.md larger than 1 MiB
-	agentsMDPluginURL = "https://github.com/vyomi-cloud/claude-plugins"
+	agentsMDFile     = "AGENTS.md"
+	agentsMDStart    = "<!-- vyomi:start -->"
+	agentsMDEnd      = "<!-- vyomi:end -->"
+	agentsMDImport   = "@AGENTS.md"
+	agentsMDMaxBytes = 1 << 20 // refuse to rewrite an AGENTS.md / CLAUDE.md larger than 1 MiB
+	// agentsMDMaxTextBytes caps the AGENTS.md / CLAUDE.md text the hosted tool accepts per field (plan §4 rule 5).
+	agentsMDMaxTextBytes = 256 << 10
+	agentsMDPluginURL    = "https://github.com/vyomi-cloud/claude-plugins"
 )
 
 var cloudLabel = map[string]string{"aws": "AWS", "gcp": "GCP", "azure": "Azure"}
@@ -119,6 +121,15 @@ var claudeMemoryFiles = []claudeMemoryFile{
 	{"CLAUDE.local.md", []string{agentsMDImport, "@./AGENTS.md"}},
 }
 
+// claudeMemoryFileNames lists the memory files, for the hosted tool's claude_md_file enum.
+func claudeMemoryFileNames() []string {
+	out := make([]string, 0, len(claudeMemoryFiles))
+	for _, f := range claudeMemoryFiles {
+		out = append(out, filepath.ToSlash(f.name))
+	}
+	return out
+}
+
 // importsAgentsMD reports whether a memory file already has one of the import lines on a line of its own.
 func importsAgentsMD(content string, imports []string) bool {
 	for _, line := range strings.Split(content, "\n") {
@@ -203,6 +214,102 @@ func readProjectFile(dir, name string) ([]byte, bool, error) {
 	}
 	b, err := os.ReadFile(p)
 	return b, true, err
+}
+
+// proposeAgentsMDFromText is the hosted side of vyomi_agents_md: the agent reads AGENTS.md and the project's
+// Claude memory file with its own tools and passes their text; nil means the file does not exist. The splice and
+// import logic is the same as the local tool's, so the proposals are identical. Nothing is written here either.
+//
+// claudeFile names which memory file the text came from, because the import line is relative to the importing
+// file (.claude/CLAUDE.md needs @../AGENTS.md). It is one of claudeMemoryFiles, not a path.
+func proposeAgentsMDFromText(agentsMD, claudeMD *string, claudeFile string, clouds []string, envFile string) (map[string]any, error) {
+	section := agentsMDSection(clouds, envFile)
+	var old []byte
+	if agentsMD != nil {
+		old = []byte(*agentsMD)
+	}
+	out, action, err := spliceAgentsMD(old, agentsMD != nil, section)
+	if err != nil {
+		return nil, err
+	}
+	am := map[string]any{"file": agentsMDFile, "action": action, "proposed_content": out}
+	if action == "updated" || action == "unchanged" {
+		o := string(old)
+		i := strings.Index(o, agentsMDStart)
+		j := strings.Index(o, agentsMDEnd) + len(agentsMDEnd)
+		am["replace_block"] = o[i:j]
+	}
+	res := map[string]any{"agents_md": am, "section": section, "start_marker": agentsMDStart, "end_marker": agentsMDEnd}
+
+	mem := claudeMemoryFiles[0]
+	if claudeFile != "" {
+		found := false
+		for _, f := range claudeMemoryFiles {
+			if filepath.ToSlash(f.name) == filepath.ToSlash(claudeFile) {
+				mem, found = f, true
+			}
+		}
+		if !found {
+			names := make([]string, 0, len(claudeMemoryFiles))
+			for _, f := range claudeMemoryFiles {
+				names = append(names, filepath.ToSlash(f.name))
+			}
+			return nil, fmt.Errorf("claude_md_file must be one of %s (got %q)", strings.Join(names, ", "), claudeFile)
+		}
+	}
+	name := filepath.ToSlash(mem.name)
+	switch {
+	case claudeMD == nil:
+		// Claude Code reads AGENTS.md on its own when the project has no memory file: never propose creating one.
+		res["claude_md"] = map[string]any{"file": name, "action": "not_needed"}
+	case importsAgentsMD(*claudeMD, mem.imports):
+		res["claude_md"] = map[string]any{"file": name, "action": "unchanged"}
+	default:
+		res["claude_md"] = map[string]any{
+			"file": name, "action": "prepended",
+			"proposed_content": mem.imports[0] + "\n\n" + *claudeMD,
+			"why":              "This project has " + name + ", so Claude Code ignores AGENTS.md unless that file imports it.",
+		}
+	}
+	res["next"] = "Nothing was written. Show the user the section and the action. Only after they approve, apply it with your own file-edit tool: " +
+		"created -> create AGENTS.md with proposed_content; appended -> append the section; updated -> replace replace_block (from start_marker to end_marker) with the section; unchanged -> nothing to do. " +
+		"If claude_md.action is prepended, also write claude_md.proposed_content to claude_md.file (same approval). Never change text outside the markers. Then suggest committing AGENTS.md so teammates' agents pick it up."
+	return res, nil
+}
+
+// normalizeClouds puts the requested clouds in canonical order, de-duplicated, and refuses an unknown one. Shared
+// by the local and hosted AGENTS.md and env-file tools.
+func normalizeClouds(want []string) ([]string, error) {
+	if len(want) == 0 {
+		return nil, fmt.Errorf("clouds is required (aws, gcp, azure)")
+	}
+	for _, c := range want {
+		if !validCloud(c) {
+			return nil, fmt.Errorf("unknown cloud %q", c)
+		}
+	}
+	var out []string
+	seen := map[string]bool{}
+	for _, c := range mcpClouds {
+		for _, w := range want {
+			if w == c && !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+	}
+	return out, nil
+}
+
+// envFileName validates an .env.vyomi* file name: a plain name, never a path.
+func envFileName(name string) (string, error) {
+	if name == "" {
+		return ".env.vyomi", nil
+	}
+	if name != filepath.Base(name) || name == "." || name == ".." || !strings.HasPrefix(name, ".env.vyomi") {
+		return "", fmt.Errorf("filename must be a plain file name starting with .env.vyomi (got %q)", name)
+	}
+	return name, nil
 }
 
 func (s *mcpServer) toolAgentsMD(raw json.RawMessage) (any, error) {

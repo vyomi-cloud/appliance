@@ -15,10 +15,10 @@ import (
 	"testing"
 )
 
-// hostedPin is the hosted tool surface. PR 1 ships four knowledge tools; PR 2 adds get_scan_rules,
-// summarize_scan_hits, propose_env_file and propose_agents_md_section for a pin of eight. Changing this list is a
-// contract change: directories re-review the tool set (plan §7).
-var hostedPin = []string{"check_capability", "get_code_snippet", "get_sdk_settings", "list_services"}
+// hostedPin is the hosted tool surface: eight read-only tools, no writer. Changing this list is a contract
+// change: directories re-review the tool set (plan §7).
+var hostedPin = []string{"check_capability", "get_code_snippet", "get_scan_rules", "get_sdk_settings",
+	"list_services", "propose_agents_md_section", "propose_env_file", "summarize_scan_hits"}
 
 func testHostedServer(t *testing.T) *mcpServer {
 	t.Helper()
@@ -52,7 +52,23 @@ func hostedCalls() []hostedCall {
 			call{"get_sdk_settings", map[string]any{"cloud": "azure", "home": home, "host": "192.168.64.5:9100", "account": "devstoreaccount1"}},
 		)
 	}
+	for _, home := range []string{"", "nano", "mesh", "offline"} {
+		calls = append(calls,
+			call{"summarize_scan_hits", map[string]any{"home": home, "hits": []map[string]any{
+				{"rule": "aws-python-1", "file": "src/app.py", "line": 12, "token": "s3"},
+				{"rule": "gcp-nodejs-1", "file": "web/index.js", "line": 3, "token": "pubsub"},
+				{"rule": "azure-terraform-1", "file": "infra/main.tf", "line": 40, "token": "cosmosdb"},
+				{"rule": scanWiredRuleID, "file": "src/app.py", "line": 9},
+			}}},
+			call{"propose_env_file", map[string]any{"clouds": []string{"aws", "gcp", "azure"}, "home": home}},
+		)
+	}
 	calls = append(calls,
+		call{"get_scan_rules", map[string]any{}},
+		call{"get_scan_rules", map[string]any{"languages": []string{"python", "terraform"}}},
+		call{"propose_env_file", map[string]any{"clouds": []string{"aws"}, "filename": ".env.vyomi.local", "home": "nano", "relay_url": "https://relay.vyomi.cloud/abc123"}},
+		call{"propose_agents_md_section", map[string]any{"clouds": []string{"aws"}}},
+		call{"propose_agents_md_section", map[string]any{"clouds": []string{"aws", "gcp"}, "agents_md": "# Agents\n", "claude_md": "# notes\n", "env_file": ".env.vyomi.local"}},
 		call{"check_capability", map[string]any{"query": "bucket versioning"}},
 		call{"check_capability", map[string]any{"query": "aks.cluster", "cloud": "azure"}},
 		call{"list_services", map[string]any{}},
@@ -140,28 +156,41 @@ func TestHostedDescriptionsAreComplete(t *testing.T) {
 func TestHostedTextHasNoPricingOrUpgradeWording(t *testing.T) {
 	s := testHostedServer(t)
 	banned := []string{"upgrade", "pricing", "price", "paid", "purchase", "subscribe", "subscription",
-		"free plan", "pro tier", "pro plan", "pro licence", "pro license", "pro/max", "trial", "billing", "$"}
-	check := func(what, text string) {
+		"free plan", "pro tier", "pro plan", "pro licence", "pro license", "pro/max", "trial", "billing"}
+	check := func(what, text string, extra ...string) {
 		low := strings.ToLower(text)
-		for _, b := range banned {
+		for _, b := range append(banned, extra...) {
 			if strings.Contains(low, b) {
 				t.Errorf("%s mentions %q; the hosted surface carries no tier pricing or upgrade wording", what, b)
 			}
 		}
 	}
-	check("the hosted instructions", mcpHostedInstructions)
+	// Prose also carries no currency symbol; a schema may ("$" is a regex anchor in the scan token pattern).
+	check("the hosted instructions", mcpHostedInstructions, "$")
 	for _, tool := range s.tools {
-		check(tool.Name+" title", tool.Title)
-		check(tool.Name+" description", tool.Description)
+		check(tool.Name+" title", tool.Title, "$")
+		check(tool.Name+" description", tool.Description, "$")
 		schema, _ := json.Marshal(tool.Schema)
 		check(tool.Name+" schema", string(schema))
 	}
 }
 
-// Rule 2, first half: no hosted input is a file path, at any depth of any schema.
+// Rule 2, first half: no hosted input names a place on the caller's disk, at any depth of any schema.
+//
+// Some inputs do carry file NAMES, which is deliberate and disclosed (design §4 and §8): a scan hit's `file` and
+// `line` are how the report shows the user where a service is used, and `filename` / `env_file` are the name of
+// the file the agent will write after a yes. None of them is ever opened — the hosted server has no file access
+// at all (TestHostedToolsTouchNoFiles). They are pinned here so a new file-ish input needs a deliberate review.
 func TestHostedSchemasHaveNoPath(t *testing.T) {
 	s := testHostedServer(t)
-	banned := map[string]bool{"path": true, "dir": true, "directory": true, "file": true, "filename": true, "cwd": true, "root": true}
+	banned := map[string]bool{"path": true, "file_path": true, "filepath": true, "dir": true, "directory": true,
+		"cwd": true, "root": true, "project": true, "project_path": true, "workspace": true, "paths": true, "files": true}
+	allowedFileNames := map[string]bool{
+		"summarize_scan_hits.hits[].file":          true, // where a hit was found: shown to the user, never opened
+		"propose_env_file.filename":                true, // the name of the proposed .env.vyomi
+		"propose_agents_md_section.env_file":       true, // the env file name the section refers to
+		"propose_agents_md_section.claude_md_file": true, // which memory file claude_md came from (a fixed enum)
+	}
 	var walk func(tool, where string, v any)
 	walk = func(tool, where string, v any) {
 		m, ok := v.(map[string]any)
@@ -170,10 +199,15 @@ func TestHostedSchemasHaveNoPath(t *testing.T) {
 		}
 		if props, ok := m["properties"].(map[string]any); ok {
 			for name, sub := range props {
-				if banned[strings.ToLower(name)] {
-					t.Errorf("%s: schema %s has a %q input; the hosted server never sees a file system", tool, where, name)
+				at := where + "." + name
+				low := strings.ToLower(name)
+				if banned[low] {
+					t.Errorf("%s: schema %s is a path input; the hosted server never sees a file system", tool, at)
 				}
-				walk(tool, where+"."+name, sub)
+				if (strings.Contains(low, "file") || strings.Contains(low, "path")) && !allowedFileNames[tool+strings.TrimPrefix(at, "root")] {
+					t.Errorf("%s: schema %s looks like a file input and is not in the reviewed list", tool, at)
+				}
+				walk(tool, at, sub)
 			}
 		}
 		if items, ok := m["items"]; ok {
@@ -254,7 +288,7 @@ func TestHostedToolsTouchNoFiles(t *testing.T) {
 	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 0 {
 		t.Fatalf("the working directory is no longer empty: %v (%v)", entries, err)
 	}
-	// A path-shaped argument is refused outright, never used.
+	// A path argument is refused outright by every hosted tool: none of them has one.
 	for _, tool := range hostedPin {
 		if res, isErr := callTool(t, s, tool, map[string]any{"path": filepath.Join(dir, "x")}); !isErr {
 			t.Errorf("%s accepted a path argument: %v", tool, res)

@@ -83,7 +83,7 @@ func TestMCPMatrixEmbedded(t *testing.T) {
 		}
 	}
 	s := &mcpServer{matrix: m}
-	if _, _, err := s.compileScanRules(); err != nil {
+	if _, err := s.scanRuleTable(); err != nil {
 		t.Fatalf("scan rules must compile: %v", err)
 	}
 	// Every alias target must be a real service (or a deliberate skip marker), so

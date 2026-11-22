@@ -13,8 +13,7 @@ set -uo pipefail
 BASE="${1:-http://localhost:8080/mcp}"
 BASE="${BASE%/}"
 ROOT="${BASE%/mcp}"   # the same server without the /mcp prefix
-# PR 1 ships four tools; PR 2 takes this to eight.
-EXPECT_TOOLS="check_capability get_code_snippet get_sdk_settings list_services"
+EXPECT_TOOLS="check_capability get_code_snippet get_scan_rules get_sdk_settings list_services propose_agents_md_section propose_env_file summarize_scan_hits"
 
 fail=0
 pass() { printf 'PASS  %s\n' "$1"; }
