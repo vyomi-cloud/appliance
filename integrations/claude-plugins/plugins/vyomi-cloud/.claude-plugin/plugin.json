@@ -1,6 +1,6 @@
 {
   "name": "vyomi-cloud",
-  "version": "4.3.0",
+  "version": "4.3.1",
   "description": "Run and test cloud code locally against Vyomi, the AWS/GCP/Azure simulator, through Vyomi's hosted MCP server at https://vyomi.cloud/mcp: ask what Vyomi emulates, get the SDK settings and code for your simulator, scan a repo with rules it hands you, and get a .env.vyomi and an AGENTS.md section to apply yourself. No install, no Node.js and no tunnel: the server is read-only and never sees your machine or your code.",
   "author": {
     "name": "Vyomi",
