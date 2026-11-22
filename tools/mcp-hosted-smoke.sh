@@ -108,8 +108,14 @@ for method in GET DELETE; do
   if [ "$code" = "405" ]; then pass "$method $BASE -> 405"; else bad "$method $BASE" "status $code, want 405"; fi
 done
 
-big="$(head -c 300000 /dev/zero | tr '\0' 'x')"
-post "oversize body -> 413" 413 "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"check_capability\",\"arguments\":{\"query\":\"$big\"}}}"
+# The ~300 KB body goes through a file (curl --data-binary @file): as one command-line argument it exceeds Linux's
+# per-argument limit (MAX_ARG_STRLEN, 128 KiB), so curl never starts ("Argument list too long"); macOS allows it.
+bigf="$(mktemp)"
+{ printf '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"check_capability","arguments":{"query":"'
+  head -c 300000 /dev/zero | tr '\0' 'x'
+  printf '"}}}'; } > "$bigf"
+post "oversize body -> 413" 413 "@$bigf"
+rm -f "$bigf"
 post "JSON-RPC batch -> 400" 400 '[{"jsonrpc":"2.0","id":6,"method":"tools/list"}]'
 post "invalid JSON -> 400" 400 '{"jsonrpc":'
 post "unknown MCP-Protocol-Version -> 400" 400 '{"jsonrpc":"2.0","id":7,"method":"ping"}' -H 'MCP-Protocol-Version: 2099-01-01'

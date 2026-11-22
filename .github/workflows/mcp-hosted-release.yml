@@ -7,14 +7,15 @@
 # -> set ONLY the mcp component's image tag in the portal's App Platform spec -> `doctl apps update --spec`
 # -> wait for the deployment -> smoke https://vyomi.cloud/mcp.
 #
-# The image is public on GHCR and pushed with the workflow's own GITHUB_TOKEN (permissions: packages: write), so
-# there are no registry secrets. The deploy needs:
+# The image is a private GHCR package, pushed with the workflow's own GITHUB_TOKEN (permissions: packages: write), so
+# there are no registry secrets here. App Platform pulls it with credentials stored (encrypted) in the portal app
+# spec by add-component.py; set-image-tag.py only changes the tag, so they are kept. The deploy needs:
 #   DIGITALOCEAN_ACCESS_TOKEN  — a DO token that can read and update the portal app
 #   PORTAL_APP_ID              — the portal's App Platform app id (`doctl apps list`)
 #
 # App Platform deploys ALL components together, so this also redeploys the portal's current main from its own
 # source, and a failed component rolls the whole app back. See deploy/mcp-hosted/RUNBOOK.md, including the
-# one-time steps: make the GHCR package public, add the component, and let /mcp* through Cloudflare.
+# one-time steps: add the component with pull credentials, and let /mcp* through Cloudflare.
 name: Hosted MCP release
 
 on:
@@ -118,13 +119,16 @@ jobs:
 
       # No :latest. The portal app pins an exact version, and a floating tag would let a portal deploy pick up an
       # MCP change nobody released.
-      - name: Build and push
+      # Build into the local Docker engine first; the image is pushed only after it passes the smoke test, so a
+      # broken build never reaches GHCR under a version tag.
+      - name: Build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: deploy/mcp-hosted/Dockerfile
           platforms: linux/amd64
-          push: true
+          load: true
+          push: false
           tags: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
           build-args: |
             VERSION=${{ steps.meta.outputs.version }}
@@ -136,7 +140,7 @@ jobs:
           cache-from: type=gha,scope=mcp-hosted
           cache-to: type=gha,mode=max,scope=mcp-hosted
 
-      # The image has to serve before it is pinned in the portal's spec.
+      # The image has to serve before it is pushed, and so before it can be pinned in the portal's spec.
       - name: Smoke the image we just built
         run: |
           set -euo pipefail
@@ -150,6 +154,9 @@ jobs:
       - name: Container log
         if: always()
         run: docker logs mcp-smoke 2>&1 | tail -40 || true
+
+      - name: Push
+        run: docker push "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
 
   deploy:
     needs: image

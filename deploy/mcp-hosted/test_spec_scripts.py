@@ -5,6 +5,7 @@ The thing worth proving is the dangerous part: adding or bumping the hosted MCP 
 anything else in the portal's App Platform spec.
 """
 import copy
+import os
 import pathlib
 import subprocess
 import sys
@@ -42,9 +43,20 @@ def check(ok, what, detail=""):
         fails.append(what)
 
 
-def run(script, *args):
-    r = subprocess.run([sys.executable, str(HERE / script), *map(str, args)], capture_output=True, text=True)
+TOKEN = "bot-user:ghp_TESTONLY0000000000000000000000000000"
+
+
+def run(script, *args, creds=TOKEN):
+    """Run a helper; by default with GHCR_PULL_CREDENTIALS set, as the runbook does (the package is private)."""
+    env = {k: v for k, v in os.environ.items() if k != "GHCR_PULL_CREDENTIALS"}
+    if creds is not None:
+        env["GHCR_PULL_CREDENTIALS"] = creds
+    r = subprocess.run([sys.executable, str(HERE / script), *map(str, args)], capture_output=True, text=True, env=env)
     return r.returncode, r.stdout + r.stderr
+
+
+def mcp_image(spec):
+    return [x for x in spec["services"] if x["name"] == "mcp"][0]["image"]
 
 
 def write(spec):
@@ -76,7 +88,7 @@ check(svc["image"] == {"registry_type": "GHCR", "registry": "vyomi-cloud", "repo
 check(isinstance(svc["image"].get("tag"), str) and svc["image"]["tag"] not in ("", "latest"),
       "the image tag is pinned, never latest", str(svc["image"].get("tag")))
 check("registry_credentials" not in svc["image"] and "username" not in svc["image"],
-      "no registry credentials: the package is public")
+      "no registry credentials are committed: add-component.py adds them from GHCR_PULL_CREDENTIALS")
 check(svc["instance_size_slug"] == "basic-xxs" and svc["instance_count"] == 1, "basic-xxs, one instance")
 check(svc["http_port"] == 8080, "http_port 8080", str(svc.get("http_port")))
 check(svc["health_check"]["http_path"] == "/healthz", "health check on /healthz")
@@ -93,9 +105,17 @@ check(rc == 0 and "check only" in out, "a check-only run exits 0 and says so", o
 check(load(p) == PORTAL, "a check-only run writes nothing")
 check("portal" in out, "it reports the components it leaves alone", out)
 
+rc, out = run("add-component.py", p, "--apply", creds=None)
+check(rc != 0 and "private" in out and "GHCR_PULL_CREDENTIALS" in out,
+      "without credentials it refuses (the package is private) and says what to set", out)
+check(load(p) == PORTAL, "the refused run wrote nothing")
+
 rc, out = run("add-component.py", p, "--apply")
 after = load(p)
 check(rc == 0, "--apply exits 0", out)
+check(mcp_image(after).get("registry_credentials") == TOKEN, "--apply adds the pull credentials from the env")
+check("ghp_" not in out and TOKEN not in out, "the token is never printed", out)
+check((os.stat(p).st_mode & 0o777) == 0o600, "a file holding the token is written mode 600", oct(os.stat(p).st_mode))
 check(strip_mcp(after) == PORTAL, "everything but the mcp component is byte-identical")
 check([s["name"] for s in after["services"]] == ["portal", "mcp"], "the mcp service was appended")
 rules = after["ingress"]["rules"]
@@ -123,7 +143,27 @@ run("add-component.py", p2, "--apply")
 prefixes = [r["match"]["path"]["prefix"] for r in load(p2)["ingress"]["rules"]]
 check(prefixes == ["/api", "/mcp", "/"], "it inserts before the catch-all, keeping the other rules in order", str(prefixes))
 
+# What App Platform returns after the first apply: the credentials encrypted.
+enc = copy.deepcopy(load(p))
+mcp_image(enc)["registry_credentials"] = "EV[1:encrypted]"
+p4 = write(enc)
+rc, out = run("add-component.py", p4, "--apply", "--tag", "9.9.9", creds=None)
+check(rc == 0 and "nothing to do" in out, "without the env, encrypted credentials are kept and the re-run is a no-op", out)
+check(mcp_image(load(p4))["registry_credentials"] == "EV[1:encrypted]", "the EV[...] value is kept as it is")
+rc, out = run("add-component.py", p4, "--apply", "--tag", "9.9.9", creds="bot-user:ghp_ROTATED")
+check(rc == 0 and mcp_image(load(p4))["registry_credentials"] == "bot-user:ghp_ROTATED",
+      "setting the env again rotates the token", out)
+check(strip_mcp(load(p4)) == PORTAL, "rotating the token changes nothing outside the component")
+rc, out = run("add-component.py", write(PORTAL), "--apply", creds="no-colon-here")
+check(rc != 0 and "<github-user>:<token>" in out, "a malformed credential is refused", out)
+p5 = write(PORTAL)
+rc, out = run("add-component.py", p5, "--apply", "--public", creds=None)
+check(rc == 0 and "registry_credentials" not in mcp_image(load(p5)), "--public adds no credentials", out)
+
 # ── set-image-tag.py ─────────────────────────────────────────────────────────
+rc, out = run("set-image-tag.py", p4, "0.3.0", creds=None)
+check(rc == 0 and mcp_image(load(p4))["registry_credentials"] == "bot-user:ghp_ROTATED",
+      "set-image-tag.py keeps the pull credentials", out)
 rc, out = run("set-image-tag.py", p, "0.2.0")
 bumped = load(p)
 check(rc == 0, "set-image-tag.py exits 0 on a spec that has the component", out)

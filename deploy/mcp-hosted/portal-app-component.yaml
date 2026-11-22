@@ -8,7 +8,8 @@
 # App Platform deploys all components together, so bumping this tag also redeploys the portal's current main from
 # its own source — that is the known trade-off of B' (design §5).
 #
-# The image is public on GHCR, so the component needs no registry credentials.
+# The GHCR package is private. The pull credentials are NOT in this file: add-component.py adds them from
+# GHCR_PULL_CREDENTIALS ("username:token", read:packages) and App Platform stores them encrypted (EV[...]).
 
 services:
   - name: mcp
