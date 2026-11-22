@@ -4,18 +4,19 @@
 #   mcp-hosted-v0.1.1  ->  ghcr.io/vyomi-cloud/mcp-hosted:0.1.1  ->  the portal app's `mcp` component
 #
 # Steps: guardrails (hard gate) -> go test -> build and push the image (linux/amd64; App Platform runs amd64)
-# -> set ONLY the mcp component's image tag in the portal's App Platform spec -> `doctl apps update --spec`
+# -> add or update ONLY the mcp component (and its /mcp rule) in the portal's App Platform spec -> `doctl apps update --spec`
 # -> wait for the deployment -> smoke https://vyomi.cloud/mcp.
 #
 # The image is a private GHCR package, pushed with the workflow's own GITHUB_TOKEN (permissions: packages: write), so
 # there are no registry secrets here. App Platform pulls it with credentials stored (encrypted) in the portal app
-# spec by add-component.py; set-image-tag.py only changes the tag, so they are kept. The deploy needs:
+# spec by add-component.py from the GHCR_PULL_CREDENTIALS secret. The deploy needs:
 #   DIGITALOCEAN_ACCESS_TOKEN  — a DO token that can read and update the portal app
 #   PORTAL_APP_ID              — the portal's App Platform app id (`doctl apps list`)
+#   GHCR_PULL_CREDENTIALS      — "<github-user>:<classic token with read:packages>", for the private image
 #
 # App Platform deploys ALL components together, so this also redeploys the portal's current main from its own
 # source, and a failed component rolls the whole app back. See deploy/mcp-hosted/RUNBOOK.md, including the
-# one-time steps: add the component with pull credentials, and let /mcp* through Cloudflare.
+# one-time steps: the pull-token secret, and letting /mcp* through Cloudflare. The first release adds the component.
 name: Hosted MCP release
 
 on:
@@ -173,21 +174,27 @@ jobs:
         with:
           token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
 
-      # Only the mcp component's image tag changes: set-image-tag.py refuses to write if anything else would,
-      # and the step prints the diff into the job summary so a reviewer can see exactly what was applied.
-      - name: Pin the new version in the portal app spec
+      # One path for the first install and every release: add-component.py adds the mcp component and its /mcp
+      # ingress rule when they are missing, or replaces them with the new tag, and refuses to write if anything
+      # else in the portal's spec would change. The pull credentials for the private GHCR package come from the
+      # GHCR_PULL_CREDENTIALS secret ("user:token", read:packages); App Platform stores them encrypted. Updating
+      # that secret rotates the token on the next release. Without the secret, credentials already in the spec
+      # (EV[...]) are kept. The diff goes into the job summary with the credentials line removed.
+      - name: Add or update the mcp component in the portal app spec
         env:
           PORTAL_APP_ID: ${{ secrets.PORTAL_APP_ID }}
+          GHCR_PULL_CREDENTIALS: ${{ secrets.GHCR_PULL_CREDENTIALS }}
         run: |
           set -euo pipefail
           [[ -n "${PORTAL_APP_ID}" ]] || { echo "PORTAL_APP_ID is not set (see deploy/mcp-hosted/RUNBOOK.md §0d)"; exit 1; }
+          umask 077
           doctl apps spec get "${PORTAL_APP_ID}" > /tmp/portal-app.yaml
           cp /tmp/portal-app.yaml /tmp/portal-app.before.yaml
-          python3 deploy/mcp-hosted/set-image-tag.py /tmp/portal-app.yaml "${{ needs.image.outputs.version }}"
+          python3 deploy/mcp-hosted/add-component.py /tmp/portal-app.yaml --tag "${{ needs.image.outputs.version }}" --apply
           {
-            echo "### Portal app spec change"
+            echo "### Portal app spec change (registry credentials not shown)"
             echo '```diff'
-            diff -u /tmp/portal-app.before.yaml /tmp/portal-app.yaml || true
+            diff -u /tmp/portal-app.before.yaml /tmp/portal-app.yaml | grep -v registry_credentials || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -199,6 +206,7 @@ jobs:
           # --wait blocks until the deployment finishes; App Platform rebuilds every component, so give it room.
           doctl apps update "${PORTAL_APP_ID}" --spec /tmp/portal-app.yaml --wait --format ID,DefaultIngress,ActiveDeployment.Phase
           doctl apps get "${PORTAL_APP_ID}" --format ActiveDeployment.Phase,InProgressDeployment.Phase
+          rm -f /tmp/portal-app.yaml   # it held the pull token in plain text
 
       - name: Smoke production
         run: |

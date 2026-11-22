@@ -194,7 +194,7 @@ growth (the server is stateless).
 |---|---|---|
 | Approve this plan and D-I1–D-I5 | Before PR 1 | Reply "approve" |
 | O-G1b GHCR pull token (package stays private, decided 2026-11-23) | Before adding the component | A classic PAT with only `read:packages`, ideally on a bot account in `vyomi-cloud`; passed once to `add-component.py` as `GHCR_PULL_CREDENTIALS` and stored encrypted by App Platform. Track its expiry: an expired token fails every portal deploy on the image pull (`deploy/mcp-hosted/RUNBOOK.md` §0a–0b) |
-| O-G2 Portal app change | Before PR 3's deploy | Add the `mcp` component and `/mcp` route to the portal's DigitalOcean app (from `deploy/mcp-hosted/portal-app-component.yaml`, merged with `deploy/mcp-hosted/add-component.py`); add `DIGITALOCEAN_ACCESS_TOKEN` and `PORTAL_APP_ID` as appliance repo secrets (no registry secrets) |
+| O-G2 Portal app change | Before the first deploy | Done by the release pipeline (decided 2026-11-23): the deploy job runs `deploy/mcp-hosted/add-component.py --tag <version> --apply`, which adds the `mcp` component and `/mcp` route, or updates them, and changes nothing else. Owner: set the `DIGITALOCEAN_ACCESS_TOKEN`, `PORTAL_APP_ID` and `GHCR_PULL_CREDENTIALS` secrets, add a required reviewer to the `production` environment, and push the release tag |
 | O-G3 Cloudflare rule | Before PR 3's deploy | Let `vyomi.cloud/mcp*` through bot protection / challenges (server-to-server clients such as ChatGPT and Claude send no browser headers) |
 | First production tag | After PR 3 merges | Push `mcp-hosted-v0.1.0` |
 | Privacy policy | Before any directory submission | Add the hosted server (see `OPENAI-DIRECTORY-PLAN.md` WP-O5) |

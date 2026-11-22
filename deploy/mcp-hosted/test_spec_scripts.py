@@ -196,7 +196,11 @@ check("registry: ghcr.io" in wf and "ghcr.io/${{ github.repository_owner }}/mcp-
       "it pushes to ghcr.io/<org>/mcp-hosted")
 check("DOCKERHUB" not in wf, "no Docker Hub secrets are referenced")
 check("platforms: linux/amd64" in wf and "arm64" not in wf, "linux/amd64 only")
-check("set-image-tag.py" in wf, "it bumps the tag with set-image-tag.py, not by hand")
+check("add-component.py" in wf and "--tag" in wf, "it adds or updates the component with add-component.py, not by hand")
+check("GHCR_PULL_CREDENTIALS: ${{ secrets.GHCR_PULL_CREDENTIALS }}" in wf,
+      "the pull credentials come from the GHCR_PULL_CREDENTIALS secret")
+check("grep -v registry_credentials" in wf, "the job summary diff never shows the credentials")
+check("environment: production" in wf, "the deploy job runs in the production environment (owner approval gate)")
 check("mcp-hosted-smoke.sh https://vyomi.cloud/mcp" in wf, "it smokes production after deploying")
 check(not any("mcp-hosted:latest" in l or l.strip().startswith("tags:") and "latest" in l
               for l in wf.splitlines()), "it never pushes a floating tag")
