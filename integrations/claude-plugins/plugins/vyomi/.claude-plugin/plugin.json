@@ -1,6 +1,6 @@
 {
   "name": "vyomi",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "description": "Run and test cloud code locally against Vyomi, the AWS/GCP/Azure simulator (Nano in your browser, or a Pro/Max mesh): find your simulator, scan a repo, see what is emulated where, wire SDKs to it, and tell every coding agent about it via AGENTS.md. Needs vyomi-tunnel 1.3.0+ (1.4.0+ for the AGENTS.md step).",
   "author": {
     "name": "Vyomi",
@@ -17,13 +17,5 @@
     "local-cloud",
     "emulator",
     "testing"
-  ],
-  "network": {
-    "hosts": [
-      "registry.npmjs.org",
-      "127.0.0.1",
-      "relay.vyomi.cloud",
-      "api.github.com"
-    ]
-  }
+  ]
 }
