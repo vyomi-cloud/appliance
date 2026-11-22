@@ -62,6 +62,13 @@
        divider starts 40px below the header. The tab hangs from the top edge of the page instead (the row is 0px tall). */
     "#vy-md.c-aws.nav:not(.open) .md-tabrow{height:0}" +
     "#vy-md.c-aws.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:24px;border-radius:0 0 12px 12px;z-index:5}" +
+    /* GCP service page (left nav present): the drawer spans nav + content like the section below it (16px gutters), and a collapsed drawer
+       hangs from the header instead of reserving a 44px row above the nav (which cut the nav's top). */
+    "#vy-md.c-gcp.nav .md-body{max-width:none;padding-left:16px;padding-right:16px}" +
+    /* Azure: every page except the home dashboard is a service page: the drawer runs edge to edge with the page's own 20px gutters */
+    "#vy-md.c-azure.nav .md-body{max-width:none;padding-left:20px;padding-right:20px}" +
+    "#vy-md.c-gcp.nav:not(.open) .md-tabrow{height:0}" +
+    "#vy-md.c-gcp.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:24px;border-radius:0 0 12px 12px;z-index:5}" +
     "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
     "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
     "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +
@@ -113,6 +120,22 @@
       var nv = document.querySelector('[class*="awsui_navigation-container"]');
       var on = !!(nv && nv.getBoundingClientRect().width > 40);
       if (box.classList.contains("nav") !== on) box.classList.toggle("nav", on);
+    }
+    if (CLOUD === "azure") {   // service page = any route but the home dashboard
+      var az = location.hash.replace(/^#\/?/, "").replace(/^home$/, "") !== "";
+      if (box.classList.contains("nav") !== az) box.classList.toggle("nav", az);
+    }
+    if (CLOUD === "aws") {   // Console Home (no side nav): the content column is 1280px up to ~2000px wide and 1620px beyond; follow it
+      var cw = 1280;
+      if (!box.classList.contains("nav")) document.querySelectorAll("main > div").forEach(function (d) {
+        var hw = Math.round(d.getBoundingClientRect().width); if (cw === 1280 && hw >= 600 && hw <= 2400) cw = hw;
+      });
+      if (box.style.getPropertyValue("--md-cw") !== cw + "px") box.style.setProperty("--md-cw", cw + "px");
+    }
+    if (CLOUD === "gcp") {   // GCP service pages have a left nav (expanded 256px or collapsed 64px rail): same nav mode as AWS
+      var gn = document.querySelector("nav.MuiBox-root");
+      var gon = !!(gn && gn.getBoundingClientRect().width > 40);
+      if (box.classList.contains("nav") !== gon) box.classList.toggle("nav", gon);
     }
     publish();
   }

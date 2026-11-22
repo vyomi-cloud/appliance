@@ -54,4 +54,9 @@ const appbar = readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8");
 check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits above every panel (z-index 1600 > AWS flyout 1500, GCP drawer 1200, nav 830) and nothing caps the navs above it",
   /#vy-appbar\{position:fixed;[^}]*z-index:1600/.test(appbar) && /awsui_navigation-container_"\],\[class\*="awsui_tools-container_"\]\{height:calc\(100vh - 40px\) !important\}/.test(appbar) && /#blade\{bottom:0 !important/.test(appbar) && !/function fit\(\)/.test(src) && !/--vy-dock/.test(src));
 
+check("service pages are edge to edge on every console (own gutters: AWS 24, GCP 16, Azure 20) while each home keeps its own column width",
+  /#vy-md\.c-aws\.nav \.md-body\{max-width:none;padding-left:24px/.test(css) && /#vy-md\.c-gcp\.nav \.md-body\{max-width:none;padding-left:16px;padding-right:16px\}/.test(css) && /#vy-md\.c-azure\.nav \.md-body\{max-width:none;padding-left:20px;padding-right:20px\}/.test(css) && /CLOUD === "azure"/.test(src) && /CLOUD === "gcp"/.test(src));
+check("GCP: collapsed drawer on a service page hangs from the header (no 44px row cutting the nav's top); collapsed nav rail keeps its Expand button inside the 64px rail",
+  /#vy-md\.c-gcp\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /button\[aria-label="Expand navigation"\]\{transform:translateX\(-32px\)\}/.test(readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8")));
+
 process.exit(failed ? 1 : 0);
