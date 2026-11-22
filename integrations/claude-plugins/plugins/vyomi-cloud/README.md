@@ -52,7 +52,7 @@ holding it can drive your tab, and the server has no input that takes it.
 
 | Input | Sent by | Kept |
 |---|---|---|
-| Tool arguments (cloud, language, home, the feature you searched for) | every call | Not stored. Request logs keep the method, the tool name, the status and the latency for 30 days — **no arguments and no IP addresses** |
+| Tool arguments (cloud, language, home, the feature you searched for) | every call | Not stored. Request logs keep the method, the tool name, the status and the latency for up to 30 days — **no arguments and no IP addresses** |
 | Scan hits: rule ids, file paths, line numbers, and the matched service name (e.g. `s3`) | `summarize_scan_hits` | Not stored, and not logged. **No source lines and no file contents**: the server accepts only an identifier (`^[A-Za-z0-9_.\-/]{1,64}$`) per hit, and a hit for an endpoint override it already found carries `file:line` with no text at all |
 | The current text of your `AGENTS.md` and Claude memory file | `propose_agents_md_section` | Not stored, and not logged. These files are meant to be committed and shared; paste them only if that is true for you |
 | Credentials, tokens, relay URLs | **never** | There is no input that can carry one |
@@ -60,8 +60,12 @@ holding it can drive your tab, and the server has no input that takes it.
 File paths and line numbers do reach the server when you scan a repo. If that is not acceptable for a project,
 use the local `vyomi` plugin instead, which scans on your machine and sends nothing.
 
-Privacy policy: https://vyomi.cloud/privacy · Terms: https://vyomi.cloud/terms · Support:
-support@vyomi.cloud · Security policy: [SECURITY.md](../../SECURITY.md)
+## Links
+
+- Privacy policy: https://vyomi.cloud/privacy
+- Terms of service: https://vyomi.cloud/terms
+- Support: https://vyomi.cloud/support (or support@vyomi.cloud)
+- Security policy: [SECURITY.md](../../SECURITY.md)
 
 ## Install
 
