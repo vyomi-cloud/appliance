@@ -65,6 +65,11 @@
     "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
     "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
     "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +
+    /* the services / navigation flyouts (AWS "Recently visited" panel, GCP drawer, Azure portal menu) end at the top of the bottom dock;
+       --vy-dock = px from the window bottom to the dock top, published by fit() */
+    "body .vy-dark-chrome[style*=\"position: fixed\"]{bottom:var(--vy-dock,0px)!important}" +
+    "body .MuiDrawer-root.MuiDrawer-modal .MuiDrawer-paper{height:calc(100vh - var(--vy-dock,0px))!important;max-height:none!important}" +
+    "body .vy-portal-menu{bottom:var(--vy-dock,0px)!important}" +
     "@media(max-width:700px){#vy-md .md-tab{padding:0 12px}}";
 
   function header() { return document.querySelector(HEADER[CLOUD] || "header"); }
@@ -126,6 +131,7 @@
               gcp: { sel: "nav.MuiBox-root", top: 56, prop: "max-height" } };
   function fit() {
     var n = document.querySelector("#vy-appbar .vy-notch"), dock = n ? Math.max(0, innerHeight - n.getBoundingClientRect().top) : 0;
+    document.documentElement.style.setProperty("--vy-dock", dock + "px");
     if (CLOUD === "azure") {   // the resource blade is fixed to the window: end it at the dock, not at a hard-coded 44px
       var bl = document.getElementById("blade"); if (bl && dock) bl.style.setProperty("bottom", dock + "px", "important");
       return;

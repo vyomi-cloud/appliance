@@ -52,4 +52,7 @@ check("EXPANDED tab sits on the bottom border: flat bottom edge (radius 0 at the
 
 check("side navs end where the bottom dock starts (AWS nav/tools containers, GCP nav; Azure blade) and are re-fitted on scroll/resize", /function fit\(\)/.test(src) && /#vy-appbar \.vy-notch/.test(src) && /innerHeight - dock - Math\.max\(e\.getBoundingClientRect\(\)\.top, cfg\.top\)/.test(src) && /setProperty\("bottom", dock \+ "px", "important"\)/.test(src) && /addEventListener\("scroll", fitSoon/.test(src));
 
+check("services / navigation flyouts (AWS .vy-dark-chrome panel, GCP MuiDrawer paper, Azure .vy-portal-menu) end at the dock via --vy-dock; the AWS header (also .vy-dark-chrome, position:relative) is NOT touched",
+  /--vy-dock/.test(src) && /\.vy-dark-chrome\[style\*=\\"position: fixed\\"\]\{bottom:var\(--vy-dock,0px\)!important\}/.test(css) && /\.MuiDrawer-paper\{height:calc\(100vh - var\(--vy-dock,0px\)\)!important/.test(css) && /\.vy-portal-menu\{bottom:var\(--vy-dock,0px\)!important\}/.test(css) && /setProperty\("--vy-dock"/.test(src));
+
 process.exit(failed ? 1 : 0);
