@@ -63,6 +63,15 @@ jobs:
       - name: gofmt
         run: test -z "$(gofmt -l cmd/vyomi/)" || { gofmt -l cmd/vyomi/; exit 1; }
 
+      # The component spec, the two spec helpers, the Dockerfile and this workflow agree with each other. Cheap,
+      # and it is the only automated check over deploy/mcp-hosted (no other workflow watches those paths).
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Deploy spec checks
+        run: |
+          pip install -q pyyaml
+          python3 deploy/mcp-hosted/test_spec_scripts.py
+
   image:
     needs: test
     runs-on: ubuntu-latest
