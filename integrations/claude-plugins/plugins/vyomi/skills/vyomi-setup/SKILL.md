@@ -11,9 +11,12 @@ keeps running on the real cloud. The `vyomi` MCP server (bundled with this
 plugin) knows what Vyomi emulates, where the user's simulator lives and how to
 point code at it.
 
-**Requires `vyomi-tunnel` 1.3.0 or newer**: the plugin runs its MCP server as
-`vyomi-tunnel mcp`, which first shipped in 1.3.0 (check with
-`vyomi-tunnel --version`).
+The plugin starts its MCP server with `npx -y vyomi-tunnel mcp`, which needs
+Node.js 18+ (`npx` on the PATH). When the user has `vyomi-tunnel` installed
+(1.3.0 or newer), that command runs the installed one, so it is the same server
+as `vyomi-tunnel mcp`; without an install it runs the npm copy. The tunnel is
+still needed to reach Nano; the `vyomi-nano` skill covers installing it. If
+`vyomi_status` returns `tunnel.upgrade`, pass that suggestion to the user.
 
 In v4 the simulator lives in one of these **homes**:
 
@@ -115,9 +118,13 @@ In v4 the simulator lives in one of these **homes**:
   never through Bash, not even in the background. The MCP never starts them
   either. Give the user the exact command (use the one `vyomi_status` gives:
   it picks a free local port) and let them run it in their own terminal.
-- If the `vyomi` MCP tools are unavailable: install or upgrade the tunnel
-  (`brew install vyomi-cloud/tap/vyomi-tunnel` or `npm i -g vyomi-tunnel`;
-  version 1.3.0 or newer, the first with `vyomi-tunnel mcp`; check with
-  `vyomi-tunnel --version`), then restart the coding agent (Claude Code, Codex,
-  Cursor, Copilot, ...) so it starts the MCP server. v4.0.0 offline users:
-  `vyomi mcp` from the `vyomi-docker` install keeps working.
+- If the `vyomi` MCP tools are unavailable: the agent could not start
+  `npx -y vyomi-tunnel mcp`. Ask the user to check `node --version` (18 or
+  newer) and that `npx` is on the PATH the coding agent sees (GUI editors
+  started from the Dock may not see an nvm or Homebrew Node), and that npm can
+  reach the registry on the first start. Then restart the coding agent (Claude
+  Code, Codex, Cursor, Copilot, ...). On native Windows, an agent that cannot
+  start `npx` directly needs it registered as `cmd /c npx -y vyomi-tunnel mcp`.
+  Offline machines: install the tunnel (`npm i -g vyomi-tunnel`) and register
+  `vyomi-tunnel mcp` instead. v4.0.0 offline users: `vyomi mcp` from the
+  `vyomi-docker` install keeps working.

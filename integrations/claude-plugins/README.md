@@ -11,16 +11,15 @@ Vyomi section to your project's `AGENTS.md` so every other agent knows too.
 One package works in Claude Code, Codex, GitHub Copilot, Cursor, VS Code and
 other clients that read the [Agent Plugins](https://agent-plugins.org) format.
 
-## 1. Install the Vyomi tunnel
+## 1. Before you start
 
-**Version 1.3.0 or later** (the first with `vyomi-tunnel mcp`, which runs the
-MCP server; it is bundled, nothing else to install):
-
-- `brew install vyomi-cloud/tap/vyomi-tunnel`, or
-- `npm i -g vyomi-tunnel`
-
-Check with `vyomi-tunnel --version`; upgrade with `brew upgrade vyomi-tunnel`
-or `npm i -g vyomi-tunnel@latest`.
+- **Node.js 18 or newer.** The plugin starts the MCP server with
+  `npx -y vyomi-tunnel mcp`. If `vyomi-tunnel` is installed, that runs your
+  installed copy, so `npx -y vyomi-tunnel mcp` and `vyomi-tunnel mcp` are always
+  the same server; with nothing installed it runs the npm copy.
+- **The Vyomi tunnel, to use Nano** (1.3.0 or later):
+  `brew install vyomi-cloud/tap/vyomi-tunnel` or `npm i -g vyomi-tunnel`.
+  Check with `vyomi-tunnel --version`.
 
 ## 2. Add the plugin to your agent
 
@@ -35,10 +34,16 @@ or `npm i -g vyomi-tunnel@latest`.
 The MCP server on its own, for any MCP client:
 
 ```json
-{ "mcpServers": { "vyomi": { "command": "vyomi-tunnel", "args": ["mcp"] } } }
+{ "mcpServers": { "vyomi": { "command": "npx", "args": ["-y", "vyomi-tunnel", "mcp"] } } }
 ```
 
-Claude Code without the plugin: `claude mcp add --scope user vyomi -- vyomi-tunnel mcp`.
+Claude Code without the plugin: `claude mcp add --scope user vyomi -- npx -y vyomi-tunnel mcp`.
+Codex without the plugin: `codex mcp add vyomi -- npx -y vyomi-tunnel mcp`.
+
+If your agent cannot start `npx` (an editor opened from the Dock that does not
+see your Node install, or native Windows, where some agents need
+`cmd /c npx -y vyomi-tunnel mcp`), or the machine is offline, install the tunnel
+and use `"command": "vyomi-tunnel", "args": ["mcp"]` instead.
 
 **v4.0.0 offline users:** `vyomi mcp` from your `vyomi-docker` install keeps
 working. Without the tunnel, register it directly:
@@ -66,7 +71,7 @@ Codespace needs a Pro or Max key.
 
 | Component | What it does |
 |---|---|
-| MCP server `vyomi` (`vyomi-tunnel mcp`) | `vyomi_status` (which home: Nano, local mesh, Codespace mesh, offline), `vyomi_reach`, `vyomi_services`, `vyomi_capability`, `vyomi_snippet`, `vyomi_env`, `vyomi_scan_repo`, `vyomi_write_env`, `vyomi_write_agents_md` |
+| MCP server `vyomi` (`npx -y vyomi-tunnel mcp`) | `vyomi_status` (which home: Nano, local mesh, Codespace mesh, offline), `vyomi_reach`, `vyomi_services`, `vyomi_capability`, `vyomi_snippet`, `vyomi_env`, `vyomi_scan_repo`, `vyomi_write_env`, `vyomi_write_agents_md` |
 | Skill `vyomi-setup` | The workflow: find the home, scan, get exact settings for that home, propose dev-only changes, ask before writing, verify with your tests, offer the `AGENTS.md` section |
 | Skill `vyomi-nano` | Get a working Nano endpoint: the tunnel, the access key, the tab, or the cloud relay URL; Nano's limits |
 | Skill `vyomi-mesh` | Reach a local or Codespace mesh: status, forwards for the API, k3s and databases, `ssh <vm>.vyomi`, locked meshes, AI models |

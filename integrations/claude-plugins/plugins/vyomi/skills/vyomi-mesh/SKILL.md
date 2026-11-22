@@ -11,8 +11,9 @@ runs either **locally** (the headless appliance on `:9000`, TLS on `:9443`) or
 in the user's own **GitHub Codespace**, reached from this machine through
 `vyomi-tunnel` over their own `gh codespace ssh` session.
 
-**Requires `vyomi-tunnel` 1.3.0 or newer** (`vyomi-tunnel --version`): it runs
-this plugin's MCP server (`vyomi-tunnel mcp`) and lists the Codespace mesh. A
+**Requires `vyomi-tunnel` 1.3.0 or newer** (`vyomi-tunnel --version`): it
+lists and forwards the Codespace mesh. (This plugin's MCP server runs through
+`npx -y vyomi-tunnel mcp` and does not need the install.) A
 Codespace mesh also needs a Pro or Max access key in `~/.vyomi/credentials`;
 ask the user, never read the file.
 
