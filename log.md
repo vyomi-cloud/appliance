@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T10:17:20+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T09:17:19+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
 - · `announcement` Compute Engine: Feature (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
 - · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.114.9 → v1.114.10
-- · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.52.11 → v1.53.0
-- · `release` pypi:boto3: 1.43.127 → 1.44.0
-- · `release` pypi:botocore: 1.43.127 → 1.44.0
-
-Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
