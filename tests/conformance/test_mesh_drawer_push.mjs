@@ -29,7 +29,7 @@ check("AWS side nav + collapsed drawer: tab row is 0px tall so the nav's vertica
 check("the tab row takes real height (no hanging pill over the console)", /\.md-tabrow\{[^}]*height:calc\(var\(--md-bh,32px\) \+ 8px\)/.test(css));
 check("no box-shadow value anywhere in the drawer CSS", !/box-shadow:(?!none)/.test(css) && !/--md-shadow:(?!none)/.test(css) && !/--md-bsh:(?!none)/.test(css), (css.match(/box-shadow:[^;}]*/g) || []).join(" | "));
 check("safety net: nothing inside #vy-md may cast a shadow / filter", /#vy-md,#vy-md \*\{box-shadow:none!important/.test(css) && /#vy-md\{filter:none!important\}/.test(css));
-check("1px border is the only edge", /#vy-md\{[^}]*border-bottom:1px solid var\(--md-line\)/.test(css));
+check("EXPANDED drawer closes with a 1px bottom border; collapsed has none (border-bottom:0 on the root)", /#vy-md\.open\{border-bottom:1px solid var\(--md-line\)\}/.test(css) && /#vy-md\{[^}]*border-bottom:0/.test(css));
 check("body max-height leaves room for the console (no 100vh-150px overlay sizing)", /max-height:min\(56vh,calc\(100vh - 220px\)\)/.test(css) && !/100vh - 150px/.test(css));
 check("mounts right after the console header and re-mounts if React re-creates it", /h\.parentNode\.insertBefore\(box,\s*h\.nextSibling\)/.test(src) && /setInterval\(place,\s*1500\)/.test(src));
 check("falls back to the top of <body> when a page has no header", /document\.body\.insertBefore\(box,\s*document\.body\.firstChild\)/.test(src));

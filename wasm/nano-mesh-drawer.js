@@ -19,6 +19,8 @@
     "#vy-md{position:relative;flex:none;box-sizing:border-box;width:100%;z-index:1;background:var(--md-bg);border-bottom:0;box-shadow:none;filter:none;font:14px/1.45 var(--md-font);color:var(--md-fg);--md-font:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--md-fg:#16191f;--md-line:#d5dbdb;--md-bg:#fff;--md-accent:#0972d3;--md-al-bg:#f1faff;--md-al-bd:#0972d3;--md-al-fg:#414d5c;--md-al-r:10px;--md-al-bw:1px;--md-shadow:none}" +
     "#vy-md .md-panel{display:grid;grid-template-rows:0fr;background:var(--md-bg);transition:grid-template-rows .25s ease}" +
     "#vy-md.open .md-panel{grid-template-rows:1fr}" +
+    /* expanded: a 1px bottom border closes the section so the console below it never looks like it has a margin; collapsed stays borderless */
+    "#vy-md.open{border-bottom:1px solid var(--md-line)}" +
     "#vy-md .md-clip{overflow:hidden;min-height:0}" +
     "#vy-md .md-body{box-sizing:border-box;max-width:calc(var(--md-cw,1272px) + 2 * var(--md-px,24px));margin:0 auto;padding:16px var(--md-px,24px) 18px;max-height:min(56vh,calc(100vh - 220px));overflow:auto}" +
     "#vy-md:not(.open) .md-body{visibility:hidden}" +
