@@ -151,3 +151,10 @@ FIXED: post_create/probes/azure_openai.py was not re-runnable: Cognitive Service
 DECISION: the probe asserts a 1536-d embedding, but since dbb1b47cb deployments serve the booster-mesh model (`nomic-embed-text`, backend 768-d or hash fallback 256-d). Either the Azure embeddings op reports ada-002's 1536 dims, or the probe asserts the model's real dimension. Not changed (would loosen a test).
 ENV, not product: offline-sdk-java-azure* (Maven cannot fetch com.azure:azure-sdk-bom 1.2.31, Central returns 404 from this runner); offline-sweepA-azure APIM proxy (backend outbound timeout); azure-openai chat (no vyomi-llm sibling); offline-ui-azure-{metrics,rg-nav,resource-group-detail,apim-appinsights} Playwright boot timeouts on the runner, not reproduced as product bugs.
 Tunnel check (6): NOT RUN, no Codespace leg. Checks 2-5: only the existing suites ran; crawl-azure-ui, validation-azure-ui and bidi-azure-* are still `pending` in suites.json.
+
+## AWS nightly 2026-11-22
+- FIXED (product): offline Lambda Function URL (`GET /lambda-url/<id>/`) returned 500 (`KeyError: 'function_name'` in `routes/aws_lambda.py`); now delegates to `core.lambda_core.url_invoke`. Test `test_aws_lambda_function_url_api.py` (suite `offline-api-aws-lambda-function-url`).
+- OPEN (same class as 2026-11-17, not fixed): offline-api-aws-detail-tabs Secrets/KMS/EventBridge/SQS-encryption legacy-store reads; offline-post-create-aws-event-delivery "EventBridge: Lambda target invoked once with the InputTransformer payload".
+- DECISION: nano-cores is red only for tests of modules outside the Nano vendor list (`sns_delivery`, `mesh_selfcheck`, `k3s_runtime`) and uvicorn-needing GCP/identity cores. Either vendor them (trunk-owned list) or make `nano-cores` skip tests that import non-vendored modules. Shared, not changed.
+- NOT REPRODUCED: offline-sdk-{go,java}-aws-sns email delivery (green on re-run; baseline suite ran while the 30-entry delivery log was shared).
+- ENV: offline-ui-* / nano UI suites need Playwright + fastapi (absent on this runner); the runner exports `AWS_REGION` in a form the CLI rejects (offline-cli-aws is green with `AWS_REGION=us-east-1`).
