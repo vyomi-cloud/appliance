@@ -132,7 +132,17 @@
     var RES = { aws: '.page{min-height:calc(100vh - 40px - 36px - 44px) !important}' +
                      // Cloudscape's side panels are sticky to the window bottom (z-index 830): full height, running BEHIND the dock (the dock is
                      // z-index 1600, above these panels and the services flyouts), so nothing is cut short above it.
-                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px) !important}',
+                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px) !important}' +
+                     // phones: the top bar's controls added up to ~860px, which made the whole page 860px wide (cards off-centre, page scrolls
+                     // sideways). Fit it to the screen: smaller logo, search takes the spare width, help / settings / region hidden, account = icon.
+                     '@media(max-width:640px){#vyomi-top,#vyomi-top .vy-dark-chrome{max-width:100vw;box-sizing:border-box;overflow:hidden}' +
+                       '#vyomi-top .vy-dark-chrome{gap:0;padding:0 4px 0 8px}#vyomi-top .vy-dark-chrome>a{flex:0 1 auto;width:auto !important;min-width:0}' +
+                       '#vyomi-top .vy-dark-chrome>a img{width:92px !important;height:auto}' +
+                       '#vyomi-top .vy-dark-chrome>div:nth-child(5){flex:1 1 0 !important;min-width:0 !important}' +
+                       '#vyomi-top .vy-dark-chrome>div:nth-child(5)>div>span:last-child{display:none}' +
+                       '#vyomi-top .vy-dark-chrome>div:nth-child(6){display:none}' +
+                       '#vyomi-top .vy-dark-chrome>*:nth-child(8),#vyomi-top .vy-dark-chrome>*:nth-child(9),#vyomi-top .vy-dark-chrome>*:nth-child(10),#vyomi-top .vy-dark-chrome>*:nth-child(11),#vyomi-top .vy-dark-chrome>*:nth-child(12){display:none !important}' +
+                       '#vyomi-top .vy-dark-chrome>div:nth-child(13) button,#vyomi-top .vy-dark-chrome>div:nth-child(13) button *:not(svg):not(path):not([class*="awsui_icon"]){font-size:0 !important}}',
                 gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}',
                 azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:0 !important;height:auto !important}' };
     var st = document.createElement('style'); st.textContent = css + (RES[cloud] || ''); document.head.appendChild(st);

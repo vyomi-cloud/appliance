@@ -57,4 +57,7 @@ check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits
 check("phones (<=640px): the bottom dock is as wide as the screen (left:0;right:0), flat, icons spread evenly - it no longer grows past the viewport",
   /@media\(max-width:640px\)\{#vy-appbar \.vy-notch\{left:0;right:0;box-sizing:border-box;max-width:100vw !important;padding:0 6px;gap:0;justify-content:space-between\}/.test(appbar) && /clip-path:none/.test(appbar));
 
+check("phones: the AWS top bar is fitted to the screen (search takes the spare width; help/settings/region hidden; account = icon) so the page is not 860px wide",
+  /@media\(max-width:640px\)\{#vyomi-top,#vyomi-top \.vy-dark-chrome\{max-width:100vw;box-sizing:border-box;overflow:hidden\}/.test(appbar) && /vy-dark-chrome>div:nth-child\(5\)\{flex:1 1 0 !important/.test(appbar) && /nth-child\(12\)\{display:none !important\}/.test(appbar));
+
 process.exit(failed ? 1 : 0);
