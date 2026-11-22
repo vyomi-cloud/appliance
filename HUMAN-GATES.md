@@ -7,9 +7,9 @@ Each needs the owner (Rohith). Work on everything else continued.
 |---|---|---|---|---|
 | G1 | Add the claims row to `docs/architecture/v4.0/SESSION-CLAIMS.md` on `v4-on-main`: `\| agent-plugins \| v4/agent-plugins \| appliance \| integrations/claude-plugins/**, cmd/vyomi/mcp_agents_md*.go, cmd/vyomi/mcp_tunnel_sync*.go, wasm/relay/mcp-launch.mjs, packaging/tunnel/{package.json,server.json,README.md,bin/mcp-launch.mjs}, tools/guardrails/run.sh, scripts/check_*.py \| 2026-11-22 \|` | Pushing to the trunk is the integrator's step | WP0 | open |
 | G2 | Trigger `tunnel-release.yml` as a `workflow_dispatch` dry run on `v4/agent-plugins` (or on `v4-on-main` after the merge) and confirm every gate is green, including the guardrail gate and the new `mcp-publisher validate` step | Running the release workflow is a human step (plan §2, §4 "Release dry run") | WP3 | open |
-| G3 | Merge the appliance PR `v4/agent-plugins` → `v4-on-main` | Merges are the integrator's step | WP7 | open |
+| G3 | Merge the appliance PR `v4/agent-plugins` → `v4-on-main` (https://github.com/vyomi-cloud/appliance/pull/702) | Merges are the integrator's step | WP7 | open |
 | G4 | Tag `tunnel-v1.4.0`: the workflow publishes npm `vyomi-tunnel@1.4.0`, then the MCP Registry (`io.github.vyomi-cloud/vyomi`), bumps the tap and syncs plugin 4.2.0 to `vyomi-cloud/claude-plugins` | Tags, `npm publish` and `mcp-publisher publish` are human gates | WP3 | open |
-| G5 | Merge the portal PR `portal/agents-docs` → `v4-nano-portal`, then promote to portal `main` | Every portal `main` merge is a paid DigitalOcean deploy | WP5 | open |
+| G5 | Merge the portal PR `portal/agents-docs` → `v4-nano-portal` (https://github.com/vyomi-cloud/portal/pull/62; attach the screenshots first), then promote to portal `main` | Every portal `main` merge is a paid DigitalOcean deploy | WP5 | open |
 | G6 | Submit `plugins/vyomi` to the Claude directory from `integrations/claude-plugins/SUBMISSION.md` (claude.ai/directory/manage; paid plan, GitHub connected) | Directory submissions are human gates | WP8 | open |
 | G7 | Cursor Marketplace and OpenAI directory submissions | Paused (plan §6 D8, D9; §7) | — | paused |
 | G8 | Enable GitHub branch protection on `v4-on-main` / `main` (repo CLAUDE.md) | Org settings | — | open (pre-existing) |
