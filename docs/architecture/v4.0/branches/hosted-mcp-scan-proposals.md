@@ -69,8 +69,8 @@ Run on macOS (darwin/arm64), 2026-11-22, Go 1.27.1.
 
 | What | Command | Result |
 |---|---|---|
-| Go suite | `RELAY_PORT=1 go -C cmd/vyomi test -count=1 ./...` | `ok` |
-| Guardrail suite | `RELAY_PORT=1 WS_PKG=... PY=... bash tools/guardrails/run.sh` | all seven hosted rows PASS; every pre-existing row PASS except the Mesh boot-script row (macOS BSD sed, see PR 1's branch doc) |
+| Go suite | `go -C cmd/vyomi test -count=1 ./...` | `ok` (no environment overrides: the two home=auto tests are hermetic since PR 1) |
+| Guardrail suite | `WS_PKG=... PY=... bash tools/guardrails/run.sh` | all seven hosted rows PASS; every pre-existing row PASS except the Mesh boot-script row (macOS BSD sed, see PR 1's branch doc) |
 | Hosted server | `/tmp/vyomi mcp --hosted --listen :8080` | 8 read-only tools, knowledge v4.0.10 |
 | Smoke | `tools/mcp-hosted-smoke.sh http://localhost:8080/mcp` | 26/26 PASS |
 
