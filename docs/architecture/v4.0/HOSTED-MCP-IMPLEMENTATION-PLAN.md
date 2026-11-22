@@ -90,8 +90,8 @@ pricing or upgrade wording.
 | `cmd/vyomi/mcp_log.go` (new) | One JSON line per request: time, method, tool, status, latency ms, response bytes. No arguments, no IP (O-D4). |
 | `tools/guardrails/run.sh` | New rows: hosted surface pin, no outbound, no file access, HTTP limits. Label "hosted: 8 read-only, 0 writers". |
 | `deploy/mcp-hosted/Dockerfile` (new) | Multi-stage: `golang` build with `CGO_ENABLED=0`, `-trimpath`; runtime `gcr.io/distroless/static:nonroot`; `ENTRYPOINT ["/vyomi","mcp","--hosted"]`, `EXPOSE 8080`. |
-| `deploy/mcp-hosted/portal-app-component.yaml` (new) | The service component to add to the **portal's** App Platform spec: name `mcp`, source `image` (Docker Hub `vyomi/mcp-hosted`, pinned tag), `basic-xxs`, 1 instance, HTTP port 8080, health check `/healthz`, ingress rule `match.path.prefix: /mcp` (prefix trimmed, so the Go server sees `/` and `/healthz`). Also a runbook for applying it with `doctl apps update --spec` without touching the portal component. |
-| `.github/workflows/mcp-hosted-release.yml` (new) | On tag `mcp-hosted-v*`: guardrails + `go test ./cmd/vyomi/...` → build and push `vyomi/mcp-hosted:<version>` (multi-arch not needed: amd64) → fetch the portal app spec, set the `mcp` component's image tag, `doctl apps update --spec` (this deploys the whole app) → smoke test against `https://vyomi.cloud/mcp`. Secrets: `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` (exist in the portal repo; add here), `DIGITALOCEAN_ACCESS_TOKEN`, `PORTAL_APP_ID`. |
+| `deploy/mcp-hosted/portal-app-component.yaml` (new) | The service component to add to the **portal's** App Platform spec: name `mcp`, source `image` (`registry_type: GHCR`, registry `vyomi-cloud`, repository `mcp-hosted`, pinned `tag`; no registry credentials, because the package is public), `basic-xxs`, 1 instance, HTTP port 8080, health check `/healthz`, ingress rule `match.path.prefix: /mcp` (prefix trimmed, so the Go server sees `/` and `/healthz`). Also a runbook for applying it with `doctl apps update --spec` without touching the portal component, including the first-release step: make the GHCR package public before the component is added, since App Platform pulls it anonymously. `add-component.py` and `set-image-tag.py` do the merge and the tag bump and refuse to write if anything else in the spec would change. |
+| `.github/workflows/mcp-hosted-release.yml` (new) | On tag `mcp-hosted-v*`: guardrails + `go test ./cmd/vyomi/...` → build and push `ghcr.io/vyomi-cloud/mcp-hosted:<version>` (`linux/amd64` only; App Platform runs amd64) and smoke the image in the job → fetch the portal app spec, set the `mcp` component's image tag, `doctl apps update --spec` (this deploys the whole app) → smoke test against `https://vyomi.cloud/mcp`. No registry secrets: GHCR takes the workflow's own `GITHUB_TOKEN` with `permissions: packages: write`. Secrets: `DIGITALOCEAN_ACCESS_TOKEN`, `PORTAL_APP_ID`. |
 | `tools/mcp-hosted-smoke.sh` (new) | `initialize`, `tools/list`, one call per tool, `GET /mcp` = 405, oversize = 413; exits non-zero on any miss. Takes a base URL, so it runs against `localhost`, Docker or production. |
 | `packaging/tunnel/server.json` | Add `remotes: [{type: "streamable-http", url: "https://vyomi.cloud/mcp"}]` after the first production deploy. |
 
@@ -166,13 +166,14 @@ growth (the server is stateless).
 
 ## 7. Operations
 
+- Registry: `ghcr.io/vyomi-cloud/mcp-hosted`, `linux/amd64`, one immutable tag per release and no `:latest` (a floating tag would let a portal deploy pick up an unreleased MCP). The package is public, so the portal app pulls it anonymously and holds no credentials.
 - Release: tag `mcp-hosted-vX.Y.Z` from `v4-on-main`; the workflow deploys. Never deploy on merge.
 - Versioning: `serverInfo.version` = knowledge version + `+git.<sha>`; `/healthz` reports the same.
 - Changing tool names, schemas, descriptions or annotations is a **contract change**: OpenAI re-reviews it and
   Claude's listing may too. Server-only fixes that keep the contract deploy freely.
 - Never change the origin `vyomi.cloud` or move the path away from `/mcp`: OpenAI treats a new origin as a new plugin (a path change needs a new version).
 - Monitoring: App Platform health check + an uptime alert on `/healthz`; the request log for error rates.
-- Rollback: set the previous image tag in the portal app spec and `doctl apps update --spec`. Note App Platform deploys all components together, and a failed component rolls the whole app back.
+- Rollback: set the previous image tag in the portal app spec (`set-image-tag.py`) and `doctl apps update --spec`; every released tag stays in GHCR. Note App Platform deploys all components together, and a failed component rolls the whole app back.
 - Cost: one more `basic-xxs` container in the portal app, plus outbound transfer within the plan allowance.
 
 ## 8. Decisions for this build
@@ -192,7 +193,8 @@ growth (the server is stateless).
 | Gate | When | What |
 |---|---|---|
 | Approve this plan and D-I1–D-I5 | Before PR 1 | Reply "approve" |
-| O-G2 Portal app change | Before PR 3's deploy | Add the `mcp` component and `/mcp` route to the portal's DigitalOcean app (from `deploy/mcp-hosted/portal-app-component.yaml`); add `DIGITALOCEAN_ACCESS_TOKEN`, `PORTAL_APP_ID`, `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` as appliance repo secrets |
+| O-G1b GHCR package public | Before PR 3's deploy, after the first image push | The first `mcp-hosted-v*` tag pushes `ghcr.io/vyomi-cloud/mcp-hosted`, which is private by default. Set the package to public (org Packages tab → the package → Package settings → Change visibility) and check an anonymous pull, BEFORE the component is added: App Platform pulls it with no credentials, and a failed pull fails the whole portal app's deploy (`deploy/mcp-hosted/RUNBOOK.md` §0a) |
+| O-G2 Portal app change | Before PR 3's deploy | Add the `mcp` component and `/mcp` route to the portal's DigitalOcean app (from `deploy/mcp-hosted/portal-app-component.yaml`, merged with `deploy/mcp-hosted/add-component.py`); add `DIGITALOCEAN_ACCESS_TOKEN` and `PORTAL_APP_ID` as appliance repo secrets (no registry secrets) |
 | O-G3 Cloudflare rule | Before PR 3's deploy | Let `vyomi.cloud/mcp*` through bot protection / challenges (server-to-server clients such as ChatGPT and Claude send no browser headers) |
 | First production tag | After PR 3 merges | Push `mcp-hosted-v0.1.0` |
 | Privacy policy | Before any directory submission | Add the hosted server (see `OPENAI-DIRECTORY-PLAN.md` WP-O5) |
