@@ -54,4 +54,7 @@ const appbar = readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8");
 check("side navs / flyouts run FULL height BEHIND the bottom dock: the dock sits above every panel (z-index 1600 > AWS flyout 1500, GCP drawer 1200, nav 830) and nothing caps the navs above it",
   /#vy-appbar\{position:fixed;[^}]*z-index:1600/.test(appbar) && /awsui_navigation-container_"\],\[class\*="awsui_tools-container_"\]\{height:calc\(100vh - 40px\) !important\}/.test(appbar) && /#blade\{bottom:0 !important/.test(appbar) && !/function fit\(\)/.test(src) && !/--vy-dock/.test(src));
 
+check("phones (<=640px): the bottom dock is as wide as the screen (left:0;right:0), flat, icons spread evenly - it no longer grows past the viewport",
+  /@media\(max-width:640px\)\{#vy-appbar \.vy-notch\{left:0;right:0;box-sizing:border-box;max-width:100vw !important;padding:0 6px;gap:0;justify-content:space-between\}/.test(appbar) && /clip-path:none/.test(appbar));
+
 process.exit(failed ? 1 : 0);
