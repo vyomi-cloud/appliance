@@ -188,6 +188,10 @@ type mcpTarget struct {
 	TLSPort int // 0: no TLS endpoint (Nano)
 	Account string
 	Path    string // base path, e.g. the cloud relay's /<session>
+	// Literal, when set, is the endpoint rendered verbatim instead of scheme://host:port. The hosted server uses
+	// it for the Nano cloud relay: that URL is a bearer capability for the user's tab, so the server is never
+	// given it and renders the placeholder ${VYOMI_RELAY_URL} for the agent to substitute locally.
+	Literal string
 }
 
 type mcpTargetArgs struct {
@@ -235,9 +239,17 @@ func (s *mcpServer) target(a *mcpTargetArgs) mcpTarget {
 	return t
 }
 
-func (t mcpTarget) simURL() string { return t.Scheme + "://" + t.hostPort() + t.Path }
+func (t mcpTarget) simURL() string {
+	if t.Literal != "" {
+		return t.Literal
+	}
+	return t.Scheme + "://" + t.hostPort() + t.Path
+}
 
 func (t mcpTarget) hostPort() string {
+	if t.Literal != "" {
+		return t.Literal // a host:port slot gets the placeholder too, rather than an empty, silently broken value
+	}
 	if t.SimPort == 0 {
 		return t.Host
 	}

@@ -111,7 +111,10 @@ def main(argv):
     spec = importlib.util.spec_from_file_location("check_agent_plugins", pathlib.Path(__file__).with_name("check_agent_plugins.py"))
     cap = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cap)
-    drift = cap.check(SRC)
+    # check() returns (errors, notes): the notes are submission reminders (e.g. a developerName placeholder), not drift.
+    drift, notes = cap.check(SRC)
+    for n in notes:
+        print(f"sync_claude_plugins: note: {n}")
     if drift:
         sys.exit("sync_claude_plugins: manifests disagree:\n  " + "\n  ".join(drift))
 

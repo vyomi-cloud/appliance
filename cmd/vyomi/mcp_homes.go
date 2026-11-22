@@ -762,6 +762,42 @@ func (s *mcpServer) homes() *homeProbe {
 	return s.homeCache.val
 }
 
+// namedHome turns a hosted tool's `home` argument into a selection WITHOUT probing anything and WITHOUT reading
+// the process environment: the hosted server runs on vyomi.cloud, so RELAY_PORT / VYOMI_ENDPOINT / VYOMI_MESH_URL
+// describe OUR container, never the caller's machine. It names the standard endpoints a developer's home listens
+// on (nano: the vyomi-tunnel on 127.0.0.1:8090; mesh and offline: 127.0.0.1:9000, TLS 9443), and never connects to
+// them: no probeHomes, no getJSON, no runTunnelList (plan §4 rules 1 and 4). Default nano.
+func (s *mcpServer) namedHome(arg string) (homeSel, error) {
+	d := s.matrix.Defaults
+	switch strings.ToLower(strings.TrimSpace(arg)) {
+	case "", "nano":
+		// Nano is plain HTTP through the local tunnel: no TLS port (spec decision 8).
+		return homeSel{ID: homeNanoLocal, Why: "home=nano: a Nano browser tab through the vyomi-tunnel on the developer's machine",
+			target: mcpTarget{Scheme: "http", Host: d.Host, SimPort: nanoTunnelPort, Account: d.AzureAccount}}, nil
+	case "mesh":
+		return homeSel{ID: homeMeshLocal, Why: "home=mesh: a Vyomi mesh on the developer's machine",
+			target: mcpTarget{Scheme: "http", Host: d.Host, SimPort: d.SimPort, TLSPort: d.TLSPort, Account: d.AzureAccount}}, nil
+	case "offline":
+		return homeSel{ID: homeOffline, Why: "home=offline: the Vyomi appliance on the developer's machine",
+			target: mcpTarget{Scheme: "http", Host: d.Host, SimPort: d.SimPort, TLSPort: d.TLSPort, Account: d.AzureAccount}}, nil
+	}
+	return homeSel{}, fmt.Errorf("home must be one of nano, mesh, offline (got %q)", arg)
+}
+
+// nanoTunnelPort is the port vyomi-tunnel listens on for a Nano tab. Fixed in hosted mode (RELAY_PORT is the
+// caller's setting, not ours); local mode still reads RELAY_PORT through relayPort().
+const nanoTunnelPort = 8090
+
+// homeForArg resolves a tool's `home` argument for the mode this process runs in: the hosted server names homes
+// and never probes, the local server probes. Every knowledge handler goes through here, so hosted and local
+// answers are the same code path with the same data.
+func (s *mcpServer) homeForArg(arg string) (homeSel, error) {
+	if s.hosted {
+		return s.namedHome(arg)
+	}
+	return s.resolveHome(arg)
+}
+
 // resolveHome turns a tool's `home` argument into a target. Explicit values never probe; "" / "auto" use the
 // resolver, and fall back to the legacy target (VYOMI_ENDPOINT / :9000) when it selects nothing.
 func (s *mcpServer) resolveHome(arg string) (homeSel, error) {
@@ -823,11 +859,11 @@ func (s *mcpServer) autoHome() homeSel {
 // homeTarget resolves a tool's `home` and applies its host / account overrides. The offline home keeps the
 // legacy target exactly (VYOMI_ENDPOINT / VYOMI_SIMULATOR_PORT / host arg), so 3.0.46-era output is unchanged.
 func (s *mcpServer) homeTarget(arg string, a *mcpTargetArgs) (homeSel, mcpTarget, error) {
-	sel, err := s.resolveHome(arg)
+	sel, err := s.homeForArg(arg)
 	if err != nil {
 		return sel, mcpTarget{}, err
 	}
-	if sel.ID == homeOffline {
+	if sel.ID == homeOffline && !s.hosted {
 		return sel, s.target(a), nil
 	}
 	t := sel.target

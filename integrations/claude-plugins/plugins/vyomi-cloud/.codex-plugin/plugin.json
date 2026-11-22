@@ -1,0 +1,46 @@
+{
+  "name": "vyomi-cloud",
+  "version": "4.3.0",
+  "description": "Run and test cloud code locally against Vyomi, the AWS/GCP/Azure simulator, through Vyomi's hosted MCP server at https://vyomi.cloud/mcp: ask what Vyomi emulates, get the SDK settings and code for your simulator, scan a repo with rules it hands you, and get a .env.vyomi and an AGENTS.md section to apply yourself. No install, no Node.js and no tunnel: the server is read-only and never sees your machine or your code.",
+  "author": {
+    "name": "Vyomi",
+    "email": "support@vyomi.cloud",
+    "url": "https://vyomi.cloud"
+  },
+  "homepage": "https://vyomi.cloud",
+  "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "aws",
+    "gcp",
+    "azure",
+    "local-cloud",
+    "emulator",
+    "localstack-alternative",
+    "testing",
+    "remote-mcp"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Vyomi",
+    "shortDescription": "Local AWS/GCP/Azure simulator",
+    "longDescription": "Vyomi is a local simulator of AWS, GCP and Azure: real cloud SDKs, CLIs and Terraform talk to it instead of the real cloud while you develop, and production keeps running on the real cloud.\n\nThis plugin connects to Vyomi's hosted MCP server over HTTPS, so there is nothing to install. It answers: which services Vyomi emulates and how completely, whether one specific feature is supported, a ready-to-run CLI/SDK/curl call aimed at your simulator, and the exact environment variables, SDK client settings and Terraform block that point your code at it. It also proposes a dev-only .env.vyomi file and a short Vyomi section for AGENTS.md, and splits a repo scan in two: it hands your agent the search rules, your agent runs them locally, and it summarises which services the project uses and whether Vyomi emulates them.\n\nWhat it never does: it has no access to your machine, your project or your files, it makes no outbound network connection, it writes nothing, and it asks for no credentials or secrets. Your agent does every local step with its own tools, and writes a file only after you say yes. Scan results are sent as rule ids, file paths, line numbers and the matched service name (for example s3) — never source code. Nothing is stored; request logs keep the method, the tool name, the status and the latency for 30 days, with no arguments and no IP addresses.",
+    "developerName": "TODO pending O-D1: the verified OpenAI identity (individual or business)",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "https://vyomi.cloud",
+    "supportURL": "https://vyomi.cloud/support",
+    "privacyPolicyURL": "https://vyomi.cloud/privacy",
+    "termsOfServiceURL": "https://vyomi.cloud/terms",
+    "defaultPrompt": [
+      "Which AWS services does Vyomi emulate?",
+      "Set this project up to run against Vyomi.",
+      "Show me how to call SQS on Vyomi from Python."
+    ],
+    "logo": "./.claude-plugin/icon.png",
+    "composerIcon": "./.claude-plugin/icon.png"
+  }
+}

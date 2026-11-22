@@ -83,7 +83,7 @@ func TestMCPMatrixEmbedded(t *testing.T) {
 		}
 	}
 	s := &mcpServer{matrix: m}
-	if _, _, err := s.compileScanRules(); err != nil {
+	if _, err := s.scanRuleTable(); err != nil {
 		t.Fatalf("scan rules must compile: %v", err)
 	}
 	// Every alias target must be a real service (or a deliberate skip marker), so
@@ -151,6 +151,7 @@ func TestMCPProtocolRoundTrip(t *testing.T) {
 }
 
 func TestMCPEnvRendersTargetAndWarnings(t *testing.T) {
+	probelessHomes(t) // home=auto must not depend on what is listening on this machine
 	s, _ := testMCPServer(t)
 	res, isErr := callTool(t, s, "vyomi_env", map[string]any{"cloud": "gcp", "host": "192.168.64.5", "format": "shell"})
 	if isErr {
@@ -190,6 +191,7 @@ func writeFile(t *testing.T, path, body string) {
 }
 
 func TestMCPScanRepo(t *testing.T) {
+	probelessHomes(t) // home=auto must not depend on what is listening on this machine
 	s, _ := testMCPServer(t)
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "app", "store.py"), "import boto3\ns3 = boto3.client('s3')\nsns = boto3.client(\"sns\")\nbq = boto3.client('appflow')\n")

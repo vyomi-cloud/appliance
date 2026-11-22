@@ -32,8 +32,10 @@ var scanLangExts = map[string][]string{
 type scanHit struct {
 	File string `json:"file"`
 	Line int    `json:"line"`
-	Lang string `json:"lang"`
-	Text string `json:"text"`
+	Lang string `json:"lang,omitempty"`
+	// Text is the clipped source line. The local scan fills it; the hosted summary never does, because no source
+	// text is sent to the hosted server (design §4, D-I1).
+	Text string `json:"text,omitempty"`
 }
 
 type scanService struct {
@@ -53,10 +55,11 @@ type scanService struct {
 }
 
 type scanReport struct {
-	Root         string                    `json:"root"`
+	Root         string                    `json:"root,omitempty"` // local scan only: the directory walked
 	Home         string                    `json:"home"`
-	FilesScanned int                       `json:"files_scanned"`
-	Truncated    bool                      `json:"truncated"`
+	FilesScanned int                       `json:"files_scanned,omitempty"` // local scan only
+	HitsReceived int                       `json:"hits_received,omitempty"` // hosted summary only: hits the agent sent
+	Truncated    bool                      `json:"truncated,omitempty"`
 	Clouds       map[string][]*scanService `json:"clouds"`
 	Unrecognized map[string][]string       `json:"unrecognized,omitempty"`
 	AlreadyWired []scanHit                 `json:"already_wired"`
@@ -64,28 +67,79 @@ type scanReport struct {
 	NextSteps    []string                  `json:"next_steps"`
 }
 
-type compiledRule struct {
-	cloud, lang string
-	re          *regexp.Regexp
+// scanRule is one line rule, as both the local walk and the hosted get_scan_rules see it. The id is stable
+// (cloud-lang-n in knowledge order), so a hosted caller can grep with the regex and send back hits that name it.
+type scanRule struct {
+	ID         string   `json:"id"`
+	Cloud      string   `json:"cloud,omitempty"` // empty for the already-wired rule, which is cloud-independent
+	Lang       string   `json:"lang"`
+	Globs      []string `json:"globs"`
+	Regex      string   `json:"regex"`
+	TokenGroup int      `json:"token_group"` // capture group holding the service token; 0 = the rule captures nothing
+	re         *regexp.Regexp
 }
 
-func (s *mcpServer) compileScanRules() ([]compiledRule, *regexp.Regexp, error) {
-	var rules []compiledRule
+// scanWiredRuleID is the rule that finds endpoint overrides a project already has. It captures no service, and
+// its hits are reported as file:line only: the matched text is never sent to the hosted server (D-I1).
+const scanWiredRuleID = "already-wired"
+
+// scanRuleGlobs are the file globs for a rule language, from scanLangExts.
+func scanRuleGlobs(lang string) []string {
+	exts := scanLangExts[lang]
+	globs := make([]string, 0, len(exts))
+	for _, e := range exts {
+		globs = append(globs, "**/*"+e)
+	}
+	sort.Strings(globs)
+	return globs
+}
+
+// scanRuleTable compiles the rule table once: the per-language rules in knowledge order, then the already-wired
+// rule. The local walk (scanRepo) and the hosted get_scan_rules / summarize_scan_hits all work from this table,
+// so a rule id means the same thing everywhere.
+func (s *mcpServer) scanRuleTable() ([]scanRule, error) {
+	rules := make([]scanRule, 0, len(s.matrix.Scan.Rules)+1)
+	n := map[string]int{}
 	for _, r := range s.matrix.Scan.Rules {
 		re, err := regexp.Compile(r.Pattern)
 		if err != nil {
-			return nil, nil, fmt.Errorf("scan rule %s/%s: %v", r.Cloud, r.Lang, err)
+			return nil, fmt.Errorf("scan rule %s/%s: %v", r.Cloud, r.Lang, err)
 		}
-		rules = append(rules, compiledRule{r.Cloud, r.Lang, re})
+		key := r.Cloud + "-" + r.Lang
+		n[key]++
+		rules = append(rules, scanRule{
+			ID: fmt.Sprintf("%s-%d", key, n[key]), Cloud: r.Cloud, Lang: r.Lang,
+			Globs: scanRuleGlobs(r.Lang), Regex: r.Pattern, TokenGroup: 1, re: re,
+		})
 	}
-	var wired *regexp.Regexp
 	if s.matrix.Scan.AlreadyWired != "" {
-		var err error
-		if wired, err = regexp.Compile(s.matrix.Scan.AlreadyWired); err != nil {
-			return nil, nil, fmt.Errorf("already_wired pattern: %v", err)
+		re, err := regexp.Compile(s.matrix.Scan.AlreadyWired)
+		if err != nil {
+			return nil, fmt.Errorf("already_wired pattern: %v", err)
 		}
+		all := map[string]bool{}
+		var globs []string
+		for _, lang := range sortedKeys(scanLangExts) {
+			for _, g := range scanRuleGlobs(lang) {
+				if !all[g] {
+					all[g] = true
+					globs = append(globs, g)
+				}
+			}
+		}
+		sort.Strings(globs)
+		rules = append(rules, scanRule{ID: scanWiredRuleID, Lang: "any", Globs: globs, Regex: s.matrix.Scan.AlreadyWired, TokenGroup: 0, re: re})
 	}
-	return rules, wired, nil
+	return rules, nil
+}
+
+// scanRuleByID indexes a table for the hosted summary.
+func scanRuleByID(rules []scanRule) map[string]*scanRule {
+	out := make(map[string]*scanRule, len(rules))
+	for i := range rules {
+		out[rules[i].ID] = &rules[i]
+	}
+	return out
 }
 
 // resolveAlias maps a captured token (e.g. "client-sqs" → "sqs", "pubsub_v1" →
@@ -140,9 +194,18 @@ func (s *mcpServer) scanRepo(root string, maxFiles int, sel homeSel) (*scanRepor
 	if err != nil || !st.IsDir() {
 		return nil, fmt.Errorf("%s is not a directory", root)
 	}
-	rules, wired, err := s.compileScanRules()
+	table, err := s.scanRuleTable()
 	if err != nil {
 		return nil, err
+	}
+	var rules []scanRule
+	var wired *regexp.Regexp
+	for _, r := range table {
+		if r.ID == scanWiredRuleID {
+			wired = r.re
+			continue
+		}
+		rules = append(rules, r)
 	}
 	skip := map[string]bool{}
 	for _, d := range s.matrix.Scan.SkipDirs {
@@ -212,52 +275,36 @@ func (s *mcpServer) scanRepo(root string, maxFiles int, sel homeSel) (*scanRepor
 				rep.AlreadyWired = append(rep.AlreadyWired, scanHit{File: rel, Line: lineNo, Text: clip(line)})
 			}
 			for _, r := range rules {
-				if !contains(langs, r.lang) {
+				if !contains(langs, r.Lang) {
 					continue
 				}
 				for _, m := range r.re.FindAllStringSubmatch(line, -1) {
 					if len(m) < 2 {
 						continue
 					}
-					svc := s.resolveAlias(r.cloud, m[1])
+					svc := s.resolveAlias(r.Cloud, m[1])
 					if svc == "_core" || svc == "_ignore" {
 						continue
 					}
 					if svc == "" {
-						if unknown[r.cloud] == nil {
-							unknown[r.cloud] = map[string]bool{}
+						if unknown[r.Cloud] == nil {
+							unknown[r.Cloud] = map[string]bool{}
 						}
-						unknown[r.cloud][m[1]] = true
+						unknown[r.Cloud][m[1]] = true
 						continue
 					}
-					if found[r.cloud] == nil {
-						found[r.cloud] = map[string]*scanService{}
+					if found[r.Cloud] == nil {
+						found[r.Cloud] = map[string]*scanService{}
 					}
-					e := found[r.cloud][svc]
+					e := found[r.Cloud][svc]
 					if e == nil {
-						e = &scanService{Service: svc, Status: "not_emulated", langSet: map[string]bool{}}
-						if ms := s.matrix.service(r.cloud, svc); ms != nil {
-							e.Status, e.Name = ms.Status, ms.Name
-							e.Level, e.Tier, e.Mesh, e.MeshOnly = ms.Levels[levelKey], ms.Tier, ms.Mesh, ms.MeshOnly
-							if c := ms.LevelCounts[levelKey]; ms.Capabilities > 0 && c["not_simulated"] == ms.Capabilities {
-								e.noneHere = true
-							}
-						}
-						e.Warning = s.scanWarning(r.cloud+"/"+svc, sel)
-						if e.Mesh && wiringHome(sel.ID) != "mesh" {
-							// spec decision 9: never silently wired to a home that cannot run it
-							mw := "needs a Pro/Max mesh: its main feature is mesh-only, so it does not run on Nano or the offline appliance."
-							if e.Warning != "" {
-								mw += " " + e.Warning
-							}
-							e.Warning = mw
-						}
-						found[r.cloud][svc] = e
+						e = s.newScanService(r.Cloud, svc, levelKey, sel)
+						found[r.Cloud][svc] = e
 					}
 					e.Uses++
-					e.langSet[r.lang] = true
+					e.langSet[r.Lang] = true
 					if len(e.Examples) < scanMaxHits {
-						e.Examples = append(e.Examples, scanHit{File: rel, Line: lineNo, Lang: r.lang, Text: clip(line)})
+						e.Examples = append(e.Examples, scanHit{File: rel, Line: lineNo, Lang: r.Lang, Text: clip(line)})
 					}
 				}
 			}
@@ -268,6 +315,37 @@ func (s *mcpServer) scanRepo(root string, maxFiles int, sel homeSel) (*scanRepor
 		return nil, walkErr
 	}
 
+	s.collectScanServices(rep, found, unknown)
+	s.summarize(rep)
+	return rep, nil
+}
+
+// newScanService is one per-service entry of the report: the knowledge for cloud/svc in this home, with the
+// home's warnings. Shared by the local walk and the hosted summary, so both grade a service the same way.
+func (s *mcpServer) newScanService(cloud, svc, levelKey string, sel homeSel) *scanService {
+	e := &scanService{Service: svc, Status: "not_emulated", langSet: map[string]bool{}}
+	if ms := s.matrix.service(cloud, svc); ms != nil {
+		e.Status, e.Name = ms.Status, ms.Name
+		e.Level, e.Tier, e.Mesh, e.MeshOnly = ms.Levels[levelKey], ms.Tier, ms.Mesh, ms.MeshOnly
+		if c := ms.LevelCounts[levelKey]; ms.Capabilities > 0 && c["not_simulated"] == ms.Capabilities {
+			e.noneHere = true
+		}
+	}
+	e.Warning = s.scanWarning(cloud+"/"+svc, sel)
+	if e.Mesh && wiringHome(sel.ID) != "mesh" {
+		// spec decision 9: never silently wired to a home that cannot run it
+		mw := "needs a Pro/Max mesh: its main feature is mesh-only, so it does not run on Nano or the offline appliance."
+		if e.Warning != "" {
+			mw += " " + e.Warning
+		}
+		e.Warning = mw
+	}
+	return e
+}
+
+// collectScanServices fills rep.Clouds (most-used service first) and rep.Unrecognized from the maps both scan
+// paths build.
+func (s *mcpServer) collectScanServices(rep *scanReport, found map[string]map[string]*scanService, unknown map[string]map[string]bool) {
 	for _, cloud := range mcpClouds {
 		svcs := found[cloud]
 		if len(svcs) == 0 {
@@ -292,14 +370,25 @@ func (s *mcpServer) scanRepo(root string, maxFiles int, sel homeSel) (*scanRepor
 	if len(rep.Unrecognized) == 0 {
 		rep.Unrecognized = nil
 	}
-	s.summarize(rep)
-	return rep, nil
 }
 
-func (s *mcpServer) summarize(rep *scanReport) {
+// scanToolNames are the tool names the report's next_steps point at: the local server names its own tools, the
+// hosted one names the hosted tools (and tells the agent it writes the file itself).
+type scanToolNames struct {
+	env, propose, applyNote string
+}
+
+var (
+	localScanTools  = scanToolNames{"vyomi_env", "vyomi_write_env", "With the user's OK: vyomi_write_env path=<project> clouds=[...] home="}
+	hostedScanTools = scanToolNames{"get_sdk_settings", "propose_env_file", "With the user's OK: propose_env_file clouds=[...] home="}
+)
+
+func (s *mcpServer) summarize(rep *scanReport) { s.summarizeWith(rep, localScanTools) }
+
+func (s *mcpServer) summarizeWith(rep *scanReport, names scanToolNames) {
 	if len(rep.Clouds) == 0 {
 		rep.Summary = []string{"No AWS, GCP or Azure SDK / Terraform usage found."}
-		rep.NextSteps = []string{"Nothing to wire. If the project calls clouds through another library, call vyomi_env to get the endpoint settings anyway."}
+		rep.NextSteps = []string{"Nothing to wire. If the project calls clouds through another library, call " + names.env + " to get the endpoint settings anyway."}
 		return
 	}
 	for _, cloud := range mcpClouds {
@@ -351,7 +440,7 @@ func (s *mcpServer) summarize(rep *scanReport) {
 				best, bestN = l, langCount[l]
 			}
 		}
-		rep.NextSteps = append(rep.NextSteps, fmt.Sprintf("vyomi_env cloud=%s lang=%s home=%s", cloud, best, wiringHomeArg(rep.Home)))
+		rep.NextSteps = append(rep.NextSteps, fmt.Sprintf("%s cloud=%s lang=%s home=%s", names.env, cloud, best, wiringHomeArg(rep.Home)))
 		if len(gaps) > 0 {
 			rep.NextSteps = append(rep.NextSteps, fmt.Sprintf("%s services %s are not emulated: keep them on the real cloud (or stub them) during local runs.", strings.ToUpper(cloud), strings.Join(gaps, ", ")))
 		}
@@ -359,7 +448,109 @@ func (s *mcpServer) summarize(rep *scanReport) {
 	if len(rep.AlreadyWired) > 0 {
 		rep.NextSteps = append(rep.NextSteps, "Endpoint overrides already exist (see already_wired): reuse them instead of adding new ones.")
 	}
-	rep.NextSteps = append(rep.NextSteps, "With the user's OK: vyomi_write_env path=<project> clouds=[...] home="+wiringHomeArg(rep.Home))
+	rep.NextSteps = append(rep.NextSteps, names.applyNote+wiringHomeArg(rep.Home))
+	if names.propose == hostedScanTools.propose {
+		rep.NextSteps = append(rep.NextSteps, "Nothing is written from here: show the user the file and write it with your own edit tool after they say yes.")
+	}
+}
+
+// scanHitIn is one hit an agent found by running a rule from get_scan_rules with its own grep: the rule id, where
+// it matched, and the captured service token. No source text: a rule's matched line never reaches this server
+// (D-I1), and the already-wired rule carries no token at all.
+type scanHitIn struct {
+	Rule  string `json:"rule"`
+	File  string `json:"file"`
+	Line  int    `json:"line"`
+	Token string `json:"token"`
+}
+
+const (
+	scanMaxHitsIn   = 2000 // hits accepted in one summarize_scan_hits call (plan §4 rule 5)
+	scanMaxTokenLen = 64
+)
+
+// scanTokenPattern is the only shape a captured token may have (D-I1): an identifier, not source text.
+var scanTokenPattern = regexp.MustCompile(`^[A-Za-z0-9_.\-/]{1,64}$`)
+
+// scanHitFile keeps a caller's file label to a plain repo-relative path, so the report cannot be used to echo
+// arbitrary text back to the user.
+var scanHitFile = regexp.MustCompile(`^[A-Za-z0-9_.\-/\\ +@]{1,256}$`)
+
+// summarizeHits builds the same report as scanRepo, from hits an agent found locally instead of a file walk.
+// Identical knowledge, identical shape: only the examples carry no source text and files_scanned is replaced by
+// hits_received.
+func (s *mcpServer) summarizeHits(hits []scanHitIn, sel homeSel) (*scanReport, error) {
+	if len(hits) > scanMaxHitsIn {
+		return nil, fmt.Errorf("too many hits: %d (at most %d per call; run the rules per directory and summarize each batch)", len(hits), scanMaxHitsIn)
+	}
+	table, err := s.scanRuleTable()
+	if err != nil {
+		return nil, err
+	}
+	byID := scanRuleByID(table)
+	rep := &scanReport{Home: sel.ID, HitsReceived: len(hits), Clouds: map[string][]*scanService{}, Unrecognized: map[string][]string{}}
+	levelKey := "offline"
+	if wiringHome(sel.ID) == "nano" {
+		levelKey = "nano"
+	}
+	found := map[string]map[string]*scanService{}
+	unknown := map[string]map[string]bool{}
+
+	for i, h := range hits {
+		r := byID[strings.TrimSpace(h.Rule)]
+		if r == nil {
+			return nil, fmt.Errorf("hit %d names an unknown rule %q; use the ids from get_scan_rules", i+1, h.Rule)
+		}
+		file := strings.TrimSpace(h.File)
+		if file == "" || !scanHitFile.MatchString(file) {
+			return nil, fmt.Errorf("hit %d: file must be a repo-relative path (got %q)", i+1, h.File)
+		}
+		file = filepath.ToSlash(file)
+		if h.Line < 0 {
+			return nil, fmt.Errorf("hit %d: line must be 0 or more (got %d)", i+1, h.Line)
+		}
+		if r.ID == scanWiredRuleID {
+			// Endpoint overrides the project already has: file:line only, never the matched text.
+			if len(rep.AlreadyWired) < 10 {
+				rep.AlreadyWired = append(rep.AlreadyWired, scanHit{File: file, Line: h.Line})
+			}
+			continue
+		}
+		token := strings.TrimSpace(h.Token)
+		if token == "" {
+			return nil, fmt.Errorf("hit %d (%s): token is required; send capture group %d of the rule's regex (e.g. \"s3\" from boto3.client(\"s3\"))", i+1, r.ID, r.TokenGroup)
+		}
+		if len(token) > scanMaxTokenLen || !scanTokenPattern.MatchString(token) {
+			return nil, fmt.Errorf("hit %d (%s): token %q is not an identifier; send only the captured service token, never the matched line", i+1, r.ID, clip(token))
+		}
+		svc := s.resolveAlias(r.Cloud, token)
+		if svc == "_core" || svc == "_ignore" {
+			continue
+		}
+		if svc == "" {
+			if unknown[r.Cloud] == nil {
+				unknown[r.Cloud] = map[string]bool{}
+			}
+			unknown[r.Cloud][strings.ToLower(token)] = true
+			continue
+		}
+		if found[r.Cloud] == nil {
+			found[r.Cloud] = map[string]*scanService{}
+		}
+		e := found[r.Cloud][svc]
+		if e == nil {
+			e = s.newScanService(r.Cloud, svc, levelKey, sel)
+			found[r.Cloud][svc] = e
+		}
+		e.Uses++
+		e.langSet[r.Lang] = true
+		if len(e.Examples) < scanMaxHits {
+			e.Examples = append(e.Examples, scanHit{File: file, Line: h.Line, Lang: r.Lang})
+		}
+	}
+	s.collectScanServices(rep, found, unknown)
+	s.summarizeWith(rep, hostedScanTools)
+	return rep, nil
 }
 
 func joinOrNone(xs []string) string {

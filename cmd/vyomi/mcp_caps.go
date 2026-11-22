@@ -403,6 +403,17 @@ func (s *mcpServer) toolSnippet(raw json.RawMessage) (any, error) {
 	if err := decodeArgs(raw, &a); err != nil {
 		return nil, err
 	}
+	home, err := s.homeForArg(a.Home)
+	if err != nil {
+		return nil, err
+	}
+	return s.snippetResult(a.Cloud, a.Service, a.Op, a.Lang, home)
+}
+
+// snippetResult is the body of vyomi_snippet, after the home is resolved: the hosted get_code_snippet calls it
+// with a named home (namedHome) so both tools answer from the same code and the same documentation.
+func (s *mcpServer) snippetResult(cloud, service, op, lang string, home homeSel) (any, error) {
+	a := struct{ Cloud, Service, Op, Lang string }{cloud, service, op, lang}
 	if !validCloud(a.Cloud) {
 		return nil, fmt.Errorf("cloud is required: aws, gcp or azure")
 	}
@@ -423,21 +434,17 @@ func (s *mcpServer) toolSnippet(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	api, op, err := s.pickOp(a.Cloud, svc, strings.ToLower(a.Service), a.Op, a.Lang)
-	if err != nil {
-		return nil, err
-	}
-	home, err := s.resolveHome(a.Home)
+	api, pop, err := s.pickOp(a.Cloud, svc, strings.ToLower(a.Service), a.Op, a.Lang)
 	if err != nil {
 		return nil, err
 	}
 	t := home.target
 	out := map[string]any{
 		"cloud": a.Cloud, "service": stem, "title": svc.Title, "api": api.Title,
-		"op": op.Name, "method": op.Method, "path": op.Path, "description": op.Desc,
+		"op": pop.Name, "method": pop.Method, "path": pop.Path, "description": pop.Desc,
 		"lang": a.Lang, "home": home.ID, "endpoint": t.simURL(),
-		"snippet":         t.renderSnippet(op.Snips[a.Lang]),
-		"available_langs": sortedKeys(op.Snips),
+		"snippet":         t.renderSnippet(pop.Snips[a.Lang]),
+		"available_langs": sortedKeys(pop.Snips),
 		"source":          svc.Source,
 		"note":            "Generated from the API docs the Nano console shows (only operations that really answer). Placeholder values (my-bucket, my-rg) are examples.",
 	}

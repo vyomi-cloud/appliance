@@ -17,6 +17,16 @@ agents run the old command; a "Needs vyomi-tunnel ..." note changed in one means
 tunnel. Icon paths (logo, composerIcon) must exist inside the plugin, manifests that state a license agree on it, and the
 root has LICENSE and SECURITY.md. This script fails on any such drift. Stdlib only.
 
+A plugin whose MCP servers are all REMOTE (`https://vyomi.cloud/mcp`, the hosted server) is checked differently in
+one way: it must NOT carry the "Needs vyomi-tunnel ..." note, because it needs no tunnel and no install, and
+promising one would be wrong in every listing. A plugin with a stdio/`npx` server must carry it, as before. Remote
+server URLs have to be `https` on a vyomi.cloud host, so a listing can never point an installed plugin elsewhere.
+
+Listing fields for the OpenAI / Codex directory are checked against its documented limits (OPENAI-DIRECTORY-PLAN.md
+WP-O1): displayName <= 30, shortDescription <= 30, longDescription <= 4000, developerName <= 80, at most 3 starter
+prompts of <= 128 characters with no @mentions, and the four listing URLs present and https. A developerName still
+marked TODO is reported, not failed: it is a submission gate, not a repo error.
+
 The Claude directory adds three rules this script also enforces: every `npx` launcher pins vyomi-tunnel to an exact
 version, and that version is packaging/tunnel/package.json's (the release publishes npm before it mirrors the plugin, so
 the mirror never names an unpublished version; see sync_claude_plugins.py); each plugin folder has a README.md of 40+
@@ -51,6 +61,16 @@ NPX_TEXT_RE = re.compile(r"(?:npx(?:\s+-y)?\s+|\"-y\",\s*\")vyomi-tunnel(?:@([^\
 EXACT_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 # What the Claude directory accepts in .claude-plugin/plugin.json from an unverified organization (only what we use).
 CLAUDE_MANIFEST_KEYS = {"name", "version", "description", "author", "homepage", "repository", "license", "keywords"}
+# Transports that need nothing installed on the user's machine (the hosted server at https://vyomi.cloud/mcp).
+REMOTE_TYPES = {"http", "streamable-http", "sse"}
+# The host a remote server may live on: a listing must never be able to point an installed plugin somewhere else.
+REMOTE_HOSTS = ("vyomi.cloud",)
+# OpenAI / Codex listing limits (developers.openai.com/codex/submit-plugins, read 2026-11-22), plus the four URLs
+# every listing needs.
+OPENAI_LIMITS = {"displayName": 30, "shortDescription": 30, "longDescription": 4000, "developerName": 80}
+OPENAI_URLS = ("websiteURL", "supportURL", "privacyPolicyURL", "termsOfServiceURL")
+OPENAI_PROMPT_MAX = 128
+OPENAI_PROMPTS_MAX = 3
 
 
 def load(p, errors):
@@ -96,13 +116,56 @@ def readme_words(md):
     return len(re.sub(r"```.*?```", " ", md, flags=re.S).split())
 
 
+def interface_of(manifest, rel):
+    """(where, interface) for a manifest that carries OpenAI listing fields, or (None, None)."""
+    if manifest is None:
+        return None, None
+    if rel == "plugin.json":
+        iface = (manifest.get("extensions", {}).get("com.openai", {}) or {}).get("interface")
+        return (f"{rel} extensions.com.openai.interface", iface) if iface else (None, None)
+    iface = manifest.get("interface")
+    return (f"{rel} interface", iface) if iface else (None, None)
+
+
+def check_openai_interface(where, label, iface, errors, notes):
+    """The documented listing limits. A TODO developerName is a submission gate, so it is reported, not failed."""
+    for field, limit in OPENAI_LIMITS.items():
+        val = iface.get(field)
+        if val is None:
+            errors.append(f"{where}: {label}.{field} is missing (the OpenAI listing needs it)")
+            continue
+        if not isinstance(val, str):
+            errors.append(f"{where}: {label}.{field} must be a string")
+        elif len(val) > limit:
+            errors.append(f"{where}: {label}.{field} is {len(val)} characters; the OpenAI listing allows {limit}")
+    if "TODO" in (iface.get("developerName") or ""):
+        notes.append(f"{where}: {label}.developerName is still a placeholder ({iface['developerName']!r}); "
+                     "set it to the verified OpenAI identity before submitting (O-D1)")
+    for field in OPENAI_URLS:
+        url = iface.get(field)
+        if not url:
+            errors.append(f"{where}: {label}.{field} is missing (the OpenAI listing needs all of {', '.join(OPENAI_URLS)})")
+        elif not url.startswith("https://"):
+            errors.append(f"{where}: {label}.{field} must be https, got {url!r}")
+    prompts = iface.get("defaultPrompt") or []
+    if isinstance(prompts, str):
+        prompts = [prompts]
+    if len(prompts) > OPENAI_PROMPTS_MAX:
+        errors.append(f"{where}: {label}.defaultPrompt has {len(prompts)} prompts; at most {OPENAI_PROMPTS_MAX}")
+    for prompt in prompts:
+        if len(prompt) > OPENAI_PROMPT_MAX:
+            errors.append(f"{where}: {label}.defaultPrompt {prompt!r} is {len(prompt)} characters; at most {OPENAI_PROMPT_MAX}")
+        if "@" in prompt:
+            errors.append(f"{where}: {label}.defaultPrompt {prompt!r} contains an @mention, which the directory refuses")
+
+
 def check(root):
-    errors = []
+    errors, notes = [], []
     root = pathlib.Path(root)
     pin = tunnel_version()
     cmp = load(root / ".claude-plugin" / "marketplace.json", errors)
     if not cmp:
-        return [f"{root}/.claude-plugin/marketplace.json is missing"]
+        return [f"{root}/.claude-plugin/marketplace.json is missing"], notes
     meta_ver = cmp.get("metadata", {}).get("version")
     codex_mp = load(root / ".agents" / "plugins" / "marketplace.json", errors)
     cursor_mp = load(root / ".cursor-plugin" / "marketplace.json", errors)
@@ -152,6 +215,20 @@ def check(root):
             for sname, s in pmcp.get("mcpServers", {}).items():
                 if s.get("type") not in ("stdio", "streamable-http", "sse"):
                     errors.append(f"{where}: mcp.json server {sname} needs a transport type (stdio, streamable-http, sse)")
+        # A remote server must be https on a host we own: a listing must not be able to point it elsewhere.
+        remote = False
+        for label, d in (("mcp.json", pmcp), (".mcp.json", lmcp)):
+            for sname, s in (d or {}).get("mcpServers", {}).items():
+                url = s.get("url")
+                if not url and s.get("type") not in REMOTE_TYPES:
+                    continue
+                remote = True
+                if not url:
+                    errors.append(f"{where}: {label} server {sname} has type {s.get('type')!r} but no url")
+                    continue
+                host = re.sub(r"^https?://([^/:]+).*$", r"\1", url)
+                if not url.startswith("https://") or not any(host == h or host.endswith("." + h) for h in REMOTE_HOSTS):
+                    errors.append(f"{where}: {label} server {sname} url {url!r} must be https on {' or '.join(REMOTE_HOSTS)}")
         if (pmcp is None) != (lmcp is None):
             errors.append(f"{where}: mcp.json and .mcp.json must both exist or both be absent")
         elif pmcp is not None and servers(pmcp) != servers(lmcp):
@@ -200,21 +277,33 @@ def check(root):
                 errors.append(f"{where}: {rel} skills path {m['skills']} does not exist")
 
         # Descriptions: every manifest and marketplace entry carries the same tunnel requirement note.
-        notes = {}
         described = [(rel, m) for rel, m in manifests.items() if m is not None]
         described += [(".claude-plugin/marketplace.json entry", entry)]
         if cursor_mp is not None and name in cursor_entries:
             described.append((".cursor-plugin/marketplace.json entry", cursor_entries[name]))
         if codex_mp is not None and name in codex_entries:
             described.append((".agents/plugins/marketplace.json entry", codex_entries[name]))
+        tunnel_notes = {}
         for rel, m in described:
             found = TUNNEL_NOTE_RE.findall(m.get("description") or "")
+            if remote:
+                # The hosted plugin needs no tunnel and no install; a listing must not promise one.
+                if found:
+                    errors.append(f"{where}: {rel} description must not carry a 'Needs vyomi-tunnel ...' note: "
+                                  f"this plugin runs against a remote server and needs no install, found {found}")
+                continue
             if len(found) != 1:
                 errors.append(f"{where}: {rel} description needs exactly one 'Needs vyomi-tunnel ...' note, found {found}")
             else:
-                notes[rel] = found[0]
-        if len(set(notes.values())) > 1:
-            errors.append(f"{where}: descriptions disagree on the tunnel requirement: {notes}")
+                tunnel_notes[rel] = found[0]
+        if len(set(tunnel_notes.values())) > 1:
+            errors.append(f"{where}: descriptions disagree on the tunnel requirement: {tunnel_notes}")
+
+        # OpenAI / Codex listing fields, wherever they are declared.
+        for rel in ("plugin.json", ".codex-plugin/plugin.json"):
+            label, iface = interface_of(manifests[rel], rel)
+            if iface:
+                check_openai_interface(where, label, iface, errors, notes)
 
         # Icons: logo / composerIcon paths stay inside the plugin and exist. Codex ignores paths without a leading './'.
         icons = {".cursor-plugin/plugin.json logo": (manifests[".cursor-plugin/plugin.json"] or {}).get("logo")}
@@ -268,7 +357,7 @@ def check(root):
         extra = set(entries) - {p["name"] for p in cmp.get("plugins", [])}
         if extra:
             errors.append(f"{label} lists plugins not in .claude-plugin/marketplace.json: {sorted(extra)}")
-    return errors
+    return errors, notes
 
 
 def check_schemas(root, spec_dir, cursor_dir):
@@ -302,9 +391,11 @@ def main(argv):
         if len(schemas) != 2:
             sys.exit("check_agent_plugins: --schemas needs <agent-plugins-spec dir> <cursor-plugins dir>")
     root = pathlib.Path(args[0]) if args else DEFAULT
-    errors = check(root)
+    errors, notes = check(root)
     if schemas and not errors:
         errors = check_schemas(root, *schemas)
+    for n in notes:
+        print(f"check_agent_plugins: note: {n}")
     for e in errors:
         print(f"check_agent_plugins: {e}", file=sys.stderr)
     if errors:

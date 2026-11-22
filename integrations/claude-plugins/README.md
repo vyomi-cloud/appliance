@@ -11,6 +11,17 @@ Vyomi section to your project's `AGENTS.md` so every other agent knows too.
 One package works in Claude Code, Codex, GitHub Copilot, Cursor, VS Code and
 other clients that read the [Agent Plugins](https://agent-plugins.org) format.
 
+**Two plugins, one marketplace.** Pick by where you want the MCP server to run:
+
+| Plugin | Server | Install needed | Sees your machine |
+|---|---|---|---|
+| **`vyomi`** | on your machine (`npx -y vyomi-tunnel mcp`) | Node.js 18+, and the tunnel for Nano | Yes: finds your simulator, scans the project itself, writes `.env.vyomi` after you approve |
+| **`vyomi-cloud`** | Vyomi's hosted server, `https://vyomi.cloud/mcp` | nothing | No. Read-only knowledge and proposals; your agent greps and writes files. Works on claude.ai, ChatGPT and Cowork, where a local server cannot run |
+
+Both can be installed at once; the skills notice which tools they have and
+follow the right flow. `plugins/vyomi-cloud/README.md` lists exactly what each
+hosted call receives and what is kept.
+
 ## 1. Before you start
 
 - **Node.js 18 or newer.** The plugin starts the MCP server with
@@ -34,6 +45,9 @@ The plugin (MCP server plus the three skills), from this GitHub marketplace:
 
 Claude Code also takes the shell form: `claude plugin marketplace add vyomi-cloud/claude-plugins`
 then `claude plugin install vyomi@vyomi`.
+
+For the hosted plugin, install `vyomi-cloud` instead of `vyomi` in any of those
+commands — it needs no Node.js and no tunnel.
 
 The MCP server on its own (no skills), for any MCP client:
 

@@ -36,6 +36,19 @@ func isolateHomes(t *testing.T) {
 	t.Cleanup(func() { portFree = oldFree })
 }
 
+// probelessHomes (rendering tests) points the probes that can CHOOSE a home at ports nothing listens on, while
+// leaving the rendering defaults alone, so a vyomi-tunnel running on the developer's :8090 (or a local mesh)
+// cannot change which home a home=auto call picks. Unlike deadHomes it keeps VYOMI_SIMULATOR_PORT at 9000,
+// because these tests assert the offline endpoint: whatever answers on :9000, the offline home renders the same
+// legacy target, so the result is the same with or without an appliance running.
+func probelessHomes(t *testing.T) {
+	t.Helper()
+	t.Setenv("RELAY_PORT", strconv.Itoa(deadPort(t)))                         // the Nano tunnel probe
+	t.Setenv("VYOMI_MESH_URL", "http://127.0.0.1:"+strconv.Itoa(deadPort(t))) // the local mesh probe
+	t.Setenv("VYOMI_ENDPOINT", "")                                            // no relay or legacy override
+	t.Setenv("VYOMI_TARGET", "")                                              // no explicit choice
+}
+
 // deadHomes (probing tests) points every probe at a dead port, so the resolver only sees the fakes a test starts
 // and never a real tab on :8090 or an appliance on :9000 on the developer's machine.
 func deadHomes(t *testing.T) {
