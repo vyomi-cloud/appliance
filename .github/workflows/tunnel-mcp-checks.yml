@@ -13,6 +13,7 @@ on:
       - scripts/build_tunnel_mcp.sh
       - scripts/sync_tunnel_bin.py
       - scripts/sync_claude_plugins.py
+      - scripts/check_agent_plugins.py
       - scripts/mcp_knowledge_drift.py
       - core/capabilities/**
       - wasm/docs/**
@@ -89,6 +90,9 @@ jobs:
 
       - name: Claude plugin validates
         run: npx -y @anthropic-ai/claude-code plugin validate integrations/claude-plugins
+
+      - name: Agent plugin manifests agree (Agent Plugins, Claude Code, Codex, Cursor)
+        run: python3 scripts/check_agent_plugins.py
 
       - name: Plugin changes carry a version bump (vs the public marketplace)
         run: |
