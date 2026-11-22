@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-22T17:17:36+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T16:17:40+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Tracking 4258 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **2 change(s), 1 actionable.**
 - 🔧 `operation-added` GCP storage/v1: new operation storage.anywhereCaches.pause
 - · `spec-commit` Azure apimanagement: Fix API Management nested resource operation identities (#47949) ([link](https://github.com/Azure/azure-rest-api-specs/commit/f5d8b5a7cd1a6abf2a38c39ada5be61035d4aafe))
-
-Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-11T00:59:56+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
