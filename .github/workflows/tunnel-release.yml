@@ -325,7 +325,11 @@ jobs:
         id: sync
         run: |
           git clone -q https://github.com/vyomi-cloud/claude-plugins.git marketplace
-          python3 scripts/sync_claude_plugins.py marketplace --apply
+          # The plugin runs `npx -y vyomi-tunnel@<pin> mcp`: pin this release's version, and refuse a pin npm does not
+          # serve yet. npm publish ran in the publish job this one needs, so on a release the check passes; a dry run
+          # published nothing (and pushes nothing below), so it skips the npm check.
+          extra=""; [ "$DRY" = "true" ] && extra="--allow-unpublished"
+          python3 scripts/sync_claude_plugins.py marketplace --apply --tunnel-version "$VER" $extra
       - name: The mirrored marketplace validates
         if: steps.sync.outputs.changed == 'true'
         run: npx -y @anthropic-ai/claude-code plugin validate marketplace

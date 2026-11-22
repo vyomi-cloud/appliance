@@ -17,6 +17,12 @@ agents run the old command; a "Needs vyomi-tunnel ..." note changed in one means
 tunnel. Icon paths (logo, composerIcon) must exist inside the plugin, manifests that state a license agree on it, and the
 root has LICENSE and SECURITY.md. This script fails on any such drift. Stdlib only.
 
+The Claude directory adds three rules this script also enforces: every `npx` launcher pins vyomi-tunnel to an exact
+version, and that version is packaging/tunnel/package.json's (the release publishes npm before it mirrors the plugin, so
+the mirror never names an unpublished version; see sync_claude_plugins.py); each plugin folder has a README.md of 40+
+words outside code blocks; and .claude-plugin/plugin.json uses only the fields in CLAUDE_MANIFEST_KEYS (an unverified
+organization's plugin is refused for any other field, e.g. `network`).
+
   python3 scripts/check_agent_plugins.py [root]     # default root: integrations/claude-plugins
 
 With --schemas, it also validates the files against the published JSON Schemas (needs the `jsonschema` package):
@@ -39,6 +45,12 @@ MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json"
 # The tunnel requirement every description repeats, e.g. "Needs vyomi-tunnel 1.3.0+ (1.4.0+ for the AGENTS.md step)".
 TUNNEL_NOTE_RE = re.compile(r"Needs vyomi-tunnel [0-9][^\s]*(?: \([^)]*\))?")
 NAME_RE = re.compile(r"^(?!.*--)(?!.*\.\.)[a-z0-9](?:[a-z0-9.-]{0,62}[a-z0-9])?$")
+TUNNEL_PACKAGE = ROOT / "packaging" / "tunnel" / "package.json"
+# `npx [-y] vyomi-tunnel[@<spec>]` in prose and in JSON args; the spec must be an exact version (no range, no tag).
+NPX_TEXT_RE = re.compile(r"(?:npx(?:\s+-y)?\s+|\"-y\",\s*\")vyomi-tunnel(?:@([^\s`\"']+))?")
+EXACT_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
+# What the Claude directory accepts in .claude-plugin/plugin.json from an unverified organization (only what we use).
+CLAUDE_MANIFEST_KEYS = {"name", "version", "description", "author", "homepage", "repository", "license", "keywords"}
 
 
 def load(p, errors):
@@ -71,9 +83,23 @@ def frontmatter(md):
     return out
 
 
+def tunnel_version():
+    """packaging/tunnel/package.json's version: the vyomi-tunnel the plugin pins (None outside this repo)."""
+    try:
+        return json.loads(TUNNEL_PACKAGE.read_text())["version"]
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def readme_words(md):
+    """Words in a README outside fenced code blocks (the directory's 40-word minimum counts these)."""
+    return len(re.sub(r"```.*?```", " ", md, flags=re.S).split())
+
+
 def check(root):
     errors = []
     root = pathlib.Path(root)
+    pin = tunnel_version()
     cmp = load(root / ".claude-plugin" / "marketplace.json", errors)
     if not cmp:
         return [f"{root}/.claude-plugin/marketplace.json is missing"]
@@ -130,7 +156,37 @@ def check(root):
             errors.append(f"{where}: mcp.json and .mcp.json must both exist or both be absent")
         elif pmcp is not None and servers(pmcp) != servers(lmcp):
             errors.append(f"{where}: mcp.json {servers(pmcp)} != .mcp.json {servers(lmcp)}")
+        # Pinned launcher: npx runs vyomi-tunnel@<exact version>, the same version in every server and every text that
+        # shows the command, and that version is packaging/tunnel/package.json's.
+        for label, d in (("mcp.json", pmcp), (".mcp.json", lmcp)):
+            for sname, s in (d or {}).get("mcpServers", {}).items():
+                if s.get("command") != "npx":
+                    continue
+                pkg = next((a for a in s.get("args", []) if not a.startswith("-")), "")
+                spec = pkg.split("@", 1)[1] if pkg.startswith("vyomi-tunnel@") else None
+                if not spec or not EXACT_RE.match(spec):
+                    errors.append(f"{where}: {label} server {sname} runs npx {pkg!r}; pin an exact version (vyomi-tunnel@{pin or 'X.Y.Z'})")
+                elif pin and spec != pin:
+                    errors.append(f"{where}: {label} server {sname} pins vyomi-tunnel@{spec} but packaging/tunnel/package.json is {pin}")
+        for f in sorted(x for x in pdir.rglob("*") if x.is_file() and x.suffix in (".md", ".json")):
+            for m in NPX_TEXT_RE.finditer(f.read_text()):
+                spec = m.group(1)
+                if not spec or not EXACT_RE.match(spec):
+                    errors.append(f"{where}: {f.relative_to(pdir)} shows {m.group(0)!r}; pin it (vyomi-tunnel@{pin or 'X.Y.Z'})")
+                elif pin and spec != pin:
+                    errors.append(f"{where}: {f.relative_to(pdir)} pins vyomi-tunnel@{spec} but packaging/tunnel/package.json is {pin}")
+
+        # README in the plugin folder itself (the directory shows it as the listing; it refuses a missing or short one).
+        readme = pdir / "README.md"
+        if not readme.is_file():
+            errors.append(f"{where}: README.md is missing from the plugin folder")
+        elif readme_words(readme.read_text()) < 40:
+            errors.append(f"{where}: README.md has {readme_words(readme.read_text())} words outside code blocks; the directory needs 40+")
+
         claude = manifests[".claude-plugin/plugin.json"] or {}
+        extra = sorted(set(claude) - CLAUDE_MANIFEST_KEYS)
+        if extra:
+            errors.append(f"{where}: .claude-plugin/plugin.json has fields the Claude directory refuses from an unverified organization: {extra}")
         if lmcp is not None and "mcpServers" in claude:
             errors.append(f"{where}: .claude-plugin/plugin.json declares mcpServers inline while .mcp.json exists; Claude Code would register the server twice")
         for rel in (".codex-plugin/plugin.json", ".cursor-plugin/plugin.json"):
