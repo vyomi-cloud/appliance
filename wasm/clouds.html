@@ -2621,7 +2621,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       }
       // Each card keeps its own tab (CLI / SDK / curl), like the console's Connect card.
       var picked = {};
-      var cloudPick = 'aws'; try{ cloudPick = localStorage.getItem('vyomi.usage.cloud') || 'aws'; }catch(_){}
+      var ONLY = (location.search.match(/[?&]only=(aws|gcp|azure)/) || [])[1] || '';   // embedded in a console's Vyomi Labs dialog: that console's cloud only
+      var cloudPick = ONLY || 'aws'; try{ if (!ONLY)  cloudPick = localStorage.getItem('vyomi.usage.cloud') || 'aws'; }catch(_){}
       var SVC_IC = { 'aws-s3':'s3', 'aws-dynamodb':'dynamodb', 'aws-kms':'kms', 'aws-secrets':'secretsmanager', 'aws-sqs':'sqs',
                      'aws-sns':'sns', 'aws-iam':'iam', 'aws-rds':'rds', 'az-blob':'storage', 'az-queue':'storage',
                      'az-cosmos':'cosmos', 'az-keyvault':'keyvaults' ,
@@ -2692,7 +2693,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if(grid){
           // One panel; its header is the cloud switch — AWS | Google Cloud | Azure tabs (the
           // choice is remembered). The setup hint for the chosen cloud sits on the right.
-          var clouds = CLOUDS.filter(function(c){ return SERVICES.some(function(s){ return s.cloud===c.id; }); });
+          var clouds = CLOUDS.filter(function(c){ return (!ONLY || c.id===ONLY) && SERVICES.some(function(s){ return s.cloud===c.id; }); });
           if(!clouds.some(function(c){ return c.id===cloudPick; })) cloudPick = clouds.length ? clouds[0].id : 'aws';
           var c = clouds.filter(function(x){ return x.id===cloudPick; })[0] || clouds[0];
           var svcs = SERVICES.filter(function(s){ return s.cloud===c.id; });
@@ -2960,7 +2961,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (search) search.addEventListener('input', function(){ filter = search.value.trim(); if (window.NanoDocs){ clearTimeout(search._t); search._t = setTimeout(function(){ loadSpec(curCloud); }, 200); return; } render(); });
       document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.addEventListener('click', function(){ filter = ''; if (search) search.value = ''; loadSpec(t.dataset.c); }); });
       window.__apiCloud = function(c){ filter = ''; loadSpec(c); };
-      window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec('aws'); } };
+      window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec((location.search.match(/[?&]only=(aws|gcp|azure)/) || [])[1] || 'aws'); } };
       // Booted straight into the API view (e.g. a console link → clouds.html#api)?
       // showAppView ran before this IIFE defined __apiShow, so load the spec now.
       var av = document.getElementById('view-api');

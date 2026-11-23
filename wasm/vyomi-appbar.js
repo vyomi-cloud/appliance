@@ -58,6 +58,7 @@
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
     '#vy-modal.labs .box{width:min(1500px,97vw);height:min(94vh,1000px)}' +
+    '#vy-modal.labs #vy-hd-tabs{display:none !important}' +
     '#vy-hd-lab{display:none;margin-left:auto;align-self:stretch;gap:2px}#vy-modal.labs #vy-hd-lab{display:inline-flex}#vy-modal.labs .hd>button{margin-left:8px}' +
     '#vy-hd-lab button{border:0;background:none;padding:0 16px;font:600 13px Inter,system-ui,sans-serif;color:#475467;cursor:pointer;border-bottom:3px solid transparent;margin-top:3px}' +
     '#vy-hd-lab button:hover{color:#101828}#vy-hd-lab button.on{color:#0b5fff;border-bottom-color:#0b5fff}' +
@@ -197,7 +198,7 @@
       m.querySelectorAll('#vy-hd-lab button').forEach(function (x) { x.classList.toggle('on', x.dataset.t === t); });
       m.classList.toggle('api', t === 'api');
       m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
-      fr.src = t === 'labs' ? CL.replace(/clouds\.html$/, '') + 'labs/index.html?embed=1&cloud=' + cloud : CL + '?embed=1#' + t;
+      fr.src = t === 'labs' ? CL.replace(/clouds\.html$/, '') + 'labs/index.html?embed=1&cloud=' + cloud : CL + '?embed=1&only=' + cloud + '#' + t;   // this console's cloud only
     }
     m.querySelectorAll('#vy-hd-lab button').forEach(function (b) { b.addEventListener('click', function () { labTab(b.dataset.t); }); });
     function openView(view, title, small) {
