@@ -42,3 +42,19 @@ Proven: `tests/conformance/test_iam_e2e_engine.py` (real map + real engine + gat
 - Request map gaps: 1,033 GCP methods unmapped (fail-closed in enforce), S3 DeleteObjects/CBOR resources are wildcards.
 - Onboarding gate: wire `gen_iam_catalog.py` + request-map coverage into the service-expansion pipeline and CI.
 - Entra ID is out of scope (assumption), Basic GCP roles are derived approximations.
+
+## Second wave merged (2026-11-23): mesh-gcp-azure, resource-policies, nano-e2e, onboarding-gate, ui-live
+- Mesh GCP + Azure proven on the real app (adapters rebuilt to the engines' state shape; gate passes host + query to the maps; deny-policy route fixed in `aws_wire_router.py` / `gcp_iam_core.py`).
+- AWS resource policies (S3, SQS, SNS, KMS incl. the key-policy rule, Secrets Manager, Lambda, ECR, API Gateway) + attached SCP/RCP levels fed to the engine (`core/iam_resource_policies.py`).
+- Nano: real engines in the browser for AWS/GCP/Azure (`core/iam_state_nano.py`), Chrome e2e 34/34; decision overhead < 1 ms p50.
+- Onboarding gate (rule 14): 52 of 86 services enforceable (AWS 26/26, Azure 26/31, GCP 0/29 by the strict permission-reachability measure).
+- UI verified against a live appliance (AWS full chain; GCP/Azure render and persist); Audit time + Azure audit grid fixed.
+Merge result: 675 IAM pytest cases pass together, the 9 script-style IAM/RBAC suites exit 0, `build_cores.py --check` clean, `iamEnforce.test.mjs` passes.
+
+## Still open
+- Azure paths that never reach the gate: /openai, /azure-openai, /azure-sql, Graph, /oauth2, /_wire/arm. GCP path-style XML storage requests are routed as AWS S3.
+- GCP: 1,033 unmapped methods; folder/org hierarchy, groups, PAB not fed from stores; opaque Nano tokens act as owner. Azure: management groups, PIM, groups not fed; non-blob data planes not driven live.
+- AWS: API Gateway policy needs the API id resolved by the request map; SNS default policy, access-point/Object Lambda policies, cross-account principals.
+- Re-run live-UI GCP/Azure "Allowed" cases against the merged backend (harness in the ui-live branch doc).
+- `root` gets would-deny on ARM `roleDefinitions` reads in audit mode (ui-live finding, not yet investigated).
+- Nothing has run in CI; nothing is on the trunk.
