@@ -137,11 +137,27 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     },
     {
      "id": "gemini",
-     "title": "Gemini Developer API"
+     "title": "Gemini Developer API",
+     "f": "gemini.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.endpoints.generateContent"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.publishers.models.generateContent"
+    },
+    {
+     "f": "gemini.json",
+     "n": "models.generateContent"
     }
    ],
    "validate": [
@@ -317,9 +333,11 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     }
    ],
+   "ops": [],
    "validate": [
     {
      "kind": "Console",
@@ -528,15 +546,52 @@
    "docs": [
     {
      "id": "functions",
-     "title": "Cloud Functions"
+     "title": "Cloud Functions",
+     "f": "functions.json"
     },
     {
      "id": "run",
-     "title": "Cloud Run"
+     "title": "Cloud Run",
+     "f": "run.json"
     },
     {
      "id": "firestore",
-     "title": "Firestore"
+     "title": "Firestore",
+     "f": "firestore.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.create"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.generateUploadUrl"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.get"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.call"
+    },
+    {
+     "f": "run.json",
+     "n": "run.projects.locations.services.create"
+    },
+    {
+     "f": "run.json",
+     "n": "run.projects.locations.services.get"
+    },
+    {
+     "f": "firestore.json",
+     "n": "firestore.projects.databases.get"
+    },
+    {
+     "f": "firestore.json",
+     "n": "firestore.projects.databases.list"
     }
    ],
    "validate": [
@@ -763,23 +818,74 @@
    "docs": [
     {
      "id": "storage",
-     "title": "Cloud Storage"
+     "title": "Cloud Storage",
+     "f": "storage.json"
     },
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     },
     {
      "id": "eventarc",
-     "title": "eventarc"
+     "title": "eventarc",
+     "f": "eventarc.json"
     },
     {
      "id": "functions",
-     "title": "Cloud Functions"
+     "title": "Cloud Functions",
+     "f": "functions.json"
     },
     {
      "id": "run",
-     "title": "Cloud Run"
+     "title": "Cloud Run",
+     "f": "run.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "storage.json",
+     "n": "storage.buckets.get"
+    },
+    {
+     "f": "storage.json",
+     "n": "storage.buckets.insert"
+    },
+    {
+     "f": "storage.json",
+     "n": "storage.objects.get"
+    },
+    {
+     "f": "storage.json",
+     "n": "storage.objects.insert"
+    },
+    {
+     "f": "storage.json",
+     "n": "storage.objects.list"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.create"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.generateUploadUrl"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.get"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.call"
+    },
+    {
+     "f": "run.json",
+     "n": "run.projects.locations.services.create"
+    },
+    {
+     "f": "run.json",
+     "n": "run.projects.locations.services.get"
     }
    ],
    "validate": [
@@ -932,9 +1038,11 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     }
    ],
+   "ops": [],
    "validate": [
     {
      "kind": "SDK",
@@ -1102,7 +1210,18 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.endpoints.generateContent"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.publishers.models.generateContent"
     }
    ],
    "validate": [
@@ -1251,9 +1370,11 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     }
    ],
+   "ops": [],
    "validate": [
     {
      "kind": "Console",
@@ -1424,9 +1545,11 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     }
    ],
+   "ops": [],
    "validate": [
     {
      "kind": "Console",
@@ -1609,19 +1732,77 @@
    "docs": [
     {
      "id": "pubsub",
-     "title": "Pub/Sub"
+     "title": "Pub/Sub",
+     "f": "pubsub.json"
     },
     {
      "id": "functions",
-     "title": "Cloud Functions"
+     "title": "Cloud Functions",
+     "f": "functions.json"
     },
     {
      "id": "run",
-     "title": "Cloud Run"
+     "title": "Cloud Run",
+     "f": "run.json"
     },
     {
      "id": "firestore",
-     "title": "Firestore"
+     "title": "Firestore",
+     "f": "firestore.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.subscriptions.acknowledge"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.subscriptions.create"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.subscriptions.pull"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.topics.create"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.topics.publish"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.create"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.generateUploadUrl"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.get"
+    },
+    {
+     "f": "functions.json",
+     "n": "cloudfunctions.projects.locations.functions.call"
+    },
+    {
+     "f": "run.json",
+     "n": "run.projects.locations.services.create"
+    },
+    {
+     "f": "run.json",
+     "n": "run.projects.locations.services.get"
+    },
+    {
+     "f": "firestore.json",
+     "n": "firestore.projects.databases.get"
+    },
+    {
+     "f": "firestore.json",
+     "n": "firestore.projects.databases.list"
     }
    ],
    "validate": [
@@ -1791,7 +1972,14 @@
    "docs": [
     {
      "id": "iam-admin",
-     "title": "IAM & Admin"
+     "title": "IAM & Admin",
+     "f": "iam-admin.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "iam-admin.json",
+     "n": "iamcredentials.projects.serviceAccounts.generateIdToken"
     }
    ],
    "validate": [
@@ -1925,11 +2113,35 @@
    "docs": [
     {
      "id": "vertex-ai",
-     "title": "Vertex AI"
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
     },
     {
      "id": "pubsub",
-     "title": "Pub/Sub"
+     "title": "Pub/Sub",
+     "f": "pubsub.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.subscriptions.acknowledge"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.subscriptions.create"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.subscriptions.pull"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.topics.create"
+    },
+    {
+     "f": "pubsub.json",
+     "n": "pubsub.projects.topics.publish"
     }
    ],
    "validate": [
@@ -2084,17 +2296,21 @@
    "docs": [
     {
      "id": "trace",
-     "title": "Cloud Trace"
+     "title": "Cloud Trace",
+     "f": "trace.json"
     },
     {
      "id": "logs",
-     "title": "Logging"
+     "title": "Logging",
+     "f": "logs.json"
     },
     {
      "id": "monitoring",
-     "title": "Monitoring"
+     "title": "Monitoring",
+     "f": "monitoring.json"
     }
    ],
+   "ops": [],
    "validate": [
     {
      "kind": "CLI",
@@ -2261,11 +2477,31 @@
    "docs": [
     {
      "id": "security/kms",
-     "title": "Cloud KMS"
+     "title": "Cloud KMS",
+     "f": "security_kms.json"
     },
     {
      "id": "logs",
-     "title": "Logging"
+     "title": "Logging",
+     "f": "logs.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "security_kms.json",
+     "n": "cloudkms.projects.locations.keyRings.create"
+    },
+    {
+     "f": "security_kms.json",
+     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.create"
+    },
+    {
+     "f": "security_kms.json",
+     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.decrypt"
+    },
+    {
+     "f": "security_kms.json",
+     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.encrypt"
     }
    ],
    "validate": [

@@ -298,14 +298,14 @@
         el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null);
       /* Validate: the chapter's services' SDK & CLI usage + API reference, embedded live from the generated docs (one source of truth), with Try it that runs the calls in this browser. */
       var docIds = (l.docs || []).map(function (d) { return d.id; });
-      var docsUrl = function (view) { return base + "../clouds.html?embed=1&only=" + cloud + "&svc=" + encodeURIComponent(docIds.join(",")) + "#" + view; };
+      var docsUrl = function (view) { return base + "../clouds.html?embed=1&only=" + cloud + "&svc=" + encodeURIComponent(docIds.join(",")) + "&ops=" + encodeURIComponent(JSON.stringify((l.ops || []).map(function (o) { return { f: o.f, n: o.n }; }))) + "#" + view; };
       var docsBlock = function () {
         if (!docIds.length) return el("p", { className: "vl-muted", textContent: "This chapter's services have no generated API docs yet; use the console steps above to check them." });
         var frame = el("iframe", { className: "vl-docframe", title: "SDK & CLI usage and API reference for this chapter", loading: "lazy", src: docsUrl("usage") });
-        window.addEventListener("message", function (e) { if (e.source === frame.contentWindow && e.data && e.data.vylabs === "h") frame.style.height = Math.min(Math.max(e.data.h + 8, 160), 2600) + "px"; });
+        window.addEventListener("message", function (e) { if (e.source === frame.contentWindow && e.data && e.data.vylabs === "h") frame.style.height = Math.min(Math.max(e.data.h + 8, 160), 12000) + "px"; });
         var tabs = [["usage", "SDK & CLI usage"], ["api", "API reference"]].map(function (t, i) { var bt = el("button", { type: "button", className: "vl-dtab" + (i ? "" : " on"), textContent: t[1] });
           bt.onclick = function () { tabs.forEach(function (x) { x.classList.toggle("on", x === bt); }); frame.src = docsUrl(t[0]); }; return bt; });
-        return el("div", { className: "vl-docs" }, el("div", { className: "vl-dtabs" }, tabs, el("span", { className: "vl-muted vl-dsvc", textContent: (l.docs || []).map(function (d) { return d.title; }).join(" · ") })), frame);
+        return el("div", { className: "vl-docs" }, el("div", { className: "vl-dtabs" }, el("span", { className: "vl-muted vl-dsvc", textContent: (l.docs || []).map(function (d) { return d.title; }).join(" · ") }), tabs), frame);
       };
       var consoleVals = l.validate.filter(function (v) { return v.kind === "Console"; }).map(function (v) {
         return el("li", { className: "vl-val" }, el("div", { className: "vl-valhead" }, el("span", { className: "vl-kind console", textContent: "Console" }), el("b", { textContent: v.what })), el("div", { className: "vl-path" }, v.how), el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), v.expect)); });

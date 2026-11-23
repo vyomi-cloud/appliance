@@ -164,7 +164,34 @@
    "docs": [
     {
      "id": "cognitiveservices",
-     "title": "Azure AI services"
+     "title": "Azure AI services",
+     "f": "cognitiveservices.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Get"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Delete"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Responses: create"
     }
    ],
    "validate": [
@@ -342,11 +369,59 @@
    "docs": [
     {
      "id": "cognitiveservices",
-     "title": "Azure AI services"
+     "title": "Azure AI services",
+     "f": "cognitiveservices.json"
     },
     {
      "id": "containerapps",
-     "title": "Container Apps"
+     "title": "Container Apps",
+     "f": "containerapps.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Get"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Delete"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Responses: create"
+    },
+    {
+     "f": "containerapps.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "containerapps.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "containerapps.json",
+     "n": "Get"
+    },
+    {
+     "f": "containerapps.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "containerapps.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -570,11 +645,55 @@
    "docs": [
     {
      "id": "functionapp",
-     "title": "Function App"
+     "title": "Function App",
+     "f": "functionapp.json"
     },
     {
      "id": "storage",
-     "title": "Storage accounts"
+     "title": "Storage accounts",
+     "f": "storage.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "functionapp.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Get"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Delete"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "storage.json",
+     "n": "Get"
+    },
+    {
+     "f": "storage.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "storage.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -817,19 +936,109 @@
    "docs": [
     {
      "id": "storage",
-     "title": "Storage accounts"
+     "title": "Storage accounts",
+     "f": "storage.json"
     },
     {
      "id": "search",
-     "title": "Azure AI Search"
+     "title": "Azure AI Search",
+     "f": "search.json"
     },
     {
      "id": "eventgrid",
-     "title": "Event Grid"
+     "title": "Event Grid",
+     "f": "eventgrid.json"
     },
     {
      "id": "functionapp",
-     "title": "Function App"
+     "title": "Function App",
+     "f": "functionapp.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "storage.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "storage.json",
+     "n": "Get"
+    },
+    {
+     "f": "storage.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "storage.json",
+     "n": "Delete"
+    },
+    {
+     "f": "search.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "search.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "search.json",
+     "n": "Get"
+    },
+    {
+     "f": "search.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "search.json",
+     "n": "Delete"
+    },
+    {
+     "f": "eventgrid.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "eventgrid.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "eventgrid.json",
+     "n": "Get"
+    },
+    {
+     "f": "eventgrid.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "eventgrid.json",
+     "n": "Delete"
+    },
+    {
+     "f": "eventgrid.json",
+     "n": "Resources: query"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Get"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -983,7 +1192,30 @@
    "docs": [
     {
      "id": "search",
-     "title": "Azure AI Search"
+     "title": "Azure AI Search",
+     "f": "search.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "search.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "search.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "search.json",
+     "n": "Get"
+    },
+    {
+     "f": "search.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "search.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -1141,7 +1373,34 @@
    "docs": [
     {
      "id": "cognitiveservices",
-     "title": "Azure AI services"
+     "title": "Azure AI services",
+     "f": "cognitiveservices.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Get"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Delete"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Responses: create"
     }
    ],
    "validate": [
@@ -1288,11 +1547,59 @@
    "docs": [
     {
      "id": "cognitiveservices",
-     "title": "Azure AI services"
+     "title": "Azure AI services",
+     "f": "cognitiveservices.json"
     },
     {
      "id": "storage",
-     "title": "Storage accounts"
+     "title": "Storage accounts",
+     "f": "storage.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Get"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Delete"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Responses: create"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "storage.json",
+     "n": "Get"
+    },
+    {
+     "f": "storage.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "storage.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -1460,7 +1767,30 @@
    "docs": [
     {
      "id": "apim",
-     "title": "API Management services"
+     "title": "API Management services",
+     "f": "apim.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "apim.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "apim.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "apim.json",
+     "n": "Get"
+    },
+    {
+     "f": "apim.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "apim.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -1632,15 +1962,80 @@
    "docs": [
     {
      "id": "servicebus",
-     "title": "Service Bus"
+     "title": "Service Bus",
+     "f": "servicebus.json"
     },
     {
      "id": "functionapp",
-     "title": "Function App"
+     "title": "Function App",
+     "f": "functionapp.json"
     },
     {
      "id": "storage",
-     "title": "Storage accounts"
+     "title": "Storage accounts",
+     "f": "storage.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "servicebus.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "Get"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "Delete"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Get"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "functionapp.json",
+     "n": "Delete"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "storage.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "storage.json",
+     "n": "Get"
+    },
+    {
+     "f": "storage.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "storage.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -1812,15 +2207,80 @@
    "docs": [
     {
      "id": "entra",
-     "title": "Microsoft Entra ID"
+     "title": "Microsoft Entra ID",
+     "f": "entra.json"
     },
     {
      "id": "apim",
-     "title": "API Management services"
+     "title": "API Management services",
+     "f": "apim.json"
     },
     {
      "id": "frontdoor",
-     "title": "Front Door and CDN profiles"
+     "title": "Front Door and CDN profiles",
+     "f": "frontdoor.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "entra.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "entra.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "entra.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "entra.json",
+     "n": "Delete"
+    },
+    {
+     "f": "entra.json",
+     "n": "Get"
+    },
+    {
+     "f": "apim.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "apim.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "apim.json",
+     "n": "Get"
+    },
+    {
+     "f": "apim.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "apim.json",
+     "n": "Delete"
+    },
+    {
+     "f": "frontdoor.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "frontdoor.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "frontdoor.json",
+     "n": "Get"
+    },
+    {
+     "f": "frontdoor.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "frontdoor.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -1963,11 +2423,59 @@
    "docs": [
     {
      "id": "cognitiveservices",
-     "title": "Azure AI services"
+     "title": "Azure AI services",
+     "f": "cognitiveservices.json"
     },
     {
      "id": "servicebus",
-     "title": "Service Bus"
+     "title": "Service Bus",
+     "f": "servicebus.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Get"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Delete"
+    },
+    {
+     "f": "cognitiveservices.json",
+     "n": "Responses: create"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "Get"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "servicebus.json",
+     "n": "Delete"
     }
    ],
    "validate": [
@@ -2160,11 +2668,63 @@
    "docs": [
     {
      "id": "monitor",
-     "title": "Monitor"
+     "title": "Monitor",
+     "f": "monitor.json"
     },
     {
      "id": "loganalytics",
-     "title": "Log Analytics workspaces"
+     "title": "Log Analytics workspaces",
+     "f": "loganalytics.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "monitor.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "monitor.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Get"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Delete"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Diagnostic settings: create (activity-log export)"
+    },
+    {
+     "f": "loganalytics.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "loganalytics.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "loganalytics.json",
+     "n": "Get"
+    },
+    {
+     "f": "loganalytics.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "loganalytics.json",
+     "n": "Delete"
+    },
+    {
+     "f": "loganalytics.json",
+     "n": "Data exports: create"
     }
    ],
    "validate": [
@@ -2319,11 +2879,59 @@
    "docs": [
     {
      "id": "keyvaults",
-     "title": "Key vaults"
+     "title": "Key vaults",
+     "f": "keyvaults.json"
     },
     {
      "id": "monitor",
-     "title": "Monitor"
+     "title": "Monitor",
+     "f": "monitor.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "keyvaults.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "keyvaults.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "keyvaults.json",
+     "n": "Get"
+    },
+    {
+     "f": "keyvaults.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "keyvaults.json",
+     "n": "Delete"
+    },
+    {
+     "f": "monitor.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "monitor.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Get"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Create or update"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Delete"
+    },
+    {
+     "f": "monitor.json",
+     "n": "Diagnostic settings: create (activity-log export)"
     }
    ],
    "validate": [

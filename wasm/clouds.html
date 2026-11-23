@@ -7,7 +7,7 @@
   <script src="nano-rates.js"></script>
   <script src="mesh-link.js"></script>
   <script src="nano-connect.js"></script>
-  <script src="nano-docs.js?v=tryit2"></script>
+  <script src="nano-docs.js?v=ops2"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1255,7 +1255,14 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
 
     /* Embedded in a Vyomi Labs chapter (?svc=<service ids>): only that chapter's generated service cards, nothing else. */
     html.vy-svc #view-usage .u-tunnel, html.vy-svc #view-usage .u-panel > .sc-head, html.vy-svc #view-usage .u-panel > .sc-desc, html.vy-svc #view-usage .u-panel > .u-grid, html.vy-svc #view-usage .u-cloud-head, html.vy-svc #view-usage .u-info { display: none !important; }
+    html.vy-svc .container, html.vy-svc #view-usage .u-panel { max-width: none !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin: 0 !important; }
+    html.vy-svc #view-usage .u-grid, html.vy-svc #view-usage .nd-ugrid { grid-template-columns: 1fr !important; }
     html.vy-svc #view-usage .u-panel { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+    html.vy-svc #view-api .tabs-wrap, html.vy-svc #view-api .api-search, html.vy-svc #view-api .sc-head { display: none !important; }
+    .rd-ops-only .rd-src { font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; margin: 18px 0 6px; }
+    .rd-ops-only .rd-op { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); border: 1px solid #e4e7ec; border-radius: 10px; overflow: hidden; }
+    .rd-ops-only .rd-l { padding: 18px 22px; min-width: 0; } .rd-ops-only .rd-r { background: #0e1322; color: #cdd8e6; padding: 18px 22px; min-width: 0; }
+    @media (max-width: 900px) { .rd-ops-only .rd-op { grid-template-columns: 1fr; } }
     html.vy-svc body, html.vy-svc #app-main { background: #fff !important; }
     /* Embedded in a console's drawer modal (?embed=1): just the view, no app chrome. */
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
@@ -2936,6 +2943,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (window.NanoDocs){   // generated reference (wasm/docs) — works offline in Nano, no /openapi-*.json needed
           curCloud = cloud;
           document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
+          var wantOps = (location.search.match(/[?&]ops=([^&#]+)/) || [])[1];
+          if (wantOps) { try { NanoDocs.renderOps(document.getElementById('api-body'), cloud, apiEndpoint(), JSON.parse(decodeURIComponent(wantOps))); return; } catch (e) {} }
           NanoDocs.renderRedoc(document.getElementById('api-body'), cloud, filter, apiEndpoint());
           return;
         }
@@ -4523,6 +4532,6 @@ function nanoLogout(){
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
 <script src="./nano-tunnel-tabs.js" defer></script>
 <script src="./nano-back.js"></script>
-<script>if(/[?&]svc=/.test(location.search)){var _vh=function(){try{var e=document.getElementById('nd-usage-all')||document.getElementById('api-body')||document.body;parent.postMessage({vylabs:'h',h:Math.ceil(e.getBoundingClientRect().bottom+(window.scrollY||0))+24,u:location.hash},'*')}catch(e){}};addEventListener('load',function(){try{new ResizeObserver(_vh).observe(document.body)}catch(e){setInterval(_vh,800)}_vh()})}</script>
+<script>if(/[?&]svc=/.test(location.search)){var _vh=function(){try{var v=document.querySelector('#view-usage:not([hidden]),#view-api:not([hidden])');var e=(v&&(v.querySelector('.rd-ops-only')||v.querySelector('#nd-usage-host')||v.querySelector('#usage-cards')))||v||document.body;parent.postMessage({vylabs:'h',h:Math.ceil(e.getBoundingClientRect().bottom+(window.scrollY||0))+24,u:location.hash},'*')}catch(e){}};addEventListener('load',function(){try{new ResizeObserver(_vh).observe(document.body)}catch(e){setInterval(_vh,800)}_vh()})}</script>
 </body>
 </html>

@@ -131,7 +131,18 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "Converse"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "InvokeModel"
     }
    ],
    "validate": [
@@ -318,7 +329,42 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "Converse"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "InvokeAgentRuntime"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "StopRuntimeSession"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "CreateAgentRuntime"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetAgentRuntime"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetGateway"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListAgentRuntimes"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGateways"
     }
    ],
    "validate": [
@@ -513,11 +559,43 @@
    "docs": [
     {
      "id": "lambda",
-     "title": "Lambda"
+     "title": "Lambda",
+     "f": "lambda.json"
     },
     {
      "id": "dynamodb",
-     "title": "DynamoDB"
+     "title": "DynamoDB",
+     "f": "dynamodb.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "lambda.json",
+     "n": "CreateFunction"
+    },
+    {
+     "f": "lambda.json",
+     "n": "Invoke"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "CreateTable"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "GetItem"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "PutItem"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "Scan"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "UpdateItem"
     }
    ],
    "validate": [
@@ -702,11 +780,59 @@
    "docs": [
     {
      "id": "s3",
-     "title": "S3"
+     "title": "S3",
+     "f": "s3.json"
     },
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "s3.json",
+     "n": "CreateBucket"
+    },
+    {
+     "f": "s3.json",
+     "n": "PutBucketNotificationConfiguration"
+    },
+    {
+     "f": "s3.json",
+     "n": "PutObject"
+    },
+    {
+     "f": "s3.json",
+     "n": "CreateFunction"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "CreateDataSource"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "CreateKnowledgeBase"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetIngestionJob"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListDataSources"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListIngestionJobs"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListKnowledgeBases"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "StartIngestionJob"
     }
    ],
    "validate": [
@@ -848,7 +974,18 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "ListKnowledgeBases"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "Retrieve"
     }
    ],
    "validate": [
@@ -990,7 +1127,34 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "CreateGuardrail"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "CreateGuardrailVersion"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGuardrails"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ApplyGuardrail"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListKnowledgeBases"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "RetrieveAndGenerate"
     }
    ],
    "validate": [
@@ -1118,9 +1282,11 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
     }
    ],
+   "ops": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1268,7 +1434,30 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "CreateGateway"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "CreateGatewayTarget"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetGateway"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGatewayTargets"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGateways"
     }
    ],
    "validate": [
@@ -1489,19 +1678,93 @@
    "docs": [
     {
      "id": "states",
-     "title": "Step Functions"
+     "title": "Step Functions",
+     "f": "states.json"
     },
     {
      "id": "sns",
-     "title": "Simple Notification Service"
+     "title": "Simple Notification Service",
+     "f": "sns.json"
     },
     {
      "id": "sqs",
-     "title": "Simple Queue Service"
+     "title": "Simple Queue Service",
+     "f": "sqs.json"
     },
     {
      "id": "dynamodb",
-     "title": "DynamoDB"
+     "title": "DynamoDB",
+     "f": "dynamodb.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "states.json",
+     "n": "CreateStateMachine"
+    },
+    {
+     "f": "states.json",
+     "n": "DescribeExecution"
+    },
+    {
+     "f": "states.json",
+     "n": "GetExecutionHistory"
+    },
+    {
+     "f": "states.json",
+     "n": "ListExecutions"
+    },
+    {
+     "f": "states.json",
+     "n": "ListStateMachines"
+    },
+    {
+     "f": "states.json",
+     "n": "SendTaskFailure"
+    },
+    {
+     "f": "states.json",
+     "n": "SendTaskSuccess"
+    },
+    {
+     "f": "states.json",
+     "n": "StartExecution"
+    },
+    {
+     "f": "sns.json",
+     "n": "CreateTopic"
+    },
+    {
+     "f": "sns.json",
+     "n": "Publish"
+    },
+    {
+     "f": "sns.json",
+     "n": "Subscribe"
+    },
+    {
+     "f": "sqs.json",
+     "n": "CreateQueue"
+    },
+    {
+     "f": "sqs.json",
+     "n": "GetQueueAttributes"
+    },
+    {
+     "f": "sqs.json",
+     "n": "GetQueueUrl"
+    },
+    {
+     "f": "sqs.json",
+     "n": "ReceiveMessage"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "GetItem"
+    },
+    {
+     "f": "dynamodb.json",
+     "n": "Scan"
     }
    ],
    "validate": [
@@ -1656,7 +1919,42 @@
    "docs": [
     {
      "id": "apigateway",
-     "title": "API Gateway"
+     "title": "API Gateway",
+     "f": "apigateway.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "apigateway.json",
+     "n": "CreateAuthorizer"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "CreateDeployment"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "CreateResource"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "CreateRestApi"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "GetResources"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "GetRestApis"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "PutIntegration"
+    },
+    {
+     "f": "apigateway.json",
+     "n": "PutMethod"
     }
    ],
    "validate": [
@@ -1796,15 +2094,44 @@
    "docs": [
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
     },
     {
      "id": "sns",
-     "title": "Simple Notification Service"
+     "title": "Simple Notification Service",
+     "f": "sns.json"
     },
     {
      "id": "sqs",
-     "title": "Simple Queue Service"
+     "title": "Simple Queue Service",
+     "f": "sqs.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "ApplyGuardrail"
+    },
+    {
+     "f": "sns.json",
+     "n": "CreateTopic"
+    },
+    {
+     "f": "sns.json",
+     "n": "Publish"
+    },
+    {
+     "f": "sqs.json",
+     "n": "DeleteMessage"
+    },
+    {
+     "f": "sqs.json",
+     "n": "GetQueueUrl"
+    },
+    {
+     "f": "sqs.json",
+     "n": "ReceiveMessage"
     }
    ],
    "validate": [
@@ -1921,15 +2248,56 @@
    "docs": [
     {
      "id": "api-xray",
-     "title": "AWS X-Ray"
+     "title": "AWS X-Ray",
+     "f": "api-xray.json"
     },
     {
      "id": "cloudwatch",
-     "title": "CloudWatch"
+     "title": "CloudWatch",
+     "f": "cloudwatch.json"
     },
     {
      "id": "bedrock",
-     "title": "Amazon Bedrock"
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "api-xray.json",
+     "n": "BatchGetTraces"
+    },
+    {
+     "f": "api-xray.json",
+     "n": "GetTraceSummaries"
+    },
+    {
+     "f": "api-xray.json",
+     "n": "PutTraceSegments"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "ListMetrics"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "PutMetricData"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "CreateLogGroup"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "CreateLogStream"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "GetLogEvents"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "PutLogEvents"
     }
    ],
    "validate": [
@@ -2063,15 +2431,60 @@
    "docs": [
     {
      "id": "kms",
-     "title": "Key Management Service"
+     "title": "Key Management Service",
+     "f": "kms.json"
     },
     {
      "id": "cloudwatch",
-     "title": "CloudWatch"
+     "title": "CloudWatch",
+     "f": "cloudwatch.json"
     },
     {
      "id": "s3",
-     "title": "S3"
+     "title": "S3",
+     "f": "s3.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "kms.json",
+     "n": "CreateAlias"
+    },
+    {
+     "f": "kms.json",
+     "n": "CreateKey"
+    },
+    {
+     "f": "kms.json",
+     "n": "Decrypt"
+    },
+    {
+     "f": "kms.json",
+     "n": "EnableKeyRotation"
+    },
+    {
+     "f": "kms.json",
+     "n": "Encrypt"
+    },
+    {
+     "f": "kms.json",
+     "n": "GetKeyRotationStatus"
+    },
+    {
+     "f": "s3.json",
+     "n": "PutObject"
+    },
+    {
+     "f": "s3.json",
+     "n": "CreateTrail"
+    },
+    {
+     "f": "s3.json",
+     "n": "GetTrailStatus"
+    },
+    {
+     "f": "s3.json",
+     "n": "StartLogging"
     }
    ],
    "validate": [

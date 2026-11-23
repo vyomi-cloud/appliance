@@ -172,13 +172,48 @@ def _docs(cloud, services):
     import re
     ix = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "wasm", "docs", "index.json")))["clouds"][cloud]
     have = {d["id"]: d["t"] for d in ix if d["o"] > 0}
+    files = {d["id"]: d["f"] for d in ix}
     out = []
     for svc in services:
         for pat, ids in DOCMAP[cloud]:
             if re.search(pat, svc):
                 for i in ids:
                     if i in have and i not in [d["id"] for d in out]:
-                        out.append(dict(id=i, title=have[i]))
+                        out.append(dict(id=i, title=have[i], f=files[i]))
+    return out
+
+# The exact operations a chapter uses, shown in the Validate "API reference" tab: AWS/GCP are matched from the chapter's own code;
+# the generic GCP verbs are curated per service, Azure ARM operations are few so all of a service's are listed.
+GCP_CORE = {"functions": r"\.functions\.(generateUploadUrl|create|get|call)$", "firestore": r"\.databases\.(get|list)$", "storage": r"\.(buckets\.(insert|get)|objects\.(insert|get|list))$",
+            "pubsub": r"\.(topics\.(create|publish)|subscriptions\.(create|pull|acknowledge))$", "security_kms": r"(cryptoKeys\.(create|encrypt|decrypt)|keyRings\.create)$", "run": r"\.services\.(create|get)$"}
+GCP_GENERIC = {"import", "write", "start", "export", "upload", "call", "run", "update", "get", "list", "create", "delete", "patch", "query"}
+
+def _snake(n):
+    import re
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", n).lower()
+
+def _ops(cloud, docs, lab):
+    import re
+    code = "\n".join((b.get("code") or "") + " " + (b.get("text") or "") for b in lab)
+    out = []
+    for d in docs:
+        doc = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "wasm", "docs", cloud, d["f"])))
+        picked = []
+        for a in doc["apis"]:
+            for i, o in enumerate(a["ops"]):
+                n = o["n"]
+                if cloud == "aws":
+                    hit = re.search(r"\b(%s|%s|%s)\b" % (n, _snake(n), n[0].lower() + n[1:]), code)
+                elif cloud == "gcp":
+                    seg = n.split(".")[-1]
+                    hit = (seg not in GCP_GENERIC and re.search(r"\b%s\b" % seg, code)) or re.search(GCP_CORE.get(d["f"][:-5], "$^"), n)
+                else:
+                    hit = len(picked) < 6
+                if hit and n not in [x["n"] for x in picked]:
+                    picked.append(dict(f=d["f"], n=n))
+        if not picked:
+            picked = [dict(f=d["f"], n=o["n"]) for o in doc["apis"][0]["ops"][:4]]
+        out += picked
     return out
 
 LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
@@ -308,7 +343,7 @@ def build():
                                reference="examples/enterprise-facilities-agent/facilities/" + ("" if cloud == "aws" else "") + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
                                code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
                                level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
-                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), docs=_docs(cloud, C[cloud][lid]["services"]), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
+                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), docs=_docs(cloud, C[cloud][lid]["services"]), ops=_ops(cloud, _docs(cloud, C[cloud][lid]["services"]), _lab(cloud, lid)), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
                    image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:

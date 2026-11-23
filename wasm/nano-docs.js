@@ -33,6 +33,7 @@
     var ks = Object.keys(o || {}); if (!ks.length) return '';
     return ks.map(function (k) { return new Array((ind || 4) + 1).join(' ') + k + '=' + pyval(o[k], ind || 4); }).join(',\n');
   }
+  function wantOps() { var m = (location.search.match(/[?&]ops=([^&#]+)/) || [])[1]; try { return m ? JSON.parse(decodeURIComponent(m)).map(function (x) { return x.n; }) : null; } catch (e) { return null; } }
   function onlySvc() { var m = (location.search.match(/[?&]svc=([^&#]+)/) || [])[1]; return m ? decodeURIComponent(m).split(',') : null; }   // embedded in a Vyomi Labs chapter: just that chapter's services
   /* Try it: run a curl example in THIS browser (no tunnel). Same-origin /_wire is answered by the Nano service worker, or routed to the Mesh. */
   function shTokens(src) {
@@ -262,6 +263,19 @@
       '<div class="rd-k">CLI &amp; SDKs</div>' + ct.html;
     return { html: '<section class="rd-op" id="' + id + '"><div class="rd-l">' + left + '</div><div class="rd-r">' + right + '</div></section>', wire: ct.wire };
   }
+  /* A chapter's exact operations (Vyomi Labs Validate): each one in full, stacked at full width. want = [{f: doc file, n: operation name}] */
+  function renderOps(el, cloud, EP, want) {
+    el.innerHTML = '<div class="api-empty">Loading…</div>';
+    Promise.all(want.map(function (w) { return service(cloud, w.f); })).then(function (ds) {
+      var h = '', wires = [], k = 0;
+      want.forEach(function (w, i) {
+        var d = ds[i], done = false;
+        d.apis.forEach(function (a) { a.ops.forEach(function (o) { if (done || o.n !== w.n) return; done = true; var r = rdOp(cloud, a, o, EP, 'rdo-' + (k++)); h += '<div class="rd-src">' + esc(d.title) + '</div>' + r.html; wires.push(r.wire); }); });
+      });
+      el.innerHTML = '<div class="rd-ops-only">' + (h || '<p class="am-none">No operations listed for this chapter.</p>') + '</div>';
+      wires.forEach(function (w) { w(el); });
+    });
+  }
   function renderRedoc(el, cloud, filter, EP, want) {
     el.innerHTML = '<div class="api-empty">Loading ' + esc(cloud.toUpperCase()) + ' reference…</div>';
     index().then(function (ix) {
@@ -347,6 +361,7 @@
 
   /* ── SDK & CLI usage ───────────────────────────────────────────────────── */
   function pickOps(a) {   // deterministic representative ops: first read-style op, then first create-style op
+    var wantL = wantOps(); if (wantL) { var w = a.ops.filter(function (o) { return wantL.indexOf(o.n) >= 0; }).slice(0, 5); if (w.length) return w; }
     var rd = null, cr = null;
     var lists = a.ops.filter(function (o) { return /(^|\.)list/i.test(o.n.split('.').pop()); }).sort(function (x, y) { return (x.p || []).filter(function (p) { return p[2] || p[3]; }).length - (y.p || []).filter(function (p) { return p[2] || p[3]; }).length; });
     if (lists.length) rd = lists[0];
@@ -447,5 +462,5 @@
     }).catch(function () { el.innerHTML = ''; });
   }
 
-  window.NanoDocs = { renderApi: renderApi, renderRedoc: renderRedoc, renderUsage: renderUsage, _icon: iconFor, _snips: snips, _index: index, _service: service };
+  window.NanoDocs = { renderApi: renderApi, renderRedoc: renderRedoc, renderOps: renderOps, renderUsage: renderUsage, _icon: iconFor, _snips: snips, _index: index, _service: service };
 })();
