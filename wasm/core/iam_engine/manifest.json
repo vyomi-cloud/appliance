@@ -121,6 +121,7 @@
   "aws_eval.py",
   "aws_routes_data.py",
   "azure_eval.py",
+  "azure_sas.py",
   "catalog_loader.py",
   "gate.py",
   "gcp_eval.py",

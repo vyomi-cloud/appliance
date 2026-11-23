@@ -392,6 +392,14 @@ def _deny_applies(d, req, ids, state, data):
 
 
 def evaluate(req, state):
+    """Entry point. SAS / Shared Key principals (storage data plane) are authorised by azure_sas, everything else by Azure RBAC (`_rbac`)."""
+    if (req.get("principal") or {}).get("type") in ("sas", "sharedkey"):
+        from . import azure_sas
+        return azure_sas.evaluate(req, state, rbac=_rbac)
+    return _rbac(req, state)
+
+
+def _rbac(req, state):
     """Azure RBAC decision: deny assignments first (explicit_deny), then any role assignment (scope-inherited, principal/group matched,
     active, condition true) whose role grants the action in the right plane (allow), else implicit_deny."""
     state = state or {}

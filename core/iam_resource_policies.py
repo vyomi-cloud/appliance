@@ -63,17 +63,41 @@ class ResourcePolicyMap(dict):
         if len(parts) < 6:
             return None
         svc, tail = parts[2], parts[5]
-        if svc == "s3":                                           # arn:aws:s3:::bucket/key -> arn:aws:s3:::bucket
+        if svc == "s3" and tail.startswith("accesspoint/"):       # accesspoint/<n>/object/<key> -> accesspoint/<n>
+            seg = tail.split("/")
+            if len(seg) > 2:
+                return ":".join(parts[:5]) + ":accesspoint/" + seg[1]
+        elif svc == "s3":                                         # arn:aws:s3:::bucket/key -> arn:aws:s3:::bucket
             if "/" in tail:
                 return "arn:%s:s3:::%s" % (parts[1], tail.split("/", 1)[0])
         elif svc == "lambda":                                     # function:name:qualifier -> function:name
             seg = tail.split(":")
             if len(seg) > 2 and seg[0] == "function":
                 return ":".join(parts[:5]) + ":function:" + seg[1]
+        elif svc == "ecr" and tail.startswith("repository/"):     # a repository that has no policy of its own (or does not exist yet): the registry policy
+            return ":".join(parts[:5]) + ":registry/" + parts[4]
         elif svc == "execute-api":                                # <apiId>/<stage>/<METHOD>/<path> -> <apiId>
             if "/" in tail:
                 return ":".join(parts[:5]) + ":" + tail.split("/", 1)[0]
         return None
+
+
+def _merge_docs(a, b):
+    """Union of two policy documents' statements (a may be None)."""
+    sa = (a or {}).get("Statement") or []
+    sb = b.get("Statement") or []
+    return {"Version": (a or b).get("Version", "2012-10-17"),
+            "Statement": (sa if isinstance(sa, list) else [sa]) + (sb if isinstance(sb, list) else [sb])}
+
+
+def _sns_default_policy(topic_arn, account):
+    """The policy SNS attaches to a topic created without one (same document sns_core._default_policy returns). It allows any principal of the
+    topic's account (condition AWS:SourceOwner, supplied by the engine as the caller's account)."""
+    return {"Version": "2008-10-17", "Id": "__default_policy_ID", "Statement": [{
+        "Sid": "__default_statement_ID", "Effect": "Allow", "Principal": {"AWS": "*"},
+        "Action": ["SNS:GetTopicAttributes", "SNS:SetTopicAttributes", "SNS:AddPermission", "SNS:RemovePermission", "SNS:DeleteTopic",
+                   "SNS:Subscribe", "SNS:ListSubscriptionsByTopic", "SNS:Publish"],
+        "Resource": topic_arn, "Condition": {"StringEquals": {"AWS:SourceOwner": str(account)}}}]}
 
 
 def kms_key_policy_enables_iam(policy, account):
@@ -123,11 +147,27 @@ def _collect(stores):
             meta = _dict(meta)
             arn = "arn:aws:s3:::%s" % b
             put(arn, _dict(meta.get("cfg")).get("policy") or meta.get("policy"), meta.get("tags"))
-        for region, repos in _dict(_dict(_dict(getattr(s3, "account", None)).get("ecr")).get("regions")).items():
-            acct = _acct(s3)
+        ecr = _dict(_dict(getattr(s3, "account", None)).get("ecr"))
+        acct = _acct(s3)
+        reg = _doc(ecr.get("registryPolicy"))                     # registry permissions policy (PutRegistryPolicy): applies to every repository
+        for region, repos in _dict(ecr.get("regions")).items():
             for n, r in _dict(repos).items():
                 if isinstance(r, Mapping):
-                    put("arn:aws:ecr:%s:%s:repository/%s" % (region, acct, n), r.get("policy"), r.get("tags") if isinstance(r.get("tags"), Mapping) else None)
+                    arn = "arn:aws:ecr:%s:%s:repository/%s" % (region, acct, n)
+                    put(arn, r.get("policy"), r.get("tags") if isinstance(r.get("tags"), Mapping) else None)
+                    if reg:
+                        pol[arn] = _merge_docs(pol.get(arn), reg)
+            if reg:                                               # repositories that do not exist yet (CreateRepository / ReplicateImage)
+                pol["arn:aws:ecr:%s:%s:registry/%s" % (region, acct, acct)] = reg
+        if reg and not _dict(ecr.get("regions")):
+            pol["arn:aws:ecr:%s:%s:registry/%s" % (REGION, acct, acct)] = reg
+        for b, meta in _dict(getattr(s3, "buckets", None)).items():        # S3 access point policies (store record: meta["access_points"][n]["policy"])
+            for apn, ap in _dict(_dict(meta).get("access_points")).items():
+                ap = _dict(ap)
+                put(ap.get("arn") or "arn:aws:s3:%s:%s:accesspoint/%s" % (REGION, acct, apn), ap.get("policy"))
+        for apn, ol in _dict(_dict(getattr(s3, "account", None)).get("olaps")).items():      # Object Lambda access point policies
+            ol = _dict(ol)
+            put(ol.get("arn") or "arn:aws:s3-object-lambda:%s:%s:accesspoint/%s" % (REGION, acct, apn), ol.get("policy"))
 
     msg = stores.get("msg")
     if msg is not None:
@@ -138,7 +178,8 @@ def _collect(stores):
         for n, t in _dict(getattr(msg, "topics", None)).items():
             t = _dict(t)
             arn = t.get("topic_arn") or "arn:aws:sns:%s:%s:%s" % (REGION, _acct(msg), n)
-            put(arn, _dict(t.get("attributes")).get("Policy"), t.get("tags"))
+            explicit = _dict(t.get("attributes")).get("Policy")
+            put(arn, explicit if _doc(explicit) else _sns_default_policy(arn, _acct(msg)), t.get("tags"))
 
     kms = stores.get("kms")
     if kms is not None:
@@ -171,10 +212,19 @@ def _collect(stores):
         acct = _acct(lam)
         for n, fn in _dict(getattr(lam, "_lambda_functions", None)).items():
             fn = _dict(fn)
-            stmts = list(_dict(fn.get("policy_statements")).values())
-            if stmts:
-                put(fn.get("arn") or "arn:aws:lambda:%s:%s:function:%s" % (REGION, acct, n),
-                    {"Version": "2012-10-17", "Id": "default", "Statement": stmts})
+            fn_arn = fn.get("arn") or "arn:aws:lambda:%s:%s:function:%s" % (REGION, acct, n)
+            groups = {}
+            for st in _dict(fn.get("policy_statements")).values():
+                res = st.get("Resource") if isinstance(st, Mapping) else None
+                key = res if isinstance(res, str) and res.startswith(fn_arn + ":") else fn_arn     # alias / version statements live on their own ARN
+                groups.setdefault(key, []).append(st)
+            for key, stmts in groups.items():
+                put(key, {"Version": "2012-10-17", "Id": "default", "Statement": stmts})
+        for ln, layer in _dict(getattr(lam, "_lambda_layers", None)).items():                 # layer version permissions (AddLayerVersionPermission)
+            for ver, lv in _dict(_dict(layer).get("versions")).items():
+                stmts = list(_dict(_dict(lv).get("policy_statements")).values())
+                if stmts:
+                    put("arn:aws:lambda:%s:%s:layer:%s:%s" % (REGION, acct, ln, ver), {"Version": "2012-10-17", "Id": "default", "Statement": stmts})
         try:
             apis = _dict(getattr(lam, "_apigateway_apis", None))
         except Exception:

@@ -109,7 +109,7 @@ def required_permissions(cloud, http_request, maps=None) -> list:
 def _principal_name(cloud, principal):
     p = principal or {}
     if cloud == "aws":
-        return p.get("arn") or "unknown"
+        return p.get("arn") or ("anonymous" if p.get("type") == "anonymous" else "unknown")
     if cloud == "gcp":
         return p.get("member") or "unknown"
     return p.get("object_id") or "unknown"
@@ -131,6 +131,8 @@ def _aws_protocol(hr, service):
 
 
 def _aws_message(principal, action, resource, decision):
+    if (principal or {}).get("type") == "anonymous":
+        return "Access Denied"                       # what S3 tells an unsigned caller (no principal to name)
     arn = _principal_name("aws", principal)
     if (decision or {}).get("reason") == "explicit_deny":
         why = f"with an explicit deny in {_deny_source(decision)} policy"
@@ -157,6 +159,11 @@ def denial_spec(cloud, hr, principal, action, resource, decision=None, service=N
                           "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "IAM_PERMISSION_DENIED",
                                        "domain": "iam.googleapis.com", "metadata": {"permission": action}}]}}
         return {"status": 403, "headers": {}, "body": json.dumps(body), "content_type": "application/json; charset=UTF-8"}
+    if cloud == "azure" and (decision or {}).get("storageError"):     # SAS / Shared Key: the storage service's own error, not ARM's AuthorizationFailed
+        se = decision["storageError"]
+        xml = ('<?xml version="1.0" encoding="utf-8"?>\n<Error><Code>%s</Code><Message>%s\nRequestId:00000000-0000-0000-0000-000000000000</Message></Error>'
+               % (_xe(se["code"]), _xe(se["message"])))
+        return {"status": int(se.get("status") or 403), "headers": {"x-ms-error-code": str(se["code"])}, "body": xml, "content_type": "application/xml"}
     if cloud == "azure":
         who = _principal_name("azure", principal)
         msg = message or (f"The client '{who}' with object id '{who}' does not have authorization to perform action "
@@ -253,6 +260,8 @@ def _check(cloud, hr, state, settings, engines, maps, log, bypass):
             if engine is None:
                 raise RuntimeError(f"engine unavailable: {engine_err}")
             ctx = dict(hr.get("context") or {})
+            if p.get("hint"):
+                ctx["hint"] = p["hint"]             # Azure storage: list vs read, update vs process (SAS permission letters)
             dec = engine.evaluate(_request(cloud, principal, action, resource, ctx, data=bool(p.get("data"))), state)
             allowed = bool(dec.get("allowed"))
             reason, matched = dec.get("reason", ""), dec.get("matched")

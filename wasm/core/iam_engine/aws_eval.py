@@ -404,6 +404,8 @@ def _build_context(req, state, principal, resource, res_tags):
             raw["aws:userid"] = principal["id"]
     if principal.get("account"):
         raw["aws:PrincipalAccount"] = principal["account"]
+    if principal.get("account") and principal.get("type") != "anonymous":
+        raw["AWS:SourceOwner"] = principal["account"]       # service-condition key (SNS default topic policy): the caller's account
     if principal.get("type"):
         raw["aws:PrincipalType"] = {"user": "User", "role": "AssumedRole", "root": "Account", "federated": "FederatedUser",
                                     "service": "Service", "anonymous": "Anonymous"}.get(principal["type"], principal["type"])

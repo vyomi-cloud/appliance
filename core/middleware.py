@@ -151,9 +151,13 @@ async def _iam_gate_response(request, cloud: str):
         if request.method in ("POST", "PUT", "PATCH", "DELETE") and cl.isdigit() and int(cl) < 4 * 1024 * 1024:
             body = await request.body()
         hr = _ad.http_request_from(request, body)
-        if cloud == "aws" and not (_ad.aws_access_key_id(hr["headers"], hr["query"]) or "x-amz-target" in hr["headers"]):
-            return None   # not signed AWS API traffic (console pages, static, health): never gated (anonymous S3 is a known gap)
-        state, hr["principal"] = _ad.state_and_principal(cloud, hr["headers"], hr["query"], space)
+        if cloud == "aws":
+            res = _ad.aws_resolve(hr, settings)      # signed -> the signer; unsigned S3 to an existing bucket -> anonymous; else None (console, static)
+            if res is None:
+                return None
+            state, hr["principal"] = res
+        else:
+            state, hr["principal"] = _ad.state_and_principal(cloud, hr["headers"], hr["query"], space, hr["path"])
         if cloud == "aws" and (hr["principal"] or {}).get("type") == "unknown" and (settings or {}).get("unknownPrincipal", "root") != "deny":
             acct = hr["principal"].get("account") or "000000000000"      # not an IAM user/role of this store: the account root
             hr["principal"] = {"arn": f"arn:aws:iam::{acct}:root", "type": "root", "account": acct}
