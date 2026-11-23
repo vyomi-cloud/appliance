@@ -25,6 +25,9 @@ NOT_POSSIBLE: dict[str, str] = {
 _SERVICE = [("aws_vpc", "vpc"), ("aws_subnet", "vpc"), ("aws_internet_gateway", "vpc"), ("aws_route_table", "vpc"),
             ("aws_security_group", "vpc"), ("aws_s3_", "s3"), ("aws_iam_", "iam"), ("aws_lambda_", "lambda"),
             ("aws_api_gateway_", "apigateway"), ("aws_db_", "rds"), ("aws_secretsmanager_", "secretsmanager"),
+            ("aws_dynamodb_", "dynamodb"), ("aws_sqs_", "sqs"), ("aws_sns_", "sns"), ("aws_cloudwatch_event_", "eventbridge"),
+            ("aws_kms_", "kms"), ("aws_sfn_", "stepfunctions"), ("aws_ecr_", "ecr"), ("aws_backup_", "backup"),
+            ("aws_instance", "ec2"), ("aws_key_pair", "ec2"), ("aws_ebs_volume", "ec2"), ("aws_volume_attachment", "ec2"),
             ("aws_cloudwatch_", "cloudwatch")]
 _NETWORK_CHILDREN = {"aws_subnet", "aws_internet_gateway", "aws_route_table", "aws_security_group"}
 _ADDR = re.compile(r"\b(aws_[a-z0-9_]+\.[A-Za-z0-9_\-]+)\.")

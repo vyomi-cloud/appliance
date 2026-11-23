@@ -8,7 +8,7 @@ STUBS = {
     "botocore/httpsession.py": "class URLLib3Session:  # Nano: no sockets\n    pass\n\ndef get_cert_path(*a, **k):\n    return None\n\nclass ProxyConfiguration:\n    pass\n",
     "botocore/awsrequest.py": "class AWSRequest:\n    pass\n\nclass AWSResponse:\n    pass\n\nclass AWSPreparedRequest:\n    pass\n\nclass HeadersDict(dict):\n    pass\n\nclass AWSRequestPreparer:\n    pass\n\ndef create_request_object(*a, **k):\n    raise NotImplementedError\n\ndef prepare_request_dict(*a, **k):\n    raise NotImplementedError\n\ndef _urljoin(a, b, *r):\n    return a.rstrip(\"/\") + \"/\" + str(b).lstrip(\"/\")\n\nclass AWSConnection:\n    pass\n\nclass AWSHTTPConnection:\n    pass\n\nclass AWSHTTPSConnection:\n    pass\n\nclass AWSHTTPConnectionPool:\n    pass\n\nclass AWSHTTPSConnectionPool:\n    pass\n",
 }
-KEEP = ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager")
+KEEP = ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager", "dynamodb", "sqs", "sns", "events", "kms", "stepfunctions", "ecr", "cloudwatch", "backup")
 src = Path(sys.argv[1]); out = Path(__file__).parent / "pylib" / "botocore-lite.whl"
 buf = io.BytesIO()
 with zipfile.ZipFile(src) as zin, zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zout:

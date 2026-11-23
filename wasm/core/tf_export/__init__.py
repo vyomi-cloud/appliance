@@ -7,9 +7,13 @@ import io
 import zipfile
 from typing import Any
 
-from core.tf_export import aws_apigw, aws_data, aws_iam, aws_lambda, aws_network, aws_storage  # noqa: F401  (register exporters)
+from core.tf_export import (aws_apigw, aws_compute, aws_data, aws_dynamodb, aws_iam, aws_kms, aws_lambda, aws_messaging, aws_network,  # noqa: F401  (register exporters)
+                            aws_ops, aws_storage)
 from core.tf_export.core import Ctx, registered, render_files
 from core.tf_export.graph import build_graph, portability
+
+
+AWS_SERVICES = ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager", "dynamodb", "sqs", "sns", "events", "kms", "stepfunctions", "ecr", "cloudwatch", "backup")
 
 
 def _clients(endpoint: str, region: str) -> dict[str, Any]:
@@ -17,7 +21,7 @@ def _clients(endpoint: str, region: str) -> dict[str, Any]:
     from botocore.config import Config
     cfg = Config(retries={"max_attempts": 8, "mode": "standard"}, s3={"addressing_style": "path"})
     kw = dict(endpoint_url=endpoint, region_name=region, aws_access_key_id="test", aws_secret_access_key="test", config=cfg)
-    return {n: boto3.client(n, **kw) for n in ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager")}
+    return {n: boto3.client(n, **kw) for n in AWS_SERVICES}
 
 
 def build_aws(endpoint: str, region: str = "us-east-1", real_cloud: bool = False) -> dict[str, Any]:
