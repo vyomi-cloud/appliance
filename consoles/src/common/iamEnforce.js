@@ -52,12 +52,20 @@ export function withMode(settings, level, key, mode) {
   return { ...s, [bag]: next };
 }
 
+/** The real appliance sends ts as epoch seconds (float) plus an ISO `time`: show the ISO string, never the raw float. */
+function auditTime(rec) {
+  if (rec.time) return String(rec.time);
+  const t = rec.ts ?? rec.timestamp;
+  if (typeof t === "number") return new Date(t * (t < 1e11 ? 1000 : 1)).toISOString().replace(/\.\d+Z$/, "Z");
+  return t || "";
+}
+
 /** Audit rows -> a uniform shape. enforced=false in audit mode so a deny is a "would deny". */
 export function normalizeAudit(rec) {
   const allowed = rec.allowed ?? rec.decision?.allowed ?? (rec.decision === "allow" || rec.decision === "allowed");
   const mode = rec.mode || "off";
   return {
-    ts: rec.ts || rec.time || rec.timestamp || "",
+    ts: auditTime(rec),
     principal: typeof rec.principal === "string" ? rec.principal : rec.principal?.arn || rec.principal?.member || rec.principal?.object_id || "",
     action: rec.action || "", resource: rec.resource || "", service: rec.service || "", mode,
     allowed: !!allowed, reason: rec.reason || rec.decision?.reason || (allowed ? "allow" : "implicit_deny"),
