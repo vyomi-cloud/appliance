@@ -776,3 +776,6 @@ class SecretVersion:
 
     def delete(self, c, out):
         pass  # the value goes away with its secret
+
+
+from core.tf_export import aws_apply2  # noqa: E402,F401  (second batch of appliers; imports the helpers above)
