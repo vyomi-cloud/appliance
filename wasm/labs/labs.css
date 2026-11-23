@@ -237,3 +237,12 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-finish{display:flex;flex-direction:column;gap:12px;margin-top:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}.vl .vl-finish p{font-size:13px}
 
 .vl .vl-dstatus{font-size:13px;color:var(--muted);margin-bottom:8px;white-space:pre-wrap}
+
+/* GCP + Azure: the steps / "In this article" card is a horizontal ribbon above the content (like AWS tasks) */
+.vl .vl-ws.gcp .vl-wsbody,.vl .vl-ws.azure .vl-wsbody{grid-template-columns:1fr}
+.vl .vl-ws.gcp .vl-pnav,.vl .vl-ws.azure .vl-pnav{order:0;position:static;display:flex;flex-direction:row;gap:2px;overflow-x:auto;align-self:auto;border-left:0;border-right:0;border-bottom:1px solid var(--line);padding:6px 14px}
+.vl .vl-ws.gcp .vl-pnav h4,.vl .vl-ws.azure .vl-pnav h4{display:none}
+.vl .vl-ws.gcp .vl-pb,.vl .vl-ws.azure .vl-pb{width:auto;white-space:nowrap;flex-wrap:nowrap}
+.vl .vl-ws.gcp .vl-pnav{background:#f8f9fa;padding:10px 16px;gap:6px}.vl .vl-ws.gcp .vl-pb{border-radius:99px;padding:7px 14px}.vl .vl-ws.gcp .vl-pb.cur{background:#e8f0fe;color:#1a73e8}.vl .vl-ws.gcp .vl-pd{width:auto;margin:0}
+.vl .vl-ws.azure .vl-pnav{background:#fff;padding:0 14px}.vl .vl-ws.azure .vl-pb{border-left:0;border-bottom:3px solid transparent;border-radius:0;padding:12px 14px}.vl .vl-ws.azure .vl-pb.cur{border-bottom-color:#0f6cbd;color:#0f6cbd;font-weight:600}
+.vl .vl-ws.azure .vl-pn{display:grid}.vl .vl-ws.azure .vl-pd{display:none}
