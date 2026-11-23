@@ -524,3 +524,17 @@ def collect_inputs(payload: dict) -> tuple[dict[str, str], dict[str, bytes], dic
     files = {str(k): v for k, v in (payload.get("files") or {}).items() if isinstance(v, str)}
     binaries = {str(k): base64.b64decode(v) for k, v in (payload.get("binaries") or {}).items() if isinstance(v, str)}
     return files, binaries, dict(payload.get("variables") or {})
+
+
+def handle(op: str, payload: dict, clients, region: str = "us-east-1") -> dict:
+    """The one entry both substrates call (appliance route, Nano ``_tf`` service): ``Plan`` | ``Apply`` | ``Destroy``."""
+    payload = payload or {}
+    region = payload.get("region") or region
+    files, binaries, variables = collect_inputs(payload)
+    if op == "Plan":
+        return plan(files, binaries, clients, region, variables)
+    if op == "Apply":
+        return apply(files, binaries, clients, region, variables, payload.get("targets"), payload.get("known"))
+    if op == "Destroy":
+        return destroy(clients, region, payload.get("ledger"), files, binaries, variables)
+    return {"ok": False, "code": "UnsupportedOperation", "operation": op}
