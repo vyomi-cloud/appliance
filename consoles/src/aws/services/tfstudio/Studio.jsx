@@ -1,7 +1,7 @@
 /* Infrastructure Studio: the stack as a diagram, exported as Terraform, plus a check of which resource types of a template Vyomi can
  * create. Availability colours: available / planned / not possible in Vyomi. Read-only; applying a template is done with OpenTofu/Terraform
  * against this endpoint (in-browser apply is not available yet). */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -14,64 +14,11 @@ import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import Tabs from "@cloudscape-design/components/tabs";
+import Diagram from "./Diagram.jsx";
 import * as api from "./api.js";
 
-const W = 150, H = 44, GAP = 18;
 const COL = { supported: "#1d8102", planned: "#b7791f", not_possible: "#d13212" };
 const LABEL = { supported: "Available in Vyomi", planned: "Planned, not simulated yet", not_possible: "Not possible in Vyomi" };
-
-function layout(g) {
-  const pos = {}, boxes = []; let y = 12;
-  for (const grp of g.groups) {
-    const ms = g.nodes.filter((n) => n.group === grp.id);
-    const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(ms.length)))), rows = Math.ceil(ms.length / cols) || 1;
-    const w = cols * (W + GAP) + GAP, h = rows * (H + GAP) + GAP + 22;
-    boxes.push({ x: 12, y, w, h, label: `VPC ${grp.label}${grp.cidr ? "  " + grp.cidr : ""}` });
-    ms.forEach((n, i) => { pos[n.id] = { x: 12 + GAP + (i % cols) * (W + GAP), y: y + 26 + Math.floor(i / cols) * (H + GAP) }; });
-    y += h + GAP;
-  }
-  const rest = g.nodes.filter((n) => !n.group);
-  for (const s of [...new Set(rest.map((n) => n.service))].sort()) {
-    const ms = rest.filter((n) => n.service === s);
-    boxes.push({ x: 12, y, w: ms.length * (W + GAP) + GAP, h: H + GAP * 2 + 16, label: s, lane: true });
-    ms.forEach((n, i) => { pos[n.id] = { x: 12 + GAP + i * (W + GAP), y: y + 26 }; });
-    y += H + GAP * 2 + 30;
-  }
-  return { pos, boxes, w: Math.max(600, ...boxes.map((b) => b.x + b.w)) + 12, h: y + 8 };
-}
-const clip = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
-
-function Diagram({ graph, selected, onSelect }) {
-  const L = useMemo(() => layout(graph), [graph]);
-  const hi = (e) => selected && (e.from === selected || e.to === selected);
-  return (
-    <div style={{ overflow: "auto" }}>
-      <svg width={L.w} height={L.h} role="img" aria-label="Stack diagram">
-        {L.boxes.map((b, i) => (
-          <g key={i}>
-            <rect x={b.x} y={b.y} width={b.w} height={b.h} rx={8} fill="none" stroke={b.lane ? "#c9ced6" : "#0972d3"} strokeWidth={1.5} strokeDasharray="6 4" />
-            <text x={b.x + 10} y={b.y + 16} fontSize={12} fill="#414d5c">{b.label}</text>
-          </g>
-        ))}
-        {graph.edges.map((e, i) => {
-          const a = L.pos[e.from], b = L.pos[e.to]; if (!a || !b) return null;
-          const x1 = a.x + W / 2, y1 = a.y + H / 2, x2 = b.x + W / 2, y2 = b.y + H / 2, m = (y1 + y2) / 2;
-          return <path key={i} d={`M${x1} ${y1} C${x1} ${m},${x2} ${m},${x2} ${y2}`} fill="none" stroke={hi(e) ? "#0972d3" : "#8a94a3"} strokeWidth={hi(e) ? 2 : 1} opacity={hi(e) ? 1 : 0.55} />;
-        })}
-        {graph.nodes.map((n) => {
-          const p = L.pos[n.id]; if (!p) return null;
-          return (
-            <g key={n.id} transform={`translate(${p.x},${p.y})`} style={{ cursor: "pointer" }} onClick={() => onSelect(n.id)} data-node={n.id}>
-              <rect width={W} height={H} rx={6} fill="#fff" stroke={COL[n.status]} strokeWidth={2} strokeDasharray={n.status === "planned" ? "5 3" : n.status === "not_possible" ? "2 3" : undefined} />
-              <text x={8} y={18} fontSize={12} fill="#16191f">{clip(n.label, 22)}</text>
-              <text x={8} y={34} fontSize={11} fill="#5f6b7a">{clip(n.type.replace(/^aws_/, ""), 24)}</text>
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-  );
-}
 
 function Legend() {
   return (
