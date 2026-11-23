@@ -47,6 +47,9 @@ _CRED_RE = re.compile(r"Credential=([^/,\s]+)/")
 
 
 def aws_access_key_id(headers, query="") -> str:
+    form = _h(headers, "x-vyomi-form-akid")        # set only by aws_resolve() from a verified multipart form; never trusted from the wire
+    if form:
+        return form
     auth = _h(headers, "authorization")
     m = _CRED_RE.search(auth)
     if m:
@@ -58,6 +61,16 @@ def aws_access_key_id(headers, query="") -> str:
         if q.get(key):
             return unquote(q[key][0]).split("/", 1)[0]
     return ""
+
+
+def _form_post_akid(headers, body) -> str:
+    """Access key id carried by a browser-based S3 POST (multipart form field `x-amz-credential` or `AWSAccessKeyId`): that request is signed
+    (by the form's policy), not anonymous."""
+    if "multipart/form-data" not in _h(headers, "content-type").lower() or not body:
+        return ""
+    txt = bytes(body[:65536]).decode("latin-1", "replace")
+    m = re.search(r'name="x-amz-credential"\r?\n\r?\n([^/\r\n]+)/', txt, re.I) or re.search(r'name="AWSAccessKeyId"\r?\n\r?\n([^\r\n]+)', txt, re.I)
+    return m.group(1).strip() if m else ""
 
 
 def aws_principal(headers, query, store) -> dict:
@@ -139,6 +152,57 @@ def aws_state(store) -> dict:
     return out
 
 
+_S3_VHOST = re.compile(r"^(?P<b>[^.]+(?:\.[^.]+)*?)\.s3[.-](?!accesspoint)")
+
+
+def s3_bucket_of(hr, buckets) -> str:
+    """Bucket an UNSIGNED request addresses, or "" when it is not an S3 request for an existing bucket (console pages, assets, health ...)."""
+    host = _h(hr.get("headers"), "host").split(":")[0].lower()
+    m = _S3_VHOST.match(host) if host else None
+    if m and m.group("b") in buckets:
+        return m.group("b")
+    first = unquote(str(hr.get("path") or "").lstrip("/").split("/", 1)[0])
+    return first if first and first in buckets else ""
+
+
+def aws_anonymous(hr, store, buckets):
+    """(state, principal) for an unsigned request addressed to an existing S3 bucket (faithful: principal "*" = anonymous, only a bucket /
+    access-point policy can allow it), else None (ungated: console pages, static assets, unknown buckets which real S3 answers 404 anyway).
+    OPTIONS (CORS preflight, evaluated against the bucket CORS rules, not IAM) and the bucket-less root are never gated. Sets hr["service_hint"]."""
+    if str(hr.get("method") or "").upper() == "OPTIONS" or str(hr.get("path") or "/") == "/":
+        return None
+    if not s3_bucket_of(hr, buckets):
+        return None
+    hr["service_hint"] = "s3"
+    acct = getattr(store, "account_id", "") or "000000000000"
+    return aws_state(store), {"arn": "", "type": "anonymous", "account": acct}
+
+
+def aws_resolve(hr, settings=None):
+    """The AWS half of the host gate: None = not gated, else (state, principal). Signed requests (header, presigned query, JSON target)
+    resolve the signer; a browser form POST resolves the key id from its form fields; everything else addressed to an existing bucket is
+    anonymous. settings["anonymousS3"] == "allow" restores the pre-v4.1 behaviour (unsigned traffic never gated)."""
+    h, q = hr.get("headers") or {}, hr.get("query") or ""
+    h.pop("x-vyomi-form-akid", None)
+    if not (aws_access_key_id(h, q) or "x-amz-target" in h):
+        akid = _form_post_akid(h, hr.get("body"))
+        if akid:
+            h["x-vyomi-form-akid"] = akid
+    if aws_access_key_id(h, q) or "x-amz-target" in h:
+        return state_and_principal("aws", h, q, None)
+    if (settings or {}).get("anonymousS3") == "allow":
+        return None
+    from core.appliance_stores import iam_store, s3_store
+    return aws_anonymous(hr, iam_store(), _dict_keys(getattr(s3_store(), "buckets", None)))
+
+
+def _dict_keys(m):
+    try:
+        return set(m or {})
+    except Exception:
+        return set()
+
+
 # ----------------------------------------------------------------------------- GCP
 
 def gcp_member(raw: str) -> dict:
@@ -197,13 +261,69 @@ _AZ = {"microsoft.authorization/roleassignments": "role_assignments",
        "microsoft.authorization/denyassignments": "deny_assignments"}
 
 
-def azure_principal(headers, space) -> dict:
+_SAS_KEYS = ("sv", "sp", "se", "st", "sr", "ss", "srt", "spr", "sig", "si", "skoid", "sktid", "tn", "sip", "spk", "epk", "srk", "erk")
+
+
+def azure_principal(headers, space, query="", graph=None, path="") -> dict:
+    """Who is calling. Order: X-Cloudlearn-Principal (explicit override) > `Authorization: SharedKey <acct>:<sig>` (account key: type
+    "sharedkey") > a SAS query (`sig=` + `sp/se/...`: type "sas") > bearer claims (oid / appid / sub) > the space's active principal.
+    `graph` (the Entra directory store, optional) resolves a UPN or an application (client) id to the object id role assignments use,
+    and supplies group membership (state["groups"], see azure_state). `path` limits SharedKey / SAS detection to Storage data-plane requests
+    (a `sig=` query on any other service is not a storage SAS); empty = unknown, treated as storage."""
     raw = _h(headers, "x-cloudlearn-principal")
+    if not raw and _storage_path(path):
+        try:
+            from core.iam_engine import azure_sas as _sas
+        except Exception:
+            _sas = None
+        if _sas is not None:
+            acct = _sas.parse_shared_key(_h(headers, "authorization"))
+            if acct:
+                return {"object_id": "sharedkey:" + acct, "type": "sharedkey", "account": acct, "groups": []}
+            q = {k.lower(): v[0] for k, v in parse_qs(query or "", keep_blank_values=True).items() if v}
+            if _sas.is_sas(q):
+                tok = {k: q[k] for k in _SAS_KEYS if k in q}
+                return {"object_id": "sas:" + (q.get("skoid") or q.get("sv", "")), "type": "sas", "account": "", "sas": tok, "groups": []}
     if not raw:
         c = _jwt_claims(headers)
         raw = c.get("oid") or c.get("appid") or c.get("sub") or ""
     raw = raw or str((space or {}).get("active_principal") or "root")
+    if graph is not None and raw != "root":
+        raw = _graph_object_id(graph, raw)
     return {"object_id": raw, "type": "root" if raw == "root" else "user", "groups": []}
+
+
+_STORAGE_PATH = re.compile(r"^(?:/_wire)?/azure-data/(?:blob|queue|queue-core|table|tableroot)(?:/|$)", re.I)
+
+
+def _storage_path(path) -> bool:
+    return not path or bool(_STORAGE_PATH.match(str(path)))
+
+
+def _graph_object_id(graph, ident):
+    """UPN / mail -> user object id, application (client) id -> service principal object id; anything else unchanged."""
+    try:
+        low = str(ident).lower()
+        for uid, u in (getattr(graph, "users", None) or {}).items():
+            if low in (str(uid).lower(), str(u.get("userPrincipalName", "")).lower(), str(u.get("mail") or "").lower()):
+                return uid
+        for sid, sp in (getattr(graph, "service_principals", None) or {}).items():
+            if low == str(sp.get("appId", "")).lower():
+                return sid
+    except Exception:
+        pass
+    return ident
+
+
+def azure_groups(graph) -> dict:
+    """{group object id: [member object ids]} from the Entra directory store (transitive expansion is the engine's)."""
+    out = {}
+    try:
+        for gid in (getattr(graph, "groups", None) or {}):
+            out[gid] = sorted(str(m) for m in (getattr(graph, "group_members", None) or {}).get(gid, ()))
+    except Exception:
+        pass
+    return out
 
 
 # ARM type -> the data-plane resource prefix core/iam_engine/map_azure.py reports (so data actions inherit from the ARM resource's scope)
@@ -264,17 +384,28 @@ def azure_openai_account(arm_resources, path, headers) -> str:
     return names[0] if len(names) == 1 else ""
 
 
-def azure_state(arm_resources, rbac_store=None) -> dict:
+def azure_state(arm_resources, rbac_store=None, graph=None) -> dict:
     """Engine `state` (core/iam_engine/azure_eval.py). `arm_resources`: the flat ARM record map of the Azure space (role assignments, custom
     role definitions and deny assignments are ARM resources there, in ARM shape: properties.principalId ... -> flattened here).
     `rbac_store`: the Azure RBAC core slot (core/azure_iam_core.py: {name, principalId, roleDefinition, scope, kind, denyActions}), if present."""
-    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "data_scopes": {}}
+    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "data_scopes": {}, "storage_accounts": {},
+           "groups": azure_groups(graph), "management_groups": {}, "subscriptions": {}}
+    accounts = []
     for rec in (arm_resources or {}).values():
         if not isinstance(rec, dict):
             continue
         t = str(rec.get("_type") or rec.get("type") or "").lower()
         if t in _AZ_DATA and rec.get("id") and rec.get("name"):
             out["data_scopes"][_AZ_DATA[t] % str(rec["name"]).lower()] = rec["id"]
+        if t == "microsoft.storage/storageaccounts" and rec.get("name"):
+            accounts.append(rec)
+            props = rec.get("properties") or {}
+            out["storage_accounts"][str(rec["name"]).lower()] = {"allowSharedKeyAccess": props.get("allowSharedKeyAccess", True) is not False}
+        elif t == "microsoft.management/managementgroups" and rec.get("name"):       # not served by any store today; fed when one models them
+            parent = (((rec.get("properties") or {}).get("details") or {}).get("parent") or {}).get("id") or ""
+            out["management_groups"][str(rec["name"])] = parent.rsplit("/", 1)[-1] or None
+        elif t == "microsoft.management/managementgroups/subscriptions" and rec.get("name"):
+            out["subscriptions"][str(rec["name"])] = str(rec.get("id") or "").split("/managementGroups/")[-1].split("/")[0] or None
         if t == "microsoft.authorization/roleassignments":
             out["role_assignments"].append(_flat_assignment(rec))
         elif t == "microsoft.authorization/roledefinitions":
@@ -287,6 +418,12 @@ def azure_state(arm_resources, rbac_store=None) -> dict:
     m = re.match(r"^(/subscriptions/[^/]+)", str(first or ""), re.I)
     if m:
         ds["/cognitiveservices/_"] = m.group(1)
+    if accounts and "/_default" not in out["data_scopes"]:     # the root Storage wire carries no account name: the sole account, else the first one's subscription
+        arm_ids = sorted(str(a["id"]) for a in accounts if a.get("id"))
+        if len(arm_ids) == 1:
+            out["data_scopes"]["/_default"] = arm_ids[0]
+        elif arm_ids:
+            out["data_scopes"]["/_default"] = re.sub(r"(?i)/resourceGroups/.*$", "", arm_ids[0])
     for a in (getattr(rbac_store, "_azure_role_assignments", None) or {}).values():
         if not isinstance(a, dict):
             continue
@@ -301,7 +438,7 @@ def azure_state(arm_resources, rbac_store=None) -> dict:
 
 # ----------------------------------------------------------------------------- live host binding
 
-def state_and_principal(cloud, headers, query="", space=None):
+def state_and_principal(cloud, headers, query="", space=None, path=""):
     """(state, principal) from the live appliance stores. Runs the store lookups as `cloud`'s request provider (the stores are
     space-scoped per provider), so it also works outside a request (the /api/iam/<cloud>/evaluate view)."""
     if cloud == "aws":
@@ -309,12 +446,12 @@ def state_and_principal(cloud, headers, query="", space=None):
     from core import app_context
     tok = app_context.REQUEST_PROVIDER.set(cloud)
     try:
-        return _live(cloud, headers, query, space)
+        return _live(cloud, headers, query, space, path)
     finally:
         app_context.REQUEST_PROVIDER.reset(tok)
 
 
-def _live(cloud, headers, query, space):
+def _live(cloud, headers, query, space, path=""):
     if cloud == "aws":
         from core.appliance_stores import iam_store
         s = iam_store()
@@ -341,4 +478,10 @@ def _live(cloud, headers, query, space):
         rbac = appliance_stores.net_new_core_stores().get("iam")
     except Exception:
         pass
-    return azure_state(arm, rbac), azure_principal(headers, space)
+    graph = None
+    try:
+        from core import appliance_stores
+        graph = appliance_stores.graph_store()
+    except Exception:
+        pass
+    return azure_state(arm, rbac, graph), azure_principal(headers, space, query, graph, path)

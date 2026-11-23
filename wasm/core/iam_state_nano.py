@@ -154,8 +154,19 @@ def gcp_state(reg, known=None) -> dict:
 _AZ_T = ("microsoft.authorization/roleassignments", "microsoft.authorization/roledefinitions", "microsoft.authorization/denyassignments")
 
 
-def azure_principal(headers) -> dict:
-    """x-cloudlearn-principal > Bearer JWT `oid` | `appid` | `sub`; groups from the `groups` claim. No identity -> the subscription owner ("root")."""
+def azure_principal(headers, query="", path="") -> dict:
+    """x-cloudlearn-principal > SharedKey account key > SAS query > Bearer JWT `oid` | `appid` | `sub`; groups from the `groups` claim.
+    No identity -> the subscription owner ("root"). SharedKey / SAS: same rules as core/iam_state_adapters.azure_principal (storage data plane)."""
+    if not _h(headers, "x-cloudlearn-principal") and _A._storage_path(path):
+        from core.iam_engine import azure_sas as _sas
+        acct = _sas.parse_shared_key(_h(headers, "authorization"))
+        if acct:
+            return {"object_id": "sharedkey:" + acct, "type": "sharedkey", "account": acct, "groups": []}
+        from urllib.parse import parse_qs
+        q = {k.lower(): v[0] for k, v in parse_qs(query or "", keep_blank_values=True).items() if v}
+        if _sas.is_sas(q):
+            return {"object_id": "sas:" + (q.get("skoid") or q.get("sv", "")), "type": "sas", "account": "",
+                    "sas": {k: q[k] for k in _A._SAS_KEYS if k in q}, "groups": []}
     c = _jwt_claims(headers)
     raw = _h(headers, "x-cloudlearn-principal") or c.get("oid") or c.get("appid") or c.get("azp") or c.get("sub") or ""
     if not raw:
@@ -251,4 +262,4 @@ def state_and_principal(cloud, headers, query="", reg=None):
         _require(("gcp", "_methods"))
         st = gcp_state(reg)
         return st, gcp_principal(headers)
-    return azure_state(reg), azure_principal(headers)
+    return azure_state(reg), azure_principal(headers, query)

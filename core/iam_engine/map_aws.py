@@ -35,7 +35,10 @@ OVERRIDES = {
     "apigateway.method-actions": "API Gateway management APIs authorise apigateway:<HTTP method> on arn:aws:apigateway:<region>::<path> (v2 paths drop the /v2 prefix)",
     "execute-api.data-plane": "execute-api:Invoke is authorised on arn:aws:execute-api:<region>:<acct>:<apiId>/<stage>/<METHOD>/<path>; ManageConnections for @connections",
     "kms.alias": "a KeyId of the form alias/<n> is authorised on the alias ARN (the simulator cannot resolve alias -> key at mapping time)",
-    "cloudwatch.cbor": "boto3 >= 1.40 may speak smithy-rpc-v2-cbor to CloudWatch (/service/<svc>/operation/<Op>); the operation is read from the path, the CBOR body is not decoded, so resources fall back to *",
+    "cloudwatch.cbor": "boto3 >= 1.40 may speak smithy-rpc-v2-cbor to CloudWatch (/service/<svc>/operation/<Op>); the operation is read from the path and the CBOR body is decoded (_cbor_loads) so resources bind exactly like the JSON/query protocols",
+    "execute-api.api-id": "the REST API id is resolved from the host label, then from the path-style forms /restapis/<id>/<stage>/_user_request_/.., /apigw/<id>/<stage>/.. and /<id>/<stage>/.. (id = 10 lowercase alphanumerics) so the API's resource policy matches",
+    "s3.delete-objects": "DeleteObjects authorises s3:DeleteObject (s3:DeleteObjectVersion for a keyed VersionId) on EACH <Key> of the XML body, not on the bucket-wide wildcard",
+    "service-hint": "a host adapter that already knows the request is S3 (anonymous traffic has no signature and an arbitrary Host header) passes http_request['service_hint']='s3'",
     "ec2.run-instances": "RunInstances is also authorised on the new instance/network-interface/volume (wildcard ARNs: they do not exist yet)",
     "create-noun": "catalog gap: Create* actions that list no resource type (eks:CreateCluster) use the resource type named by the operation noun",
     "name-fallback": "a catalog variable <X>Name with no matching parameter falls back to the generic `Name`/`name` parameter (CreateTopic Name, EKS /clusters/{name})",
@@ -134,13 +137,85 @@ def _flatten(obj, out, depth=0):
                 _flatten(v, out, depth + 1)
 
 
+def _cbor_loads(data):
+    """Minimal CBOR (RFC 8949) decoder for smithy-rpc-v2-cbor request bodies: ints, bytes/text, arrays, maps, tags, simple values,
+    float16/32/64 (indefinite lengths included). Raises ValueError on malformed input."""
+    import struct
+
+    def item(i, depth=0):
+        if depth > 16:
+            raise ValueError("too deep")
+        ib = data[i]
+        i += 1
+        major, info = ib >> 5, ib & 31
+        if major == 7 and info >= 25 and info <= 27:
+            n = {25: 2, 26: 4, 27: 8}[info]
+            raw = data[i:i + n]
+            if len(raw) != n:
+                raise ValueError("short")
+            if info == 25:
+                h = int.from_bytes(raw, "big")
+                e, m = (h >> 10) & 31, h & 1023
+                v = (m / 1024.0 if e == 0 else (float("inf") if e == 31 and m == 0 else (float("nan") if e == 31 else (1 + m / 1024.0) * 2.0 ** (e - 15))))
+                return (-v if h & 0x8000 else v), i + n
+            return struct.unpack(">f" if info == 26 else ">d", raw)[0], i + n
+        if info < 24:
+            arg = info
+        elif info in (24, 25, 26, 27):
+            n = 1 << (info - 24)
+            raw = data[i:i + n]
+            if len(raw) != n:
+                raise ValueError("short")
+            arg, i = int.from_bytes(raw, "big"), i + n
+        elif info == 31:
+            arg = None
+        else:
+            raise ValueError("reserved")
+        if major == 0:
+            return arg, i
+        if major == 1:
+            return -1 - arg, i
+        if major in (2, 3):
+            if arg is None:
+                buf = b""
+                while data[i] != 0xFF:
+                    chunk, i = item(i, depth + 1)
+                    buf += chunk if isinstance(chunk, bytes) else chunk.encode("utf-8")
+                i += 1
+            else:
+                buf, i = data[i:i + arg], i + arg
+                if len(buf) != arg:
+                    raise ValueError("short")
+            return (bytes(buf) if major == 2 else bytes(buf).decode("utf-8", "replace")), i
+        if major == 4:
+            out = []
+            while (arg is None and data[i] != 0xFF) or (arg is not None and len(out) < arg):
+                v, i = item(i, depth + 1)
+                out.append(v)
+            return out, (i + 1 if arg is None else i)
+        if major == 5:
+            out, n = {}, 0
+            while (arg is None and data[i] != 0xFF) or (arg is not None and n < arg):
+                k, i = item(i, depth + 1)
+                v, i = item(i, depth + 1)
+                out[k if isinstance(k, str) else str(k)] = v
+                n += 1
+            return out, (i + 1 if arg is None else i)
+        if major == 6:
+            return item(i, depth + 1)
+        return {20: False, 21: True, 22: None, 23: None}.get(info), i      # simple values
+
+    val, end = item(0)
+    return val
+
+
 def _form_key(k):
     parts = [p for p in k.split(".") if p and not p.isdigit() and p.lower() != "member"]
     return _norm(parts[-1]) if parts else _norm(k)
 
 
 class _Req(object):
-    __slots__ = ("method", "path", "query", "headers", "body", "host", "scope", "region", "account", "params", "present", "form", "json")
+    __slots__ = ("method", "path", "query", "headers", "body", "host", "scope", "region", "account", "params", "present", "form", "json", "hint")
 
 
 def _build(http_request):
@@ -161,6 +236,7 @@ def _build(http_request):
     r.scope = _scope(r.headers, r.query)
     r.region = r.scope.get("region") or DEFAULT_REGION
     r.account = http_request.get("account") or DEFAULT_ACCOUNT
+    r.hint = str(http_request.get("service_hint") or "")      # host-supplied service (anonymous S3: no signature, arbitrary Host header)
     ct = r.headers.get("content-type", "").lower()
     r.form, r.json = {}, None
     if r.body and ("x-www-form-urlencoded" in ct or r.body[:7] == b"Action="):
@@ -168,6 +244,11 @@ def _build(http_request):
             r.form = _parse_query(r.body.decode("utf-8", "replace"))
         except Exception:
             r.form = {}
+    elif r.body and "cbor" in ct:                                 # override cloudwatch.cbor
+        try:
+            r.json = _cbor_loads(r.body)
+        except Exception:
+            r.json = None
     elif r.body and ("json" in ct or r.body[:1] in (b"{", b"[")):
         try:
             r.json = json.loads(r.body.decode("utf-8", "replace"))
@@ -258,6 +339,8 @@ def _host_service(host):
     if not host:
         return None
     first = host.split(".")[0]
+    if ".execute-api." in host:
+        return "execute-api"
     if first in ("s3", "s3-control") or ".s3" in host:
         return "s3"
     return _prefix_of_signing(first)
@@ -300,7 +383,7 @@ def identify(http_request):
         prefix = prefix or tprefix
         if prefix:
             return {"prefix": prefix, "op": op, "labels": {}, "req": req}
-    prefix = prefix or _host_service(req.host)
+    prefix = prefix or _host_service(req.host) or (req.hint if req.hint == "s3" else None)
     action = (req.query.get("Action") or req.form.get("Action") or [None])[0]
     if action and prefix:
         return {"prefix": prefix, "op": action, "labels": {}, "req": req}
@@ -560,6 +643,29 @@ def _s3_arn(cat, rtype, **kw):
     return _VAR.sub(lambda m: {"Partition": PARTITION}.get(m.group(1), kw.get(m.group(1), "*")), fmt)
 
 
+def _delete_objects_keys(body):
+    """[(key, versionId|None)] from a DeleteObjects XML body (<Delete><Object><Key>..</Key><VersionId>..</VersionId></Object>...)."""
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(body or b"")
+    except Exception:
+        return []
+    out = []
+    for el in root.iter():
+        if el.tag.split("}")[-1] != "Object":
+            continue
+        k = v = None
+        for ch in el:
+            t = ch.tag.split("}")[-1]
+            if t == "Key":
+                k = ch.text or ""
+            elif t == "VersionId":
+                v = ch.text or None
+        if k is not None:
+            out.append((k, v))
+    return out
+
+
 def _s3_required(ident, req):
     cat = catalog("s3")
     op = ident["op"]
@@ -594,6 +700,15 @@ def _s3_required(ident, req):
         for a in base:
             out.append(_entry("s3", a, dest, op))
         return out
+    if op == "DeleteObjects" and not ap:                                  # override s3.delete-objects
+        keys = _delete_objects_keys(req.body)
+        if keys:
+            out_keys = []
+            for k, ver in keys:
+                e = _entry("s3", "DeleteObjectVersion" if ver else "DeleteObject", _s3_arn(cat, "object", BucketName=bucket or "*", ObjectName=k), op)
+                if e not in out_keys:
+                    out_keys.append(e)
+            return out_keys
     acts = _s3_actions(op, acts, req, cat, params)
     for a in acts:
         rtypes = (cat["actions"].get(a) or {}).get("r", [])
@@ -627,17 +742,27 @@ def _apigw_required(ident, req):
              "service": "apigateway", "operation": ident["op"]}]
 
 
+_API_ID = re.compile(r"^[a-z0-9]{10}$")
+
+
+def _execute_api_target(req):
+    """-> (api_id, stage, rest_segments): override execute-api.api-id."""
+    segs = [s for s in req.path.split("/") if s]
+    label = req.host.split(".")[0] if ".execute-api." in req.host else ""
+    if label:                                                              # <id>.execute-api.<region|localhost>/<stage>/<path>
+        return label, (segs[0] if segs else "*"), segs[1:]
+    if len(segs) >= 3 and segs[0] == "restapis":                          # /restapis/<id>/<stage>/_user_request_/<path>
+        return segs[1], segs[2], [s for s in segs[3:] if s != "_user_request_"]
+    if len(segs) >= 2 and segs[0] == "apigw":                             # Caddy path-style fallback /apigw/<id>/<stage>/<path>
+        return segs[1], (segs[2] if len(segs) > 2 else "*"), segs[3:]
+    if segs and _API_ID.match(segs[0]):                                    # /<id>/<stage>/<path>
+        return segs[0], (segs[1] if len(segs) > 1 else "*"), segs[2:]
+    return "*", "*", segs
+
+
 def _execute_api_required(req):
-    host_id = req.host.split(".")[0] if ".execute-api." in req.host else None
-    path = req.path
-    segs = [s for s in path.split("/") if s]
-    if host_id:
-        stage, rest = (segs[0] if segs else "*"), "/".join(segs[1:])
-    elif len(segs) >= 3 and segs[0] == "restapis":                          # path-style local invoke: /restapis/<id>/<stage>/_user_request_/<path>
-        host_id, stage = segs[1], segs[2]
-        rest = "/".join(s for s in segs[3:] if s != "_user_request_")
-    else:
-        host_id, stage, rest = "*", "*", "/".join(segs)
+    host_id, stage, rest_segs = _execute_api_target(req)
+    rest = "/".join(rest_segs)
     if rest.startswith("@connections"):
         return [{"action": "execute-api:ManageConnections", "resource": "arn:%s:execute-api:%s:%s:%s/%s/POST/%s" % (
             PARTITION, req.region, req.account, host_id, stage, rest), "service": "execute-api", "operation": "ManageConnections"}]

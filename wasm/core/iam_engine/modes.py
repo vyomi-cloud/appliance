@@ -33,7 +33,7 @@ def validate(doc) -> tuple[dict, list]:
     if not isinstance(doc, dict):
         return out, ["settings must be an object"]
     for k in doc:
-        if k not in ("global", "space", "services", "resources", "allowUnmapped", "unknownPrincipal"):
+        if k not in ("global", "space", "services", "resources", "allowUnmapped", "unknownPrincipal", "anonymousS3"):
             errors.append(f"unknown key '{k}'")
     for k in _SCALARS:
         if k in doc:
@@ -67,6 +67,12 @@ def validate(doc) -> tuple[dict, list]:
             out["unknownPrincipal"] = doc["unknownPrincipal"]
         else:
             errors.append("'unknownPrincipal' must be 'root' or 'deny'")
+    if "anonymousS3" in doc:
+        # AWS only: unsigned S3 requests to an existing bucket are evaluated as the anonymous principal ("gate", default); "allow" never gates them.
+        if doc["anonymousS3"] in ("gate", "allow"):
+            out["anonymousS3"] = doc["anonymousS3"]
+        else:
+            errors.append("'anonymousS3' must be 'gate' or 'allow'")
     return out, errors
 
 

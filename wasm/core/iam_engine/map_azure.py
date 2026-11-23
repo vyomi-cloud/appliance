@@ -36,8 +36,11 @@ def _canon(a):
     return _catalog().get(a.lower(), a)
 
 
-def _out(action, resource, data=False):
-    return [{"action": _canon(action), "resource": resource, "data": data}]
+def _out(action, resource, data=False, hint=None):
+    e = {"action": _canon(action), "resource": resource, "data": data}
+    if hint:
+        e["hint"] = hint            # SAS-permission disambiguation the action alone cannot carry (list vs read, update vs process)
+    return [e]
 
 
 def _split(url):
@@ -132,11 +135,23 @@ _HOST = (("blob.core.windows.net", "blob"), ("queue.core.windows.net", "queue"),
 _SA = "Microsoft.Storage/storageAccounts/"
 
 
-def _data_target(host, path):
+_ROOT_ALIAS = re.compile(r"^/azure-data/(queue-core|tableroot)(/.*)?$", re.I)
+_HOST_LABEL = re.compile(r"^([a-z0-9][a-z0-9-]*)\.(?:queue|table)\.", re.I)
+_SHARED = re.compile(r"^\s*SharedKey(?:Lite)?\s+([^:\s]+):", re.I)
+DEFAULT_ACCOUNT = "_default"
+
+
+def _data_target(host, path, headers=None):
     m = _ALIAS.match(path)
     if m:
         k = m.group(1).lower()
         return ("keyvault" if k == "vault" else k), m.group(2), m.group(3) or "/"
+    m = _ROOT_ALIAS.match(path)
+    if m:                                           # the root Storage wire (v4 console / Nano / host-style SDK): the account is NOT in the path
+        hm = _HOST_LABEL.match(host or "")
+        sk = _SHARED.match(str((headers or {}).get("authorization") or ""))
+        acct = hm.group(1).lower() if hm else (sk.group(1).lower() if sk else DEFAULT_ACCOUNT)
+        return ("queue" if m.group(1).lower() == "queue-core" else "table"), acct, m.group(2) or "/"
     for suffix, kind in _HOST:
         if host and host.endswith(suffix):
             return kind, host.split(".")[0], path
@@ -149,12 +164,12 @@ def _blob(method, path, q, h, acct):
         parts = parts[1:]
     c = _SA + "blobServices/containers"
     if not parts:
-        return _out(c + "/read", "/" + acct, True) if q.get("comp") == "list" else []
+        return _out(c + "/read", "/" + acct, True, "list") if q.get("comp") == "list" else []
     cont = parts[0]
     res = "/%s/%s" % (acct, "/".join(parts))
     if len(parts) == 1:                                    # container
         if q.get("comp") == "list":
-            return _out(c + "/blobs/read", res, True)
+            return _out(c + "/blobs/read", res, True, "list")
         if method == "DELETE":
             return _out(c + "/delete", res, True)
         if method in ("PUT", "POST") and q.get("comp") in (None, "metadata", "acl", "lease"):
@@ -191,7 +206,7 @@ def _queue(method, path, q, acct):
             return _out(base + "/messages/read", res, True)
         return _out(base + "/messages/process/action", res, True)
     if len(parts) >= 3:
-        return _out(base + ("/messages/delete" if method == "DELETE" else "/messages/process/action"), res, True)
+        return _out(base + ("/messages/delete" if method == "DELETE" else "/messages/process/action"), res, True, "update" if method == "PUT" else None)
     return _out(base + "/read", res, True)
 
 
@@ -435,7 +450,7 @@ def required(method, path, body=None, host=None, headers=None):
         return _openai(method, p, acct)
     if re.match(r"^/azure-sql(?:/|$)", p, re.I):
         return _azure_sql(method, p)
-    kind, acct, dpath = _data_target(host, p)
+    kind, acct, dpath = _data_target(host, p, hdr)
     if kind == "openai":
         return _openai(method, dpath, acct)
     if kind:
