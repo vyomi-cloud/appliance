@@ -235,3 +235,5 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-outline{display:none}.vl .vl-cols,.vl .vl-cols.oc{grid-template-columns:minmax(0,1fr)}
 
 .vl .vl-finish{display:flex;flex-direction:column;gap:12px;margin-top:18px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}.vl .vl-finish p{font-size:13px}
+
+.vl .vl-dstatus{font-size:13px;color:var(--muted);margin-bottom:8px;white-space:pre-wrap}

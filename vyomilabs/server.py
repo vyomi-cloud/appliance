@@ -5,7 +5,7 @@
 import os
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import WEB_DIR, __version__, checks, layers, progress
@@ -51,6 +51,20 @@ def create_app(endpoint=None, region="us-east-1"):
     @app.post("/api/layers/{layer_id}/reset")
     def reset_layer(layer_id: int):
         progress.reset(layer_id)
+        return dict(ok=True)
+
+    @app.post("/api/deploy/{cloud}/{layer_id}")
+    def deploy_layer(cloud: str, layer_id: int):
+        import json as _json
+        from . import deployer
+        if cloud not in ("aws", "gcp", "azure"):
+            raise HTTPException(404, "no such cloud")
+        return StreamingResponse((_json.dumps(ev) + "\n" for ev in deployer.deploy(cloud, layer_id)), media_type="application/x-ndjson")
+
+    @app.post("/api/deploy/{cloud}/reset")
+    def deploy_reset(cloud: str):
+        from . import deployer
+        deployer.reset(cloud)
         return dict(ok=True)
 
     @app.get("/api/health")
