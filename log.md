@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-23T09:18:01+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` Amazon CloudWatch Query Studio now supports saved queries ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-query-studio-saved-queries))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-23T08:17:49+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3007,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-11-11T14:00:09+00:00
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**13 change(s), 7 actionable.**
-- 🔧 `lifecycle` Google Kubernetes Engine: Change (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: Change (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: Change (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: Extended channel (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: No channel (deprecated) (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: Regular channel (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
-- 🔧 `lifecycle` Google Kubernetes Engine: Stable channel (November 10, 2026) ([link](https://docs.cloud.google.com/release-notes#November_10_2026))
