@@ -2,7 +2,6 @@
  * service's v4 module (default export {routes, ...} — see storage/index.jsx). Services without a
  * v4 module yet render an honest NotSimulated blade linking to the classic (v3) console.
  * `icon` names Vyomi's own original glyph (common/icons/azure.js) — no Microsoft service icons. */
-import { classicUrl } from "../../common/classic.js";
 
 export const CATEGORIES = ["Compute", "Containers", "Databases", "Storage", "Networking", "Integration", "Security", "Identity", "AI + machine learning", "Management and governance"];
 
@@ -45,5 +44,3 @@ export const byId = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
 /** Home "Azure services" strip (the portal shows a short, ordered set + "More services"). */
 export const HOME_TILES = ["storage", "vms", "sql", "cosmos", "functionapp", "appservices", "aks", "keyvaults"];
 
-/** Classic (v3) Azure console, used until a service has its v4 module. */
-export const classicHref = () => classicUrl("azure");

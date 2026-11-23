@@ -18,7 +18,7 @@ import { useNotify } from "../common/notify.jsx";
 import { DEFAULT_SUBSCRIPTION, getSubscriptionInfo, setSubscription } from "./kit/arm.js";
 import { Glyph, Loading, NotSimulated } from "./kit/common.jsx";
 import { SubscriptionCtx } from "./kit/subscription.js";
-import { SERVICES, byId, classicHref } from "./services/registry.js";
+import { SERVICES, byId } from "./services/registry.js";
 import { useK8sLock, K8sLocked } from "../common/k8sTier.jsx";
 import BackendsSection from "../common/BackendsPanel.jsx";
 import ScopeSection from "../common/ScopeSection.jsx";
@@ -129,7 +129,6 @@ export default function App() {
                   <MenuItem onClick={() => setDrawer("settings")}>Switch directory or subscription</MenuItem>
                   <MenuDivider />
                   <MenuItem onClick={() => { location.hash = "/notices"; }}>Notices and licences</MenuItem>
-                  <MenuItem onClick={() => { location.href = classicHref(); }}>Open the classic Vyomi console</MenuItem>
                 </MenuList>
               </MenuPopover>
             </Menu>
@@ -182,7 +181,6 @@ export default function App() {
                   <ScopeSection entry={scopeFor("azure", route.path)} />
                   {svc && <BackendsSection cloud="azure" data={BACKENDS_DATA} serviceId={svcId} registryFile={registryFileFor(svcId)} substrate={SUBSTRATE} accent="#0f6cbd" />}
                   <p>Vyomi simulates this portal against local backends. Storage accounts are created over native Azure Resource Manager (ARM) and blobs over the native Blob REST API — the same endpoints your azure-* SDKs and the az CLI use, so both always see the same state.</p>
-                  <p>Services without a Vyomi v4 page open in the <a href={classicHref()}>classic Vyomi console</a>.</p>
                   <p><a href="#/notices" data-testid="help-notices-link">Notices and licences</a></p>
                   <NotSimulated feature="Support requests, service health and the documentation search" />
                 </div>

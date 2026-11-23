@@ -2,7 +2,6 @@
 import { Button } from "@fluentui/react-components";
 import { Glyph, NotSimulated } from "../kit/common.jsx";
 import { TitleRow } from "../kit/ResourceBlade.jsx";
-import { classicHref } from "../services/registry.js";
 
 export default function ServiceNotSimulated({ svc }) {
   return (
@@ -10,8 +9,7 @@ export default function ServiceNotSimulated({ svc }) {
       <TitleRow title={svc.title} subtitle="Vyomi simulator (default directory)" glyph={<Glyph id={svc.icon} />} closeHref="#/" />
       <div className="vy-page">
         <NotSimulated feature={`The v4 ${svc.title} blade`}
-          note={<>Vyomi simulates {svc.title} ({svc.type}); its page has not moved to the v4 portal lens yet. Use the classic console meanwhile.</>} />
-        <Button as="a" href={classicHref()} appearance="primary" style={{ marginTop: 12 }}>Open {svc.title} in the classic Vyomi console</Button>
+          note={<>Vyomi simulates {svc.title} ({svc.type}); its page has not moved to the v4 portal lens yet.</>} />
       </div>
     </>
   );

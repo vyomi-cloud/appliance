@@ -23,7 +23,6 @@ import ChartIcon from "@mui/icons-material/esm/BarChartOutlined.js";
 import LogIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import MemorystoreIcon from "@mui/icons-material/esm/CachedOutlined.js";
 import AiIcon from "@mui/icons-material/esm/AutoAwesomeOutlined.js";
-import { classicUrl } from "../../common/classic.js";
 
 export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability", "AI and Machine Learning"];
 
@@ -67,4 +66,3 @@ export function productFor(parts) {
 }
 
 /** Classic (v3) console deep link, used until a product has its v4 module. */
-export const classicHref = (svc) => classicUrl("gcp", svc);

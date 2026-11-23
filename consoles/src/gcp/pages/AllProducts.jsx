@@ -8,7 +8,7 @@ import StarIcon from "@mui/icons-material/esm/Star.js";
 import StarBorderIcon from "@mui/icons-material/esm/StarBorder.js";
 import ArticleIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import ExpandMoreIcon from "@mui/icons-material/esm/ExpandMore.js";
-import { CATEGORIES, PRODUCTS, classicHref } from "../services/registry.js";
+import { CATEGORIES, PRODUCTS } from "../services/registry.js";
 import SUBPAGES from "../services/subpages.json";
 
 // Our own one-line summaries of each category (what Vyomi offers in it).
@@ -28,7 +28,7 @@ const BLURBS = {
 const read = (k, d) => { try { return JSON.parse(localStorage.getItem(`vyomi.v4.gcp.${k}`)) ?? d; } catch { return d; } };
 const write = (k, v) => { try { localStorage.setItem(`vyomi.v4.gcp.${k}`, JSON.stringify(v)); } catch {} };
 const anchor = (c) => `cat-${c.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
-const openHref = (p) => (p.load ? `#/${p.id}` : classicHref(p.classic));
+const openHref = (p) => `#/${p.id}`;
 
 import { useK8sLock, LockBadge } from "../../common/k8sTier.jsx";
 export default function AllProducts() {
