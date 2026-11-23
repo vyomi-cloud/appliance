@@ -271,13 +271,24 @@
   /* A chapter's exact operations (Vyomi Labs Validate): each one in full, stacked at full width. want = [{f: doc file, n: operation name}] */
   function renderOps(el, cloud, EP, want) {
     el.innerHTML = '<div class="api-empty">Loading…</div>';
-    Promise.all(want.map(function (w) { return service(cloud, w.f); })).then(function (ds) {
-      var h = '', wires = [], k = 0;
-      want.forEach(function (w, i) {
-        var d = ds[i], done = false;
-        d.apis.forEach(function (a) { a.ops.forEach(function (o) { if (done || o.n !== w.n) return; done = true; var r = rdOp(cloud, a, o, EP, 'rdo-' + (k++)); h += '<div class="rd-src">' + esc(d.title) + '</div>' + r.html; wires.push(r.wire); }); });
+    var fs = []; want.forEach(function (w) { if (fs.indexOf(w.f) < 0) fs.push(w.f); });
+    var libReady = new Promise(function (ok) { var t = 0; (function w() { if (window.VyomiServiceIcons || cloud === 'gcp' || t++ > 40) ok(); else setTimeout(w, 50); })(); });
+    Promise.all([index(), libReady].concat(fs.map(function (f) { return service(cloud, f); }))).then(function (res) {
+      var ix = res[0], docs = {}, meta = {}, wires = [], k = 0, cats = [], byCat = {};
+      fs.forEach(function (f, i) { docs[f] = res[i + 2]; });
+      (ix.clouds[cloud] || []).forEach(function (s) { meta[s.f] = s; });
+      fs.forEach(function (f) {
+        var d = docs[f], c = (meta[f] && meta[f].c) || 'Services', h = '', n = 0;
+        want.filter(function (w) { return w.f === f; }).forEach(function (w) {
+          var done = false;
+          d.apis.forEach(function (a) { a.ops.forEach(function (o) { if (done || o.n !== w.n) return; done = true; n++; var r = rdOp(cloud, a, o, EP, 'rdo-' + (k++)); h += r.html; wires.push(r.wire); }); });
+        });
+        if (!n) return;
+        if (!byCat[c]) { byCat[c] = ''; cats.push(c); }
+        byCat[c] += '<div class="rd-src">' + iconFor(cloud, d.title, f) + '<b>' + esc(d.title) + '</b><span>' + n + ' read operation' + (n > 1 ? 's' : '') + '</span></div>' + h;
       });
-      el.innerHTML = '<div class="rd-ops-only">' + (h || '<p class="am-none">No operations listed for this chapter.</p>') + '</div>';
+      cats.sort();
+      el.innerHTML = '<div class="rd-ops-only">' + (cats.map(function (c) { return '<div class="rd-cat-h">' + esc(c) + '</div>' + byCat[c]; }).join('') || '<p class="am-none">No operations listed for this chapter.</p>') + '</div>';
       wires.forEach(function (w) { w(el); });
     });
   }

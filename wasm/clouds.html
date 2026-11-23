@@ -7,7 +7,7 @@
   <script src="nano-rates.js"></script>
   <script src="mesh-link.js"></script>
   <script src="nano-connect.js"></script>
-  <script src="nano-docs.js?v=ops4"></script>
+  <script src="nano-docs.js?v=ops8"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1259,7 +1259,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     html.vy-svc #view-usage .u-grid, html.vy-svc #view-usage .nd-ugrid { grid-template-columns: 1fr !important; }
     html.vy-svc #view-usage .u-panel { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
     html.vy-svc #view-api .tabs-wrap, html.vy-svc #view-api .api-search, html.vy-svc #view-api .sc-head { display: none !important; }
-    .rd-ops-only .rd-src { font-size: 11px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #667085; margin: 18px 0 6px; }
+    .rd-ops-only .rd-cat-h { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #667085; margin: 26px 0 4px; padding-bottom: 6px; border-bottom: 1px solid #e4e7ec; }
+    .rd-ops-only .rd-src { display: flex; justify-content: flex-start !important; text-align: left; align-items: center; gap: 10px; margin: 16px 0 8px; color: #101828; font-size: 15px; }
+    .rd-ops-only .rd-src > span:last-child { margin-left: auto; font-size: 12px; color: #667085; }
+    .rd-ops-only .u-svc-ic { display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; } .rd-ops-only .u-svc-ic svg { width: 26px; height: 26px; } .rd-ops-only .u-svc-ic .material-icons { font-size: 24px; color: #1a73e8; }
     .rd-ops-only .rd-op { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); border: 1px solid #e4e7ec; border-radius: 10px; overflow: hidden; }
     .rd-ops-only .rd-l { padding: 18px 22px; min-width: 0; } .rd-ops-only .rd-r { background: #0e1322; color: #cdd8e6; padding: 18px 22px; min-width: 0; }
     @media (max-width: 900px) { .rd-ops-only .rd-op { grid-template-columns: 1fr; } }
