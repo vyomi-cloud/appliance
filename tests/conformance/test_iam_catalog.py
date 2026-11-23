@@ -24,3 +24,15 @@ def test_s3_known_permissions_verbatim():
     j = json.load(open(os.path.join(ROOT, "core", "iam_catalog", "aws", "s3.json")))
     assert "GetObject" in j["actions"] and j["actions"]["PutBucketPolicy"]["l"] == "permissions"
     assert "GetObject" in j["operations"]
+
+
+def test_azure_and_gcp_catalogs_verbatim():
+    az = json.load(open(os.path.join(ROOT, "core", "iam_catalog", "azure", "Microsoft.Storage.json")))
+    assert "Microsoft.Storage/storageAccounts/read" in az["actions"]
+    assert any(k.startswith("Microsoft.Storage/storageAccounts/blobServices/containers/blobs/") for k in az["dataActions"])
+    gc = json.load(open(os.path.join(ROOT, "core", "iam_catalog", "gcp", "storage.json")))
+    assert "storage.objects.get" in gc["permissions"] and "roles/storage.objectViewer" in gc["roles"]
+    assert "storage.objects.get" in gc["roles"]["roles/storage.objectViewer"]["permissions"]
+    for cloud in ("azure", "gcp"):
+        d = os.path.join(ROOT, "core", "iam_catalog", cloud)
+        assert os.listdir(d)
