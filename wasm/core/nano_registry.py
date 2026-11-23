@@ -54,6 +54,7 @@ from core.autoscaling_core import AutoScalingStore
 from core.dlm_core import DlmStore
 from core.stepfunctions_core import StepFunctionsStore
 from core.gcp_cloudscheduler_core import CloudSchedulerStore
+from core.gcp_inframanager_core import InfraManagerStore
 from core.gcp_iamcredentials_core import IamCredentialsStore
 from core.gcp_redis_core import RedisStore
 from core.gcp_vertex_core import VertexStore
@@ -120,6 +121,7 @@ def get() -> dict:
             "gcp_redis": RedisStore(),   # Memorystore for Redis instances
             "gcp_iamc": IamCredentialsStore(),   # IAM Credentials issue log
             "gcp_sched": CloudSchedulerStore(),   # Cloud Scheduler jobs
+            "gcp_im": InfraManagerStore(),   # Infrastructure Manager deployments
             "gcp_msg": InMemoryMessagingStore(),
             "gcp_iam": InMemoryIamStore(),
             "gcp_sql": _sql_store("gcp_sql"),
