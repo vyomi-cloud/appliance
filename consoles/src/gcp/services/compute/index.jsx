@@ -7,8 +7,6 @@ import ExtensionIcon from "@mui/icons-material/esm/ExtensionOutlined.js";
 import BuildIcon from "@mui/icons-material/esm/BuildOutlined.js";
 import DnsIcon from "@mui/icons-material/esm/DnsOutlined.js";
 import SettingsIcon from "@mui/icons-material/esm/SettingsOutlined.js";
-import OpenInNewIcon from "@mui/icons-material/esm/OpenInNew.js";
-import { classicHref } from "../registry.js";
 
 import Overview from "./Overview.jsx";
 import VmInstances from "./VmInstances.jsx";
@@ -93,8 +91,6 @@ export default {
         { text: "Settings", href: "#/compute/settings", icon: SettingsIcon },
       ].filter(Boolean),
     },
-    { text: "Marketplace", href: classicHref("marketplace"), icon: OpenInNewIcon },
-    { text: "Release Notes", href: classicHref("releasenotes"), icon: OpenInNewIcon },
   ],
   routes: [
     { pattern: "/compute", component: Overview },

@@ -16,7 +16,7 @@ import Modal from "@cloudscape-design/components/modal";
 import Checkbox from "@cloudscape-design/components/checkbox";
 import Table from "@cloudscape-design/components/table";
 import { vy } from "../../common/VyomiMark.jsx";
-import { byId, SERVICES, classicHref } from "../services/registry.js";
+import { byId, SERVICES } from "../services/registry.js";
 import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 
 /** A service's icon followed by its console link (Console Home lists, All services). */
@@ -353,7 +353,6 @@ function Explore() {
     <SpaceBetween size="s">
       <div><Link href="https://vyomi.cloud" external>Vyomi documentation</Link><Box variant="small" display="block" color="text-body-secondary">Guides for every simulated service.</Box></div>
       <div><Link href="#/services" onFollow={follow}>All services</Link><Box variant="small" display="block" color="text-body-secondary">What this console can open.</Box></div>
-      <div><Link href={classicHref("")}>Classic Vyomi console</Link><Box variant="small" display="block" color="text-body-secondary">Services without a v4 page yet.</Box></div>
     </SpaceBetween>
   );
 }
