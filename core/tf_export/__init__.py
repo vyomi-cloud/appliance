@@ -7,6 +7,7 @@ from typing import Any
 
 from core.tf_export import aws_apigw, aws_data, aws_iam, aws_lambda, aws_network, aws_storage  # noqa: F401  (register exporters)
 from core.tf_export.core import Ctx, registered, render_files
+from core.tf_export.graph import build_graph, portability
 
 
 def _clients(endpoint: str, region: str) -> dict[str, Any]:
@@ -17,7 +18,7 @@ def _clients(endpoint: str, region: str) -> dict[str, Any]:
     return {n: boto3.client(n, **kw) for n in ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager")}
 
 
-def build_aws(endpoint: str, region: str = "us-east-1") -> dict[str, Any]:
+def build_aws(endpoint: str, region: str = "us-east-1", real_cloud: bool = False) -> dict[str, Any]:
     ctx = Ctx(_clients(endpoint, region), region)
     errors: list[dict[str, str]] = []
     for _order, name, fn in registered():
@@ -25,8 +26,8 @@ def build_aws(endpoint: str, region: str = "us-east-1") -> dict[str, Any]:
             fn(ctx)
         except Exception as exc:  # noqa: BLE001 - one service failing must not hide the rest
             errors.append({"exporter": name, "error": f"{type(exc).__name__}: {exc}"[:300]})
-    files = render_files(ctx)
-    return {"files": files, "binaries": ctx.files_bin,
+    files = render_files(ctx, real_cloud=real_cloud)
+    return {"files": files, "binaries": ctx.files_bin, "graph": build_graph(ctx), "portability": portability(ctx, files, real_cloud),
             "summary": {"resources": len(ctx.resources), "by_type": _count(ctx), "skipped": ctx.skipped, "errors": errors}}
 
 
