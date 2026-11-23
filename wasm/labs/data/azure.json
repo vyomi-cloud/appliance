@@ -98,6 +98,7 @@
      "shot": "img/steps/azure-10-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -198,6 +199,7 @@
      "shot": "img/steps/azure-3-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -314,6 +316,7 @@
      "shot": "img/steps/azure-7-2.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -429,6 +432,7 @@
      "shot": "img/steps/azure-12-2.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -525,6 +529,7 @@
      "shot": "img/steps/azure-6-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "SDK",
@@ -615,6 +620,7 @@
      "shot": "img/steps/azure-11-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "SDK",
@@ -704,6 +710,7 @@
      "shot": "img/steps/azure-9-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "Console",
@@ -804,6 +811,7 @@
      "shot": "img/steps/azure-4-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -908,6 +916,7 @@
      "shot": "img/steps/azure-5-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1022,6 +1031,7 @@
      "shot": "img/steps/azure-1-2.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1117,6 +1127,7 @@
      "shot": "img/steps/azure-2-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1222,6 +1233,7 @@
      "shot": "img/steps/azure-8-2.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1319,6 +1331,7 @@
      "shot": "img/steps/azure-13-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",

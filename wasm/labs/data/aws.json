@@ -105,6 +105,28 @@
      "shot": "img/steps/aws-10-2.jpg"
     }
    ],
+   "lab": [
+    {
+     "title": "Write the model client",
+     "text": "Every other layer imports these three functions, so keep the names. boto3 reads the simulator address from AWS_ENDPOINT_URL, exactly as it would on real AWS.",
+     "file": "models.py",
+     "lang": "python",
+     "code": "import json\nimport boto3\n\nCHAT_MODEL = \"anthropic.claude-3-haiku-20240307-v1:0\"\nEMBED_MODEL = \"amazon.titan-embed-text-v2:0\"\n_rt = boto3.client(\"bedrock-runtime\")\n\n\ndef _text(resp):\n    return \"\".join(b.get(\"text\", \"\") for b in resp[\"output\"][\"message\"][\"content\"])\n\n\ndef chat(prompt):\n    r = _rt.converse(modelId=CHAT_MODEL, messages=[{\"role\": \"user\", \"content\": [{\"text\": prompt}]}], inferenceConfig={\"maxTokens\": 200})\n    return _text(r)\n\n\ndef chat_with_tools(prompt, tools):\n    r = _rt.converse(modelId=CHAT_MODEL, messages=[{\"role\": \"user\", \"content\": [{\"text\": prompt}]}], toolConfig={\"tools\": tools})\n    tool = next((b[\"toolUse\"] for b in r[\"output\"][\"message\"][\"content\"] if \"toolUse\" in b), None)\n    return {\"stop_reason\": r[\"stopReason\"], \"tool_use\": tool, \"text\": _text(r)}\n\n\ndef embed(text):\n    r = _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps({\"inputText\": text}))\n    return json.loads(r[\"body\"].read())[\"embedding\"]\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false
+    },
+    {
+     "title": "Try all three calls",
+     "text": "A chat call, a tool-calling call and an embedding. The tool definition is the one the agents use later.",
+     "file": "try_models.py",
+     "lang": "python",
+     "code": "from models import chat, chat_with_tools, embed\n\nprint(\"chat:\", chat(\"Reply with the single word OK.\"))\n\nTOOL = {\"toolSpec\": {\"name\": \"asset_status\", \"description\": \"status of an asset by id\",\n                     \"inputSchema\": {\"json\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}}}}\nr = chat_with_tools(\"What is the status of asset B-12?\", [TOOL])\nprint(\"tools: stop_reason =\", r[\"stop_reason\"])\n\nv = embed(\"boiler pressure limit\")\nprint(\"embed: vector of\", len(v), \"numbers\")\n",
+     "run": "python try_models.py",
+     "expect": "embed: vector of",
+     "needs_runtime": false
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -204,6 +226,7 @@
      "shot": "img/steps/aws-3-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -319,6 +342,78 @@
      "click": false,
      "n": 2,
      "shot": "img/steps/aws-7-2.jpg"
+    }
+   ],
+   "lab": [
+    {
+     "title": "Create the three tables",
+     "text": "Assets and work orders hold the operational data; the ledger is used by the approval layer later. On-demand billing, one string key each.",
+     "file": "tables.py",
+     "lang": "python",
+     "code": "import boto3\n\nddb = boto3.client(\"dynamodb\")\nfor name, key in ((\"facilities-assets\", \"asset_id\"), (\"facilities-work-orders\", \"work_order_id\"), (\"approval-ledger\", \"request_id\")):\n    try:\n        ddb.create_table(TableName=name, KeySchema=[{\"AttributeName\": key, \"KeyType\": \"HASH\"}],\n                         AttributeDefinitions=[{\"AttributeName\": key, \"AttributeType\": \"S\"}], BillingMode=\"PAY_PER_REQUEST\")\n        print(\"created\", name)\n    except ddb.exceptions.ResourceInUseException:\n        print(\"exists \", name)\n",
+     "run": "python tables.py",
+     "expect": "created facilities-assets",
+     "needs_runtime": false
+    },
+    {
+     "title": "Seed the data",
+     "text": "Three assets and three work orders. Boiler B-12 is running at 34 psi, which the later chapters use as the example problem.",
+     "file": "seed.py",
+     "lang": "python",
+     "code": "import boto3\n\nddb = boto3.client(\"dynamodb\")\nASSETS = [\n    {\"asset_id\": \"B-12\", \"name\": \"Boiler B-12\", \"site\": \"HQ-1\", \"type\": \"boiler\", \"status\": \"RUNNING\", \"pressure_psi\": 34, \"last_inspection\": \"2026-08-02\"},\n    {\"asset_id\": \"AHU-7\", \"name\": \"Air handling unit 7\", \"site\": \"HQ-1\", \"type\": \"hvac\", \"status\": \"DEGRADED\", \"supply_temp_drift_c\": 3.8, \"last_inspection\": \"2026-09-12\"},\n    {\"asset_id\": \"EL-3\", \"name\": \"Elevator 3\", \"site\": \"HQ-2\", \"type\": \"elevator\", \"status\": \"RUNNING\", \"last_inspection\": \"2026-10-01\"},\n]\nWORK_ORDERS = [\n    {\"work_order_id\": \"WO-000101\", \"asset_id\": \"AHU-7\", \"title\": \"Replace AHU-7 filter\", \"priority\": \"P3\", \"status\": \"CLOSED\", \"requester\": \"seed\"},\n    {\"work_order_id\": \"WO-000102\", \"asset_id\": \"B-12\", \"title\": \"Quarterly PRV inspection\", \"priority\": \"P2\", \"status\": \"OPEN\", \"requester\": \"seed\"},\n    {\"work_order_id\": \"WO-000103\", \"asset_id\": \"EL-3\", \"title\": \"Door-zone sensor check\", \"priority\": \"P2\", \"status\": \"OPEN\", \"requester\": \"seed\"},\n]\n\n\ndef attr(v):\n    return {\"N\": str(v)} if isinstance(v, (int, float)) else {\"S\": str(v)}\n\n\nfor table, rows in ((\"facilities-assets\", ASSETS), (\"facilities-work-orders\", WORK_ORDERS)):\n    for row in rows:\n        ddb.put_item(TableName=table, Item={k: attr(v) for k, v in row.items()})\n    print(\"seeded\", table, len(rows))\n",
+     "run": "python seed.py",
+     "expect": "seeded facilities-work-orders 3",
+     "needs_runtime": false
+    },
+    {
+     "title": "Write the read-only tool",
+     "text": "asset-status is a read-only tool: it returns one asset and its work orders. It never writes.",
+     "file": "asset_status.py",
+     "lang": "python",
+     "code": "import os\nimport boto3\n\n\ndef handler(event, context):\n    ddb = boto3.client(\"dynamodb\")\n    asset = ddb.get_item(TableName=os.environ[\"ASSETS_TABLE\"], Key={\"asset_id\": {\"S\": event[\"asset_id\"]}}).get(\"Item\")\n    if not asset:\n        return {\"found\": False}\n    wos = ddb.scan(TableName=os.environ[\"WORK_ORDERS_TABLE\"], FilterExpression=\"asset_id = :a\",\n                   ExpressionAttributeValues={\":a\": {\"S\": event[\"asset_id\"]}}).get(\"Items\", [])\n    return {\"found\": True, \"asset\": {k: list(v.values())[0] for k, v in asset.items()},\n            \"work_orders\": [{k: list(v.values())[0] for k, v in w.items()} for w in wos]}\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false
+    },
+    {
+     "title": "Write the approval-request tool",
+     "text": "request-approval parks a request in the ledger and tells the approver. Chapter 9 wires it to the approval flow; for now you only deploy it.",
+     "file": "request_approval.py",
+     "lang": "python",
+     "code": "import json, os, time\nimport boto3\n\n\ndef handler(event, context):\n    token = event[\"TaskToken\"]\n    req = {k: v for k, v in event.items() if k != \"TaskToken\"}\n    boto3.client(\"dynamodb\").put_item(TableName=os.environ[\"LEDGER_TABLE\"], Item={\n        \"request_id\": {\"S\": req[\"request_id\"]}, \"status\": {\"S\": \"PENDING\"}, \"task_token\": {\"S\": token},\n        \"requester\": {\"S\": req.get(\"requester\", \"\")}, \"summary\": {\"S\": req.get(\"summary\", \"\")}, \"ts\": {\"N\": str(int(time.time()))}})\n    boto3.client(\"sns\").publish(TopicArn=os.environ[\"INBOX_TOPIC_ARN\"], Subject=\"Approval needed: \" + req.get(\"summary\", \"\")[:80],\n                                Message=json.dumps({\"request_id\": req[\"request_id\"], \"summary\": req.get(\"summary\"), \"task_token\": token}))\n    return {\"queued\": True}\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false
+    },
+    {
+     "title": "Write the work-order tool",
+     "text": "create-work-order is the write tool: it only ever runs after a human has approved, and it closes the ledger entry.",
+     "file": "create_work_order.py",
+     "lang": "python",
+     "code": "import os\nimport boto3\n\n\ndef handler(event, context):\n    req = event[\"request\"] if \"request\" in event else event\n    ddb = boto3.client(\"dynamodb\")\n    wo_id = \"WO-\" + req[\"request_id\"][-6:].upper()\n    ddb.put_item(TableName=os.environ[\"WORK_ORDERS_TABLE\"], Item={\n        \"work_order_id\": {\"S\": wo_id}, \"asset_id\": {\"S\": req[\"asset_id\"]}, \"title\": {\"S\": req[\"summary\"]},\n        \"priority\": {\"S\": req.get(\"priority\", \"P3\")}, \"status\": {\"S\": \"OPEN\"}, \"requester\": {\"S\": req.get(\"requester\", \"\")}})\n    ddb.update_item(TableName=os.environ[\"LEDGER_TABLE\"], Key={\"request_id\": {\"S\": req[\"request_id\"]}},\n                    UpdateExpression=\"SET #s = :s, work_order_id = :w\", ExpressionAttributeNames={\"#s\": \"status\"},\n                    ExpressionAttributeValues={\":s\": {\"S\": \"EXECUTED\"}, \":w\": {\"S\": wo_id}})\n    return {\"work_order_id\": wo_id}\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false
+    },
+    {
+     "title": "Deploy the three Lambda functions",
+     "text": "Zips each handler file you saved and calls CreateFunction. Environment variables carry the table names and, because the functions call the simulator too, the endpoint.",
+     "file": "deploy_tools.py",
+     "lang": "python",
+     "code": "import io, os, zipfile\nimport boto3\n\nlam = boto3.client(\"lambda\")\nROLE = \"arn:aws:iam::123456789012:role/facilities-role\"\nENV = {\"ASSETS_TABLE\": \"facilities-assets\", \"WORK_ORDERS_TABLE\": \"facilities-work-orders\", \"LEDGER_TABLE\": \"approval-ledger\",\n       \"INBOX_TOPIC_ARN\": \"\", \"AWS_ENDPOINT_URL\": os.environ[\"AWS_ENDPOINT_URL\"], \"AWS_DEFAULT_REGION\": os.environ.get(\"AWS_DEFAULT_REGION\", \"us-east-1\")}\n\n\ndef zip_of(module, source):\n    buf = io.BytesIO()\n    with zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n        z.writestr(module + \".py\", source)\n    return buf.getvalue()\n\n\nFUNCTIONS = ((\"facilities-asset-status\", \"asset_status\"), (\"facilities-request-approval\", \"request_approval\"),\n             (\"facilities-create-work-order\", \"create_work_order\"))\nfor name, module in FUNCTIONS:\n    source = open(module + \".py\").read()\n    lam.create_function(FunctionName=name, Runtime=\"python3.12\", Role=ROLE, Handler=module + \".handler\",\n                        Code={\"ZipFile\": zip_of(module, source)}, Timeout=30, Environment={\"Variables\": ENV})\n    print(\"deployed\", name)\n",
+     "run": "python deploy_tools.py",
+     "expect": "deployed facilities-create-work-order",
+     "needs_runtime": false
+    },
+    {
+     "title": "Call the read-only tool",
+     "text": "Invoke asset-status for boiler B-12, the way an agent will.",
+     "file": "call_tools.py",
+     "lang": "python",
+     "code": "import json\nimport boto3\n\nlam = boto3.client(\"lambda\")\nr = lam.invoke(FunctionName=\"facilities-asset-status\", Payload=json.dumps({\"asset_id\": \"B-12\"}).encode())\nout = json.loads(r[\"Payload\"].read())\nprint(\"found:\", out[\"found\"], \"| status:\", out[\"asset\"][\"status\"], \"| open work orders:\", len([w for w in out[\"work_orders\"] if w[\"status\"] == \"OPEN\"]))\n",
+     "run": "python call_tools.py",
+     "expect": "found: True | status: RUNNING | open work orders: 1",
+     "needs_runtime": true
     }
    ],
    "validate": [
@@ -438,6 +533,7 @@
      "shot": "img/steps/aws-12-2.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -532,6 +628,7 @@
      "shot": "img/steps/aws-6-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -626,6 +723,7 @@
      "shot": "img/steps/aws-11-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -716,6 +814,7 @@
      "shot": "img/steps/aws-9-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -808,6 +907,7 @@
      "shot": "img/steps/aws-4-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -961,6 +1061,7 @@
      "shot": "img/steps/aws-5-4.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1058,6 +1159,7 @@
      "shot": null
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1170,6 +1272,7 @@
      "shot": "img/steps/aws-2-2.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1259,6 +1362,7 @@
      "shot": "img/steps/aws-8-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",
@@ -1355,6 +1459,7 @@
      "shot": "img/steps/aws-13-1.jpg"
     }
    ],
+   "lab": [],
    "validate": [
     {
      "kind": "CLI",

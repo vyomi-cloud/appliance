@@ -101,6 +101,15 @@
       return t;
     }
 
+    function copyBtn(text) { return el("button", { type: "button", className: "vl-copy", title: "Copy", onclick: function (e) { try { navigator.clipboard.writeText(text); e.currentTarget.textContent = "Copied"; } catch (_) {} } }, "Copy"); }
+    function labBlock(bk, i) {
+      return el("li", { className: "vl-block" },
+        el("div", { className: "vl-bhead" }, el("span", { className: "vl-s2n", textContent: i + 1 }), el("div", {}, el("h3", { textContent: bk.title }), el("p", { className: "vl-muted", textContent: bk.text }))),
+        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), bk.file), copyBtn(bk.code)),
+        el("pre", { className: "vl-pre", textContent: bk.code }),
+        bk.run ? el("div", { className: "vl-runrow" }, el("span", { className: "vl-runlbl", textContent: "Run" }), el("code", { textContent: bk.run }), copyBtn(bk.run)) : el("div", { className: "vl-runrow muted" }, el("span", { className: "vl-runlbl", textContent: "Nothing to run yet; the next step uses this file." })),
+        bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null);
+    }
     function consoleUrl(route) { return base + "../v4/" + cloud + "/#" + route; }
     function setupStep(st) {
       var vals = Object.keys(st.fill || {});
@@ -172,10 +181,13 @@
           el("h3", { className: "vl-h3", textContent: "Why an enterprise needs it" }), ul(l.why),
           el("h3", { className: "vl-h3", textContent: "What you will learn" }), ul(l.learn),
           el("h3", { className: "vl-h3", textContent: "Before you start" }), ul(l.prereq))),
-        sec("setup", "2", "Set up this layer on Vyomi", el("div", {},
-          el("p", { className: "vl-muted", textContent: "Follow the steps in the " + course.cloud_name + " console. Each step has a button that opens exactly that service in the simulator, a screenshot of the form and the values to enter." }),
+        sec("setup", "2", "Build it on Vyomi", el("div", {},
+          (l.lab && l.lab.length) ? el("div", {},
+            el("p", { className: "vl-muted", textContent: "Do these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
+            el("ol", { className: "vl-blocks" }, l.lab.map(labBlock))) :
+          el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "The console steps below show the resources to create. The runnable, verified code for this chapter is still being added." }), ul(l.build)),
+          el("h3", { className: "vl-h3", textContent: (l.lab && l.lab.length) ? "See it in the console" : "Console steps" }),
           el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)),
-          el("h3", { className: "vl-h3", textContent: "Still to do: the remaining steps (SDK or CLI)" }), ul(l.build),
           el("h3", { className: "vl-h3", textContent: "How it fits with the other layers" }), el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
           el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null)),
         sec("validate", "3", "Quick validation in the simulator", el("div", {},
