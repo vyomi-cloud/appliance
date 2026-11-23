@@ -82,7 +82,7 @@
      "route": "/vertex-ai/model-garden",
      "do": [
       "Open Vertex AI, Model Garden.",
-      "Confirm a Gemini chat model and an embedding model are available."
+      "Confirm a chat model and an embedding model are listed (in-browser models on Nano, the Mesh pool on a Mesh)."
      ],
      "fill": {},
      "service": "Vertex AI",

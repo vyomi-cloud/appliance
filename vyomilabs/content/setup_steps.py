@@ -33,7 +33,7 @@ STEPS = {
         13: [s("Create the ledger key", "/kms/create-key", ["Open KMS, Create key: symmetric, encrypt and decrypt.", "Give it an alias and turn on automatic rotation."], {"Alias": "facilities-ledger-key"}, "AWS KMS")],
     },
     "gcp": {
-        10: [s("Browse Model Garden", "/vertex-ai/model-garden", ["Open Vertex AI, Model Garden.", "Confirm a Gemini chat model and an embedding model are available."], service="Vertex AI")],
+        10: [s("Browse Model Garden", "/vertex-ai/model-garden", ["Open Vertex AI, Model Garden.", "Confirm a chat model and an embedding model are listed (in-browser models on Nano, the Mesh pool on a Mesh)."], service="Vertex AI")],
         3: [s("Open the agent deployments", "/vertex-ai/deployments", ["Open Vertex AI, Agent Engine, deployments.", "Deploy facilities_supervisor from your agent code."], {"Name": "facilities_supervisor"}, "Vertex AI Agent Engine")],
         7: [s("Create the tool function", "/functions/create", ["Open Cloud Run functions, Create function.", "2nd gen, Python 3.12, HTTP trigger, paste the reference handler."], {"Function name": "asset-status"}, "Cloud Run functions"),
             s("Seed the assets", "/firestore", ["Open Firestore, Data.", "Add the assets collection and a few seed documents."], service="Firestore")],
