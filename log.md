@@ -1,3 +1,14 @@
+### Upstream watch — 2026-11-23T19:18:14+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` AWS CodeDeploy now supports suspending Amazon EC2 Auto Scaling processes ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-codedeploy-suspend-asg-processes/))
+- · `announcement` Amazon EC2 Capacity Blocks for ML now supports search across multiple instance types and AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-capacity-blocks-ml-flex-search/))
+- · `release` pypi:google-cloud-storage: 3.17.1 → 3.17.2
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-23T18:18:06+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,16 +3009,3 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 Sources that failed this run (15): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
 
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-11T22:58:59+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**12 change(s), 0 actionable.**
-- · `announcement` AWS Cloud WAN now supports Flow Logs ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-cloud-wan-flow-logs/))
-- · `announcement` AWS Emulator is now available for building and testing AWS applications locally ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-emulator-now-available/))
-- · `spec-commit` Azure authorization: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
-- · `spec-commit` Azure compute: [Compute Recommender] Preserve GA C# compatibility and regular IsZonal naming (#48078) ([link](https://github.com/Azure/azure-rest-api-specs/commit/0cfe0454095022e6e28fcc64775aef2e90abc227))
-- · `spec-commit` Azure keyvault: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
-- · `spec-commit` Azure operationalinsights: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))

@@ -1,40 +1,35 @@
 {
- "at": "2026-11-23T18:18:06+00:00",
+ "at": "2026-11-23T19:18:14+00:00",
  "baseline": false,
  "changes": [
   {
+   "cloud": "sdk",
+   "service": "pypi:google-cloud-storage",
+   "kind": "release",
+   "key": "ver:pypi:google-cloud-storage:3.17.2",
+   "title": "pypi:google-cloud-storage: 3.17.1 \u2192 3.17.2",
+   "actionable": false
+  },
+  {
    "cloud": "aws",
-   "service": "Amazon S3, Identity and Access Management",
+   "service": "AWS Lambda, Amazon EC2",
    "kind": "announcement",
-   "key": "feed:aws:3dd1d7c2dc91",
-   "title": "AWS Partner Central expands analytics access with Partner Central Agents and Data Subscriptions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/partner-analytics-agent-s3/",
-   "detail": "AWS Partners and AWS Marketplace sellers now have two new ways to access their analytics data in AWS Partner Central. Partner Central Agents answer questions in plain language, and Data Subscriptions deliver Partner Central data to an Amazon Simple Storage Service (Amazon S3) bucket every day. Partner Central Agents answer questions about leads, marketing campaigns, opportunities and pipeline, and funding, without navigating dashboards or exporting to spreadsheets. AWS Marketplace sellers can also ask about usage, agreements and renewals, billing, collections, and disbursements. Partners can g",
+   "key": "feed:aws:67485fc897d0",
+   "title": "AWS CodeDeploy now supports suspending Amazon EC2 Auto Scaling processes",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-codedeploy-suspend-asg-processes/",
+   "detail": "AWS CodeDeploy can now suspend Amazon EC2 Auto Scaling processes during EC2 in-place deployments to Auto Scaling groups. CodeDeploy is a fully managed service that automates application deployments to Amazon EC2 instances, on-premises servers, AWS Lambda functions, and Amazon ECS services. This launch helps prevent scaling activities from terminating or replacing instances while CodeDeploy is updating them, which can cause a deployment to fail. You can choose to suspend any combination of these processes (Terminate, AZRebalance, InstanceRefresh, and ScheduledActions) on a deployment group, or ",
    "actionable": false
   },
   {
    "cloud": "aws",
    "service": "Amazon EC2",
    "kind": "announcement",
-   "key": "feed:aws:039240e64302",
-   "title": "AgentCore runtime instances are now generally available in the AWS GovCloud (US-West) Region",
-   "link": "https://aws.amazon.com/agentcore-runtime-instances-aws-govcloud-us",
-   "detail": "Amazon Bedrock AgentCore runtime instances are now available in the AWS GovCloud (US-West) Region. Runtime instances run your agents on Amazon EC2 instances in your own account, while AgentCore handles provisioning, patching, scaling, and lifecycle management. With runtime instances, teams in AWS GovCloud (US) can choose GPU-accelerated, memory-optimized, or compute-optimized instance types for their agents and run agent sessions of up to 14 days. Agent instances, storage volumes, and session data stay in the AWS GovCloud (US-West) Region, which helps public sector organizations and their part",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3, CloudWatch Logs, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:6356421a463f",
-   "title": "Amazon SageMaker Studio now supports training job submission and model deployment for SageMaker HyperPod clusters",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-studio-hyperpod/",
-   "detail": "Amazon SageMaker Studio now provides a native developer experience for Amazon SageMaker HyperPod, enabling data scientists to submit distributed training jobs, deploy models, and monitor workloads through a visual interface on HyperPod clusters orchestrated with Amazon Elastic Kubernetes Service (Amazon EKS). SageMaker HyperPod is a purpose-built infrastructure for distributed training and fine-tuning of foundation models at scale, designed to reduce infrastructure management overhead. Submitting training jobs and deploying custom models on HyperPod at scale requires familiarity with kubectl a",
+   "key": "feed:aws:0272b716bd84",
+   "title": "Amazon EC2 Capacity Blocks for ML now supports search across multiple instance types and AWS Regions",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/ec2-capacity-blocks-ml-flex-search/",
+   "detail": "Amazon EC2 Capacity Blocks for ML now lets customers search across multiple instance types and AWS Regions in a single search, making it easier to find and reserve the capacity their ML workloads need. With Capacity Blocks for ML, customers can reserve accelerated compute instances such as Amazon EC2 P6-B300, P6-B200, and Trn2 instances, for a future start date and for up to 6 months. Until now, customers looking to buy Capacity Blocks had to run a separate search for every instance type and Region combination. Starting today, customers can use a single search in the AWS Management Console to ",
    "actionable": false
   }
  ],
- "errors": [
-  "pypi/boto3: <urlopen error [Errno 104] Connection reset by peer>",
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
- ]
+ "errors": []
 }
