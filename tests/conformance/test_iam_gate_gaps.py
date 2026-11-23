@@ -341,3 +341,14 @@ def test_s3_traffic_is_still_aws_and_untouched_by_gcp_enforcement(env):
         assert "AuthorizationFailed" not in r.text and "PERMISSION_DENIED" not in r.text
     finally:
         _set(c, "gcp", space="off"); _set(c, "azure", space="off")
+
+
+def test_gcp_test_iam_permissions_needs_no_permission():
+    from core.iam_engine import gate
+    hr = {"method": "POST", "path": "/v1/projects/p1:testIamPermissions", "query": {}, "headers": {}, "body": b"",
+          "principal": {"type": "user", "email": "x@y.z", "id": "user:x@y.z"}}
+    st = {"cloud": "gcp", "allow_policies": {}, "deny_policies": {}, "custom_roles": {}}
+    cfg = {"global": "enforce", "space": "enforce", "services": {}, "resources": {}, "allowUnmapped": False}
+    assert gate.check("gcp", hr, st, cfg) is None
+    hr2 = dict(hr, path="/v1/projects/p1/nonexistent:frobnicate")          # a truly unmapped request is still denied in enforce
+    assert gate.check("gcp", hr2, st, cfg) is not None

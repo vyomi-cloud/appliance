@@ -61,3 +61,16 @@ Merge result: 675 IAM pytest cases pass together, the 9 script-style IAM/RBAC su
 
 ## Release gate
 `tests/release/v4_checklist.py` (run by `v4-release-checklist.yml` on every release) now has `iam-faithful` (global: gate/Nano/resource-policy/onboarding tests, `gen_iam_coverage.py --check`, `build_cores.py --check`) and a per-cloud `iam-enforcement` check (engine + request map + real-server e2e for that cloud). A FAIL blocks the release unless waived with `--waive iam-faithful=<reason>`.
+
+## Third wave merged (2026-11-23): gate-gaps, aws-azure-gaps, gcp-coverage
+- Azure OpenAI/SQL/ARM-alias gated; Entra (Graph, /oauth2, OIDC) explicitly exempt; GCP XML storage API recognised and gated as GCP (`core/iam_engine/routing.py`, mirrored in `nano-iam-hook.js`).
+- AWS: API Gateway id resolved, per-key DeleteObjects, CBOR bodies, more resource policies, anonymous S3 (default off, `anonymousS3: allow` opt-out). Azure: Shared Key + SAS (`azure_sas.py`), queue/table/Key Vault data planes live, Entra groups.
+- GCP: 1033 -> 348 unmapped methods; 21/29 services enforceable under the NEW definition (share of the Discovery request surface mapped; strict catalog-reach kept as its own column with its own floor); hierarchy/groups/PAB fed; issued opaque tokens recorded.
+- Post-merge: `testIamPermissions` needs no permission (gate), tested.
+Merge result: 738 IAM pytest cases + 9 script-style suites green; build_cores/coverage checks clean.
+
+### Still open
+- GCP: 348 methods have no permission in the catalog (Vertex preview, SCC ETD, Backup&DR...); 1268 method ids use nearest-permission fallbacks; 8 services < 90%; denominator is the Discovery surface not the served set; folder/org `setIamPolicy` and project create not served.
+- Azure: SAS signature not verified; stored-access-policy tokens allowed; management groups not modelled by any store; Nano has no storage_accounts/data_scopes for data planes; /contentsafety unmapped; Foundry /api/projects not gated.
+- AWS: Block Public Access / ACL public access / website endpoints; multi-name AlarmNames binds alarm:*; layer policies not recorded by the store.
+- Nano browser run for the new paths (OpenAI, GCS XML, anonymous S3, SAS) not done; nothing in CI; nothing on trunk.

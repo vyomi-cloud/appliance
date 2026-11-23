@@ -232,6 +232,9 @@ def _check(cloud, hr, state, settings, engines, maps, log, bypass):
             return denial_spec(cloud, hr, principal, "unknown", "*", message=f"IAM enforcement could not map the request: {exc}")
         return None
 
+    if not perms and cloud == "gcp" and str(hr.get("path") or "").split("?")[0].endswith(":testIamPermissions"):
+        return None        # needs no permission by design (any caller may ask which permissions they hold)
+
     if not perms:
         if base_mode == "off":
             return None
