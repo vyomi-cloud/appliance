@@ -15,7 +15,7 @@
       x.onerror = function () { rej(new Error('network')); }; x.send();
     });
   }
-  (function () { var st = document.createElement('style'); st.textContent = '.u-run{margin-left:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:3px 10px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer}.u-run:disabled{opacity:.6}.u-out{margin:8px 0 0;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0b1220;color:#d1fae5;border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,Menlo,monospace}'; document.head.appendChild(st); })();
+  (function () { var st = document.createElement('style'); st.textContent = '.u-run{margin-left:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:3px 10px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer}.u-run:disabled{opacity:.6}.u-out{margin:8px 0 0;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0b1220;color:#d1fae5;border:1px solid rgba(255,255,255,.28);border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,Menlo,monospace}'; document.head.appendChild(st); })();
   function index() { return indexP || (indexP = xhr(BASE + 'index.json')); }
   function service(cloud, f) { var k = cloud + '/' + f; return cache[k] || (cache[k] = xhr(BASE + cloud + '/' + f)); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
