@@ -1,17 +1,6 @@
 {
- "at": "2026-11-23T09:18:01+00:00",
+ "at": "2026-11-23T10:18:00+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Identity and Access Management, CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:610eedbe8ad4",
-   "title": "Amazon CloudWatch Query Studio now supports saved queries",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-query-studio-saved-queries",
-   "detail": "Amazon CloudWatch Query Studio now lets you save your PromQL and SQL metrics queries and reuse them. You no longer need to rewrite or search for queries you run often, such as a latency query you check during every incident. You can save a query under a name and use \"/\" in the name to organize queries into folders. In the Saved tab of the Queries panel, you can search, sort, and preview your saved queries. You can then apply one to replace what's in the studio, append it to your current queries, edit it, or delete it. Saved queries are stored in your account and Region, and you control who can",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
