@@ -135,6 +135,16 @@ They are different repos with different jobs, so "latest" is answered per kind o
     Never type a service/feature count into a portal page, README, deck or release note: read the inventory (portal: `inventory.*`
     template global). Origin (2026-11-23): the portal said "55 services" (a literal) while the consoles had 86.
 
+14. **A new service or feature is not done until it is IAM-onboarded.** The mapping service -> IAM catalog slice lives in ONE file,
+    `core/iam_catalog/service_map.json` (aws IAM prefixes / gcp page slugs / azure providers, or `"catalog": "none"` with a reason, plus a
+    `floor` = minimum request-map coverage %). Adding a service means: (a) add its entry to `service_map.json`; (b) if it needs a new slice,
+    add it to `AWS_PREFIXES` / `GCP_SLUGS` / the Azure provider list in `scripts/gen_iam_catalog.py`, run `python3 scripts/gen_iam_catalog.py
+    <cloud>` and commit `core/iam_catalog/`; (c) extend the request map (`core/iam_engine/map_<cloud>.py`) until coverage is >= 90%
+    (enforceable); (d) run `python3 scripts/gen_iam_coverage.py --bump-floors` and commit `wasm/iam-coverage.json` and
+    `docs/architecture/v4.0/IAM-COVERAGE.md`. `tests/conformance/test_iam_onboarding_gate.py` fails when a service is missing from the map, the
+    coverage file is stale, coverage is below a floor, or a listed slice has no committed file; `service-gate.yml` runs it for every
+    expansion PR. Floors only go up. Never lower one to make a test pass.
+
 ## 4. Why sessions conflict, and the fix for each (observed 2026-11-09)
 
 | Cause | Seen as | Fix |

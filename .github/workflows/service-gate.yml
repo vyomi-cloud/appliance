@@ -81,6 +81,12 @@ jobs:
           npm install --silent playwright@1.47.2 ws@8.18.0
           npx playwright install --with-deps chromium
 
+      - name: IAM onboarding gate (rule 14)
+        # A new service must be in core/iam_catalog/service_map.json and the IAM coverage report must be fresh; the failure message names the fix.
+        run: |
+          PYTHONPATH=$PWD:$PWD/core python3 scripts/gen_iam_coverage.py --check
+          PYTHONPATH=$PWD:$PWD/core python3 -m pytest -p no:cacheprovider -q tests/conformance/test_iam_onboarding_gate.py
+
       - name: Boot the PR's stack + Nano relay
         run: |
           docker build -t cloudlearn/simulator:ci .
