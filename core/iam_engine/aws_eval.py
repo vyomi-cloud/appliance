@@ -532,6 +532,9 @@ def evaluate(req, state=None):
         # granted by role ARN or '*': boundary / session policy still limit it (see branch doc: unverified for '*')
         if (not boundary or ba) and (not sess or sa):
             return out(True, "allow", matched + [r for r in ra if r.get("principal_match") in ("role", "wildcard")])
+    # KMS-style resources: identity policies grant only if the resource policy itself enables them (host lists such ARNs in state)
+    if ident_ok is not None and resource in (state.get("resource_policy_requires_grant") or ()):
+        return out(False, "implicit_deny", [], "resource")
     if ident_ok is not None:
         return out(True, "allow", matched + ident_ok + [r for r in ra if r.get("principal_match") == "account"])
     return out(False, "implicit_deny", [], why)
