@@ -318,6 +318,11 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
 # Mesh pack (headless Pro/Max appliance): /mesh/* status + pairing routes.
 from core import mesh as _mesh
 _mesh.register(app)
+try:   # Vyomi Labs: deploy a course chapter inside this Mesh (POST /mesh/labs/deploy/<cloud>/<layer>)
+    from core import mesh_labs as _mesh_labs
+    _mesh_labs.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[mesh] Labs deploy route skipped: {_e}")
 # Mesh shell routes registered here (before the wire catch-all); the resolver is defined further down.
 from core import mesh_shell as _mesh_shell
 _mesh_shell.register(app, lambda cloud, ref: _shell_container(cloud, ref))

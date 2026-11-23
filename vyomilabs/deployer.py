@@ -32,8 +32,19 @@ def _env_for(cloud, endpoint=None):
     else:
         raise RuntimeError("the %s simulator did not start" % cloud)
     info = json.loads(line[len("VYOMI_ENV "):])
-    e = dict(proc=proc, endpoint=info["endpoint"], env=dict(os.environ, **info["env"]), work=tempfile.mkdtemp(prefix="vy-deploy-"), done=set())
+    e = dict(proc=proc, endpoint=info["endpoint"], env=dict(os.environ, **info["env"]), work=tempfile.mkdtemp(prefix="vy-deploy-"), done=set(), py=sys.executable, attach=bool(endpoint))
     e["env"]["PYTHONPATH"] = e["work"]
+    if endpoint:   # running inside a Mesh / appliance: its own interpreter stays untouched; the SDKs a chapter installs go into a lab venv
+        yield dict(t="status", text="Preparing the lab Python environment...")
+        venv = os.path.join(e["work"], "venv")
+        subprocess.run([sys.executable, "-m", "venv", "--system-site-packages", venv], check=True, capture_output=True, timeout=300)
+        import site
+        sp = subprocess.run([os.path.join(venv, "bin", "python"), "-c", "import site;print(site.getsitepackages()[0])"], capture_output=True, text=True).stdout.strip()
+        with open(os.path.join(sp, "appliance.pth"), "w") as f:   # the appliance's own packages (boto3, ...) stay importable behind the venv's
+            f.write("\n".join(site.getsitepackages()) + "\n")
+        e["py"] = os.path.join(venv, "bin", "python")
+        e["env"]["PATH"] = os.path.join(venv, "bin") + os.pathsep + e["env"].get("PATH", "")
+        e["env"]["VIRTUAL_ENV"] = venv
     _ENVS[cloud] = e
     return e
 
@@ -78,6 +89,18 @@ def deploy(cloud, layer, endpoint=None):
                 with open(os.path.join(e["work"], blk["file"]), "w") as f:
                     f.write(blk["code"])
                 if not blk["run"]:
+                    if e["attach"] and blk["file"].endswith(".sh") and "pip install" in blk["code"]:   # install blocks really run inside a Mesh
+                        if target:
+                            yield dict(t="block", i=i, status="running")
+                        try:
+                            p = subprocess.run(["bash", blk["file"]], cwd=e["work"], env=e["env"], capture_output=True, text=True, timeout=900)
+                            ok_i, out_i = p.returncode == 0, (p.stdout + p.stderr)[-1500:]
+                        except subprocess.TimeoutExpired:
+                            ok_i, out_i = False, "Install timed out."
+                        ok &= ok_i
+                        if target:
+                            yield dict(t="block", i=i, status="passed" if ok_i else "failed", out=out_i)
+                        continue
                     if target:
                         yield dict(t="block", i=i, status="saved")
                     continue
@@ -88,7 +111,7 @@ def deploy(cloud, layer, endpoint=None):
                 if target:
                     yield dict(t="block", i=i, status="running")
                 try:
-                    p = subprocess.run([sys.executable] + blk["run"].split()[1:], cwd=e["work"], env=e["env"], capture_output=True, text=True, timeout=240)
+                    p = subprocess.run([e["py"]] + blk["run"].split()[1:], cwd=e["work"], env=e["env"], capture_output=True, text=True, timeout=240)
                     out = (p.stdout or "") + (("\n" + p.stderr) if p.returncode else "")
                     passed = p.returncode == 0 and (not blk["expect"] or blk["expect"] in p.stdout)
                 except subprocess.TimeoutExpired:
