@@ -13,6 +13,7 @@ import CloudQueueIcon from "@mui/icons-material/esm/CloudQueue.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
 import { useProject } from "../project.js";
 import { ConnectTabs } from "./Home.jsx";
+import { byId } from "../services/registry.js";
 
 const href = (id) => `#/${id}`;
 
