@@ -81,6 +81,8 @@ export function EffectiveAccess({ a }) {
   );
 }
 
+const wrapCell = (v) => <span title={v} style={{ display: "block", minWidth: 0, maxWidth: "100%", overflowWrap: "anywhere", wordBreak: "break-all" }}>{v}</span>;
+
 export function AuditPanel({ limit = 100 }) {
   const au = useAudit(CLOUD, limit);
   const [mode, setMode] = useState("all");
@@ -97,9 +99,9 @@ export function AuditPanel({ limit = 100 }) {
         csvName="iam-audit.csv"
         columns={[
           { key: "ts", label: "Time", value: (r) => r.ts },
-          { key: "principal", label: "Principal", value: (r) => r.principal },
-          { key: "action", label: "Action", value: (r) => r.action },
-          { key: "resource", label: "Resource", value: (r) => r.resource },
+          { key: "principal", label: "Principal", value: (r) => r.principal, render: (r) => wrapCell(r.principal) },
+          { key: "action", label: "Action", value: (r) => r.action, render: (r) => wrapCell(r.action) },
+          { key: "resource", label: "Resource", value: (r) => r.resource, render: (r) => wrapCell(r.resource) },
           { key: "mode", label: "Mode", value: (r) => MODE_LABEL[r.mode] || r.mode },
           { key: "decision", label: "Decision", value: (r) => auditLabel(r) },
           { key: "reason", label: "Reason", value: (r) => r.reason },

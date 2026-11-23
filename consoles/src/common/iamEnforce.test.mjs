@@ -35,4 +35,8 @@ const d = await api.evaluate({ principal: "arn:aws:iam::1:user/a", action: "s3:D
 assert.equal(d.allowed, false);
 const a = await api.audit(10);
 assert.equal(a.length, 1); assert.equal(a[0].wouldDeny, true);
+// real appliance audit record: epoch-float ts + ISO time + decision string
+const real = normalizeAudit({ id: 1, ts: 1795434956.3, time: "2026-11-23T11:55:56Z", principal: "p", action: "sqs:ListQueues", resource: "*", mode: "audit", decision: "would_deny", reason: "implicit_deny" });
+assert.equal(real.ts, "2026-11-23T11:55:56Z"); assert.equal(real.wouldDeny, true);
+assert.equal(normalizeAudit({ ts: 1795434956.3, decision: "allow", mode: "enforce" }).ts, "2026-11-23T11:55:56Z");
 console.log("iamEnforce tests passed");
