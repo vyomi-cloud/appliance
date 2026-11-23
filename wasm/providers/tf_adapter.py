@@ -27,10 +27,9 @@ def _build(region: str, real: bool):
     from core.tf_export.wire_clients import make_clients
     clients = make_clients(_transport, region, _models_dir())
 
-    def fetch(path):  # Lambda deployment package, straight from the store
+    def fetch(path):  # Lambda deployment package, straight from Nano's Lambda store
         from core import lambda_core as lc
-        from core.appliance_stores import lambda_store
-        fn = lc._find_fn(lambda_store(), lc._norm_name(path.rstrip("/").split("/")[-1]))
+        fn = lc._find_fn(wire_adapter.router().lam, lc._norm_name(path.rstrip("/").split("/")[-1]))
         return base64.b64decode(fn["code_zip"]) if fn and fn.get("code_zip") else None
     return build_aws_with(clients, region, real, fetch=fetch)
 
