@@ -154,3 +154,40 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-runrow{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid #1e293b;background:#0b1220;color:#e5e9f5}.vl .vl-runrow code{flex:1;background:transparent;border:0;color:#7dd3fc;font-size:13.5px}.vl .vl-runrow.muted{background:var(--bg);color:var(--muted);font-size:13px}
 .vl .vl-runlbl{font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:#94a3b8}
 .vl .vl-block .vl-expect{padding:10px 16px;margin:0;border-top:1px solid var(--line)}.vl .vl-expect code{font-size:13px}
+
+/* ---- native tutorial layouts: the chapter reads like each cloud's own tutorial ---- */
+.vl .vl-doc{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:34px 44px 40px;display:block;max-width:980px}
+.vl .vl-doc h1{font-size:34px;line-height:1.2;margin:0 0 18px;letter-spacing:-.01em}
+.vl .vl-doc .vl-h2{font-size:24px;line-height:1.3;margin:36px 0 12px;display:flex;align-items:center;gap:12px}
+.vl .vl-doc p{margin:0 0 12px}.vl .vl-doc>ul,.vl .vl-doc>ol{margin:0 0 14px}
+.vl .vl-fig{margin:14px 0 20px;border:1px solid var(--line);border-radius:6px;padding:10px;background:#fff}.vl .vl-fig .vl-imgwrap{border:0}.vl .vl-fig figcaption{font-size:13px;color:var(--muted);padding:8px 4px 0}
+.vl .vl-facts{border-collapse:collapse;width:100%;margin:0 0 8px;font-size:15px}.vl .vl-facts th,.vl .vl-facts td{border:1px solid var(--line);padding:9px 14px;text-align:left;vertical-align:top}.vl .vl-facts th{width:36%;background:#f7f8f8;font-weight:700}
+.vl .vl-svclist span{display:inline-block;margin:0 14px 2px 0}.vl .vl-svclist span::before{content:"· ";color:var(--muted)}
+.vl .vl-tasklist{padding-left:22px}.vl .vl-tasklist li{margin:6px 0}.vl .vl-mins{font-size:16px;font-weight:400;color:var(--muted)}
+.vl .vl-task{margin-top:8px;padding-top:6px;border-top:1px solid var(--line)}
+.vl .vl-doc .vl-block,.vl .vl-doc .vl-step2{margin-top:12px}.vl .vl-nextcard{margin:14px 0}.vl .vl-nextcard small{display:block;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;font-size:11.5px}
+.vl .vl-doc .vl-finish{background:transparent;border:0;padding:0;margin-top:30px;border-top:1px solid var(--line);padding-top:20px}
+
+/* AWS hands-on tutorial */
+.vl .vl-doc.aws{font-family:"Open Sans","Helvetica Neue",Roboto,Arial,sans-serif;border-radius:2px;border-color:#d5dbdb}
+.vl .vl-doc.aws h1{color:#0f1b2a;font-weight:700}.vl .vl-doc.aws .vl-h2{color:#0f1b2a;font-weight:700}.vl .vl-doc.aws a{color:#0972d3}
+.vl .vl-doc.aws .vl-task>.vl-h2{padding-bottom:8px;border-bottom:2px solid #232f3e}
+
+/* Google codelab */
+.vl .vl-doc.gcp{font-family:"Google Sans",Roboto,Arial,sans-serif;border-radius:8px;padding:0;overflow:hidden;border-color:#dadce0}
+.vl .vl-doc.gcp .vl-cl-head{background:#1a73e8;color:#fff;padding:28px 40px}.vl .vl-doc.gcp .vl-cl-head h1{color:#fff;font-weight:400;font-size:32px;margin:0 0 10px}
+.vl .vl-doc.gcp .vl-cl-meta{display:flex;gap:22px;flex-wrap:wrap;font-size:14px;opacity:.95}.vl .vl-doc.gcp .vl-cl-head .vl-chip{background:rgba(255,255,255,.16);border-color:transparent;color:#fff}
+.vl .vl-doc.gcp .vl-step{padding:26px 40px;border-bottom:1px solid #e8eaed}.vl .vl-doc.gcp .vl-step:last-child{border-bottom:0}
+.vl .vl-doc.gcp .vl-h2{margin:0 0 14px;font-weight:400;font-size:24px;color:#202124}.vl .vl-stepno{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#e8f0fe;color:#1a73e8;font-size:16px;font-weight:500;flex:none}
+.vl .vl-dur{margin-left:auto;font-size:13px;color:#5f6368;font-weight:400;background:#f1f3f4;border-radius:99px;padding:3px 12px}
+.vl .vl-doc.gcp .vl-h3{color:#202124;font-weight:500}
+
+/* Microsoft Learn */
+.vl .vl-doc.azure{font-family:"Segoe UI",-apple-system,Roboto,sans-serif;border-radius:2px;border-color:#e0e0e0;padding:30px 48px 44px}
+.vl .vl-crumbs{font-size:13px;color:#616161;margin-bottom:14px}.vl .vl-doc.azure h1{font-weight:600;font-size:36px;color:#242424;margin-bottom:8px}.vl .vl-azmeta{font-size:13px;color:#616161;margin:0 0 18px;padding-bottom:14px;border-bottom:1px solid #e0e0e0}
+.vl .vl-doc.azure .vl-h2{font-weight:600;font-size:26px;border-bottom:1px solid #e0e0e0;padding-bottom:6px;color:#242424}.vl .vl-doc.azure a{color:#0f6cbd}
+.vl .vl-inthis{margin:18px 0;border:1px solid #e0e0e0;border-left:4px solid #0f6cbd;background:#fafafa;padding:12px 18px}.vl .vl-inthis h4{margin:0 0 6px;font-size:13px;text-transform:none;letter-spacing:0;color:#242424}.vl .vl-inthis ul{list-style:none;padding:0;margin:0;columns:2}.vl .vl-inthis li{margin:3px 0;font-size:14px}
+.vl .vl-az-steps{padding-left:22px}.vl .vl-az-step{margin:0 0 22px}.vl .vl-az-step .vl-vtab{margin:10px 0}.vl .vl-az-step .vl-shot{max-width:760px;margin-top:10px}
+.vl .vl-doc.azure .vl-vtab th{background:#f5f5f5}
+
+@media (max-width:800px){.vl .vl-doc{padding:22px 18px}.vl .vl-doc.gcp .vl-step{padding:20px 18px}.vl .vl-doc.gcp .vl-cl-head{padding:22px 18px}.vl .vl-inthis ul{columns:1}}

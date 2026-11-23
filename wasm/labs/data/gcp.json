@@ -9,6 +9,7 @@
   1270
  ],
  "total_minutes": 445,
+ "updated": "November 23, 2026",
  "layers": [
   {
    "id": 10,
@@ -73,7 +74,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -170,7 +171,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -270,7 +271,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -388,7 +389,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -502,7 +503,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -595,7 +596,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -686,7 +687,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -781,7 +782,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -885,7 +886,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -1002,7 +1003,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -1100,7 +1101,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -1189,7 +1190,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {
@@ -1285,7 +1286,7 @@
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
    ],
    "setup": [
     {

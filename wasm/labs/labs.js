@@ -111,6 +111,11 @@
         bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null);
     }
     function consoleUrl(route) { return base + "../v4/" + cloud + "/#" + route; }
+    function settingsTable(st, withDesc) {
+        var keys = Object.keys(st.fill || {}); if (!keys.length) return null;
+        return el("table", { className: "vl-vtab" }, el("thead", {}, el("tr", {}, el("th", { textContent: "Setting" }), el("th", { textContent: "Suggested value" }), withDesc ? el("th", { textContent: "Description" }) : null)),
+          el("tbody", {}, keys.map(function (k) { return el("tr", {}, el("td", {}, el("b", { textContent: k })), el("td", {}, el("code", { textContent: st.fill[k] })), withDesc ? el("td", { textContent: "Use exactly this name: later chapters look the resource up by it." }) : null); })));
+      }
     function setupStep(st) {
       var vals = Object.keys(st.fill || {});
       var open = st.route ? el("a", { className: "vl-btn primary", href: consoleUrl(st.route), target: "_blank", rel: "noopener" }, "Open in " + course.cloud_name + " console", icon("M7 17L17 7M9 7h8v8", 16)) : null;
@@ -119,8 +124,7 @@
       return el("li", { className: "vl-step2" },
         el("div", { className: "vl-s2head" }, el("span", { className: "vl-s2n", textContent: st.n }), el("div", {}, el("h3", { textContent: st.title }), st.service ? el("span", { className: "vl-chip", textContent: st.service }) : null), open),
         el("div", { className: "vl-s2body" + (shot ? "" : " noshot") },
-          el("div", {}, ul(st.do), vals.length ? el("table", { className: "vl-vtab" }, el("thead", {}, el("tr", {}, el("th", { textContent: "Field" }), el("th", { textContent: "Enter" }))),
-            el("tbody", {}, vals.map(function (k) { return el("tr", {}, el("td", { textContent: k }), el("td", {}, el("code", { textContent: st.fill[k] }))); }))) : null,
+          el("div", {}, ul(st.do), settingsTable(st, false),
             st.note ? el("p", { className: "vl-native", textContent: st.note }) : null),
           shot));
     }
@@ -169,37 +173,73 @@
           v.kind === "Console" ? el("div", { className: "vl-path" }, v.how) : el("div", { className: "vl-code sm" }, el("button", { type: "button", className: "vl-copy", title: "Copy", onclick: function (e) { try { navigator.clipboard.writeText(v.how); e.currentTarget.textContent = "Copied"; } catch (_) {} } }, "Copy"), el("pre", { textContent: v.how })),
           el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), v.expect));
       });
-      var main = el("article", { className: "vl-article" },
-        el("header", { className: "vl-chhead", style: "--c:" + l.color },
-          el("div", { className: "vl-eyebrow" }, "Chapter " + pad(l.order) + " · " + l.level),
-          el("h1", { textContent: l.title }), el("p", { className: "vl-lede", textContent: l.objective }),
-          el("div", { className: "vl-meta big" }, el("span", {}, icon(P.clock, 16), "~" + l.minutes + " min (estimate)"), el("span", {}, icon(P.book, 16), l.lessons + " lessons"), el("span", {}, icon(P.flag, 16), l.validate.length + " quick validations")),
-          el("div", { className: "vl-chips" }, l.services.map(function (s) { return el("span", { className: "vl-chip", textContent: s }); })),
-          el("div", { className: "vl-outbox" }, el("b", { textContent: "You will have: " }), l.outcome)),
-        sec("intro", "1", "Introduction", el("div", {},
-          el("h3", { className: "vl-h3", textContent: "About this layer" }), el("p", { textContent: l.about }),
-          el("h3", { className: "vl-h3", textContent: "Why an enterprise needs it" }), ul(l.why),
-          el("h3", { className: "vl-h3", textContent: "What you will learn" }), ul(l.learn),
-          el("h3", { className: "vl-h3", textContent: "Before you start" }), ul(l.prereq))),
-        sec("setup", "2", "Build it on Vyomi", el("div", {},
-          (l.lab && l.lab.length) ? el("div", {},
-            el("p", { className: "vl-muted", textContent: "Do these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
-            el("ol", { className: "vl-blocks" }, l.lab.map(labBlock))) :
-          el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "The console steps below show the resources to create. The runnable, verified code for this chapter is still being added." }), ul(l.build)),
-          el("h3", { className: "vl-h3", textContent: (l.lab && l.lab.length) ? "See it in the console" : "Console steps" }),
-          el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)),
-          el("h3", { className: "vl-h3", textContent: "How it fits with the other layers" }), el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
-          el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null)),
-        sec("validate", "3", "Quick validation in the simulator", el("div", {},
-          el("p", { className: "vl-muted", textContent: "Confirm the layer works before moving on. Each check can be run in the simulator right now; paste the command, or follow the console path." }),
-          el("ol", { className: "vl-vals" }, valRows),
-          el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), el("p", { className: "vl-muted", textContent: how }),
-          el("div", { className: "vl-actions" }, check, statusEl), out)),
-        sec("ref", "4", "Reference solution", el("p", { className: "vl-muted" }, "Peek only after you have tried: ", el("code", { textContent: l.reference }))),
-        el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark)),
-        el("div", { className: "vl-pager" },
-          prev ? el("button", { type: "button", className: "vl-pg", onclick: function () { go(prev.id); } }, el("small", { textContent: "Previous" }), el("span", {}, icon(P.back, 16), prev.title)) : el("span"),
-          nxt ? el("button", { type: "button", className: "vl-pg r", onclick: function () { go(nxt.id); } }, el("small", { textContent: "Next" }), el("span", {}, nxt.title, icon(P.arrow, 16))) : el("span")));
+      /* ---- the chapter as a native tutorial: AWS hands-on, Google codelab or Microsoft Learn layout ---- */
+      var N = l.minutes, tm = { build: Math.max(5, Math.round(N * 0.5)), cons: Math.max(5, Math.round(N * 0.25)), val: Math.max(5, Math.round(N * 0.2)), clean: 5 };
+      var hasLab = l.lab && l.lab.length;
+      var archFig = el("figure", { className: "vl-fig" }, diagram(l.id, false), el("figcaption", { textContent: "Highlighted: where this chapter's layer sits in the " + course.cloud_name + " architecture." }));
+      var facts = function (rows) { return el("table", { className: "vl-facts" }, el("tbody", {}, rows.map(function (r) { return el("tr", {}, el("th", { textContent: r[0] }), el("td", {}, r[1])); }))); };
+      var svcList = el("span", { className: "vl-svclist" }, l.services.map(function (x) { return el("span", {}, x); }));
+      var next = nxt ? el("div", { className: "vl-nextcard" }, el("small", { textContent: "Next" }), el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Chapter " + nxt.order + ": " + nxt.title, icon(P.arrow, 16))) : el("p", { className: "vl-muted", textContent: "That was the last chapter. You now have the full enterprise agent." });
+      var cleanup = el("div", {}, el("p", { textContent: "Vyomi is a simulator, so nothing here is billed and nothing needs deleting to avoid charges. To start this chapter again, delete the resources you created from their console pages, or reset the space from Spaces in the bottom drawer." }),
+        el("p", { className: "vl-muted", textContent: "Keep the resources if you are continuing: later chapters build on them." }));
+      var buildBody = el("div", {}, hasLab ? el("div", {},
+          el("p", { className: "vl-muted", textContent: "Complete these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
+          el("ol", { className: "vl-blocks" }, l.lab.map(labBlock))) :
+        el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "Create the resources in the console steps below. The runnable, verified code for this chapter is still being added." }), ul(l.build)));
+      var consBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Open each service in the " + course.cloud_name + " console, enter the values shown and compare with the screenshot." }),
+        el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)));
+      var fitsBody = el("div", {}, el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
+        el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null);
+      var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Confirm the layer works before moving on. Run each check in the simulator." }), el("ol", { className: "vl-vals" }, valRows),
+        el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), el("p", { className: "vl-muted", textContent: how }), el("div", { className: "vl-actions" }, check, statusEl), out);
+      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark), next, el("p", { className: "vl-muted" }, "Reference solution (peek only after you have tried): ", el("code", { textContent: l.reference })));
+      var hd = function (id, text, extra) { return el("h2", { id: "vl-" + id, className: "vl-h2" }, text, extra || null); };
+      var secs = [];   // [anchor id, heading, body, minutes-badge]
+      var main;
+      if (cloud === "aws") {
+        /* AWS hands-on tutorial: facts table, Overview, What you will accomplish, Prerequisites, Application architecture, Tasks, Clean Up Resources */
+        var tasks = [["build", "Build the Code", tm.build, buildBody], ["console", "Create the Resources in the Console", tm.cons, consBody], ["fits", "Connect It to the Other Layers", 5, fitsBody], ["validate", "Validate Your Work", tm.val, valBody], ["clean", "Clean Up Resources", tm.clean, cleanup]];
+        main = el("article", { className: "vl-article vl-doc aws" },
+          el("h1", { textContent: l.title }),
+          facts([["AWS experience", l.level], ["Minimum time to complete", "~" + N + " minutes (estimate)"], ["Cost to complete", "Free: runs on your Vyomi simulator"], ["Services used", svcList], ["Last updated", course.updated]]),
+          hd("overview", "Overview"), el("p", { textContent: l.about }), ul(l.why),
+          hd("accomplish", "What you will accomplish"), ul(l.learn),
+          hd("prereq", "Prerequisites"), ul(l.prereq),
+          hd("arch", "Application architecture"), archFig,
+          hd("tasks", "Tasks"), el("p", { textContent: "This chapter is divided into " + tasks.length + " tasks. Complete each task in order before moving on." }),
+          el("ol", { className: "vl-tasklist" }, tasks.map(function (t, i) { return el("li", {}, el("a", { href: "#vl-t" + i, onclick: function (e) { e.preventDefault(); var n = root.querySelector("#vl-t" + i); n && n.scrollIntoView({ behavior: "smooth", block: "start" }); } }, "Task " + (i + 1) + ": " + t[1]), " (" + t[2] + " minutes)"); })),
+          tasks.map(function (t, i) { return el("section", { className: "vl-task", id: "vl-t" + i }, el("h2", { className: "vl-h2" }, "Task " + (i + 1) + ": " + t[1], el("span", { className: "vl-mins", textContent: " (" + t[2] + " minutes)" })), t[3]); }),
+          closing);
+      } else if (cloud === "gcp") {
+        /* Google codelab: Before you begin (Prerequisites, What you'll learn, What you'll need), numbered steps with Duration, Clean up, Congratulations */
+        var steps = [["Before you begin", 2, el("div", {}, el("h3", { className: "vl-h3", textContent: "Prerequisites" }), ul(l.prereq), el("h3", { className: "vl-h3", textContent: "What you'll learn" }), ul(l.learn),
+            el("h3", { className: "vl-h3", textContent: "What you'll need" }), ul(["The Vyomi " + course.cloud_name + " console open in a browser tab", "Python 3 and a terminal, for the code steps", "About " + N + " minutes"]), el("h3", { className: "vl-h3", textContent: "Why this matters" }), el("p", { textContent: l.about }), ul(l.why)) ],
+          ["Architecture", 1, archFig], ["Build the code", tm.build, buildBody], ["Create the resources in the console", tm.cons, consBody], ["Connect it to the other layers", 3, fitsBody], ["Validate", tm.val, valBody], ["Clean up", tm.clean, cleanup]];
+        main = el("article", { className: "vl-article vl-doc gcp" },
+          el("div", { className: "vl-cl-head" }, el("h1", { textContent: l.title }), el("div", { className: "vl-cl-meta" }, el("span", { textContent: "Duration: ~" + N + " min (estimate)" }), el("span", { textContent: "Level: " + l.level }), el("span", { textContent: "Last updated: " + course.updated })), el("div", { className: "vl-chips" }, l.services.map(function (x) { return el("span", { className: "vl-chip", textContent: x }); }))),
+          steps.map(function (t, i) { return el("section", { className: "vl-step", id: "vl-t" + i }, el("h2", { className: "vl-h2" }, el("span", { className: "vl-stepno", textContent: i + 1 }), t[0], el("span", { className: "vl-dur", textContent: "Duration: " + t[1] + " min" })), t[2]); }),
+          el("section", { className: "vl-step" }, el("h2", { className: "vl-h2" }, el("span", { className: "vl-stepno", textContent: "✓" }), "Congratulations!"), el("p", { textContent: "You have built " + l.title.toLowerCase() + ": " + l.outcome.charAt(0).toLowerCase() + l.outcome.slice(1) + "." }), closing));
+      } else {
+        /* Microsoft Learn: intro, In this article, Prerequisites, Sign in, numbered steps with Setting / Suggested value / Description tables, Clean up resources, Next steps */
+        var items = [["prereq", "Prerequisites"], ["signin", "Sign in to the Vyomi Azure console"], ["build", "Build the code"], ["create", "Create the resources"], ["fits", "Connect it to the other layers"], ["validate", "Validate"], ["clean", "Clean up resources"], ["next", "Next steps"]];
+        var azSteps = (l.setup || []).map(function (st) {
+          return el("li", { className: "vl-az-step" }, el("p", {}, el("b", { textContent: st.title + ". " }), st.route ? el("a", { href: consoleUrl(st.route), target: "_blank", rel: "noopener", textContent: "Open " + (st.service || "the service") + " in the console" }) : null), ul(st.do), settingsTable(st, true),
+            st.shot ? el("a", { className: "vl-shot", href: base + st.shot, target: "_blank", rel: "noopener" }, el("img", { src: base + st.shot, alt: "Screenshot: " + st.title, loading: "lazy" })) : null, st.note ? el("p", { className: "vl-native", textContent: st.note }) : null);
+        });
+        main = el("article", { className: "vl-article vl-doc azure" },
+          el("div", { className: "vl-crumbs", textContent: "Microsoft Azure  /  Vyomi Labs  /  " + l.title }),
+          el("h1", { textContent: l.title }), el("div", { className: "vl-azmeta", textContent: "Chapter " + l.order + " of " + course.layers.length + " · " + l.level + " · about " + N + " min (estimate) · Updated " + course.updated }),
+          el("p", { textContent: l.about + " " + l.objective }), ul(l.why),
+          el("nav", { className: "vl-inthis", "aria-label": "In this article" }, el("h4", { textContent: "In this article" }), el("ul", {}, items.map(function (t) { return el("li", {}, el("a", { href: "#vl-" + t[0], textContent: t[1], onclick: function (e) { e.preventDefault(); var n = root.querySelector("#vl-" + t[0]); n && n.scrollIntoView({ behavior: "smooth", block: "start" }); } })); }))),
+          hd("prereq", "Prerequisites"), ul(l.prereq), archFig,
+          hd("signin", "Sign in to the Vyomi Azure console"), el("p", {}, "Open the ", el("a", { href: base + "../v4/azure/", target: "_blank", rel: "noopener", textContent: "Vyomi Azure console" }), ". No account is needed: it runs on your simulator."),
+          hd("build", "Build the code"), buildBody,
+          hd("create", "Create the resources"), el("p", { textContent: "Use these steps to create the resources in the console." }), el("ol", { className: "vl-az-steps" }, azSteps),
+          hd("fits", "Connect it to the other layers"), fitsBody,
+          hd("validate", "Validate"), valBody,
+          hd("clean", "Clean up resources"), cleanup,
+          hd("next", "Next steps"), closing);
+      }
 
       var cols = el("div", { className: "vl-cols" + (collapsed ? " oc" : "") }, side, main);
       return el("div", { className: "vl-reader" }, top, cols);

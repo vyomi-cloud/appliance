@@ -1,6 +1,7 @@
 """Generates wasm/labs/data/{aws,gcp,azure}.json: the 13-layer Enterprise Facilities agent course, once per cloud with that cloud's native services.
 Source of truth for the course text. Names come from examples/enterprise-facilities-agent/facilities/{,gcp/,azure/}runtime.py NAMES; every step is
 something the reference app does for that cloud (so the learner builds what the reference builds). Run: python -m vyomilabs.content.build_courses"""
+import datetime
 import json
 import os
 
@@ -94,7 +95,7 @@ INTRO = {
       ["Regulated data needs encryption with managed keys", "Audit trails answer who approved what, and when", "Controls apply across every layer, not one at a time"]),
 }
 PRE = ["The simulator is running: you are in its console.", "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
-       "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."]
+       "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."]
 
 # Quick validation, per cloud and layer: (kind, what to check, how, what you should see). kind = CLI | SDK | Console
 V = {"aws": {}, "gcp": {}, "azure": {}}
@@ -284,7 +285,7 @@ def build():
                                level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
                                about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
-                   image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), layers=layers)
+                   image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:
             json.dump(doc, f, indent=1, ensure_ascii=False)
         print(cloud, len(layers), "layers")
