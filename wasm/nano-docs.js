@@ -159,14 +159,19 @@
     return cloud === 'aws' ? awsSnips(a, o, EP) : cloud === 'gcp' ? gcpSnips(a, o, EP) : azSnips(a, o, EP); }
 
   /* ── shared widgets ────────────────────────────────────────────────────── */
-  function codeTabs(list) {
+  function codeTabs(list, EP) {
     var id = 'nd' + Math.random().toString(36).slice(2, 8);
-    var h = '<div class="nd-tabs" data-id="' + id + '">' + list.map(function (s, i) { return '<button type="button" class="nd-tab' + (i ? '' : ' on') + '" data-i="' + i + '">' + esc(s[0]) + '</button>'; }).join('') + '<button type="button" class="nd-cp" title="Copy">Copy</button></div>';
-    h += '<pre class="api-pre nd-code" data-id="' + id + '"><code>' + esc(list[0][1]) + '</code></pre>';
+    var h = '<div class="nd-tabs" data-id="' + id + '">' + list.map(function (s, i) { return '<button type="button" class="nd-tab' + (i ? '' : ' on') + '" data-i="' + i + '">' + esc(s[0]) + '</button>'; }).join('') + '<button type="button" class="nd-cp" title="Copy">Copy</button><button type="button" class="u-run" title="Run this call in your browser (no tunnel needed)">&#9654; Try it</button></div>';
+    h += '<pre class="api-pre nd-code" data-id="' + id + '"><code>' + esc(list[0][1]) + '</code></pre><pre class="u-out" hidden></pre>';
     return { html: h, wire: function (root) {
       var tabs = root.querySelector('.nd-tabs[data-id="' + id + '"]'), pre = root.querySelector('.nd-code[data-id="' + id + '"] code'), cur = 0;
       tabs.addEventListener('click', function (e) {
         var b = e.target.closest('button'); if (!b) return;
+        if (b.classList.contains('u-run')) {
+          var cu = list.filter(function (s) { return /curl/i.test(s[0]); })[0], out = root.querySelector('.nd-code[data-id="' + id + '"]').nextElementSibling;
+          if (!cu) { out.hidden = false; out.textContent = 'No curl example for this operation.'; return; }
+          b.disabled = true; runCurl(cu[1], EP, out).then(function () { b.disabled = false; }); return;
+        }
         if (b.classList.contains('nd-cp')) { if (navigator.clipboard) navigator.clipboard.writeText(list[cur][1]).then(function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1200); }); return; }
         cur = +b.dataset.i; tabs.querySelectorAll('.nd-tab').forEach(function (t) { t.classList.toggle('on', t === b); }); pre.textContent = list[cur][1];
       });
@@ -252,7 +257,7 @@
   ];
   function rdIcon(c) { for (var i = 0; i < RD_IC.length; i++) if (RD_IC[i][0].test(c)) return '<svg viewBox="0 0 24 24" class="rd-ic" aria-hidden="true"><path d="' + RD_IC[i][1] + '"/></svg>'; return ''; }
   function rdOp(cloud, a, o, EP, id) {
-    var sn = snips(cloud, a, o, EP), ct = codeTabs(sn);
+    var sn = snips(cloud, a, o, EP), ct = codeTabs(sn, EP);
     var left = '<h3 class="rd-h"><span class="api-m ' + o.m.toLowerCase() + '">' + o.m + '</span> ' + esc(o.n) + '</h3>' +
       (o.d ? '<p class="rd-d">' + esc(o.d) + '</p>' : '') +
       (o.llm ? '<p class="rd-d">Needs the local model: start it with <code>vyomi llm start</code>; answers 503 until then.</p>' : '') +
