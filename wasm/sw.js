@@ -432,6 +432,11 @@ async function route(method, path, body, query) {
     return { tuple: [p.provider || "aws", "_events", "List", p] };
   }
 
+  // Infrastructure Studio: the Terraform exporter (core/tf_export) over Nano's own AWS state.
+  if (method === "GET" && path === "/api/terraform/export/graph") return { tuple: ["aws", "_tf", "Graph", { region: (query && query.region) || "" }] };
+  if (method === "GET" && path === "/api/terraform/export/bundle") return { tuple: ["aws", "_tf", "Bundle", { mode: (query && query.mode) || "sim", region: (query && query.region) || "" }] };
+  if (method === "POST" && path === "/api/terraform/classify") return { tuple: ["aws", "_tf", "Classify", { types: (body && body.types) || [] }] };
+
   // Instance-type catalog for the compute launch wizard (EC2 / GCE / Azure VM).
   // Static per-cloud data, dumped from core/instance_catalog.py to fixtures.
   if (method === "GET" && path === "/api/instances/catalog") {

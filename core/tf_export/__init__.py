@@ -19,7 +19,13 @@ def _clients(endpoint: str, region: str) -> dict[str, Any]:
 
 
 def build_aws(endpoint: str, region: str = "us-east-1", real_cloud: bool = False) -> dict[str, Any]:
-    ctx = Ctx(_clients(endpoint, region), region)
+    return build_aws_with(_clients(endpoint, region), region, real_cloud)
+
+
+def build_aws_with(clients: dict[str, Any], region: str = "us-east-1", real_cloud: bool = False, fetch=None) -> dict[str, Any]:
+    """Same export over any boto3-shaped clients (Nano passes core.tf_export.wire_clients over the in-process router); ``fetch(path)->bytes|None`` downloads Lambda code."""
+    ctx = Ctx(clients, region)
+    ctx.fetch = fetch
     errors: list[dict[str, str]] = []
     for _order, name, fn in registered():
         try:

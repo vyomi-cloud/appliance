@@ -12,6 +12,12 @@ from core.tf_export.core import Ctx, exporter
 def _download(ctx: Ctx, location: str) -> bytes | None:
     """Fetch the deployment package through the simulator's own endpoint (Location is built from its public URL)."""
     path = re.sub(r"^https?://[^/]+", "", location)
+    fetch = getattr(ctx, "fetch", None)
+    if fetch is not None:
+        try:
+            return fetch(path)
+        except Exception:  # noqa: BLE001
+            return None
     base = ctx.c["lambda"].meta.endpoint_url.rstrip("/")
     try:
         with urllib.request.urlopen(base + path, timeout=30) as r:  # noqa: S310 - the simulator's own loopback endpoint

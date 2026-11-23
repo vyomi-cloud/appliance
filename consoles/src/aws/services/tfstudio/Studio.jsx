@@ -87,7 +87,7 @@ function ExportTab() {
       </ColumnLayout>
       <Container header={<Header variant="h2" actions={<SpaceBetween direction="horizontal" size="xs">
         <Select selectedOption={file ? { value: file, label: file } : null} onChange={({ detail }) => setFile(detail.selectedOption.value)} options={files.map((f) => ({ value: f, label: f }))} placeholder="File" ariaLabel="Terraform file" />
-        <Button variant="primary" iconName="download" href={api.zipUrl(mode.value)} disabled={!bundle}>Download .zip</Button></SpaceBetween>}>Terraform files</Header>}>
+        <Button variant="primary" iconName="download" disabled={!bundle} onClick={() => api.downloadZip(mode.value)}>Download .zip</Button></SpaceBetween>}>Terraform files</Header>}>
         <pre style={{ margin: 0, maxHeight: 360, overflow: "auto", fontSize: 12 }}>{(bundle && file && bundle.files[file]) || ""}</pre>
       </Container>
     </SpaceBetween>

@@ -81,6 +81,7 @@ const MODULES = [
   // its Pyodide adapter. console_next_manifest imports `from core import
   // console_conformance` (vendored under /core, see CORES), NO FastAPI.
   "console_next_manifest.py", "providers/console_next_adapter.py",
+  "providers/tf_adapter.py",   // Infrastructure Studio: the Terraform exporter over the in-process native-wire router
   "providers/wire_adapter.py",   // v4 /_wire/* native-wire prefix → AwsWireRouter on the shared registry
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
@@ -161,7 +162,7 @@ const CORES = [
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
+const CORE_PKGS = ["tf_export/__init__.py", "tf_export/core.py", "tf_export/hcl.py", "tf_export/graph.py", "tf_export/wire_clients.py", "tf_export/aws_apigw.py", "tf_export/aws_data.py", "tf_export/aws_iam.py", "tf_export/aws_lambda.py", "tf_export/aws_network.py", "tf_export/aws_storage.py", "netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
@@ -205,6 +206,9 @@ async function bootBackend() {
   // Knowledge Bases parse PDFs with pure-Python pypdf (BSD-3), which is NOT in the Pyodide 0.26 package set: unpack the vendored wheel
   // (wasm/pylib/, ~0.4 MB, same-origin, no PyPI call). Without it a .pdf fails ingestion with an explicit reason (DOCX/XLSX/PPTX need nothing).
   try { py.unpackArchive(await (await fetch(BASE + "/pylib/pypdf-7.1.0-py3-none-any.whl")).arrayBuffer(), "wheel"); } catch (e) { console.warn("[nano] pypdf unavailable (PDF knowledge-base documents will fail):", e); }
+  // Infrastructure Studio's Terraform exporter reads AWS state through botocore's serializers/parsers (pure Python, trimmed to 8 service models, wasm/build_botocore_lite.py) + jmespath.
+  try { await py.loadPackage(["python-dateutil", "urllib3"]); for (const w of ["botocore-lite.whl", "jmespath-1.0.1-py3-none-any.whl"]) py.unpackArchive(await (await fetch(BASE + "/pylib/" + w)).arrayBuffer(), "wheel"); }
+  catch (e) { console.warn("[nano] Terraform exporter unavailable:", e); }
   // Cedar policy engine (AgentCore gateway ENFORCE policies): the OSS Cedar core as WebAssembly, vendored in wasm/cedar/ (4.4 MB).
   try { const { installCedar } = await import(BASE + "/cedar/cedar-eval.mjs"); await installCedar(new URL(BASE + "/cedar/", location.origin).href); }
   catch (e) { console.warn("[nano] Cedar evaluator unavailable (ENFORCE gateways fail closed):", e); }
@@ -285,6 +289,9 @@ def _disp0(d):
     if prov == "_wire":   # v4 consoles: native wire via the relay's AwsWireRouter (same stores)
         from wasm.providers import wire_adapter as _W
         return json.dumps(_W.handle(d.get("params") or {}))
+    if d.get("service") == "_tf":     # Infrastructure Studio: Terraform export graph/bundle/classify
+        from wasm.providers import tf_adapter as _T
+        return json.dumps(_T.handle(d["op"], d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
 async def _adisp(payload_json):
