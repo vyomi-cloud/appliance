@@ -192,6 +192,14 @@ def _snake(n):
     import re
     return re.sub(r"(?<!^)(?=[A-Z])", "_", n).lower()
 
+def _is_read(o):
+    """Validate only reads: Get/List/Describe/Lookup/Query style operations and HTTP GET. Create/update/delete stay in the build steps."""
+    import re
+    seg = o["n"].split(".")[-1]
+    if re.search(r"(?i)(^|\W)(create|put|delete|update|patch|remove|set|start|stop)", seg) or "delete" in o["n"].lower():
+        return False
+    return o.get("m") == "GET" or re.match(r"(?i)^(get|list|describe|lookup|batchget|retrieve|query|scan|search|head|read|check|validate)", seg) is not None
+
 def _ops(cloud, docs, lab):
     import re
     code = "\n".join((b.get("code") or "") + " " + (b.get("text") or "") for b in lab)
@@ -208,11 +216,11 @@ def _ops(cloud, docs, lab):
                     seg = n.split(".")[-1]
                     hit = (seg not in GCP_GENERIC and re.search(r"\b%s\b" % seg, code)) or re.search(GCP_CORE.get(d["f"][:-5], "$^"), n)
                 else:
-                    hit = len(picked) < 6
-                if hit and n not in [x["n"] for x in picked]:
+                    hit = len(picked) < 6 and True
+                if hit and _is_read(o) and n not in [x["n"] for x in picked]:
                     picked.append(dict(f=d["f"], n=n))
         if not picked:
-            picked = [dict(f=d["f"], n=o["n"]) for o in doc["apis"][0]["ops"][:4]]
+            picked = [dict(f=d["f"], n=o["n"]) for o in sorted([x for x in doc["apis"][0]["ops"] if _is_read(x)], key=lambda x: (not x["n"].split(".")[-1].lower().startswith("list"), len([q for q in x.get("p", []) if (q[2] if len(q) > 2 else 0) or (q[3] if len(q) > 3 else 0)])))][:4]
         out += picked
     return out
 

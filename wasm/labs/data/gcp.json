@@ -149,15 +149,27 @@
    "ops": [
     {
      "f": "vertex-ai.json",
-     "n": "aiplatform.projects.locations.endpoints.generateContent"
+     "n": "aiplatform.operations.list"
     },
     {
      "f": "vertex-ai.json",
-     "n": "aiplatform.projects.locations.publishers.models.generateContent"
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
     },
     {
      "f": "gemini.json",
-     "n": "models.generateContent"
+     "n": "models.list"
+    },
+    {
+     "f": "gemini.json",
+     "n": "models.get"
     }
    ],
    "validate": [
@@ -337,7 +349,24 @@
      "f": "vertex-ai.json"
     }
    ],
-   "ops": [],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
+    }
+   ],
    "validate": [
     {
      "kind": "Console",
@@ -563,23 +592,7 @@
    "ops": [
     {
      "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.create"
-    },
-    {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.generateUploadUrl"
-    },
-    {
-     "f": "functions.json",
      "n": "cloudfunctions.projects.locations.functions.get"
-    },
-    {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.call"
-    },
-    {
-     "f": "run.json",
-     "n": "run.projects.locations.services.create"
     },
     {
      "f": "run.json",
@@ -849,39 +862,47 @@
     },
     {
      "f": "storage.json",
-     "n": "storage.buckets.insert"
-    },
-    {
-     "f": "storage.json",
      "n": "storage.objects.get"
-    },
-    {
-     "f": "storage.json",
-     "n": "storage.objects.insert"
     },
     {
      "f": "storage.json",
      "n": "storage.objects.list"
     },
     {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.create"
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
     },
     {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.generateUploadUrl"
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
+    },
+    {
+     "f": "eventarc.json",
+     "n": "eventarc.projects.locations.list"
+    },
+    {
+     "f": "eventarc.json",
+     "n": "eventarc.projects.locations.operations.list"
+    },
+    {
+     "f": "eventarc.json",
+     "n": "eventarc.projects.locations.providers.list"
+    },
+    {
+     "f": "eventarc.json",
+     "n": "eventarc.projects.locations.triggers.list"
     },
     {
      "f": "functions.json",
      "n": "cloudfunctions.projects.locations.functions.get"
-    },
-    {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.call"
-    },
-    {
-     "f": "run.json",
-     "n": "run.projects.locations.services.create"
     },
     {
      "f": "run.json",
@@ -1042,7 +1063,24 @@
      "f": "vertex-ai.json"
     }
    ],
-   "ops": [],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
+    }
+   ],
    "validate": [
     {
      "kind": "SDK",
@@ -1217,11 +1255,19 @@
    "ops": [
     {
      "f": "vertex-ai.json",
-     "n": "aiplatform.projects.locations.endpoints.generateContent"
+     "n": "aiplatform.operations.list"
     },
     {
      "f": "vertex-ai.json",
-     "n": "aiplatform.projects.locations.publishers.models.generateContent"
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
     }
    ],
    "validate": [
@@ -1374,7 +1420,24 @@
      "f": "vertex-ai.json"
     }
    ],
-   "ops": [],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
+    }
+   ],
    "validate": [
     {
      "kind": "Console",
@@ -1549,7 +1612,24 @@
      "f": "vertex-ai.json"
     }
    ],
-   "ops": [],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
+    }
+   ],
    "validate": [
     {
      "kind": "Console",
@@ -1754,43 +1834,23 @@
    "ops": [
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.subscriptions.acknowledge"
+     "n": "pubsub.projects.schemas.list"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.subscriptions.create"
+     "n": "pubsub.projects.schemas.listRevisions"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.subscriptions.pull"
+     "n": "pubsub.projects.snapshots.list"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.topics.create"
-    },
-    {
-     "f": "pubsub.json",
-     "n": "pubsub.projects.topics.publish"
-    },
-    {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.create"
-    },
-    {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.generateUploadUrl"
+     "n": "pubsub.projects.subscriptions.list"
     },
     {
      "f": "functions.json",
      "n": "cloudfunctions.projects.locations.functions.get"
-    },
-    {
-     "f": "functions.json",
-     "n": "cloudfunctions.projects.locations.functions.call"
-    },
-    {
-     "f": "run.json",
-     "n": "run.projects.locations.services.create"
     },
     {
      "f": "run.json",
@@ -1979,7 +2039,19 @@
    "ops": [
     {
      "f": "iam-admin.json",
-     "n": "iamcredentials.projects.serviceAccounts.generateIdToken"
+     "n": "iam.roles.list"
+    },
+    {
+     "f": "iam-admin.json",
+     "n": "iam.locations.workforcePools.list"
+    },
+    {
+     "f": "iam-admin.json",
+     "n": "iam.locations.workforcePools.providers.list"
+    },
+    {
+     "f": "iam-admin.json",
+     "n": "iam.locations.workforcePools.providers.keys.list"
     }
    ],
    "validate": [
@@ -2124,24 +2196,36 @@
    ],
    "ops": [
     {
-     "f": "pubsub.json",
-     "n": "pubsub.projects.subscriptions.acknowledge"
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.subscriptions.create"
+     "n": "pubsub.projects.schemas.list"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.subscriptions.pull"
+     "n": "pubsub.projects.schemas.listRevisions"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.topics.create"
+     "n": "pubsub.projects.snapshots.list"
     },
     {
      "f": "pubsub.json",
-     "n": "pubsub.projects.topics.publish"
+     "n": "pubsub.projects.subscriptions.list"
     }
    ],
    "validate": [
@@ -2310,7 +2394,40 @@
      "f": "monitoring.json"
     }
    ],
-   "ops": [],
+   "ops": [
+    {
+     "f": "logs.json",
+     "n": "logging.entries.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.monitoredResourceDescriptors.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.billingAccounts.exclusions.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.billingAccounts.locations.list"
+    },
+    {
+     "f": "monitoring.json",
+     "n": "monitoring.uptimeCheckIps.list"
+    },
+    {
+     "f": "monitoring.json",
+     "n": "monitoring.folders.timeSeries.list"
+    },
+    {
+     "f": "monitoring.json",
+     "n": "monitoring.projects.alertPolicies.list"
+    },
+    {
+     "f": "monitoring.json",
+     "n": "monitoring.projects.groups.list"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -2489,19 +2606,35 @@
    "ops": [
     {
      "f": "security_kms.json",
-     "n": "cloudkms.projects.locations.keyRings.create"
+     "n": "cloudkms.projects.locations.list"
     },
     {
      "f": "security_kms.json",
-     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.create"
+     "n": "cloudkms.projects.locations.keyHandles.list"
     },
     {
      "f": "security_kms.json",
-     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.decrypt"
+     "n": "cloudkms.projects.locations.keyRings.list"
     },
     {
      "f": "security_kms.json",
-     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.encrypt"
+     "n": "cloudkms.projects.locations.keyRings.cryptoKeys.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.entries.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.monitoredResourceDescriptors.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.billingAccounts.exclusions.list"
+    },
+    {
+     "f": "logs.json",
+     "n": "logging.billingAccounts.locations.list"
     }
    ],
    "validate": [

@@ -138,11 +138,19 @@
    "ops": [
     {
      "f": "bedrock.json",
-     "n": "Converse"
+     "n": "ListFoundationModels"
     },
     {
      "f": "bedrock.json",
-     "n": "InvokeModel"
+     "n": "ListGuardrails"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetFoundationModel"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetGuardrail"
     }
    ],
    "validate": [
@@ -334,22 +342,6 @@
     }
    ],
    "ops": [
-    {
-     "f": "bedrock.json",
-     "n": "Converse"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "InvokeAgentRuntime"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "StopRuntimeSession"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "CreateAgentRuntime"
-    },
     {
      "f": "bedrock.json",
      "n": "GetAgentRuntime"
@@ -571,15 +563,19 @@
    "ops": [
     {
      "f": "lambda.json",
-     "n": "CreateFunction"
+     "n": "ListCapacityProviders"
     },
     {
      "f": "lambda.json",
-     "n": "Invoke"
+     "n": "ListCodeSigningConfigs"
     },
     {
-     "f": "dynamodb.json",
-     "n": "CreateTable"
+     "f": "lambda.json",
+     "n": "ListEventSourceMappings"
+    },
+    {
+     "f": "lambda.json",
+     "n": "ListFunctions"
     },
     {
      "f": "dynamodb.json",
@@ -587,15 +583,7 @@
     },
     {
      "f": "dynamodb.json",
-     "n": "PutItem"
-    },
-    {
-     "f": "dynamodb.json",
      "n": "Scan"
-    },
-    {
-     "f": "dynamodb.json",
-     "n": "UpdateItem"
     }
    ],
    "validate": [
@@ -792,27 +780,19 @@
    "ops": [
     {
      "f": "s3.json",
-     "n": "CreateBucket"
+     "n": "ListBuckets"
     },
     {
      "f": "s3.json",
-     "n": "PutBucketNotificationConfiguration"
+     "n": "ListDirectoryBuckets"
     },
     {
      "f": "s3.json",
-     "n": "PutObject"
+     "n": "ListBucketAnalyticsConfigurations"
     },
     {
      "f": "s3.json",
-     "n": "CreateFunction"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "CreateDataSource"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "CreateKnowledgeBase"
+     "n": "ListBucketIntelligentTieringConfigurations"
     },
     {
      "f": "bedrock.json",
@@ -829,10 +809,6 @@
     {
      "f": "bedrock.json",
      "n": "ListKnowledgeBases"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "StartIngestionJob"
     }
    ],
    "validate": [
@@ -1134,19 +1110,7 @@
    "ops": [
     {
      "f": "bedrock.json",
-     "n": "CreateGuardrail"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "CreateGuardrailVersion"
-    },
-    {
-     "f": "bedrock.json",
      "n": "ListGuardrails"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "ApplyGuardrail"
     },
     {
      "f": "bedrock.json",
@@ -1286,7 +1250,24 @@
      "f": "bedrock.json"
     }
    ],
-   "ops": [],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "ListFoundationModels"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGuardrails"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetFoundationModel"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetGuardrail"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1439,14 +1420,6 @@
     }
    ],
    "ops": [
-    {
-     "f": "bedrock.json",
-     "n": "CreateGateway"
-    },
-    {
-     "f": "bedrock.json",
-     "n": "CreateGatewayTarget"
-    },
     {
      "f": "bedrock.json",
      "n": "GetGateway"
@@ -1700,10 +1673,6 @@
    "ops": [
     {
      "f": "states.json",
-     "n": "CreateStateMachine"
-    },
-    {
-     "f": "states.json",
      "n": "DescribeExecution"
     },
     {
@@ -1719,32 +1688,20 @@
      "n": "ListStateMachines"
     },
     {
-     "f": "states.json",
-     "n": "SendTaskFailure"
-    },
-    {
-     "f": "states.json",
-     "n": "SendTaskSuccess"
-    },
-    {
-     "f": "states.json",
-     "n": "StartExecution"
+     "f": "sns.json",
+     "n": "ListOriginationNumbers"
     },
     {
      "f": "sns.json",
-     "n": "CreateTopic"
+     "n": "ListPhoneNumbersOptedOut"
     },
     {
      "f": "sns.json",
-     "n": "Publish"
+     "n": "ListPlatformApplications"
     },
     {
      "f": "sns.json",
-     "n": "Subscribe"
-    },
-    {
-     "f": "sqs.json",
-     "n": "CreateQueue"
+     "n": "ListSMSSandboxPhoneNumbers"
     },
     {
      "f": "sqs.json",
@@ -1753,10 +1710,6 @@
     {
      "f": "sqs.json",
      "n": "GetQueueUrl"
-    },
-    {
-     "f": "sqs.json",
-     "n": "ReceiveMessage"
     },
     {
      "f": "dynamodb.json",
@@ -1926,35 +1879,11 @@
    "ops": [
     {
      "f": "apigateway.json",
-     "n": "CreateAuthorizer"
-    },
-    {
-     "f": "apigateway.json",
-     "n": "CreateDeployment"
-    },
-    {
-     "f": "apigateway.json",
-     "n": "CreateResource"
-    },
-    {
-     "f": "apigateway.json",
-     "n": "CreateRestApi"
-    },
-    {
-     "f": "apigateway.json",
      "n": "GetResources"
     },
     {
      "f": "apigateway.json",
      "n": "GetRestApis"
-    },
-    {
-     "f": "apigateway.json",
-     "n": "PutIntegration"
-    },
-    {
-     "f": "apigateway.json",
-     "n": "PutMethod"
     }
    ],
    "validate": [
@@ -2111,27 +2040,39 @@
    "ops": [
     {
      "f": "bedrock.json",
-     "n": "ApplyGuardrail"
+     "n": "ListFoundationModels"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGuardrails"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetFoundationModel"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetGuardrail"
     },
     {
      "f": "sns.json",
-     "n": "CreateTopic"
+     "n": "ListOriginationNumbers"
     },
     {
      "f": "sns.json",
-     "n": "Publish"
+     "n": "ListPhoneNumbersOptedOut"
     },
     {
-     "f": "sqs.json",
-     "n": "DeleteMessage"
+     "f": "sns.json",
+     "n": "ListPlatformApplications"
+    },
+    {
+     "f": "sns.json",
+     "n": "ListSMSSandboxPhoneNumbers"
     },
     {
      "f": "sqs.json",
      "n": "GetQueueUrl"
-    },
-    {
-     "f": "sqs.json",
-     "n": "ReceiveMessage"
     }
    ],
    "validate": [
@@ -2272,32 +2213,28 @@
      "n": "GetTraceSummaries"
     },
     {
-     "f": "api-xray.json",
-     "n": "PutTraceSegments"
-    },
-    {
      "f": "cloudwatch.json",
      "n": "ListMetrics"
-    },
-    {
-     "f": "cloudwatch.json",
-     "n": "PutMetricData"
-    },
-    {
-     "f": "cloudwatch.json",
-     "n": "CreateLogGroup"
-    },
-    {
-     "f": "cloudwatch.json",
-     "n": "CreateLogStream"
     },
     {
      "f": "cloudwatch.json",
      "n": "GetLogEvents"
     },
     {
-     "f": "cloudwatch.json",
-     "n": "PutLogEvents"
+     "f": "bedrock.json",
+     "n": "ListFoundationModels"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "ListGuardrails"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetFoundationModel"
+    },
+    {
+     "f": "bedrock.json",
+     "n": "GetGuardrail"
     }
    ],
    "validate": [
@@ -2448,43 +2385,27 @@
    "ops": [
     {
      "f": "kms.json",
-     "n": "CreateAlias"
-    },
-    {
-     "f": "kms.json",
-     "n": "CreateKey"
-    },
-    {
-     "f": "kms.json",
-     "n": "Decrypt"
-    },
-    {
-     "f": "kms.json",
-     "n": "EnableKeyRotation"
-    },
-    {
-     "f": "kms.json",
-     "n": "Encrypt"
-    },
-    {
-     "f": "kms.json",
      "n": "GetKeyRotationStatus"
     },
     {
-     "f": "s3.json",
-     "n": "PutObject"
+     "f": "cloudwatch.json",
+     "n": "ListDashboards"
     },
     {
-     "f": "s3.json",
-     "n": "CreateTrail"
+     "f": "cloudwatch.json",
+     "n": "ListMetricStreams"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "ListMetrics"
+    },
+    {
+     "f": "cloudwatch.json",
+     "n": "ListTagsForResource"
     },
     {
      "f": "s3.json",
      "n": "GetTrailStatus"
-    },
-    {
-     "f": "s3.json",
-     "n": "StartLogging"
     }
    ],
    "validate": [

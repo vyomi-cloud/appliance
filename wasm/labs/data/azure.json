@@ -180,18 +180,6 @@
     {
      "f": "cognitiveservices.json",
      "n": "Get"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Delete"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Responses: create"
     }
    ],
    "validate": [
@@ -392,18 +380,6 @@
      "n": "Get"
     },
     {
-     "f": "cognitiveservices.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Delete"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Responses: create"
-    },
-    {
      "f": "containerapps.json",
      "n": "List by subscription"
     },
@@ -414,14 +390,6 @@
     {
      "f": "containerapps.json",
      "n": "Get"
-    },
-    {
-     "f": "containerapps.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "containerapps.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -668,14 +636,6 @@
      "n": "Get"
     },
     {
-     "f": "functionapp.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "functionapp.json",
-     "n": "Delete"
-    },
-    {
      "f": "storage.json",
      "n": "List by subscription"
     },
@@ -686,14 +646,6 @@
     {
      "f": "storage.json",
      "n": "Get"
-    },
-    {
-     "f": "storage.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "storage.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -969,14 +921,6 @@
      "n": "Get"
     },
     {
-     "f": "storage.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "storage.json",
-     "n": "Delete"
-    },
-    {
      "f": "search.json",
      "n": "List by subscription"
     },
@@ -987,14 +931,6 @@
     {
      "f": "search.json",
      "n": "Get"
-    },
-    {
-     "f": "search.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "search.json",
-     "n": "Delete"
     },
     {
      "f": "eventgrid.json",
@@ -1009,18 +945,6 @@
      "n": "Get"
     },
     {
-     "f": "eventgrid.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "eventgrid.json",
-     "n": "Delete"
-    },
-    {
-     "f": "eventgrid.json",
-     "n": "Resources: query"
-    },
-    {
      "f": "functionapp.json",
      "n": "List by subscription"
     },
@@ -1031,14 +955,6 @@
     {
      "f": "functionapp.json",
      "n": "Get"
-    },
-    {
-     "f": "functionapp.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "functionapp.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -1208,14 +1124,6 @@
     {
      "f": "search.json",
      "n": "Get"
-    },
-    {
-     "f": "search.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "search.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -1389,18 +1297,6 @@
     {
      "f": "cognitiveservices.json",
      "n": "Get"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Delete"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Responses: create"
     }
    ],
    "validate": [
@@ -1570,18 +1466,6 @@
      "n": "Get"
     },
     {
-     "f": "cognitiveservices.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Delete"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Responses: create"
-    },
-    {
      "f": "storage.json",
      "n": "List by subscription"
     },
@@ -1592,14 +1476,6 @@
     {
      "f": "storage.json",
      "n": "Get"
-    },
-    {
-     "f": "storage.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "storage.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -1783,14 +1659,6 @@
     {
      "f": "apim.json",
      "n": "Get"
-    },
-    {
-     "f": "apim.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "apim.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -1990,14 +1858,6 @@
      "n": "Get"
     },
     {
-     "f": "servicebus.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "servicebus.json",
-     "n": "Delete"
-    },
-    {
      "f": "functionapp.json",
      "n": "List by subscription"
     },
@@ -2010,14 +1870,6 @@
      "n": "Get"
     },
     {
-     "f": "functionapp.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "functionapp.json",
-     "n": "Delete"
-    },
-    {
      "f": "storage.json",
      "n": "List by subscription"
     },
@@ -2028,14 +1880,6 @@
     {
      "f": "storage.json",
      "n": "Get"
-    },
-    {
-     "f": "storage.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "storage.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -2232,14 +2076,6 @@
     },
     {
      "f": "entra.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "entra.json",
-     "n": "Delete"
-    },
-    {
-     "f": "entra.json",
      "n": "Get"
     },
     {
@@ -2255,14 +2091,6 @@
      "n": "Get"
     },
     {
-     "f": "apim.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "apim.json",
-     "n": "Delete"
-    },
-    {
      "f": "frontdoor.json",
      "n": "List by subscription"
     },
@@ -2273,14 +2101,6 @@
     {
      "f": "frontdoor.json",
      "n": "Get"
-    },
-    {
-     "f": "frontdoor.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "frontdoor.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -2446,18 +2266,6 @@
      "n": "Get"
     },
     {
-     "f": "cognitiveservices.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Delete"
-    },
-    {
-     "f": "cognitiveservices.json",
-     "n": "Responses: create"
-    },
-    {
      "f": "servicebus.json",
      "n": "List by subscription"
     },
@@ -2468,14 +2276,6 @@
     {
      "f": "servicebus.json",
      "n": "Get"
-    },
-    {
-     "f": "servicebus.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "servicebus.json",
-     "n": "Delete"
     }
    ],
    "validate": [
@@ -2691,18 +2491,6 @@
      "n": "Get"
     },
     {
-     "f": "monitor.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "monitor.json",
-     "n": "Delete"
-    },
-    {
-     "f": "monitor.json",
-     "n": "Diagnostic settings: create (activity-log export)"
-    },
-    {
      "f": "loganalytics.json",
      "n": "List by subscription"
     },
@@ -2713,18 +2501,6 @@
     {
      "f": "loganalytics.json",
      "n": "Get"
-    },
-    {
-     "f": "loganalytics.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "loganalytics.json",
-     "n": "Delete"
-    },
-    {
-     "f": "loganalytics.json",
-     "n": "Data exports: create"
     }
    ],
    "validate": [
@@ -2902,14 +2678,6 @@
      "n": "Get"
     },
     {
-     "f": "keyvaults.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "keyvaults.json",
-     "n": "Delete"
-    },
-    {
      "f": "monitor.json",
      "n": "List by subscription"
     },
@@ -2920,18 +2688,6 @@
     {
      "f": "monitor.json",
      "n": "Get"
-    },
-    {
-     "f": "monitor.json",
-     "n": "Create or update"
-    },
-    {
-     "f": "monitor.json",
-     "n": "Delete"
-    },
-    {
-     "f": "monitor.json",
-     "n": "Diagnostic settings: create (activity-log export)"
     }
    ],
    "validate": [
