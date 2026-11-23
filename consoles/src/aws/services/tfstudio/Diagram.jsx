@@ -33,14 +33,16 @@ const GROUP_STYLE = {
   region: { border: "2px dashed #7a8699", bg: "#ffffff80", color: "#414d5c", icon: null },
   vpc: { border: "2px solid #8c4fff", bg: "#8c4fff0d", color: "#6b2fd9", icon: "vpc" },
   layer: { border: "1.5px dashed #9aa3b2", bg: "#ffffffb3", color: "#414d5c", icon: null },
+  sub: { border: "1px dotted #c3cad5", bg: "#f6f8fa", color: "#6b7787", icon: null },
 };
 function GroupNode({ data }) {
   const g = GROUP_STYLE[data.kind] || GROUP_STYLE.layer;
   return (
     <div style={{ width: "100%", height: "100%", border: g.border, borderRadius: 10, background: g.bg, boxSizing: "border-box", position: "relative" }}>
-      <div style={{ position: "absolute", top: 7, left: 10, display: "flex", alignItems: "center", gap: 6, fontSize: data.kind === "layer" ? 11.5 : 12.5, fontWeight: 700, color: g.color }}>
+      <div style={{ position: "absolute", top: 7, left: 10, display: "flex", alignItems: "center", gap: 6, fontSize: data.kind === "layer" ? 11.5 : data.kind === "sub" ? 10.5 : 12.5, fontWeight: 700, color: g.color }}>
         {g.icon && <ServiceIcon cloud="aws" id={g.icon} size={18} />}{data.label}{data.cidr ? <span style={{ fontWeight: 400, color: "#5f6b7a" }}>{data.cidr}</span> : null}
       </div>
+      {data.empty && <div style={{ position: "absolute", top: "50%", left: 0, right: 0, textAlign: "center", fontSize: 11, color: "#aab2bf" }}>none</div>}
     </div>
   );
 }
@@ -55,84 +57,92 @@ function ExternalNode({ data }) {
 }
 const nodeTypes = { resource: ResourceNode, group: GroupNode, external: ExternalNode };
 
-/** Which layer a Terraform resource type belongs to. `skip` = drawn as the wrapper itself, not as a tile. */
-const LAYER_RULES = [
-  ["skip", /^aws_vpc$/],
-  ["network", /^aws_(subnet|route_table|route\b|db_subnet_group|vpc_endpoint|network_interface|eip)/],
-  ["edge", /^aws_(api_gateway|apigatewayv2|internet_gateway|nat_gateway|lb|alb|elb|security_group|network_acl|wafv2|cloudfront|route53)/],
+/* The layer template (every stack, every layer): 1 users & external apps -> 2 gateway / firewall / proxy / load balancing -> 3 services &
+ * serverless -> 4 database / NoSQL / storage. Each layer is split the same way: INBOUND (how traffic, events or access get in), CORE (the
+ * resources that do the layer's job) and OUTBOUND (what the layer is allowed to call, emits or depends on). Supporting resources (IAM, logs,
+ * secrets, subnets...) join the layer of the resources they serve, found from the dependency edges. */
+const PRIMARY = [
+  ["edge", /^aws_(api_gateway|apigatewayv2|internet_gateway|nat_gateway|lb|alb|elb|security_group|network_acl|wafv2|cloudfront|route53|subnet|route_table|route\b|vpc_endpoint|eip|network_interface)/],
   ["data", /^aws_(db_|rds_|dynamodb|s3_|elasticache|docdb|neptune|redshift|efs|ebs)/],
-  ["shared", /^aws_(iam_|kms_|secretsmanager_|cloudwatch_log|cloudwatch_metric|cloudwatch_dashboard|ssm_|backup_)/],
   ["compute", /^aws_(lambda_|instance|launch_|autoscaling|ecs_|eks_|sfn_|sqs_|sns_|cloudwatch_event|kinesis|ecr_)/],
 ];
-export const layerOf = (type) => (LAYER_RULES.find(([, re]) => re.test(type)) || ["shared"])[0];
-const LAYERS = [
-  { key: "external", title: "1 · Users & external apps" },
-  { key: "edge", title: "2 · Gateway, firewall & load balancing" },
-  { key: "compute", title: "3 · Services & serverless" },
-  { key: "data", title: "4 · Data & storage" },
-];
-const BANDS = [{ key: "network", title: "Network: subnets & routing" }, { key: "shared", title: "Identity, secrets & monitoring" }];
-const GAP = 12;
+const FALLBACK_LAYER = [["data", /^aws_(secretsmanager_|kms_)/]];
+const INBOUND = /^aws_(internet_gateway|security_group|network_acl|wafv2|lb_listener|lb_target|api_gateway_(resource|method|authorizer|api_key)|apigatewayv2_(route|authorizer)|lambda_(permission|event_source_mapping)|subnet|route_table|route\b|vpc_endpoint|eip|db_subnet_group|db_parameter_group|s3_bucket_(policy|public_access_block|ownership)|secretsmanager_secret(_version)?$)/;
+const OUTBOUND = /^aws_(iam_|cloudwatch_log|api_gateway_integration|sns_topic_subscription|sqs_queue_policy|kms_)/;
+export const roleOf = (type) => (INBOUND.test(type) ? "inbound" : OUTBOUND.test(type) ? "outbound" : "core");
+const LAYER_TITLE = { external: "1 · Users & external apps", edge: "2 · Gateway, firewall, proxy & load balancing", compute: "3 · Services & serverless", data: "4 · Database, NoSQL & storage" };
+const ROLES = [["inbound", "Inbound"], ["core", "Core"], ["outbound", "Outbound"]];
+const GAP = 12, PER_COL = 6, EMPTY_W = 84, SUBHEAD = 22;
 
-const gridFor = (n, maxCols) => { const cols = Math.max(1, Math.min(maxCols, n <= 4 ? 1 : n <= 10 ? 2 : 3)); return { cols, rows: Math.ceil(n / cols) || 1 }; };
-const place = (members, cols, ox, oy) => Object.fromEntries(members.map((n, i) => [n.id, { x: ox + (i % cols) * (NW + GAP), y: oy + Math.floor(i / cols) * (NH + GAP) }]));
+/** Layer of every node: by type, else the layer most of its neighbours are in, else a type fallback, else services. */
+export function assignLayers(nodes, edges) {
+  const layer = {};
+  nodes.forEach((n) => { const r = PRIMARY.find(([, re]) => re.test(n.type)); if (r) layer[n.id] = r[0]; });
+  const adj = {}; edges.forEach((e) => { (adj[e.from] = adj[e.from] || []).push(e.to); (adj[e.to] = adj[e.to] || []).push(e.from); });
+  for (let pass = 0; pass < 3; pass++) nodes.forEach((n) => {
+    if (layer[n.id]) return;
+    const c = {}; (adj[n.id] || []).forEach((m) => { if (layer[m]) c[layer[m]] = (c[layer[m]] || 0) + 1; });
+    const best = Object.entries(c).sort((x, y) => y[1] - x[1])[0];
+    if (best) layer[n.id] = best[0];
+  });
+  nodes.forEach((n) => { if (!layer[n.id]) layer[n.id] = (FALLBACK_LAYER.find(([, re]) => re.test(n.type)) || ["compute"])[0]; });
+  return layer;
+}
 
-/** Builds the nested nodes (Region > VPC > layer > resource) and the dependency edges. Positions are computed once per graph. */
+const subGrid = (n) => { const cols = Math.max(1, Math.ceil(n / PER_COL)), rows = Math.min(n, PER_COL); return { cols, rows }; };
+
+/** Nested nodes (Region > VPC > layer > inbound|core|outbound > resource) plus the dependency edges. Positions are computed once per graph. */
 export function buildFlow(graph, selected, availability) {
   const rf = [];
-  const nodes = graph.nodes.filter((n) => layerOf(n.type) !== "skip");
-  const by = { edge: [], compute: [], data: [], network: [], shared: [] };
-  nodes.forEach((n) => by[layerOf(n.type)].push(n));
-  const vpc = (graph.groups || [])[0];
-  const region = graph.region || "us-east-1";
-
-  // size each layer box
-  const layers = ["edge", "compute", "data"].map((k) => {
-    const members = by[k], { cols, rows } = gridFor(members.length, 3);
-    return { key: k, title: LAYERS.find((l) => l.key === k).title, members, cols, w: Math.max(cols, 1) * (NW + GAP) - GAP + PAD * 2, h: Math.max(rows, 1) * (NH + GAP) - GAP + HEAD + PAD };
-  });
-  const layersH = Math.max(...layers.map((l) => l.h));
-  const innerW = layers.reduce((w, l) => w + l.w, 0) + GAP * 2 * (layers.length - 1) + GAP * 2;     // layers side by side with arrows' room
-  const layerGap = 56;
-  const rowW = layers.reduce((w, l) => w + l.w, 0) + layerGap * (layers.length - 1);
-  const bandCols = Math.max(1, Math.floor((rowW - PAD * 2 + GAP) / (NW + GAP)));
-  const bands = BANDS.map((b) => ({ ...b, members: by[b.key] })).filter((b) => b.members.length).map((b) => ({ ...b, h: Math.ceil(b.members.length / bandCols) * (NH + GAP) - GAP + HEAD + PAD }));
-  const bandsH = bands.reduce((h, b) => h + 24 + b.h, 0);
-  const vpcW = rowW + PAD * 2, vpcH = HEAD + layersH + bandsH + PAD;
-  const regionW = vpcW + PAD * 2, regionH = vpcH + HEAD + PAD;
-  const extW = NW + PAD * 2, extH = NH + HEAD + PAD;
-
-  // parents first
-  rf.push({ id: "box.external", type: "group", position: { x: 0, y: regionH / 2 - extH / 2 }, data: { kind: "layer", label: LAYERS[0].title }, style: { width: extW, height: extH }, selectable: false, zIndex: 0 });
-  rf.push({ id: "external.users", type: "external", parentId: "box.external", extent: "parent", position: { x: PAD, y: HEAD }, data: { label: "Users, browsers & external apps", type: "clients" }, draggable: true, selectable: false, zIndex: 2 });
-  const rx = extW + 70;
-  rf.push({ id: "box.region", type: "group", position: { x: rx, y: 0 }, data: { kind: "region", label: `AWS Region · ${region}` }, style: { width: regionW, height: regionH }, selectable: false, zIndex: 0 });
-  rf.push({ id: "box.vpc", type: "group", parentId: "box.region", position: { x: PAD, y: HEAD }, data: { kind: "vpc", label: vpc ? `VPC ${vpc.label}` : "VPC", cidr: vpc?.cidr }, style: { width: vpcW, height: vpcH }, selectable: false, zIndex: 0 });
-  let x = PAD;
-  layers.forEach((l) => {
-    rf.push({ id: `box.${l.key}`, type: "group", parentId: "box.vpc", position: { x, y: HEAD }, data: { kind: "layer", label: l.title }, style: { width: l.w, height: l.h }, selectable: false, zIndex: 0 });
-    const pos = place(l.members, l.cols, PAD, HEAD);
-    l.members.forEach((n) => rf.push({ id: n.id, type: "resource", parentId: `box.${l.key}`, extent: "parent", position: pos[n.id], zIndex: 2, data: { ...n, reason: availability[n.type]?.reason, selected: selected === n.id } }));
-    x += l.w + layerGap;
-  });
-  let by0 = HEAD + layersH;
-  bands.forEach((b) => {
-    by0 += 24;
-    rf.push({ id: `box.${b.key}`, type: "group", parentId: "box.vpc", position: { x: PAD, y: by0 }, data: { kind: "layer", label: b.title }, style: { width: rowW, height: b.h }, selectable: false, zIndex: 0 });
-    const pos = place(b.members, bandCols, PAD, HEAD);
-    b.members.forEach((n) => rf.push({ id: n.id, type: "resource", parentId: `box.${b.key}`, extent: "parent", position: pos[n.id], zIndex: 2, data: { ...n, reason: availability[n.type]?.reason, selected: selected === n.id } }));
-    by0 += b.h;
-  });
-
-  // edges: real dependencies (drawn from the dependent to what it needs) + users entering through the edge layer
+  const nodes = graph.nodes.filter((n) => n.type !== "aws_vpc");
   const shown = new Set(nodes.map((n) => n.id));
+  const edgesIn = graph.edges.filter((e) => shown.has(e.from) && shown.has(e.to));
+  const layerOf = assignLayers(nodes, edgesIn);
+  const vpc = (graph.groups || [])[0], region = graph.region || "us-east-1";
+  const users = { id: "external.users", type: "external", label: "Users, browsers & external apps" };
+
+  const defs = ["external", "edge", "compute", "data"].map((key) => {
+    const members = key === "external" ? [users] : nodes.filter((n) => layerOf[n.id] === key);
+    const subs = ROLES.map(([role, title]) => {
+      const m = key === "external" ? (role === "core" ? [users] : []) : members.filter((n) => roleOf(n.type) === role);
+      const g = subGrid(m.length);
+      return { role, title, members: m, cols: m.length ? g.cols : 0, w: m.length ? g.cols * (NW + GAP) - GAP + 16 : EMPTY_W, h: m.length ? g.rows * (NH + GAP) - GAP + SUBHEAD + 12 : SUBHEAD + 40 };
+    });
+    const w = subs.reduce((t, x) => t + x.w, 0) + 8 * (subs.length + 1);
+    return { key, subs, w, h: HEAD + Math.max(...subs.map((x) => x.h)) + 12 };
+  });
+  const H = Math.max(...defs.map((d) => d.h));
+  const layerGap = 56, cloud = defs.filter((d) => d.key !== "external");
+  const vpcW = cloud.reduce((t, d) => t + d.w, 0) + layerGap * (cloud.length - 1) + PAD * 2, vpcH = HEAD + H + PAD;
+  const regionW = vpcW + PAD * 2, regionH = vpcH + HEAD + PAD;
+  const ext = defs[0], extX = 0, extY = (regionH - H) / 2, regionX = ext.w + 70;
+
+  const addLayer = (d, parentId, x, y) => {
+    rf.push({ id: `layer.${d.key}`, type: "group", ...(parentId ? { parentId } : {}), position: { x, y }, data: { kind: "layer", label: LAYER_TITLE[d.key] }, style: { width: d.w, height: H }, selectable: false, zIndex: 0 });
+    let sx = 8;
+    d.subs.forEach((sub) => {
+      rf.push({ id: `sub.${d.key}.${sub.role}`, type: "group", parentId: `layer.${d.key}`, position: { x: sx, y: HEAD }, data: { kind: "sub", label: sub.title, empty: !sub.members.length }, style: { width: sub.w, height: H - HEAD - 12 }, selectable: false, zIndex: 1 });
+      sub.members.forEach((n, i) => {
+        const pos = { x: 8 + Math.floor(i / PER_COL) * (NW + GAP), y: SUBHEAD + 6 + (i % PER_COL) * (NH + GAP) };
+        rf.push(n === users
+          ? { id: users.id, type: "external", parentId: `sub.${d.key}.${sub.role}`, extent: "parent", position: pos, data: { label: users.label, type: "clients" }, selectable: false, zIndex: 2 }
+          : { id: n.id, type: "resource", parentId: `sub.${d.key}.${sub.role}`, extent: "parent", position: pos, zIndex: 2, data: { ...n, reason: availability[n.type]?.reason, selected: selected === n.id } });
+      });
+      sx += sub.w + 8;
+    });
+  };
+  addLayer(ext, null, extX, extY);
+  rf.push({ id: "box.region", type: "group", position: { x: regionX, y: 0 }, data: { kind: "region", label: `AWS Region · ${region}` }, style: { width: regionW, height: regionH }, selectable: false, zIndex: 0 });
+  rf.push({ id: "box.vpc", type: "group", parentId: "box.region", position: { x: PAD, y: HEAD }, data: { kind: "vpc", label: vpc ? `VPC ${vpc.label}` : "VPC", cidr: vpc?.cidr }, style: { width: vpcW, height: vpcH }, selectable: false, zIndex: 0 });
+  let x = PAD; cloud.forEach((d) => { addLayer(d, "box.vpc", x, HEAD); x += d.w + layerGap; });
+
+  // edges: real dependencies + users entering through the gateway layer
   const hi = (a, b) => selected && (a === selected || b === selected);
-  const mk = (id, a, b, dashed) => ({ id, source: a, target: b, type: "smoothstep", zIndex: 1,
+  const mk = (id, a, b, dashed) => ({ id, source: a, target: b, type: "smoothstep", zIndex: 3,
     markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: hi(a, b) ? "#0972d3" : "#8a94a3" },
     style: { stroke: hi(a, b) ? "#0972d3" : "#8a94a3", strokeWidth: hi(a, b) ? 2.2 : 1.2, opacity: !selected || hi(a, b) ? 1 : 0.25, strokeDasharray: dashed ? "6 4" : undefined } });
-  const edges = graph.edges.filter((e) => shown.has(e.from) && shown.has(e.to)).map((e, i) => mk(`e${i}`, e.from, e.to));
-  const entry = nodes.filter((n) => /^aws_(api_gateway_rest_api|apigatewayv2_api|internet_gateway|lb|alb|elb|cloudfront_distribution)$/.test(n.type));
-  entry.forEach((n, i) => edges.push(mk(`u${i}`, "external.users", n.id, true)));
+  const edges = edgesIn.map((e, i) => mk(`e${i}`, e.from, e.to));
+  nodes.filter((n) => /^aws_(api_gateway_rest_api|apigatewayv2_api|internet_gateway|lb|alb|elb|cloudfront_distribution)$/.test(n.type)).forEach((n, i) => edges.push(mk(`u${i}`, users.id, n.id, true)));
   return { nodes: rf, edges };
 }
 
