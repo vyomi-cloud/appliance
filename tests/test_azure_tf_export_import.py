@@ -84,6 +84,8 @@ def test_terraform_roundtrip_into_fresh_group_is_equal_modulo_names(seeded):
                            "parameters": {"sqlvyomi01_administrator_login_password": {"value": "Pw-12345!x"}}}}
     r = a2.handle("PUT", rgid("rg2") + "/providers/Microsoft.Resources/deployments/imp", {"api-version": "2021-04-01"}, body)
     assert r["body"]["properties"]["provisioningState"] == "Succeeded", r["body"]["properties"].get("error")
+    wi = a2.handle("POST", rgid("rg2") + "/providers/Microsoft.Resources/deployments/imp/whatIf", {"api-version": "2021-04-01"}, body)
+    assert {c["changeType"] for c in wi["body"]["properties"]["changes"]} == {"NoChange"}, [c for c in wi["body"]["properties"]["changes"] if c["changeType"] != "NoChange"]
     b2 = export(a2, "rg2")
     norm = lambda s: s.replace("rg1", "X").replace("rg2", "X")
     assert norm(b["terraform"]) == norm(b2["terraform"])

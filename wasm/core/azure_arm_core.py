@@ -1536,7 +1536,7 @@ class AzureArm:
                 return _err(405, "MethodNotAllowed", "Use POST to export a template.")
             from core import azure_templates_core as _tpl
             r = _tpl.export_group(self.state, sub, rg, (payload or {}).get("resources"),
-                                  {c["type"].lower(): c["api_version"] for c in CATALOG},
+                                  {f'{c["namespace"]}/{c["type"]}'.lower(): c["api_version"] for c in CATALOG},
                                   (payload or {}).get("vyomiIncludeParameters", True) is not False)
             if r["status"] >= 300:
                 return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])

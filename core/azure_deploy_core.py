@@ -753,7 +753,10 @@ def _delta(path, before, after, out):
 
 
 def _norm(v):
-    return v.lower() if isinstance(v, str) else v
+    return v.lower().replace(" ", "") if isinstance(v, str) else v      # "East US" == "eastus"
+
+
+_WRITE_ONLY = re.compile(r"(password|secret|sastoken|accountkey)", re.I)     # accepted on PUT, never returned by GET -> cannot be compared
 
 
 def _subset(a, b):
@@ -784,7 +787,8 @@ def what_if(arm, sub, rg, rec, mode="Incremental", location=None):
         before = cur["body"] if isinstance(cur["body"], dict) else {}
         d = []
         _delta("", {k: v for k, v in before.items() if k not in ("id", "name", "type")}, {k: v for k, v in r["body"].items()}, d)
-        d = [x for x in d if x["path"].split(".")[-1].split("[")[0] not in _SERVER_KEYS]
+        d = [x for x in d if x["path"].split(".")[-1].split("[")[0] not in _SERVER_KEYS and not _WRITE_ONLY.search(x["path"].split(".")[-1])
+             and not (x["path"] == "kind" and "kind" not in before)]
         if d:
             changes.append({"resourceId": r["id"], "changeType": "Modify", "before": before, "after": {**before, **after}, "delta": d})
         else:

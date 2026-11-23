@@ -576,12 +576,14 @@ def plan(ctx, template):
                 pass    # dependency on a resource outside this template (already exists)
             elif t is None and d:
                 raise TemplateError("InvalidTemplate", f"The resource '{r['type']}/{r['name']}' depends on '{d}', which is not defined in this template.")
+        r["explicit"] = set(r["deps"])
         # children depend on parent
         pe = r["_parent"]
         if pe is not None:
             for p in expanded_by_ent.get(id(pe), []):
                 if r["name"].lower().startswith(p["name"].lower() + "/"):
                     r["deps"].add(_res_id(ctx.sub, ctx.rg, p["type"], p["name"], p["scope"]).lower())
+                    r["explicit"].add(_res_id(ctx.sub, ctx.rg, p["type"], p["name"], p["scope"]).lower())
         # implicit: any string in the body equal to (or under) another template resource's id
         strs = []
         _walk_strings(r["body"], strs)
@@ -602,6 +604,10 @@ def plan(ctx, template):
                 done.add(r["id"].lower())
                 remaining.remove(r)
                 progressed = True
+        if not progressed and any(x["deps"] != x["explicit"] for x in remaining):
+            for x in remaining:     # reference-only edges (two resources pointing at each other, e.g. NIC <-> VM) are not ordering constraints
+                x["deps"] = set(x["explicit"])
+            continue
         if not progressed:
             names = ", ".join(f"{x['type']}/{x['name']}" for x in remaining)
             raise TemplateError("InvalidTemplate", f"Circular dependency detected on resource(s): {names}.")
@@ -749,7 +755,10 @@ def _delta(path, before, after, out):
 
 
 def _norm(v):
-    return v.lower() if isinstance(v, str) else v
+    return v.lower().replace(" ", "") if isinstance(v, str) else v      # "East US" == "eastus"
+
+
+_WRITE_ONLY = re.compile(r"(password|secret|sastoken|accountkey)", re.I)     # accepted on PUT, never returned by GET -> cannot be compared
 
 
 def _subset(a, b):
@@ -780,7 +789,8 @@ def what_if(arm, sub, rg, rec, mode="Incremental", location=None):
         before = cur["body"] if isinstance(cur["body"], dict) else {}
         d = []
         _delta("", {k: v for k, v in before.items() if k not in ("id", "name", "type")}, {k: v for k, v in r["body"].items()}, d)
-        d = [x for x in d if x["path"].split(".")[-1].split("[")[0] not in _SERVER_KEYS]
+        d = [x for x in d if x["path"].split(".")[-1].split("[")[0] not in _SERVER_KEYS and not _WRITE_ONLY.search(x["path"].split(".")[-1])
+             and not (x["path"] == "kind" and "kind" not in before)]
         if d:
             changes.append({"resourceId": r["id"], "changeType": "Modify", "before": before, "after": {**before, **after}, "delta": d})
         else:

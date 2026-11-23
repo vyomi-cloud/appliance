@@ -901,6 +901,164 @@ def _ra_from(a, imp):
 
 spec("Microsoft.Authorization/roleAssignments", "azurerm_role_assignment", loc=False, api="2022-04-01", literal_name=True)((_ra_to, _ra_from))
 
+# ── additional networking / compute / data services ──
+def _simple(arm, tf, api, pairs, extra_to=None, extra_from=None, loc=True):
+    """name/rg/location + a flat table of (tf attr, arm property path, kind) pairs."""
+    def to(res, X):
+        out = {**common_to(res, X)} if loc else {"name": res["leaf"]}
+        for tfa, path, *rest in pairs:
+            v = _g(res["props"], *path.split("."))
+            if v is not None:
+                out[tfa] = rest[0](v) if rest else v
+        if extra_to:
+            out.update(extra_to(res, X) or {})
+        out["tags"] = res["tags"] or None
+        return out
+
+    def frm(a, imp):
+        props = {}
+        for tfa, path, *rest in pairs:
+            if a.has(tfa):
+                cur = props
+                ps = path.split(".")
+                for p_ in ps[:-1]:
+                    cur = cur.setdefault(p_, {})
+                v = a.v(tfa)
+                cur[ps[-1]] = rest[1](v) if len(rest) > 1 else v
+        out = {"properties": props}
+        if extra_from:
+            extra_from(a, imp, out)
+        return out
+    spec(arm, tf, api=api, loc=loc)((to, frm))
+
+
+_simple("Microsoft.Network/applicationSecurityGroups", "azurerm_application_security_group", "2023-05-01", [])
+
+
+def _rt_to(res, X):
+    return {"bgp_route_propagation_enabled": not res["props"].get("disableBgpRoutePropagation", False),
+            "route": Blocks([_clean({"name": r.get("name"), "address_prefix": _g(r, "properties", "addressPrefix"), "next_hop_type": _g(r, "properties", "nextHopType"),
+                                     "next_hop_in_ip_address": _g(r, "properties", "nextHopIpAddress")}) for r in res["props"].get("routes") or []])}
+
+
+def _rt_from(a, imp, out):
+    out["properties"]["routes"] = [{"name": b.v("name"), "properties": _clean({"addressPrefix": b.v("address_prefix"), "nextHopType": b.v("next_hop_type"),
+                                                                             "nextHopIpAddress": b.v("next_hop_in_ip_address")})} for b in a.b("route")]
+    if a.has("bgp_route_propagation_enabled"):
+        out["properties"]["disableBgpRoutePropagation"] = a.v("bgp_route_propagation_enabled") not in (True, "true")
+
+
+_simple("Microsoft.Network/routeTables", "azurerm_route_table", "2023-05-01", [], _rt_to, _rt_from)
+_simple("Microsoft.Network/natGateways", "azurerm_nat_gateway", "2023-05-01", [("idle_timeout_in_minutes", "idleTimeoutInMinutes")],
+        lambda res, X: {"sku_name": (res["sku"] or {}).get("name") or "Standard"},
+        lambda a, imp, out: out.__setitem__("sku", {"name": a.v("sku_name", "Standard")}))
+
+
+def _nic_to(res, X):
+    ipc = []
+    for c in res["props"].get("ipConfigurations") or []:
+        cp = c.get("properties") or {}
+        d = {"name": c.get("name"), "subnet_id": X.ref_id(_g(cp, "subnet", "id"), "id") if _g(cp, "subnet", "id") else None,
+             "private_ip_address_allocation": cp.get("privateIPAllocationMethod") or "Dynamic",
+             "public_ip_address_id": X.ref_id(_g(cp, "publicIPAddress", "id"), "id") if _g(cp, "publicIPAddress", "id") else None}
+        if d["private_ip_address_allocation"] == "Static":
+            d["private_ip_address"] = cp.get("privateIPAddress")
+        ipc.append(_clean(d))
+    return {"ip_configuration": Blocks(ipc)}
+
+
+def _nic_from(a, imp, out):
+    ips = []
+    for b in a.b("ip_configuration"):
+        p = {"privateIPAllocationMethod": b.v("private_ip_address_allocation", "Dynamic")}
+        if b.has("subnet_id"):
+            p["subnet"] = {"id": b.v("subnet_id")}
+        if b.has("public_ip_address_id"):
+            p["publicIPAddress"] = {"id": b.v("public_ip_address_id")}
+        if b.has("private_ip_address"):
+            p["privateIPAddress"] = b.v("private_ip_address")
+        ips.append({"name": b.v("name"), "properties": p})
+    out["properties"]["ipConfigurations"] = ips
+
+
+_simple("Microsoft.Network/networkInterfaces", "azurerm_network_interface", "2023-05-01", [], _nic_to, _nic_from)
+_simple("Microsoft.Compute/disks", "azurerm_managed_disk", "2023-04-02", [("disk_size_gb", "diskSizeGB")],
+        lambda res, X: {"storage_account_type": (res["sku"] or {}).get("name") or "Standard_LRS", "create_option": _g(res["props"], "creationData", "createOption") or "Empty"},
+        lambda a, imp, out: (out.__setitem__("sku", {"name": a.v("storage_account_type", "Standard_LRS")}),
+                             out["properties"].__setitem__("creationData", {"createOption": a.v("create_option", "Empty")})))
+_simple("Microsoft.Cache/redis", "azurerm_redis_cache", "2023-08-01", [("minimum_tls_version", "minimumTlsVersion"), ("redis_version", "redisVersion", lambda v: str(v).split(".")[0], lambda v: v),
+                                                                       ("non_ssl_port_enabled", "enableNonSslPort")],
+        lambda res, X: {"capacity": _g(res["props"], "sku", "capacity"), "family": _g(res["props"], "sku", "family"), "sku_name": _g(res["props"], "sku", "name")},
+        lambda a, imp, out: out["properties"].__setitem__("sku", {"name": a.v("sku_name"), "family": a.v("family"), "capacity": a.v("capacity")}))
+_simple("Microsoft.AppConfiguration/configurationStores", "azurerm_app_configuration", "2023-03-01",
+        [("soft_delete_retention_days", "softDeleteRetentionInDays"), ("purge_protection_enabled", "enablePurgeProtection")],
+        lambda res, X: {"sku": (res["sku"] or {}).get("name") or "standard", "local_auth_enabled": not res["props"].get("disableLocalAuth", False)},
+        lambda a, imp, out: (out.__setitem__("sku", {"name": a.v("sku", "standard")}), out["properties"].__setitem__("disableLocalAuth", a.v("local_auth_enabled", True) not in (True, "true"))))
+_simple("Microsoft.EventGrid/topics", "azurerm_eventgrid_topic", "2022-06-15", [("input_schema", "inputSchema"), ("local_auth_enabled", "disableLocalAuth", lambda v: not v, lambda v: v not in (True, "true"))])
+_simple("Microsoft.CognitiveServices/accounts", "azurerm_cognitive_account", "2023-05-01",
+        [("custom_subdomain_name", "customSubDomainName"), ("local_auth_enabled", "disableLocalAuth", lambda v: not v, lambda v: v not in (True, "true")),
+         ("public_network_access_enabled", "publicNetworkAccess", lambda v: str(v).lower() != "disabled", lambda v: "Enabled" if v in (True, "true") else "Disabled")],
+        lambda res, X: {"kind": res["body"].get("kind"), "sku_name": (res["sku"] or {}).get("name")},
+        lambda a, imp, out: (out.__setitem__("kind", a.v("kind")), out.__setitem__("sku", {"name": a.v("sku_name")})))
+_simple("Microsoft.ApiManagement/service", "azurerm_api_management", "2022-08-01", [("publisher_email", "publisherEmail"), ("publisher_name", "publisherName")],
+        lambda res, X: {"sku_name": f"{(res['sku'] or {}).get('name', 'Developer')}_{(res['sku'] or {}).get('capacity', 1)}"},
+        lambda a, imp, out: out.__setitem__("sku", {"name": str(a.v("sku_name", "Developer_1")).rsplit("_", 1)[0],
+                                                  "capacity": int(str(a.v("sku_name", "Developer_1")).rsplit("_", 1)[-1] or 1)}))
+_simple("Microsoft.App/managedEnvironments", "azurerm_container_app_environment", "2023-05-01", [])
+
+
+def _vm_match(linux):
+    def m(r):
+        p = r["props"]
+        is_linux = "linuxConfiguration" in (p.get("osProfile") or {}) or str(_g(p, "storageProfile", "osDisk", "osType") or "").lower() == "linux"
+        return is_linux == linux
+    return m
+
+
+def _vm_to(linux):
+    def to(res, X):
+        p = res["props"]
+        sp, od = p.get("storageProfile") or {}, (p.get("storageProfile") or {}).get("osDisk") or {}
+        out = {**common_to(res, X), "size": _g(p, "hardwareProfile", "vmSize"), "admin_username": _g(p, "osProfile", "adminUsername"),
+               "admin_password": Raw(f"var.{X.label_for(res)}_admin_password"),
+               "network_interface_ids": [X.ref_id(n.get("id"), "id") for n in _g(p, "networkProfile", "networkInterfaces", default=[])]}
+        X.secret_vars.append((f"{X.label_for(res)}_admin_password", "Administrator password of the virtual machine"))
+        if linux:
+            out["disable_password_authentication"] = False
+        out["os_disk"] = Blocks([_clean({"caching": od.get("caching") or "ReadWrite", "storage_account_type": _g(od, "managedDisk", "storageAccountType") or "Standard_LRS",
+                                          "disk_size_gb": od.get("diskSizeGB")})])
+        ir = sp.get("imageReference")
+        if ir:
+            out["source_image_reference"] = Blocks([_clean({"publisher": ir.get("publisher"), "offer": ir.get("offer"), "sku": ir.get("sku"), "version": ir.get("version")})])
+        out["tags"] = res["tags"] or None
+        return out
+    return to
+
+
+def _vm_from(linux):
+    def frm(a, imp):
+        od = (a.b("os_disk") or [None])[0]
+        ir = (a.b("source_image_reference") or [None])[0]
+        os_ = {"computerName": a.v("computer_name") or a.v("name"),"adminUsername": a.v("admin_username")}
+        if a.has("admin_password"):
+            os_["adminPassword"] = a.v("admin_password")
+        if linux:
+            os_["linuxConfiguration"] = {"disablePasswordAuthentication": a.v("disable_password_authentication", True) in (True, "true")}
+        osd = {"createOption": "FromImage", "caching": od.v("caching", "ReadWrite") if od else "ReadWrite",
+               "managedDisk": {"storageAccountType": od.v("storage_account_type", "Standard_LRS") if od else "Standard_LRS"}}
+        if od and od.has("disk_size_gb"):
+            osd["diskSizeGB"] = od.v("disk_size_gb")
+        st = {"osDisk": osd}
+        if ir:
+            st["imageReference"] = _clean({"publisher": ir.v("publisher"), "offer": ir.v("offer"), "sku": ir.v("sku"), "version": ir.v("version")})
+        return {"properties": {"hardwareProfile": {"vmSize": a.v("size")}, "osProfile": os_, "storageProfile": st,
+                               "networkProfile": {"networkInterfaces": [{"id": i} for i in a.v("network_interface_ids", [])]}}}
+    return frm
+
+
+spec("Microsoft.Compute/virtualMachines", "azurerm_linux_virtual_machine", api="2023-09-01", match=_vm_match(True))((_vm_to(True), _vm_from(True)))
+spec("Microsoft.Compute/virtualMachines", "azurerm_windows_virtual_machine", api="2023-09-01", match=_vm_match(False))((_vm_to(False), _vm_from(False)))
+
 BY_TF = {s["tf"]: s for s in SPECS}
 _ARM_SPECS = {}
 for _s in SPECS:
@@ -1016,6 +1174,9 @@ def to_terraform(template: dict, subscription: str, rg: str, rg_location: str = 
     for res, sp in chosen:
         if res["type"].lower() in _IGNORED_CHILD:
             skipped.append(f"{res['type']}/{res['name']} (platform default child resource, not managed by azurerm)")
+            continue
+        if sp is not None and sp["tf"] == "azurerm_managed_disk" and _g(res["props"], "creationData", "createOption") == "FromImage":
+            skipped.append(f"{res['type']}/{res['name']} (the OS disk is created by the virtual machine's os_disk block)")
             continue
         if sp is None:
             blocks.append(_azapi_block(res, X, subscription, rg))

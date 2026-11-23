@@ -30,11 +30,13 @@ _DROP_PROPS = {"provisioningState", "creationDate", "createdAt", "lastModifiedAt
                "failoverPolicies", "instanceId", "documentEndpoint", "customerId", "createdDate", "modifiedDate", "nameServers", "numberOfRecordSets",
                "maxNumberOfRecordSets", "maxNumberOfRecordsPerRecordSet", "fullyQualifiedDomainName", "fqdn", "currentKubernetesVersion", "powerState",
                "nodeResourceGroup", "namespaces", "defaultHostName", "enabledHostNames", "hostNames", "repositorySiteName", "usageState",
-               "availabilityState", "serviceBusEndpoint", "loginServer", "status", "state", "AppId", "InstrumentationKey", "ConnectionString", "TenantId",
+               "availabilityState", "serviceBusEndpoint", "loginServer", "AppId", "InstrumentationKey", "ConnectionString", "TenantId",
                "principalId", "clientId", "ipAddress", "lastSkuUpdate", "quotaNextResetTime", "dataIngestionStatus", "privateLinkScopedResources",
                "creationTime", "earliestRestoreDate", "currentServiceObjectiveName", "requestedServiceObjectiveName", "currentSku", "databaseId",
                "currentBackupStorageRedundancy", "vyomiAccess", "messagingProtocol", "Name", "lastEnabledTime", "outboundIpAddresses",
-               "possibleOutboundIpAddresses"}
+               "possibleOutboundIpAddresses", "diskState", "diskSizeBytes", "uniqueId", "timeCreated", "diskIOPSReadWrite", "diskMBpsReadWrite", "staticIp",
+               "defaultDomain", "infrastructureResourceGroup", "eventStreamEndpoint", "customDomainVerificationId", "sslPort", "vmId",
+               "internalId", "dateCreated", "endpoint", "endpoints", "skuChangeInfo", "callRateLimit", "targetResource", "isMigrated"}
 _SECRET = re.compile(r"(password|clientsecret|secretkey|connectionstring|primarykey|secondarykey|accountkey|sastoken)", re.I)
 _IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _EXPR = re.compile(r"^\[(?!\[)(.*)\]$", re.S)
@@ -68,6 +70,26 @@ def _split_id(rid):
 
 def _q(s):
     return "'" + str(s).replace("'", "''") + "'"
+
+
+def _break_cycles(dep_map):
+    """Drop the back edge of every dependsOn cycle (e.g. NIC <-> VM, which reference each other); the property
+    references stay as resourceId() expressions, which ARM does not treat as dependencies."""
+    state = {}
+
+    def visit(n, stack):
+        state[n] = 1
+        for d in sorted(dep_map.get(n, ())):
+            if d not in dep_map:
+                continue
+            if state.get(d) == 1:
+                dep_map[n].discard(d)
+            elif state.get(d) is None:
+                visit(d, stack)
+        state[n] = 2
+    for n in sorted(dep_map):
+        if state.get(n) is None:
+            visit(n, [])
 
 
 def _api_for(rtype):
@@ -140,7 +162,7 @@ def build_template(records: list[dict], api_versions: dict[str, str], include_pa
                 out[nk] = rewrite(x, self_id, deps)
             return out
         return v
-    params, resources = {}, []
+    params, resources, dep_map, res_by_id = {}, [], {}, {}
     for e in entries:
         r, rtype = e["rec"], e["type"]
         deps = set()
@@ -187,9 +209,13 @@ def build_template(records: list[dict], api_versions: dict[str, str], include_pa
         props = rewrite(props, self_id, deps)
         if props:
             res["properties"] = props
-        if deps:
-            res["dependsOn"] = ["[" + id_expr[d] + "]" for d in sorted(deps) if d in id_expr]
+        dep_map[self_id] = {d for d in deps if d in id_expr}
+        res_by_id[self_id] = res
         resources.append(res)
+    _break_cycles(dep_map)
+    for sid, res in res_by_id.items():
+        if dep_map[sid]:
+            res["dependsOn"] = ["[" + id_expr[d] + "]" for d in sorted(dep_map[sid])]
     t = {"$schema": SCHEMA, "contentVersion": "1.0.0.0"}
     if include_params:
         t["parameters"] = dict(sorted(params.items()))
