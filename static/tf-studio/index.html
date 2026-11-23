@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vyomi Infrastructure Studio</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--line:#2a3140;--fg:#e6edf3;--mut:#9aa7b4;--acc:#4c8bf5;--ok:#3fb950;--plan:#d29922;--no:#f85149}
+@media (prefers-color-scheme:light){:root{--bg:#f6f8fa;--panel:#fff;--line:#d0d7de;--fg:#1f2328;--mut:#59636e;--acc:#0969da;--ok:#1a7f37;--plan:#9a6700;--no:#cf222e}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif}
+header{display:flex;gap:16px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+h1{font-size:16px;margin:0}nav{display:flex;gap:4px}nav button,.btn{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer;font:inherit}
+nav button.on{border-color:var(--acc);color:var(--acc)}.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;padding:16px;max-width:1500px;margin:0 auto}
+@media(max-width:900px){main{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px}.card h2{font-size:13px;margin:0 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+#canvas{overflow:auto;min-height:320px}svg text{fill:var(--fg);font:11px system-ui}.nd{cursor:pointer}.nd rect{fill:var(--panel);stroke-width:2}
+.s-supported rect{stroke:var(--ok)}.s-planned rect{stroke:var(--plan);stroke-dasharray:5 3}.s-not_possible rect{stroke:var(--no);stroke-dasharray:2 3}
+.grp{fill:none;stroke:var(--acc);stroke-width:1.5;stroke-dasharray:6 4}.edge{fill:none;stroke:var(--mut);stroke-width:1;opacity:.6}.edge.hi{stroke:var(--acc);opacity:1;stroke-width:2}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}.lg{display:flex;gap:14px;flex-wrap:wrap;color:var(--mut);margin-bottom:8px}
+.row{padding:6px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}.tag{font-size:11px;padding:1px 6px;border-radius:10px;border:1px solid var(--line);color:var(--mut)}
+.err{color:var(--no)}.warn{color:var(--plan)}pre{margin:0;overflow:auto;max-height:340px;font:12px/1.4 ui-monospace,monospace}
+#drop{border:2px dashed var(--line);border-radius:8px;padding:28px;text-align:center;color:var(--mut)}.hide{display:none}
+select{background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:6px}
+</style></head><body>
+<header><h1>Vyomi Infrastructure Studio</h1>
+<nav><button id="t-export" class="on">Export</button><button id="t-import">Import</button></nav>
+<span style="flex:1"></span><label class="tag">Target <select id="mode"><option value="sim">Vyomi (simulator ids)</option><option value="real">Real AWS (portable)</option></select></label>
+<button class="btn" id="refresh">Refresh</button></header>
+<main>
+<section id="p-export">
+ <div class="card"><div class="lg"><span><i class="dot" style="background:var(--ok)"></i>Available in Vyomi</span><span><i class="dot" style="background:var(--plan)"></i>Planned, not simulated yet</span><span><i class="dot" style="background:var(--no)"></i>Not possible in Vyomi</span></div>
+ <div id="canvas"></div><p id="empty" class="hide" style="color:var(--mut)">No resources in this space yet. Apply a Terraform template or create resources in the console, then refresh.</p></div>
+ <div class="card" style="margin-top:16px"><h2>Terraform files</h2><div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><button class="btn pri" id="dl">Download .zip</button><select id="files"></select></div><pre id="src"></pre></div>
+</section>
+<section id="p-import" class="hide"><div class="card"><h2>Import a Terraform template</h2>
+ <div id="drop">Drop .tf files here or <label style="color:var(--acc);cursor:pointer">choose files<input id="pick" type="file" accept=".tf" multiple hidden></label></div>
+ <p style="color:var(--mut)">This checks which resource types in your template Vyomi can create. Applying the template is done with OpenTofu against this endpoint; in-browser apply is not available yet.</p>
+ <div id="imp"></div></div></section>
+<aside><div class="card"><h2>Selected</h2><div id="sel" style="color:var(--mut)">Click a resource.</div></div>
+ <div class="card" style="margin-top:16px"><h2>Unavailable in Vyomi</h2><div id="gaps" style="color:var(--mut)">None.</div></div>
+ <div class="card" style="margin-top:16px"><h2>Before you apply on real AWS</h2><div id="port" style="color:var(--mut)">-</div></div></aside>
+</main>
+<script>
+const $=id=>document.getElementById(id);let G=null,B=null;const NS="http://www.w3.org/2000/svg";
+const el=(n,a={},p)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);p&&p.appendChild(e);return e};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const W=150,H=44,GAP=18;
+function layout(g){const pos={},boxes=[];let y=16;
+ for(const grp of g.groups){const ms=g.nodes.filter(n=>n.group===grp.id),cols=Math.max(1,Math.min(4,Math.ceil(Math.sqrt(ms.length)))),rows=Math.ceil(ms.length/cols)||1;
+  const w=cols*(W+GAP)+GAP,h=rows*(H+GAP)+GAP+22;boxes.push({x:16,y,w,h,label:`VPC ${grp.label}  ${grp.cidr||""}`});
+  ms.forEach((n,i)=>pos[n.id]={x:16+GAP+(i%cols)*(W+GAP),y:y+26+Math.floor(i/cols)*(H+GAP)});y+=h+GAP}
+ const rest=g.nodes.filter(n=>!n.group),svcs=[...new Set(rest.map(n=>n.service))].sort();
+ svcs.forEach(s=>{const ms=rest.filter(n=>n.service===s);boxes.push({x:16,y,w:Math.max(ms.length,1)*(W+GAP)+GAP,h:H+GAP*2+16,label:s,lane:1});
+  ms.forEach((n,i)=>pos[n.id]={x:16+GAP+i*(W+GAP),y:y+26});y+=H+GAP*2+30});
+ return{pos,boxes,w:Math.max(...boxes.map(b=>b.x+b.w),600)+16,h:y+8}}
+function draw(g){const c=$("canvas");c.innerHTML="";$("empty").classList.toggle("hide",g.nodes.length>0);if(!g.nodes.length)return;
+ const L=layout(g),svg=el("svg",{width:L.w,height:L.h});c.appendChild(svg);
+ L.boxes.forEach(b=>{el("rect",{x:b.x,y:b.y,width:b.w,height:b.h,rx:8,class:"grp",style:b.lane?"stroke:var(--line)":""},svg);const t=el("text",{x:b.x+10,y:b.y+16},svg);t.textContent=b.label});
+ const ed=[];g.edges.forEach(e=>{const a=L.pos[e.from],b=L.pos[e.to];if(!a||!b)return;const x1=a.x+W/2,y1=a.y+H/2,x2=b.x+W/2,y2=b.y+H/2;
+  const p=el("path",{d:`M${x1} ${y1} C${x1} ${(y1+y2)/2},${x2} ${(y1+y2)/2},${x2} ${y2}`,class:"edge"},svg);ed.push({p,e})});
+ g.nodes.forEach(n=>{const p=L.pos[n.id];if(!p)return;const gr=el("g",{class:`nd s-${n.status}`,transform:`translate(${p.x},${p.y})`},svg);
+  el("rect",{width:W,height:H,rx:6},gr);const t1=el("text",{x:8,y:18},gr);t1.textContent=n.label.length>22?n.label.slice(0,21)+"…":n.label;
+  const t2=el("text",{x:8,y:34,style:"fill:var(--mut)"},gr);{const ty=n.type.replace(/^aws_/,"");t2.textContent=ty.length>24?ty.slice(0,23)+"…":ty}
+  gr.onclick=()=>{ed.forEach(({p,e})=>p.classList.toggle("hi",e.from===n.id||e.to===n.id));sel(n,g)}})}
+function sel(n,g){const out=g.edges.filter(e=>e.from===n.id).map(e=>e.to),inn=g.edges.filter(e=>e.to===n.id).map(e=>e.from),v=g.availability[n.type]||{};
+ $("sel").innerHTML=`<b>${esc(n.id)}</b><div class="row">Service: ${esc(n.service)}</div><div class="row">Status: ${esc(n.status)} ${esc(v.reason||"")}</div><div class="row">Uses: ${out.map(esc).join(", ")||"-"}</div><div class="row">Used by: ${inn.map(esc).join(", ")||"-"}</div>`}
+function side(g){const bad=Object.entries(g.availability).filter(([,v])=>v.status!=="supported");
+ $("gaps").innerHTML=bad.length?bad.map(([t,v])=>`<div class="row"><span class="tag" style="color:var(--${v.status==="planned"?"plan":"no"})">${v.status.replace("_"," ")}</span> ${esc(t)}<div style="color:var(--mut)">${esc(v.reason)}</div></div>`).join(""):"None.";
+ $("port").innerHTML=(g.portability||[]).map(p=>`<div class="row"><span class="${p.severity==="error"?"err":p.severity==="warn"?"warn":""}">${esc(p.severity)}</span> ${esc(p.message)}${p.resource?`<div style="color:var(--mut)">${esc(p.resource)}</div>`:""}</div>`).join("")||"-"}
+async function load(){const m=$("mode").value;
+ try{const[a,b]=await Promise.all([fetch("/api/terraform/export/graph").then(r=>r.json()),fetch("/api/terraform/export/bundle?format=json&mode="+m).then(r=>r.json())]);
+  G=a;B=b;draw(G);side({...G,portability:b.portability});const names=Object.keys(b.files).sort();$("files").innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join("");show()}
+ catch(e){$("canvas").innerHTML=`<p class="err">Could not read the stack: ${esc(e)}</p>`}}
+function show(){$("src").textContent=B&&B.files[$("files").value]||""}
+$("files").onchange=show;$("refresh").onclick=load;$("mode").onchange=load;
+$("dl").onclick=()=>{location.href="/api/terraform/export/bundle?format=zip&mode="+$("mode").value};
+["export","import"].forEach(t=>$("t-"+t).onclick=()=>{["export","import"].forEach(x=>{$("t-"+x).classList.toggle("on",x===t);$("p-"+x).classList.toggle("hide",x!==t)})});
+async function imp(files){const types=new Set();for(const f of files){const s=await f.text();for(const m of s.matchAll(/^\s*resource\s+"([a-z0-9_]+)"/gm))types.add(m[1])}
+ if(!types.size){$("imp").innerHTML='<p class="warn">No resource blocks found.</p>';return}
+ const r=await fetch("/api/terraform/classify",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({types:[...types]})}).then(r=>r.json());
+ const e=Object.entries(r.availability),n=e.filter(([,v])=>v.status!=="supported").length;
+ $("imp").innerHTML=`<p>${e.length-n} of ${e.length} resource types can be created in Vyomi.</p>`+e.map(([t,v])=>`<div class="row"><i class="dot" style="background:var(--${v.status==="supported"?"ok":v.status==="planned"?"plan":"no"})"></i>${esc(t)} <span class="tag">${v.status.replace("_"," ")}</span>${v.reason?`<div style="color:var(--mut)">${esc(v.reason)}</div>`:""}</div>`).join("")}
+$("pick").onchange=e=>imp(e.target.files);$("drop").ondragover=e=>e.preventDefault();$("drop").ondrop=e=>{e.preventDefault();imp(e.dataTransfer.files)};
+load();
+</script></body></html>
