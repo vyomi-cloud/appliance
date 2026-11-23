@@ -89,10 +89,11 @@ function ExportTab() {
       </ColumnLayout>
       <Container header={<Header variant="h2" description="Notes from the exporter about moving this stack to a real AWS account.">Before you apply on real AWS</Header>}>
         {bundle ? (() => { const all = bundle.portability || [], warns = all.filter((p) => p.severity !== "info"), infos = all.filter((p) => p.severity === "info");
-          const item = (p, i) => <Box key={i} variant="small"><b>{p.message}</b>{p.resource ? <><br /><span style={{ color: "#5f6b7a" }}>{p.resource}</span></> : null}</Box>;
+          const item = (p, i) => <li key={i} style={{ marginBottom: 6 }}><b>{p.message}</b>{p.resource ? <><br /><span style={{ color: "#5f6b7a" }}>{p.resource}</span></> : null}</li>;
+          const list = (a) => a.length ? <ul style={{ margin: 0, paddingLeft: 20 }}>{a.map(item)}</ul> : "None.";
           return <ColumnLayout columns={2}>
-            <Alert type={warns.some((p) => p.severity === "error") ? "error" : "warning"} header={`Warnings (${warns.length})`}><SpaceBetween size="xs">{warns.length ? warns.map(item) : "None."}</SpaceBetween></Alert>
-            <Alert type="info" header={`Info (${infos.length})`}><SpaceBetween size="xs">{infos.length ? infos.map(item) : "None."}</SpaceBetween></Alert>
+            <Alert type={warns.some((p) => p.severity === "error") ? "error" : "warning"} header={`Warnings (${warns.length})`}>{list(warns)}</Alert>
+            <Alert type="info" header={`Info (${infos.length})`}>{list(infos)}</Alert>
           </ColumnLayout>; })() : <Box color="text-status-inactive">-</Box>}
       </Container>
       <Container header={<Header variant="h2" actions={<SpaceBetween direction="horizontal" size="xs">
