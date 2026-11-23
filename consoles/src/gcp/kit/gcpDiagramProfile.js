@@ -10,21 +10,28 @@ import MessageOutlined from "@mui/icons-material/esm/MessageOutlined.js";
 import FunctionsOutlined from "@mui/icons-material/esm/FunctionsOutlined.js";
 import DescriptionOutlined from "@mui/icons-material/esm/DescriptionOutlined.js";
 import AltRoute from "@mui/icons-material/esm/AltRoute.js";
+import KeyOutlined from "@mui/icons-material/esm/KeyOutlined.js";
+import LockOutlined from "@mui/icons-material/esm/LockOutlined.js";
+import BadgeOutlined from "@mui/icons-material/esm/BadgeOutlined.js";
+import PublicOutlined from "@mui/icons-material/esm/PublicOutlined.js";
+import Inventory from "@mui/icons-material/esm/Inventory.js";
+import ScheduleOutlined from "@mui/icons-material/esm/ScheduleOutlined.js";
+import SpeedOutlined from "@mui/icons-material/esm/SpeedOutlined.js";
 
-const ICON = { network: LanOutlined, subnet: LanOutlined, firewall: SecurityOutlined, route: AltRoute, instance: MemoryOutlined, bucket: Inventory2Outlined, sql: StorageOutlined, run: DirectionsRunOutlined, topic: MessageOutlined, function: FunctionsOutlined, firestore: DescriptionOutlined };
+const ICON = { network: LanOutlined, subnet: LanOutlined, firewall: SecurityOutlined, route: AltRoute, instance: MemoryOutlined, bucket: Inventory2Outlined, sql: StorageOutlined, run: DirectionsRunOutlined, topic: MessageOutlined, function: FunctionsOutlined, firestore: DescriptionOutlined, keyring: KeyOutlined, key: KeyOutlined, secret: LockOutlined, serviceaccount: BadgeOutlined, dns: PublicOutlined, registry: Inventory, scheduler: ScheduleOutlined, redis: SpeedOutlined };
 
 export const GCP_PROFILE = {
   cloud: "gcp",
   usersLabel: "Users, browsers & external apps",
   primary: [
-    ["edge", /^(subnet|firewall|route|address)$/],
-    ["data", /^(bucket|sql|firestore)$/],
-    ["compute", /^(instance|run|function|topic|subscription)$/],
+    ["edge", /^(subnet|firewall|route|address|dns)$/],
+    ["data", /^(bucket|sql|firestore|redis|registry|keyring|key|secret)$/],
+    ["compute", /^(instance|run|function|topic|subscription|scheduler|serviceaccount)$/],
   ],
   fallback: [],
-  inbound: /^(subnet|firewall|route|address)$/,
-  outbound: /^(subscription)$/,
-  entry: /^(address)$/,
+  inbound: /^(subnet|firewall|route|address|dns)$/,
+  outbound: /^(subscription|scheduler)$/,
+  entry: /^(address|dns)$/,
   Icon: (n) => ICON[n.type] || StorageOutlined,
   typeLabel: (n) => n.type,
 };

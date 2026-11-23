@@ -183,10 +183,10 @@ def offline_runtime_stores() -> dict:
     # falling back to appliance_router() never reaches an in-memory default.
     nn = aps.net_new_core_stores()
     out["gcp_iam"], out["gcp_rm"] = nn["gcp_iam"], nn["gcp_rm"]
-    from core import (apigatewayv2_core, ssm_core, stepfunctions_core, gcp_cloudscheduler_core,
+    from core import (apigatewayv2_core, ssm_core, stepfunctions_core, gcp_cloudscheduler_core, gcp_inframanager_core,
                       gcp_container_core, gcp_iamcredentials_core, gcp_redis_core, gcp_monitoring_core, gcp_vertex_core)
     for key, mod in (("ssm", ssm_core), ("sfn", stepfunctions_core), ("apigwv2", apigatewayv2_core),
-                     ("gcp_sched", gcp_cloudscheduler_core), ("gcp_gke", gcp_container_core),
+                     ("gcp_sched", gcp_cloudscheduler_core), ("gcp_im", gcp_inframanager_core), ("gcp_gke", gcp_container_core),
                      ("gcp_iamc", gcp_iamcredentials_core), ("gcp_redis", gcp_redis_core),
                      ("gcp_mon", gcp_monitoring_core), ("gcp_vertex", gcp_vertex_core)):
         out[key] = mod.shared_store()
@@ -1010,6 +1010,8 @@ def build_backed_router(overrides: dict | None = None) -> AwsWireRouter:
     stores["sfn"] = _sfn_store()   # shared with the console REST (/api/stepfunctions)
     from core.gcp_cloudscheduler_core import shared_store as _gcp_sched_store
     stores["gcp_sched"] = _gcp_sched_store()   # shared with the console REST (/api/gcp/cloudscheduler)
+    from core.gcp_inframanager_core import shared_store as _gcp_im_store
+    stores["gcp_im"] = _gcp_im_store()   # Infrastructure Manager deployments (config.googleapis.com)
     from core.gcp_container_core import shared_store as _gcp_gke_store
     stores["gcp_gke"] = _gcp_gke_store()   # shared with the console REST (/api/gcp/container)
     from core.gcp_iamcredentials_core import shared_store as _gcp_iamc_store

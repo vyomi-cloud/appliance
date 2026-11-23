@@ -141,7 +141,7 @@ const CORES = [
   // lock-step with the relay + build_cores (usable now via the Nano relay;
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
-  "gcp_compute_core.py",   // main-side Nano cores (merged)
+  "gcp_compute_core.py", "gcp_inframanager_core.py",   // main-side Nano cores (merged)
   "azure_graph_ext_core.py", "azure_graph_core.py",
   "azure_cdn_edge_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
   "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",

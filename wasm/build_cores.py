@@ -101,6 +101,7 @@ CORES = [
     "dlm_core.py",                                   # AWS: Data Lifecycle Manager (scheduled EBS snapshot policies)
     "ssh_access_core.py",                          # SSH/shell access: EC2 Instance Connect, SSM sessions, GCE ssh-keys, web-shell records
     "ssm_core.py",                                 # AWS: Systems Manager (Parameter Store, documents, Run Command, windows, baselines)
+    "gcp_inframanager_core.py",                    # GCP: Infrastructure Manager (config.googleapis.com v1: deployments, revisions, previews; apply via the native Google routes)
     "gcp_cloudscheduler_core.py",                  # expansion GCP: Cloud Scheduler (jobs, cron, pause/resume/run)
     "gcp_iamcredentials_core.py",                  # expansion GCP: IAM Service Account Credentials (access/ID tokens, signBlob, signJwt)
     "gcp_compute_core.py",                         # Compute Engine REST for gcloud compute (networks, subnets, firewalls, instances)

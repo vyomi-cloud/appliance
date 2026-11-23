@@ -7,43 +7,49 @@ import InfraDiagram from "../../../common/infra-diagram/InfraDiagram.jsx";
 import { GCP_PROFILE } from "../../kit/gcpDiagramProfile.js";
 import { PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
-import * as net from "./api.js";
-import * as compute from "../compute/api.js";
-import * as storage from "../storage/api.js";
-import * as sql from "../sql/api.js";
-import * as pubsub from "../pubsub/api.js";
-import * as run from "../run/api.js";
+import { readProject } from "../infra-manager/tfgcp.js";
 
 const tail = (u) => (u || "").split("/").pop();
-const safe = async (f) => { try { return (await f()) || []; } catch { return []; } };
 
 export default function NetworkTopology() {
   const project = useProject();
   const [layered, setLayered] = useState(false);
-  const { data, loading } = useAsync(async () => {
-    const [networks, subnets, firewalls, instances, buckets, sqls, topics, subs, services] = await Promise.all([
-      safe(net.listNetworks), safe(net.listAllSubnets), safe(net.listFirewalls), safe(compute.listInstancesAllZones),
-      safe(storage.listBuckets), safe(sql.listInstances), safe(pubsub.listTopics), safe(pubsub.listSubscriptions), safe(() => run.listServices("-")),
-    ]);
-    return { networks, subnets, firewalls, instances, buckets, sqls, topics, subs, services };
-  }, [project]);
+  // one read of the whole project through the native Google APIs (the same read the Terraform export uses)
+  const { data, loading } = useAsync(() => readProject(project), [project]);
 
   const graph = useMemo(() => {
     if (!data) return null;
     const nodes = [], edges = [], id = (k, n) => `${k}.${n}`;
     const add = (type, name) => nodes.push({ id: id(type, name), label: name, type, status: "supported" });
+    const fnIds = new Set(data.functions.map((f) => tail(f.name)));
     data.subnets.forEach((s) => { add("subnet", s.name); });
     data.firewalls.forEach((f) => { add("firewall", f.name); });
     data.instances.forEach((i) => { add("instance", i.name); (i.networkInterfaces || []).forEach((ni) => ni.subnetwork && edges.push({ from: id("instance", i.name), to: id("subnet", tail(ni.subnetwork)) })); });
-    data.services.forEach((s) => add("run", tail(s.name)));
+    data.runServices.filter((s) => !fnIds.has(tail(s.name))).forEach((s) => {
+      add("run", tail(s.name));
+      const sa = s.template?.serviceAccount; if (sa) edges.push({ from: id("run", tail(s.name)), to: id("serviceaccount", sa.split("@")[0]) });
+    });
+    data.functions.forEach((f) => {
+      add("function", tail(f.name));
+      const st = f.buildConfig?.source?.storageSource; if (st) edges.push({ from: id("function", tail(f.name)), to: id("bucket", st.bucket) });
+      if (f.eventTrigger?.pubsubTopic) edges.push({ from: id("topic", tail(f.eventTrigger.pubsubTopic)), to: id("function", tail(f.name)) });
+    });
     data.buckets.forEach((b) => add("bucket", b.name));
     data.sqls.forEach((d) => add("sql", d.name));
+    data.firestore.forEach((d) => add("firestore", tail(d.name)));
+    data.redis.forEach((r) => { add("redis", tail(r.name)); if (r.authorizedNetwork) edges.push({ from: id("redis", tail(r.name)), to: id("subnet", tail(r.authorizedNetwork)) }); });
     data.topics.forEach((t) => add("topic", tail(t.name)));
     data.subs.forEach((s) => { add("subscription", tail(s.name)); if (s.topic) edges.push({ from: id("topic", tail(s.topic)), to: id("subscription", tail(s.name)) }); });
+    data.jobs.filter((j) => j.name.split("/")[3] !== "appengine").forEach((j) => { add("scheduler", tail(j.name)); if (j.pubsubTarget) edges.push({ from: id("scheduler", tail(j.name)), to: id("topic", tail(j.pubsubTarget.topicName)) }); });
+    data.keyRings.forEach((r) => add("keyring", tail(r.name)));
+    data.cryptoKeys.forEach((k) => { add("key", tail(k.name)); edges.push({ from: id("key", tail(k.name)), to: id("keyring", tail(k.name.split("/cryptoKeys/")[0])) }); });
+    data.secrets.forEach((s) => add("secret", tail(s.name)));
+    data.serviceAccounts.forEach((s) => add("serviceaccount", s.email.split("@")[0]));
+    data.zones.forEach((z) => add("dns", z.name));
+    data.repos.forEach((r) => add("registry", tail(r.name)));
     const have = new Set(nodes.map((n) => n.id));
     return { nodes, edges: edges.filter((e) => have.has(e.from) && have.has(e.to)), availability: {}, wrappers: { region: `Project · ${project}`, network: { label: `VPC network ${data.networks[0]?.name || "default"}` } } };
   }, [data, project]);
-
 
   const byNet = useMemo(() => {
     if (!data) return [];
@@ -67,7 +73,7 @@ export default function NetworkTopology() {
           {vms.length > 0 && <Typography variant="body2" sx={{ mt: 1 }}>VM instances: {vms.map((v) => v.name).join(", ")}</Typography>}
         </Box>
       ))}
-      <Typography variant="body2" color="text.secondary">Also in this project: {graph.nodes.filter((x) => !/^(subnet|firewall|instance)$/.test(x.type)).map((x) => x.label).join(", ") || "nothing else"}.</Typography>
+      <Typography variant="body2" color="text.secondary" data-testid="topo-also">Also in this project: {Object.entries(graph.nodes.filter((x) => !/^(subnet|firewall|instance)$/.test(x.type)).reduce((m, x) => ((m[x.type] = m[x.type] || []).push(x.label), m), {})).map(([t, xs]) => `${t}: ${xs.join(", ")}`).join(" · ") || "nothing else"}.</Typography>
     </Box>
   );
   return (
