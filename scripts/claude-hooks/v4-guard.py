@@ -7,15 +7,28 @@ Reads the hook JSON on stdin; for Bash commands it refuses (exit 2, reason on st
   * any force push (`-f`, `--force`, `--force-with-lease`, `+refspec`)
   * a push to `main`/`master`, any tag push, or `git tag` that is not `archive/*`   (owner's go only)
   * a push to the trunk / release branch / portal trunk unless the command carries VYOMI_INTEGRATOR=1  (integrator only)
+  * a `git commit` that includes an input of scripts/gen_mcp_matrix.py (core/capabilities/**, wasm/docs/**, ...) while the
+    embedded MCP knowledge (cmd/vyomi/mcp_*.json[.gz]) is stale, or regenerated but left out of the commit   (rule 10)
 Everything else passes. Fail-open on malformed input so a bug here never blocks normal work.
 """
 import json
+import os
 import re
 import shlex
+import subprocess
 import sys
 
 TRUNKS = {"v4-on-main", "release/v4.0.0", "v4-nano-portal"}
 PROTECTED = {"main", "master"}
+
+# Inputs of scripts/gen_mcp_matrix.py (keep in step with its docstring) and the outputs it writes.
+MCP_INPUTS = (
+    "core/capabilities/", "wasm/docs/", "wasm/nano-docs.js", "services/registry.json", "providers/capabilities.py",
+    "core/pack_catalog.py", "providers/aws.py", "providers/gcp.py", "providers/azure.py", "docker-compose.appliance.yml",
+    ".env.example", "scripts/mcp_wiring.json", "scripts/gen_mcp_matrix.py", "VERSION",
+)
+MCP_OUTPUTS = ("cmd/vyomi/mcp_matrix.json", "cmd/vyomi/mcp_caps.json.gz", "cmd/vyomi/mcp_docs.json.gz")
+MCP_REGEN = "python3 scripts/gen_mcp_matrix.py"
 
 
 def statements(cmd):
@@ -77,6 +90,77 @@ def check(cmd):
     return None
 
 
+def _git(repo, *args):
+    out = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, timeout=20)
+    return out.stdout.splitlines() if out.returncode == 0 else []
+
+
+def _is_mcp_input(path):
+    return any(path == p or (p.endswith("/") and path.startswith(p)) for p in MCP_INPUTS)
+
+
+def mcp_check(cmd, cwd):
+    """Refuse a commit that changes MCP knowledge inputs without the regenerated outputs (rule 10). Fail-open on any error."""
+    cwd = cwd or os.getcwd()
+    added, commit = [], None                                  # paths `git add`ed earlier in this command; the commit's args
+    repo = cwd
+    for st in statements(cmd):
+        try:
+            tok = shlex.split(st, posix=True)
+        except ValueError:
+            continue
+        while tok and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", tok[0]):
+            tok = tok[1:]
+        if tok and tok[0] == "cd" and len(tok) > 1:
+            cwd = os.path.join(cwd, os.path.expanduser(tok[1]))
+            continue
+        if len(tok) < 2 or tok[0] != "git":
+            continue
+        here, i = cwd, 1
+        while i < len(tok) and tok[i].startswith("-"):
+            if tok[i] == "-C" and i + 1 < len(tok):
+                here = os.path.join(here, os.path.expanduser(tok[i + 1]))
+            i += 2 if tok[i] in ("-C", "-c", "--git-dir", "--work-tree") else 1
+        if i >= len(tok):
+            continue
+        if tok[i] == "add":
+            added += [(here, a) for a in tok[i + 1:] if not a.startswith("-")]
+        elif tok[i] == "commit" and commit is None:
+            commit, repo = tok[i + 1:], here
+    if commit is None:
+        return None
+    top = _git(repo, "rev-parse", "--show-toplevel")
+    if not top or not os.path.isfile(os.path.join(top[0], "scripts", "gen_mcp_matrix.py")):
+        return None
+    top = top[0]
+    paths = set(_git(top, "diff", "--cached", "--name-only"))
+    for where, p in added:
+        rel = os.path.relpath(os.path.normpath(os.path.join(where, p)), top)
+        paths |= {f for f in _git(top, "ls-files", "-m", "-o", "--exclude-standard", "--", rel)} | {rel}
+    if any(a == "--all" or re.match(r"^-[a-zA-Z]*a[a-zA-Z]*$", a) for a in commit):   # -a, -am, --all
+        paths |= set(_git(top, "diff", "--name-only"))
+    if not any(_is_mcp_input(p) for p in paths):
+        return None
+    try:
+        res = subprocess.run([sys.executable, "scripts/gen_mcp_matrix.py", "--check"], cwd=top,
+                             capture_output=True, text=True, timeout=120)
+    except Exception:
+        return None
+    if res.returncode == 1:
+        detail = (res.stdout + res.stderr).strip().splitlines()
+        return ("this commit changes an input of the embedded MCP knowledge but the outputs are stale"
+                + (f" ({detail[-1]})" if detail else "") + f". Run `{MCP_REGEN}` and commit "
+                + ", ".join(MCP_OUTPUTS) + " in the same commit (rule 10).")
+    if res.returncode != 0:
+        return None
+    dirty = set(_git(top, "diff", "--name-only", "--", *MCP_OUTPUTS)) | set(_git(top, "diff", "--cached", "--name-only", "--", *MCP_OUTPUTS))
+    missing = sorted(o for o in dirty if o not in paths)
+    if missing:
+        return ("the MCP knowledge is regenerated in the working tree but " + ", ".join(missing)
+                + " is not in this commit. Stage it explicitly with the input change (rule 10).")
+    return None
+
+
 def main():
     try:
         data = json.load(sys.stdin)
@@ -86,6 +170,11 @@ def main():
         return 0
     cmd = (data.get("tool_input") or {}).get("command") or ""
     why = check(cmd)
+    if not why:
+        try:
+            why = mcp_check(cmd, data.get("cwd"))
+        except Exception:
+            why = None
     if why:
         sys.stderr.write("v4 branch rules: " + why + "\n")
         return 2
