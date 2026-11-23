@@ -1,0 +1,19 @@
+{
+"cloud":"azure",
+"service":"Microsoft.ManagedIdentity",
+"actions":{
+"Microsoft.ManagedIdentity/identities/read":"Gets an existing system assigned identity",
+"Microsoft.ManagedIdentity/operations/read":"Lists operations available on Microsoft.ManagedIdentity resource provider",
+"Microsoft.ManagedIdentity/register/action":"Registers the subscription for the managed identity resource provider",
+"Microsoft.ManagedIdentity/userAssignedIdentities/assign/action":"RBAC action for assigning an existing user assigned identity to a resource",
+"Microsoft.ManagedIdentity/userAssignedIdentities/delete":"Deletes an existing user assigned identity",
+"Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/delete":"Delete a Federated Identity Credential",
+"Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/read":"Get or list Federated Identity Credentials",
+"Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials/write":"Add or update a Federated Identity Credential",
+"Microsoft.ManagedIdentity/userAssignedIdentities/listAssociatedResources/action":"Lists all associated resources for an existing user assigned identity",
+"Microsoft.ManagedIdentity/userAssignedIdentities/read":"Gets an existing user assigned identity",
+"Microsoft.ManagedIdentity/userAssignedIdentities/revokeTokens/action":"Revoked all the existing tokens on a user assigned identity",
+"Microsoft.ManagedIdentity/userAssignedIdentities/write":"Creates a new user assigned identity or updates the tags associated with an existing user assigned identity"
+},
+"dataActions":{}
+}
