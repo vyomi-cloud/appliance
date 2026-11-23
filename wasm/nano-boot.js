@@ -442,8 +442,13 @@ builtins._embed_bridge_set = _embed_bridge_set
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
   // `_wire` (v4 native-wire consoles) runs on the async router so awaiting engines
   // (PGlite snapshots, the Parquet writer for RDS exports) work from the console too.
-  const adispatch0 = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
-    : JSON.parse(await py.runPythonAsync(
+  // Faithful IAM (off by default; zero Python calls while the space's enforcement document is off): see nano-iam-hook.js.
+  let _iam = null;
+  import("./nano-iam-hook.js").then((m) => { _iam = { hook: m.createIamHook({ py, base: BASE }), guardWire: m.guardWire }; globalThis.NanoIamHook = _iam.hook; }).catch(() => {});
+  const adispatch0 = async (prov, svc, op, params) => prov === "_iam"        // /api/iam/* (sw.js): the faithful-IAM API, same routes as Mesh
+    ? (_iam ? _iam.hook.api(op, params.path, params.query, params.body) : { status: 503, body: { error: "IAM hook not ready" } })
+    : prov !== "_wire" ? dispatch(prov, svc, op, params)
+    : (_iam && await _iam.guardWire(_iam.hook, params || {})) || JSON.parse(await py.runPythonAsync(
       `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
   // VM-backed data planes (Container Apps replicas, job executions, SSM targets): the Python engine asks for scripts to run
   // in the in-browser VM (it cannot await the VM mid-request), the page runs them and replays the SAME request; scripts the

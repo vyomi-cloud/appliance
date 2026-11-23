@@ -1153,6 +1153,13 @@ self.addEventListener("fetch", (event) => {
         const res = await runInPage(["_console", "capabilities", "capabilities", { lens, substrate }]);
         return json(res, 200);
       }
+      // Faithful IAM API (same routes/bodies as Mesh): served by the page's core.iam_engine.api via nano-iam-hook.js.
+      if (apiPath.startsWith("/api/iam/")) {
+        let body = null;
+        if (method !== "GET" && method !== "HEAD") { try { const t = await event.request.text(); body = t ? JSON.parse(t) : null; } catch (_) { return json({ error: "invalid JSON body" }, 400); } }
+        const res = await runInPage(["_iam", "api", method, { path: apiPath, query: Object.fromEntries(url.searchParams), body }]);
+        return json(res && res.body !== undefined ? res.body : res, (res && res.status) || 200);
+      }
       if (apiPath.startsWith("/api/console/") && !/^\/api\/console\/(gce|azurevm)\/instances\/[^/]+\/exec$/.test(apiPath)) {
         // (VM exec — the in-browser VM terminal — is routed below like the other VM endpoints.)
         // Slice-1 stub for the facade data plane. Clear 501 + a TODO marker so the

@@ -234,6 +234,14 @@ builtins._capture = _capture; builtins._restore = _restore
       _busyMs = 0; _busySince = now;
     }, 5000);
     handle = (reqJson) => py.runPythonAsync(`await _handle(${JSON.stringify(reqJson)})`);
+    // Faithful IAM request hook (off by default, zero Python calls while off): wasm/nano-iam-hook.js
+    try {
+      const m = await import("../nano-iam-hook.js"), hook = m.createIamHook({ py, base: CORE_BASE.replace(/\/core$/, "") }), plain = handle;
+      handle = async (reqJson) => {
+        const r = JSON.parse(reqJson), d = await m.guardWire(hook, { method: r.method, path: r.path, query: r.query, headers: r.headers, body_b64: r.body });
+        return d ? JSON.stringify({ status: d.status, headers: d.headers, body: d.body_b64 }) : plain(reqJson);
+      };
+    } catch (_) { /* hook unavailable: serve unguarded, as before */ }
     log("cores loaded (S3·DynamoDB·KMS·Secrets·SQS·SNS·IAM·RDS — real handlers in Pyodide)", "ok");
     log(hasPg ? "RDS engine: PGlite (real Postgres)" : "RDS engine: sqlite3 (PGlite unavailable)", hasPg ? "ok" : "dim");
 
