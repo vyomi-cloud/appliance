@@ -15,6 +15,7 @@ DEFAULT_ENDPOINT = "http://localhost:9000"
 
 def create_app(endpoint=None, region="us-east-1"):
     app = FastAPI(title="Vyomi Labs", version=__version__, docs_url=None, redoc_url=None)
+    os.environ.setdefault("VYOMILABS_HAS_RUNTIME", "1")   # the deploy runner starts the simulator with the real Lambda runtime
     cfg = dict(endpoint=endpoint or os.environ.get("VYOMILABS_ENDPOINT") or DEFAULT_ENDPOINT, region=region)
 
     def summary(layer, prog):

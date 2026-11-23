@@ -28,7 +28,7 @@ def main(argv=None):
             if not blk["run"]:
                 print(f"  saved  {blk['file']}")
                 continue
-            if blk.get("needs_runtime") and not endpoint_arg:
+            if blk.get("needs_runtime") and not endpoint_arg and os.environ.get("VYOMILABS_HAS_RUNTIME") != "1":
                 print(f"  BLOCKED  {blk['run']}  (needs real function execution: run with --endpoint <appliance or Mesh>)")
                 continue
             p = subprocess.run([sys.executable] + blk["run"].split()[1:], cwd=work, env=env, capture_output=True, text=True, timeout=180)

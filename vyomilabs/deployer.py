@@ -81,7 +81,7 @@ def deploy(cloud, layer, endpoint=None):
                     if target:
                         yield dict(t="block", i=i, status="saved")
                     continue
-                if blk.get("needs_runtime") and not os.environ.get("VYOMILABS_HAS_RUNTIME"):
+                if blk.get("needs_runtime") and os.environ.get("VYOMILABS_HAS_RUNTIME") != "1":
                     if target:
                         yield dict(t="block", i=i, status="blocked", out="This step runs real function code. It needs a runtime (the offline appliance or a Mesh).")
                     continue

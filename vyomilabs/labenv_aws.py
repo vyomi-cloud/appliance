@@ -15,4 +15,6 @@ def start(endpoint=None):
         os.environ.setdefault("VYOMI_LLM_ENDPOINT", stub_llm_server.start())
         from facilities.server import start_in_process
         endpoint = start_in_process()
+        if os.environ.get("VYOMILABS_HAS_RUNTIME") == "1":
+            import routes.aws_lambda_unified  # noqa: F401  installs the appliance's real Lambda runner (separate Python process per invoke)
     return endpoint, dict(os.environ, AWS_ENDPOINT_URL=endpoint)
