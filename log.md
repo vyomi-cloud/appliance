@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-23T14:18:05+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-23T13:18:01+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `spec-commit` Azure keyvault: [KeyVault] Add Go client customizations for EKM (#47780) ([link](https://github.com/Azure/azure-rest-api-specs/commit/ec1ca1d8221a84e9201bc0b3a4f60789e51c0fba))
 
 Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-11T18:00:19+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` Google Kubernetes Engine: Issue (November 11, 2026) ([link](https://docs.cloud.google.com/release-notes#November_11_2026))
-
