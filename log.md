@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-23T16:18:07+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `announcement` AWS Parallel Computing Service now supports managed instance health checks ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-pcs-instance-health-checks/))
+- · `announcement` AWS Parallel Computing Service now supports network topology-aware scheduling ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-pcs-network-topology-scheduling/))
+
+Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-23T15:18:39+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3010,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
-**3 change(s), 0 actionable.**
-- · `announcement` AWS Lambda MicroVMs now supports the x86 CPU architecture ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/aws-lambda-microvms-x86-architecture/))
-- · `announcement` Amazon EKS Auto Mode now supports security groups for Pods ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-eks-auto-mode-security-groups-for-pods/))
-- · `release` cli:aws: 2.40.0 → 2.40.1
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-11T19:00:41+00:00
