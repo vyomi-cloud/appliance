@@ -120,6 +120,57 @@ def _gcp_iam_enforcement_response(request, path: str):
 
 
 # ---------------------------------------------------------------------------
+# Faithful IAM gate (core/iam_engine): ONE hook for AWS / GCP / Azure
+# ---------------------------------------------------------------------------
+# Per-space settings document `space["iam_enforcement"]` (off | audit | enforce, resource > service > space > global).
+# Back-compat: the legacy space flags `enforce_iam` (GCP) / `enforce_rbac` (Azure) still work -- they mean "space = enforce,
+# unmapped requests allowed". While the faithful engine/op-map modules are not installed the legacy helpers above run
+# unchanged (the `_FALLBACK` path), so this hook is inert until the engine branches merge.
+
+_FALLBACK = object()
+_LEGACY_FLAG = {"gcp": "enforce_iam", "azure": "enforce_rbac"}
+
+
+async def _iam_gate_response(request, cloud: str):
+    """403 Response when the gate denies; None to continue; `_FALLBACK` -> caller runs the legacy helper."""
+    try:
+        from core.iam_engine import modes as _m, gate as _g
+        space = _gcp_active_space_dict() or {}
+        settings = _m.get_settings(space if space else STATE)
+        legacy = bool(space.get(_LEGACY_FLAG.get(cloud, ""))) if cloud in _LEGACY_FLAG else False
+        explicit = _m.any_active(settings)
+        if legacy and not explicit:
+            if not _g.engines_available(cloud):
+                return _FALLBACK
+            settings = dict(settings, space="enforce", allowUnmapped=True)
+        elif not explicit:
+            return None
+        from core import iam_state_adapters as _ad
+        body = b""
+        cl = request.headers.get("content-length") or "0"
+        if request.method in ("POST", "PUT", "PATCH", "DELETE") and cl.isdigit() and int(cl) < 4 * 1024 * 1024:
+            body = await request.body()
+        hr = _ad.http_request_from(request, body)
+        if cloud == "aws" and not (_ad.aws_access_key_id(hr["headers"], hr["query"]) or "x-amz-target" in hr["headers"]):
+            return None   # not signed AWS API traffic (console pages, static, health): never gated (anonymous S3 is a known gap)
+        state, hr["principal"] = _ad.state_and_principal(cloud, hr["headers"], hr["query"], space)
+        spec = _g.check(cloud, hr, state, settings)
+        if spec is None:
+            return None
+        return Response(content=spec["body"], status_code=spec["status"], headers=spec["headers"],
+                        media_type=spec["content_type"])
+    except Exception:
+        return None     # the gate itself never raises; a host-side failure here must not take the control plane down
+
+
+async def _iam_enforce(request, path: str, cloud: str, legacy_fn=None):
+    r = await _iam_gate_response(request, cloud)
+    if r is _FALLBACK:
+        return legacy_fn(request, path) if legacy_fn else None
+    return r
+
+
+# ---------------------------------------------------------------------------
 # Azure RBAC enforcement helper
 # ---------------------------------------------------------------------------
 
@@ -575,7 +626,7 @@ async def _provider_api_alias(request, call_next):
     if _is_azure_native_path(path):
         try:
             if not path.startswith(("/api/azure/",)):
-                denied = _azure_rbac_enforcement_response(request, path)
+                denied = await _iam_enforce(request, path, "azure", _azure_rbac_enforcement_response)
                 if denied is not None:
                     return denied
             return await call_next(request)
@@ -588,7 +639,7 @@ async def _provider_api_alias(request, call_next):
                 return denied
             path = request.scope.get("path", path)
             if not path.startswith(("/ws/", "/api/gcp/console/")):
-                denied = _gcp_iam_enforcement_response(request, path)
+                denied = await _iam_enforce(request, path, "gcp", _gcp_iam_enforcement_response)
                 if denied is not None:
                     return denied
             return await call_next(request)
@@ -602,6 +653,10 @@ async def _provider_api_alias(request, call_next):
         path = request.scope.get("path", path)
         request.scope["path"] = "/api/" + path[len("/api/gcp/"):]
     try:
+        if provider == "aws" and not path.startswith("/api/"):
+            denied = await _iam_enforce(request, path, "aws")     # AWS wire traffic (S3, JSON-1.x, query)
+            if denied is not None:
+                return denied
         return await call_next(request)
     finally:
         REQUEST_PROVIDER.reset(token)
