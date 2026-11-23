@@ -73,6 +73,9 @@ class WireClient:
 
     def _call(self, op: str, params: dict) -> dict[str, Any]:
         opm = self._model.operation_model(op)
+        if op == "RunInstances" and isinstance(params.get("UserData"), str):  # boto3 base64-encodes this in a handler the serializer does not have
+            import base64
+            params = {**params, "UserData": base64.b64encode(params["UserData"].encode()).decode()}
         req = self._ser.serialize_to_request(params, opm)
         headers = {str(k): (v.decode() if isinstance(v, bytes) else str(v)) for k, v in req["headers"].items()}
         headers["Authorization"] = f"AWS4-HMAC-SHA256 Credential=test/20240101/{self._region}/{self._sign}/aws4_request, SignedHeaders=host, Signature=0"

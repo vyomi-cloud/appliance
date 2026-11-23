@@ -8,6 +8,14 @@ from core.tf_export.aws_network import _name_hint
 from core.tf_export.core import Ctx, attempt, exporter, paged, tags_of
 
 
+def _decode(value: str) -> bytes:
+    """User data comes back base64-encoded from EC2; accept plain text too (a client that stored it unencoded)."""
+    try:
+        return base64.b64decode(value, validate=True)
+    except ValueError:
+        return value.encode()
+
+
 @exporter(22, "instance-profiles")
 def export_instance_profiles(ctx: Ctx) -> None:
     iam = ctx.c["iam"]
@@ -64,7 +72,7 @@ def export_instances(ctx: Ctx) -> None:
         name_hint = ctx.addr[("aws_instance", iid)].split(".", 1)[1]
         if ud:
             path = f"ec2/{name_hint}-user-data.sh"
-            ctx.files_bin[path] = base64.b64decode(ud)
+            ctx.files_bin[path] = _decode(ud)
             attrs["user_data"] = hcl.Ref(f'file("{path}")')
         md = i.get("MetadataOptions") or {}
         if md.get("HttpTokens") == "required" or md.get("HttpEndpoint") == "disabled" or md.get("HttpPutResponseHopLimit") not in (None, 1):
