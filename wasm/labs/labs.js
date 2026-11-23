@@ -34,7 +34,7 @@
 
   function mount(host, opts) {
     opts = opts || {};
-    var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, hasApi = false, store = {};
+    var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, store = {};
     var root = el("div", { className: "vl" });
     host.replaceChildren(root);
     var KEY = function () { return "vyomi.labs." + cloud; };
@@ -44,15 +44,38 @@
     var nDone = function () { return Object.keys(store).length; };
 
     function load(c) {
-      cloud = c; root.dataset.cloud = c; store = lsGet(KEY()); sel = null;
+      cloud = c; root.dataset.cloud = c; store = lsGet(KEY()); sel = null; inCourse = false;
       return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
         course = d;
         return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; });
       }).then(function () { render(); });
     }
     function go(id) { sel = id; render(); var s = host.closest ? host : null; window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); }
-    function render() { root.replaceChildren(sel ? chapterView(byId(sel)) : courseView()); }
+    function render() { root.replaceChildren(sel ? chapterView(byId(sel)) : inCourse ? courseView() : catalogView()); }
     function save() { lsSet(KEY(), store); }
+
+    /* ---------- landing: every hands-on course as a card ---------- */
+    function catalogView() {
+      var nx = nextId(), n = nDone(), tot = course.layers.length, pct = Math.round(100 * n / tot);
+      var labN = course.layers.reduce(function (a, l) { return a + (l.lab ? l.lab.length : 0); }, 0);
+      var cloudTabs = opts.tabs ? el("nav", { className: "vl-clouds", "aria-label": "Cloud" }, CLOUDS.map(function (c) {
+        var b = el("button", { type: "button", textContent: c[1] }); b.setAttribute("aria-current", c[0] === cloud); b.onclick = function () { if (c[0] !== cloud) load(c[0]); }; return b; })) : null;
+      var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
+      var start = function () { inCourse = true; render(); window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); };
+      var card = el("article", { className: "vl-ccard" },
+        el("div", { className: "vl-herotxt" },
+          el("div", { className: "vl-eyebrow" }, "Hands-on course · " + course.cloud_name + " · " + course.ai_platform),
+          el("h2", { textContent: course.title }),
+          el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
+          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", "13 layers"))),
+        el("div", { className: "vl-progcard" },
+          el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
+          el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })),
+          el("button", { type: "button", className: "vl-btn primary lg", onclick: start }, n ? "Continue course" : "Start course", icon(P.arrow, 18))));
+      return el("div", { className: "vl-page" },
+        el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." })), cloudTabs),
+        el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
+    }
 
     /* ---------- course view ---------- */
     function courseView() {
@@ -65,6 +88,7 @@
       var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
       var hero = el("header", { className: "vl-hero" },
         el("div", { className: "vl-herotxt" },
+          el("button", { type: "button", className: "vl-backlink", onclick: function () { inCourse = false; render(); } }, icon(P.back, 14), "All courses"),
           el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform),
           el("h1", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
@@ -362,7 +386,7 @@
     }
 
     var q = parseInt(opts.layer, 10);
-    return load(cloud).then(function () { if (q && byId(q)) go(q); }).catch(function (e) { root.textContent = "Could not load Vyomi Labs: " + e.message; });
+    return load(cloud).then(function () { if (q && byId(q)) { inCourse = true; go(q); } }).catch(function (e) { root.textContent = "Could not load Vyomi Labs: " + e.message; });
   }
   window.VyomiLabs = { mount: mount };
 })();
