@@ -1,75 +1,14 @@
 {
- "at": "2026-11-23T20:18:07+00:00",
+ "at": "2026-11-23T21:18:14+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "network",
-   "kind": "spec-commit",
-   "key": "azure:network:a2f2af7015",
-   "title": "Azure network: Consolidate Network TypeSpec project in nested folder (#47722)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/a2f2af70150be718eb73ddeb82e6ca181acd6722",
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.42.2",
+   "title": "cli:aws: 2.42.1 \u2192 2.42.2",
    "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Aurora",
-   "kind": "announcement",
-   "key": "feed:aws:06c724e25353",
-   "title": "Amazon Aurora serverless for MySQL now supports up to 384 ACUs ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aurora-serverless-mysql-supports-384-acu/",
-   "detail": "Amazon Aurora serverless now supports database capacity of up to 384 Aurora Capacity Units (ACUs) for Aurora MySQL-Compatible Edition, a 50% increase from the previous maximum of 256 ACUs. Each ACU provides approximately 2 gibibytes (GiB) of memory with corresponding CPU and networking, so a single Aurora serverless database can now scale up to 768 GiB of memory. When the workload completes, Aurora serverless automatically scales down to zero. This makes Aurora serverless especially well-suited for agentic AI applications, which typically have bursts of activity, long idle windows, and unpredi",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:b8bc412c8dbb",
-   "title": "Amazon Inspector expands runtime reachability analysis for ECR and EC2 findings",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/inspector-runtime-reachability/",
-   "detail": "Amazon Inspector has expanded its vulnerability management capabilities with runtime reachability analysis for findings originating from Amazon Elastic Container Registry (Amazon ECR) and Amazon Elastic Compute Cloud (Amazon EC2) instances. Previously, Inspector reported every vulnerability found in a resource, including packages that were never used by applications. Security teams had to manually assess which vulnerabilities actually posed risk in their deployed environments. Now, Inspector automatically identifies which vulnerabilities are potentially reachable by analyzing package placement",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon S3",
-   "kind": "announcement",
-   "key": "feed:aws:4e1da5e44a5f",
-   "title": "You can now copy data server-side between Amazon S3 buckets and Amazon FSx file systems with S3 Access Points",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/s3-access-points-server-side-copy-fsx/",
-   "detail": "You can now use Amazon S3 Access Points to copy or move data server-side between Amazon S3 general purpose buckets and Amazon FSx file systems within the same AWS Region, making it faster, lower-cost, and easier to move your data between S3 and FSx or across FSx file systems. An S3 Access Point for FSx is an S3 endpoint that allows you to access the data on your Amazon FSx for NetApp ONTAP and Amazon FSx for OpenZFS file systems via the S3 API and from S3-based services and applications. You can also use S3 Access Points to transfer data to and from your file system without the need to mount i",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Cloud Run functions",
-   "kind": "announcement",
-   "key": "feed:gcp:4585dc9b5fe5",
-   "title": "Cloud Run functions: Feature (November 23, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_23_2026",
-   "detail": "Support for the Node.js 26 runtime is in General Availability (GA) .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Cloud Run functions",
-   "kind": "announcement",
-   "key": "feed:gcp:c9e9c2b8b0ce",
-   "title": "Cloud Run functions: Feature (November 23, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_23_2026",
-   "detail": "Support for the Python 3.15 runtime is in General Availability (GA) . This runtime is only available for Cloud Run functions and isn't supported on Cloud Run functions (1st gen) .",
-   "actionable": false
-  },
-  {
-   "cloud": "gcp",
-   "service": "Google Kubernetes Engine",
-   "kind": "lifecycle",
-   "key": "feed:gcp:a8acbcbbb23e",
-   "title": "Google Kubernetes Engine: Deprecated (November 23, 2026)",
-   "link": "https://docs.cloud.google.com/release-notes#November_23_2026",
-   "detail": "Policy Controller is deprecated as of November 12, 2026, and reaches end of support on December 31, 2027. Starting January 31, 2027, you can't enable Policy Controller in fleet host projects that don't already have Policy Controller enabled. Google Kubernetes Engine (GKE) blocks upgrades to version 1.39 and later for clusters that have Policy Controller installed. Clusters that run GKE version 1.39 and later don't support Policy Controller. On December 31, 2027, technical support, security patching on GKE version 1.38 and earlier, and the Google Cloud console dashboard for Policy Controller en",
-   "actionable": true
   }
  ],
  "errors": []
