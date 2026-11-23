@@ -206,7 +206,7 @@ def describe(method, url, body=None, host=None):
 
 
 def _match(st, method, path, host):
-    path = re.sub(r"^/upload/", "/", path)
+    path = re.sub(r"^/(?:upload|download)/", "/", path)
     if path.endswith("/") and len(path) > 1:
         path = path.rstrip("/")
     cands = st["by_method"].get(method.upper(), [])
@@ -233,19 +233,40 @@ def _match(st, method, path, host):
     return best
 
 
+_DENY = re.compile(r"^/v2/policies/(.+?)/denypolicies(?:/([^/]+))?/?$")
+_DENY_PERM = {("POST", False): "create", ("GET", False): "list", ("GET", True): "get", ("DELETE", True): "delete",
+              ("PUT", True): "update", ("PATCH", True): "update"}
+
+
+def _deny_policy(method, path):
+    """IAM v2 deny policies (iam.googleapis.com/v2; not in the v1 Discovery table): /v2/policies/{attachmentPoint}/denypolicies[/{id}]."""
+    m = _DENY.match(path)
+    if not m:
+        return None
+    verb = _DENY_PERM.get((method, bool(m.group(2))))
+    if not verb:
+        return None
+    from urllib.parse import unquote
+    return [{"action": "iam.denypolicies." + verb, "service": "iam.googleapis.com",
+             "resource": "//iam.googleapis.com/policies/" + unquote(m.group(1)) + "/denypolicies" + ("/" + m.group(2) if m.group(2) else "")}]
+
+
 def required(method, url, body=None, host=None):
     st = _load()
     h, path, q = _split_url(url)
     h = host or h
     method = (method or "GET").upper()
     if h and (h == "storage.googleapis.com" or h.endswith(".storage.googleapis.com")) \
-            and not re.match(r"^/(?:upload/)?storage/v1/", path):
+            and not re.match(r"^/(?:upload/|download/)?storage/v1/", path):
         return _xml_storage(method, path, q, h)
+    dp = _deny_policy(method, path)
+    if dp:
+        return dp
     best = _match(st, method, path, h)
     if not best:
         return []
     e, _m = best
-    rel = _resource_path(re.sub(r"^/upload/", "/", path), e["k"], e["p"])
+    rel = _resource_path(re.sub(r"^/(?:upload|download)/", "/", path), e["k"], e["p"])
     svc = e["h"]
     if e["svc"] == "storage":
         rel = _storage_name(rel) if not rel.startswith("projects/") else rel

@@ -157,6 +157,9 @@ async def _iam_gate_response(request, cloud: str):
         if cloud == "aws" and (hr["principal"] or {}).get("type") == "unknown" and (settings or {}).get("unknownPrincipal", "root") != "deny":
             acct = hr["principal"].get("account") or "000000000000"      # not an IAM user/role of this store: the account root
             hr["principal"] = {"arn": f"arn:aws:iam::{acct}:root", "type": "root", "account": acct}
+        if cloud in ("gcp", "azure") and (hr["principal"] or {}).get("type") == "root" \
+                and (settings or {}).get("unknownPrincipal", "root") != "deny":
+            return None   # no identity presented (no X-Cloudlearn-Principal / bearer claim / active_principal): the project/subscription owner
         spec = _g.check(cloud, hr, state, settings)
         if spec is None:
             return None

@@ -75,14 +75,32 @@ def _full_path(hr):
     return str(hr.get("path") or "/") + (("?" + q) if q else "")
 
 
+def _bare_host(hr):
+    h = str(hr.get("host") or (hr.get("headers") or {}).get("host") or "").strip().lower()
+    return h.rsplit(":", 1)[0] if h and not h.endswith("]") and ":" in h else (h or None)
+
+
+def _call_map(m, args, extra):
+    """The contract is required(method, url, body); the GCP/Azure maps also take host (and Azure headers). A map that predates them
+    (a stand-in, an older vendored copy) is called without."""
+    try:
+        return m.required(*args, **{k: v for k, v in extra.items() if v})
+    except TypeError as exc:
+        if "unexpected keyword" not in str(exc):
+            raise
+        return m.required(*args)
+
+
 def required_permissions(cloud, http_request, maps=None) -> list:
     m = _map(cloud, maps)
     if cloud == "aws":
         out = m.required(http_request)
     elif cloud == "gcp":
-        out = m.required(http_request.get("method", "GET"), _full_path(http_request), http_request.get("body"))
-    else:
-        out = m.required(http_request.get("method", "GET"), str(http_request.get("path") or "/"), http_request.get("body"))
+        out = _call_map(m, (http_request.get("method", "GET"), _full_path(http_request), http_request.get("body")),
+                        {"host": _bare_host(http_request)})
+    else:   # the query string selects the data-plane operation (?comp=list, ?restype=container ...); the host names the data-plane service
+        out = _call_map(m, (http_request.get("method", "GET"), _full_path(http_request), http_request.get("body")),
+                        {"host": _bare_host(http_request), "headers": http_request.get("headers")})
     return list(out or [])
 
 
@@ -226,6 +244,8 @@ def _check(cloud, hr, state, settings, engines, maps, log, bypass):
     deny = None
     for p in perms:
         action, resource = p.get("action", "?"), p.get("resource") or "*"
+        if cloud == "azure" and not p.get("service") and "/" in action:
+            p = dict(p, service=action.split("/", 1)[0])      # the Azure map has no service field: the provider namespace is the service key
         mode = _modes.resolve_mode(cloud, settings, p.get("service"), resource)
         if mode == "off":
             continue

@@ -57,6 +57,16 @@ def _ancestors(scope, state):
     if s != "/":
         parts = s.strip("/").split("/")
         out = ["/" + "/".join(parts[:i]) for i in range(len(parts), 0, -1)]
+    # data-plane resource names ("/<storage account>/<container>/<blob>", "/vaults/<v>/...") are not ARM ids: the host supplies
+    # state["data_scopes"] {"/acct": "/subscriptions/../storageAccounts/acct", "/vaults/v": ...}; the resource then inherits from that
+    # ARM resource (its resource group, subscription, management groups), exactly as Azure authorizes data actions.
+    ds = state.get("data_scopes") or {}
+    if ds and not s.startswith(("/subscriptions/", "/providers/")):
+        for pref in out:
+            arm = {k.lower(): v for k, v in ds.items()}.get(pref)
+            if arm:
+                tail = s[len(pref):]
+                return out + [a for a in _ancestors(_norm(arm), dict(state, data_scopes=None)) if a not in out]
     mg = None
     if s.startswith(_MG):
         mg = s[len(_MG):].split("/")[0]

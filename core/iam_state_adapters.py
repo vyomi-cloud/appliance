@@ -154,14 +154,35 @@ def gcp_principal(headers, space) -> dict:
     return gcp_member(raw or str((space or {}).get("active_principal") or "root"))
 
 
-def gcp_state(iam_state) -> dict:
+def _gcp_point(key: str) -> str:
+    """Policy / attachment-point key -> bare resource path ('cloudresourcemanager.googleapis.com%2Fprojects%2Fp' -> 'projects/p')."""
+    k = unquote(str(key or "")).strip("/")
+    return k.split("googleapis.com/", 1)[1] if "googleapis.com/" in k else k
+
+
+def gcp_state(iam_state, store=None, project=None) -> dict:
+    """Engine `state` (core/iam_engine/gcp_eval.py): allow_policies {attachment_point: policy}, deny_policies {point: [policy]},
+    custom_roles, hierarchy. Sources: the v4 IAM core slot (`store`: gcp_iam_policies / gcp_deny_policies / gcp_custom_roles, the
+    authoritative records) and the pre-v4 `gcp_iam_state` view ({"policies": {project: policy}}) merged under it (store wins).
+    `project` (the space's project id) parents every Cloud Storage resource ('projects/_/...'), so project-level bindings are inherited."""
     st = iam_state if isinstance(iam_state, dict) else {}
-    policies = st.get("policies") if isinstance(st.get("policies"), dict) else {}
-    bindings = list(st.get("bindings") or [])
-    for p in policies.values():
+    allow: dict = {}
+    for k, p in (st.get("policies") or {}).items():
         if isinstance(p, dict) and isinstance(p.get("bindings"), list):
-            bindings.extend(p["bindings"])
-    return {"cloud": "gcp", "policies": policies, "bindings": bindings, "service_accounts": st.get("service_accounts") or {}}
+            allow["projects/" + k if "/" not in k else _gcp_point(k)] = p
+    for k, p in (getattr(store, "gcp_iam_policies", None) or {}).items():
+        if isinstance(p, dict):
+            allow[_gcp_point(k)] = p
+    deny: dict = {}
+    for k, pols in (getattr(store, "gcp_deny_policies", None) or {}).items():
+        lst = [v for v in (pols or {}).values() if isinstance(v, dict)] if isinstance(pols, dict) else list(pols or [])
+        if lst:
+            deny[_gcp_point(k)] = lst
+    out = {"cloud": "gcp", "allow_policies": allow, "deny_policies": deny, "custom_roles": dict(getattr(store, "gcp_custom_roles", None) or {}),
+           "service_accounts": st.get("service_accounts") or {}, "hierarchy": {}}
+    if project:
+        out["hierarchy"]["projects/_"] = "projects/" + project
+    return out
 
 
 # ----------------------------------------------------------------------------- Azure
@@ -179,26 +200,108 @@ def azure_principal(headers, space) -> dict:
     return {"object_id": raw, "type": "root" if raw == "root" else "user", "groups": []}
 
 
-def azure_state(arm_resources) -> dict:
-    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": []}
+# ARM type -> the data-plane resource prefix core/iam_engine/map_azure.py reports (so data actions inherit from the ARM resource's scope)
+_AZ_DATA = {"microsoft.storage/storageaccounts": "/%s", "microsoft.keyvault/vaults": "/vaults/%s",
+            "microsoft.servicebus/namespaces": "/namespaces/%s", "microsoft.documentdb/databaseaccounts": "/databaseAccounts/%s",
+            "microsoft.appconfiguration/configurationstores": "/configurationStores/%s"}
+_RA_TAIL = re.compile(r"/providers/microsoft\.authorization/(?:roleassignments|denyassignments)/[^/]+$", re.I)
+
+
+def _arm_scope(rec) -> str:
+    props = rec.get("properties") or {}
+    sc = props.get("scope") or ""
+    if not sc:                       # ARM extension resource: the scope is the id minus its Microsoft.Authorization tail
+        sc = _RA_TAIL.sub("", str(rec.get("id") or ""))
+    return sc or "/"
+
+
+def _flat_assignment(rec) -> dict:
+    """ARM roleAssignment record ({id, name, properties:{principalId, roleDefinitionId, scope, condition}}) -> the engine's flat shape."""
+    props = rec.get("properties") or {}
+    return {"id": rec.get("id") or rec.get("name") or "", "principal_id": props.get("principalId") or rec.get("principalId") or "",
+            "principal_type": props.get("principalType") or "", "role_definition_id": props.get("roleDefinitionId") or rec.get("roleDefinition") or "",
+            "scope": _arm_scope(rec), "condition": props.get("condition"), "condition_version": props.get("conditionVersion")}
+
+
+def _flat_deny(rec) -> dict:
+    """ARM denyAssignment record ({properties:{denyAssignmentName, scope, permissions, principals, excludePrincipals, ...}})."""
+    props = rec.get("properties") or {}
+    return {"id": rec.get("id") or rec.get("name") or "", "scope": _arm_scope(rec),
+            "principals": props.get("principals") or [], "exclude_principals": props.get("excludePrincipals") or [],
+            "permissions": props.get("permissions") or [], "is_system_protected": bool(props.get("isSystemProtected")),
+            "do_not_apply_to_child_scopes": bool(props.get("doNotApplyToChildScopes"))}
+
+
+def azure_state(arm_resources, rbac_store=None) -> dict:
+    """Engine `state` (core/iam_engine/azure_eval.py). `arm_resources`: the flat ARM record map of the Azure space (role assignments, custom
+    role definitions and deny assignments are ARM resources there, in ARM shape: properties.principalId ... -> flattened here).
+    `rbac_store`: the Azure RBAC core slot (core/azure_iam_core.py: {name, principalId, roleDefinition, scope, kind, denyActions}), if present."""
+    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "data_scopes": {}}
     for rec in (arm_resources or {}).values():
-        if isinstance(rec, dict):
-            t = str(rec.get("_type") or rec.get("type") or "").lower()
-            if t in _AZ:
-                out[_AZ[t]].append(rec)
+        if not isinstance(rec, dict):
+            continue
+        t = str(rec.get("_type") or rec.get("type") or "").lower()
+        if t in _AZ_DATA and rec.get("id") and rec.get("name"):
+            out["data_scopes"][_AZ_DATA[t] % str(rec["name"]).lower()] = rec["id"]
+        if t == "microsoft.authorization/roleassignments":
+            out["role_assignments"].append(_flat_assignment(rec))
+        elif t == "microsoft.authorization/roledefinitions":
+            if str((rec.get("properties") or {}).get("type") or "CustomRole").lower() != "builtinrole":
+                out["role_definitions"].append(rec)
+        elif t == "microsoft.authorization/denyassignments":
+            out["deny_assignments"].append(_flat_deny(rec))
+    for a in (getattr(rbac_store, "_azure_role_assignments", None) or {}).values():
+        if not isinstance(a, dict):
+            continue
+        if a.get("kind") == "deny":
+            out["deny_assignments"].append({"id": a.get("name", ""), "scope": a.get("scope") or "/", "principals": [{"id": a.get("principalId", ""), "type": "User"}],
+                                            "permissions": [{"actions": list(a.get("denyActions") or [])}]})
+        else:
+            out["role_assignments"].append({"id": a.get("name", ""), "principal_id": a.get("principalId", ""),
+                                            "role_definition_id": a.get("roleDefinition", ""), "scope": a.get("scope") or "/"})
     return out
 
 
 # ----------------------------------------------------------------------------- live host binding
 
 def state_and_principal(cloud, headers, query="", space=None):
-    """(state, principal) from the live appliance stores."""
+    """(state, principal) from the live appliance stores. Runs the store lookups as `cloud`'s request provider (the stores are
+    space-scoped per provider), so it also works outside a request (the /api/iam/<cloud>/evaluate view)."""
+    if cloud == "aws":
+        return _live("aws", headers, query, space)
+    from core import app_context
+    tok = app_context.REQUEST_PROVIDER.set(cloud)
+    try:
+        return _live(cloud, headers, query, space)
+    finally:
+        app_context.REQUEST_PROVIDER.reset(tok)
+
+
+def _live(cloud, headers, query, space):
     if cloud == "aws":
         from core.appliance_stores import iam_store
         s = iam_store()
         return aws_state(s), aws_principal(headers, query, s)
     if cloud == "gcp":
         from core.app_context import gcp_iam_state
-        return gcp_state(gcp_iam_state), gcp_principal(headers, space)
-    from core.app_context import azure_state_dict
-    return azure_state(azure_state_dict()), azure_principal(headers, space)
+        store, project = None, None
+        try:
+            from core import appliance_stores, gcp_project
+            store = appliance_stores.net_new_core_stores().get("gcp_iam")
+            project = gcp_project.current().get("projectId") or gcp_project.DEFAULT_PROJECT_ID
+        except Exception:
+            pass
+        return gcp_state(gcp_iam_state, store, project), gcp_principal(headers, space)
+    try:
+        from providers import azure_services      # the live ARM record map of the Azure space (resolved for the request's provider)
+        arm = azure_services._state
+    except Exception:
+        from core.app_context import azure_state_dict
+        arm = azure_state_dict()
+    rbac = None
+    try:
+        from core import appliance_stores
+        rbac = appliance_stores.net_new_core_stores().get("iam")
+    except Exception:
+        pass
+    return azure_state(arm, rbac), azure_principal(headers, space)
