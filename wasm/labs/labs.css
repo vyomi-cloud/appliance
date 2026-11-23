@@ -264,3 +264,5 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-ccard.soon{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border-style:dashed;background:transparent;text-align:center;padding:26px;grid-template-columns:none}
 .vl .vl-backlink{display:inline-flex;align-items:center;gap:6px;border:0;background:none;padding:0 0 8px;color:var(--accent);font-weight:600;font-size:13px;cursor:pointer}
 .vl[data-cloud="aws"] .vl-ccard{border-top:4px solid #232f3e;border-radius:2px}.vl[data-cloud="gcp"] .vl-ccard{border-radius:24px}.vl[data-cloud="azure"] .vl-ccard{border-radius:6px}
+.vl .vl-archlink{display:inline-flex;align-items:center;gap:7px;margin:12px 0 0;font-weight:600;font-size:13.5px;color:var(--accent);text-decoration:none}.vl .vl-archlink:hover{text-decoration:underline}
+.vl .vl-sechead .vl-archlink{margin:4px 0 0}

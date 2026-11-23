@@ -78,6 +78,9 @@
     }
 
     /* ---------- course view ---------- */
+    function archLink() {   // the full architecture this course teaches you to build, opened full size in its own tab
+      return el("a", { className: "vl-archlink", href: base + course.image, target: "_blank", rel: "noopener" }, icon("M4 5h16v14H4zM4 10h16M10 10v9", 15), "View the full reference architecture you will build", icon("M7 17L17 7M9 7h8v8", 14));
+    }
     function courseView() {
       var nx = nextId(), n = nDone(), tot = course.layers.length, pct = Math.round(100 * n / tot);
       var cloudTabs = opts.tabs ? el("nav", { className: "vl-clouds", "aria-label": "Cloud" }, CLOUDS.map(function (c) {
@@ -92,13 +95,13 @@
           el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform),
           el("h1", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
-          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", "13 layers")), cloudTabs),
+          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", "13 layers")), archLink(), cloudTabs),
         el("div", { className: "vl-progcard" },
           el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
           el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })), cta));
 
       var map = el("section", { className: "vl-map", "aria-label": "Reference architecture" },
-        el("div", { className: "vl-sechead" }, el("h2", { textContent: "Reference architecture" }), el("p", { className: "vl-muted", textContent: "Native " + course.cloud_name + " services. Select any layer to open its chapter." })),
+        el("div", { className: "vl-sechead" }, el("h2", { textContent: "Reference architecture" }), el("p", { className: "vl-muted", textContent: "Native " + course.cloud_name + " services. Select any layer to open its chapter." }), archLink()),
         diagram(null, true), el("ul", { className: "vl-legend" }, el("li", {}, el("i", { className: "vl-dot" }), "Not started"), el("li", {}, el("i", { className: "vl-dot done" }), "Complete"), el("li", {}, el("i", { className: "vl-dot next" }), "Up next")));
 
       var tiles = el("section", { className: "vl-contents", "aria-label": "Course contents" },
