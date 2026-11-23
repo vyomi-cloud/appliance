@@ -296,8 +296,22 @@
         el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)));
       var fitsBody = el("div", {}, el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
         el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null);
-      var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Confirm the layer works before moving on. Run each check in the simulator." }), el("ol", { className: "vl-vals" }, valRows),
-        el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), el("p", { className: "vl-muted", textContent: how }), el("div", { className: "vl-actions" }, check, statusEl), out);
+      /* Validate: the chapter's services' SDK & CLI usage + API reference, embedded live from the generated docs (one source of truth), with Try it that runs the calls in this browser. */
+      var docIds = (l.docs || []).map(function (d) { return d.id; });
+      var docsUrl = function (view) { return base + "../clouds.html?embed=1&only=" + cloud + "&svc=" + encodeURIComponent(docIds.join(",")) + "#" + view; };
+      var docsBlock = function () {
+        if (!docIds.length) return el("p", { className: "vl-muted", textContent: "This chapter's services have no generated API docs yet; use the console steps above to check them." });
+        var frame = el("iframe", { className: "vl-docframe", title: "SDK & CLI usage and API reference for this chapter", loading: "lazy", src: docsUrl("usage") });
+        window.addEventListener("message", function (e) { if (e.source === frame.contentWindow && e.data && e.data.vylabs === "h") frame.style.height = Math.min(Math.max(e.data.h + 8, 160), 2600) + "px"; });
+        var tabs = [["usage", "SDK & CLI usage"], ["api", "API reference"]].map(function (t, i) { var bt = el("button", { type: "button", className: "vl-dtab" + (i ? "" : " on"), textContent: t[1] });
+          bt.onclick = function () { tabs.forEach(function (x) { x.classList.toggle("on", x === bt); }); frame.src = docsUrl(t[0]); }; return bt; });
+        return el("div", { className: "vl-docs" }, el("div", { className: "vl-dtabs" }, tabs, el("span", { className: "vl-muted vl-dsvc", textContent: (l.docs || []).map(function (d) { return d.title; }).join(" · ") })), frame);
+      };
+      var consoleVals = l.validate.filter(function (v) { return v.kind === "Console"; }).map(function (v) {
+        return el("li", { className: "vl-val" }, el("div", { className: "vl-valhead" }, el("span", { className: "vl-kind console", textContent: "Console" }), el("b", { textContent: v.what })), el("div", { className: "vl-path" }, v.how), el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), v.expect)); });
+      var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Check the layer with the live documentation for this chapter's services. Press Try it on a curl example to make the call from this browser against your simulator: no tunnel needed." }),
+        docsBlock(), consoleVals.length ? el("ol", { className: "vl-vals" }, consoleVals) : null,
+        el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), canCheck ? el("div", { className: "vl-actions" }, check, statusEl) : null, out);
       var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, statusEl), el("p", { className: "vl-muted" }, "Reference solution (peek only after you have tried): ", el("code", { textContent: l.reference })));
       /* ---- the chapter workspace: a hero, then ONE section at a time (compact), in each cloud's own tutorial structure ---- */
       var chk = function (arr) { return el("ul", { className: "vl-checks" }, arr.map(function (t) { return el("li", {}, icon(P.check, 15), t); })); };

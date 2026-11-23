@@ -161,6 +161,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "cognitiveservices",
+     "title": "Azure AI services"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -331,6 +337,16 @@
      "run": "python call_container_app.py",
      "expect": "s1 turns: 1 -> 2 | s2 turns: 1",
      "needs_runtime": true
+    }
+   ],
+   "docs": [
+    {
+     "id": "cognitiveservices",
+     "title": "Azure AI services"
+    },
+    {
+     "id": "containerapps",
+     "title": "Container Apps"
     }
    ],
    "validate": [
@@ -549,6 +565,16 @@
      "run": "python call_tools.py",
      "expect": "found: True | status: RUNNING | work orders: 1",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "functionapp",
+     "title": "Function App"
+    },
+    {
+     "id": "storage",
+     "title": "Storage accounts"
     }
    ],
    "validate": [
@@ -788,6 +814,24 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "storage",
+     "title": "Storage accounts"
+    },
+    {
+     "id": "search",
+     "title": "Azure AI Search"
+    },
+    {
+     "id": "eventgrid",
+     "title": "Event Grid"
+    },
+    {
+     "id": "functionapp",
+     "title": "Function App"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -934,6 +978,12 @@
      "run": "python try_search.py",
      "expect": "vector   what to do when boiler pressure is too high  -> boiler-sop.md\nhybrid   fire alarm evacuation procedure              -> fire-safety-sop.md",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "search",
+     "title": "Azure AI Search"
     }
    ],
    "validate": [
@@ -1088,6 +1138,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "cognitiveservices",
+     "title": "Azure AI services"
+    }
+   ],
    "validate": [
     {
      "kind": "SDK",
@@ -1227,6 +1283,16 @@
      "run": "python no_managed_memory.py",
      "expect": "no managed long-term memory API",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "cognitiveservices",
+     "title": "Azure AI services"
+    },
+    {
+     "id": "storage",
+     "title": "Storage accounts"
     }
    ],
    "validate": [
@@ -1389,6 +1455,12 @@
      "run": "python mcp_server.py",
      "expect": "| status: RUNNING",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "apim",
+     "title": "API Management services"
     }
    ],
    "validate": [
@@ -1557,6 +1629,20 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "servicebus",
+     "title": "Service Bus"
+    },
+    {
+     "id": "functionapp",
+     "title": "Function App"
+    },
+    {
+     "id": "storage",
+     "title": "Storage accounts"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1723,6 +1809,20 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "entra",
+     "title": "Microsoft Entra ID"
+    },
+    {
+     "id": "apim",
+     "title": "API Management services"
+    },
+    {
+     "id": "frontdoor",
+     "title": "Front Door and CDN profiles"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1858,6 +1958,16 @@
      "run": "python inbox.py",
      "expect": "redelivered after complete: 0",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "cognitiveservices",
+     "title": "Azure AI services"
+    },
+    {
+     "id": "servicebus",
+     "title": "Service Bus"
     }
    ],
    "validate": [
@@ -2047,6 +2157,16 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "monitor",
+     "title": "Monitor"
+    },
+    {
+     "id": "loganalytics",
+     "title": "Log Analytics workspaces"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -2194,6 +2314,16 @@
      "run": "python audit.py",
      "expect": "vault create recorded: True | function app create recorded: True",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "keyvaults",
+     "title": "Key vaults"
+    },
+    {
+     "id": "monitor",
+     "title": "Monitor"
     }
    ],
    "validate": [

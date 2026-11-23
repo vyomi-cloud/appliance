@@ -134,6 +134,16 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
+    },
+    {
+     "id": "gemini",
+     "title": "Gemini Developer API"
+    }
+   ],
    "validate": [
     {
      "kind": "SDK",
@@ -302,6 +312,12 @@
      "run": "python query_agent.py",
      "expect": "hosted in a separate process: True",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
     }
    ],
    "validate": [
@@ -507,6 +523,20 @@
      "run": "python check_write_tool.py",
      "expect": "ledger: EXECUTED",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "functions",
+     "title": "Cloud Functions"
+    },
+    {
+     "id": "run",
+     "title": "Cloud Run"
+    },
+    {
+     "id": "firestore",
+     "title": "Firestore"
     }
    ],
    "validate": [
@@ -730,6 +760,28 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "storage",
+     "title": "Cloud Storage"
+    },
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
+    },
+    {
+     "id": "eventarc",
+     "title": "eventarc"
+    },
+    {
+     "id": "functions",
+     "title": "Cloud Functions"
+    },
+    {
+     "id": "run",
+     "title": "Cloud Run"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -875,6 +927,12 @@
      "run": "python deploy_kb_search.py",
      "expect": "kb-search returned 3 cited results",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
     }
    ],
    "validate": [
@@ -1041,6 +1099,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
+    }
+   ],
    "validate": [
     {
      "kind": "SDK",
@@ -1182,6 +1246,12 @@
      "run": "python generate_memories.py",
      "expect": "memories generated from the conversation",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
     }
    ],
    "validate": [
@@ -1349,6 +1419,12 @@
      "run": "python add_policy.py",
      "expect": "policy attached to facilities-gateway",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
     }
    ],
    "validate": [
@@ -1530,6 +1606,24 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "pubsub",
+     "title": "Pub/Sub"
+    },
+    {
+     "id": "functions",
+     "title": "Cloud Functions"
+    },
+    {
+     "id": "run",
+     "title": "Cloud Run"
+    },
+    {
+     "id": "firestore",
+     "title": "Firestore"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1694,6 +1788,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "iam-admin",
+     "title": "IAM & Admin"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1820,6 +1920,16 @@
      "run": "python inbox_check.py",
      "expect": "redelivered after ack: False",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI"
+    },
+    {
+     "id": "pubsub",
+     "title": "Pub/Sub"
     }
    ],
    "validate": [
@@ -1969,6 +2079,20 @@
      "run": "python log_grpc.py",
      "expect": "gRPC log entry written and read back",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "trace",
+     "title": "Cloud Trace"
+    },
+    {
+     "id": "logs",
+     "title": "Logging"
+    },
+    {
+     "id": "monitoring",
+     "title": "Monitoring"
     }
    ],
    "validate": [
@@ -2132,6 +2256,16 @@
      "run": "python ledger_audit.py",
      "expect": "approved by duty.manager@example.com",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "security/kms",
+     "title": "Cloud KMS"
+    },
+    {
+     "id": "logs",
+     "title": "Logging"
     }
    ],
    "validate": [

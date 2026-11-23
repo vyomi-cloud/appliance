@@ -156,6 +156,31 @@ def _setup(cloud, lid):
         out.append(dict(st, n=n, shot=shot if os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "wasm", "labs", shot)) else None))
     return out
 
+# Which generated service docs (wasm/docs/index.json ids) document a chapter's services. The Validate section embeds those docs
+# (SDK & CLI usage + API reference) instead of hand-written commands, so the tutorial always shows what the docs show.
+DOCMAP = {
+ "aws": [(r"Lambda", ["lambda"]), (r"Step Functions", ["states"]), (r"Bedrock|AgentCore|Cedar", ["bedrock"]), (r"KMS", ["kms"]), (r"S3", ["s3"]), (r"DynamoDB", ["dynamodb"]),
+         (r"SNS", ["sns", "sqs"]), (r"API Gateway", ["apigateway"]), (r"CloudWatch|CloudTrail", ["cloudwatch"]), (r"X-Ray", ["api-xray"])],
+ "gcp": [(r"Cloud Run functions", ["functions", "run"]), (r"Cloud Storage", ["storage"]), (r"Firestore", ["firestore"]), (r"Pub/Sub", ["pubsub"]), (r"Vertex AI|Agent|Memory Bank|MCP|Cedar|Model Armor|LangGraph", ["vertex-ai"]),
+         (r"Gemini", ["gemini"]), (r"KMS", ["security/kms"]), (r"Logging|Audit Logs", ["logs"]), (r"Monitoring", ["monitoring"]), (r"Trace", ["trace"]), (r"Eventarc", ["eventarc"]), (r"Identity Platform", ["iam-admin"])],
+ "azure": [(r"Functions", ["functionapp"]), (r"Key Vault", ["keyvaults"]), (r"Monitor|Application Insights|Activity Log", ["monitor"]), (r"Log Analytics", ["loganalytics"]), (r"AI Search", ["search"]),
+           (r"OpenAI|Content Safety|Foundry", ["cognitiveservices"]), (r"Service Bus", ["servicebus"]), (r"Event Grid", ["eventgrid"]), (r"Container Apps", ["containerapps"]), (r"API Management|APIM", ["apim"]),
+           (r"Entra", ["entra"]), (r"Blob|Table", ["storage"]), (r"Front Door", ["frontdoor"])],
+}
+
+def _docs(cloud, services):
+    import re
+    ix = json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "wasm", "docs", "index.json")))["clouds"][cloud]
+    have = {d["id"]: d["t"] for d in ix if d["o"] > 0}
+    out = []
+    for svc in services:
+        for pat, ids in DOCMAP[cloud]:
+            if re.search(pat, svc):
+                for i in ids:
+                    if i in have and i not in [d["id"] for d in out]:
+                        out.append(dict(id=i, title=have[i]))
+    return out
+
 LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
 
 def _lab(cloud, lid):
@@ -283,7 +308,7 @@ def build():
                                reference="examples/enterprise-facilities-agent/facilities/" + ("" if cloud == "aws" else "") + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
                                code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
                                level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
-                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
+                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), docs=_docs(cloud, C[cloud][lid]["services"]), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
                    image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:

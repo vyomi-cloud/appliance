@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
+  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");if(/[?&]svc=/.test(location.search))document.documentElement.classList.add("vy-svc");</script>
   <script>if(/[?&]pick=1/.test(location.search))document.documentElement.classList.add("vy-pickview");</script>
   <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
   <script src="mesh-link.js"></script>
   <script src="nano-connect.js"></script>
-  <script src="nano-docs.js?v=icons2"></script>
+  <script src="nano-docs.js?v=tryit2"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1253,6 +1253,10 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 
+    /* Embedded in a Vyomi Labs chapter (?svc=<service ids>): only that chapter's generated service cards, nothing else. */
+    html.vy-svc #view-usage .u-tunnel, html.vy-svc #view-usage .u-panel > .sc-head, html.vy-svc #view-usage .u-panel > .sc-desc, html.vy-svc #view-usage .u-panel > .u-grid, html.vy-svc #view-usage .u-cloud-head, html.vy-svc #view-usage .u-info { display: none !important; }
+    html.vy-svc #view-usage .u-panel { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+    html.vy-svc body, html.vy-svc #app-main { background: #fff !important; }
     /* Embedded in a console's drawer modal (?embed=1): just the view, no app chrome. */
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
@@ -4519,5 +4523,6 @@ function nanoLogout(){
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
 <script src="./nano-tunnel-tabs.js" defer></script>
 <script src="./nano-back.js"></script>
+<script>if(/[?&]svc=/.test(location.search)){var _vh=function(){try{var e=document.getElementById('nd-usage-all')||document.getElementById('api-body')||document.body;parent.postMessage({vylabs:'h',h:Math.ceil(e.getBoundingClientRect().bottom+(window.scrollY||0))+24,u:location.hash},'*')}catch(e){}};addEventListener('load',function(){try{new ResizeObserver(_vh).observe(document.body)}catch(e){setInterval(_vh,800)}_vh()})}</script>
 </body>
 </html>

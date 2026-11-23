@@ -15,6 +15,7 @@
       x.onerror = function () { rej(new Error('network')); }; x.send();
     });
   }
+  (function () { var st = document.createElement('style'); st.textContent = '.u-run{margin-left:6px;border:1px solid #2563eb;background:#2563eb;color:#fff;border-radius:6px;padding:3px 10px;font:600 12px Inter,system-ui,sans-serif;cursor:pointer}.u-run:disabled{opacity:.6}.u-out{margin:8px 0 0;max-height:260px;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#0b1220;color:#d1fae5;border-radius:8px;padding:10px 12px;font:12px/1.5 ui-monospace,Menlo,monospace}'; document.head.appendChild(st); })();
   function index() { return indexP || (indexP = xhr(BASE + 'index.json')); }
   function service(cloud, f) { var k = cloud + '/' + f; return cache[k] || (cache[k] = xhr(BASE + cloud + '/' + f)); }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
@@ -31,6 +32,53 @@
   function kwargs(o, ind) {
     var ks = Object.keys(o || {}); if (!ks.length) return '';
     return ks.map(function (k) { return new Array((ind || 4) + 1).join(' ') + k + '=' + pyval(o[k], ind || 4); }).join(',\n');
+  }
+  function onlySvc() { var m = (location.search.match(/[?&]svc=([^&#]+)/) || [])[1]; return m ? decodeURIComponent(m).split(',') : null; }   // embedded in a Vyomi Labs chapter: just that chapter's services
+  /* Try it: run a curl example in THIS browser (no tunnel). Same-origin /_wire is answered by the Nano service worker, or routed to the Mesh. */
+  function shTokens(src) {
+    var s = src.replace(/\\\n/g, ' '), out = [], cur = '', q = null, has = false;
+    for (var i = 0; i < s.length; i++) {
+      var ch = s[i];
+      if (q) { if (ch === q) q = null; else if (q === '"' && ch === '\\' && i + 1 < s.length) cur += s[++i]; else cur += ch; continue; }
+      if (ch === "'" || ch === '"') { q = ch; has = true; continue; }
+      if (ch === '\\' && i + 1 < s.length) { cur += s[++i]; has = true; continue; }
+      if (/\s/.test(ch)) { if (has || cur) { out.push(cur); cur = ''; has = false; } continue; }
+      if (ch === '#' && !cur && !has) { while (i < s.length && s[i] !== '\n') i++; continue; }
+      cur += ch; has = true;
+    }
+    if (has || cur) out.push(cur); return out;
+  }
+  function parseCurl(cmd, EP) {
+    var t = shTokens(cmd), method = '', headers = {}, body = null, url = '';
+    for (var i = 1; i < t.length; i++) {
+      var a = t[i];
+      if (a === '-X' || a === '--request') method = t[++i];
+      else if (a === '-H' || a === '--header') { var h = t[++i] || '', k = h.indexOf(':'); if (k > 0) headers[h.slice(0, k).trim()] = h.slice(k + 1).trim(); }
+      else if (a === '-d' || a === '--data' || a === '--data-raw' || a === '--data-binary') body = t[++i];
+      else if (a[0] === '-') { /* -s, -S, -L, -i ... */ }
+      else if (!url) url = a;
+    }
+    if (EP && url.indexOf(EP) === 0) url = '/_wire' + url.slice(EP.length);
+    return { method: method || (body != null ? 'POST' : 'GET'), url: url, headers: headers, body: body };
+  }
+  function runCurl(src, EP, out) {
+    var cmds = src.split(/\n(?=curl )/).filter(function (c) { return /^curl /.test(c.trim()); });
+    out.hidden = false; out.textContent = 'Running ' + cmds.length + ' call' + (cmds.length > 1 ? 's' : '') + ' in this browser...\n';
+    return cmds.reduce(function (p, c) {
+      return p.then(function () {
+        var r = parseCurl(c.trim(), EP), init = { method: r.method, headers: r.headers };
+        if (/\{[A-Za-z]+\}/.test(r.url)) { out.textContent += '\n$ ' + r.method + ' ' + r.url + '\nSkipped: replace the {Name} parts of the URL with real values; this example is a template.\n'; return; }
+        var ac = new AbortController(), to = setTimeout(function () { ac.abort(); }, 40000); init.signal = ac.signal;
+        if (r.body != null && r.method !== 'GET' && r.method !== 'HEAD') init.body = r.body;
+        out.textContent += '\n$ ' + r.method + ' ' + r.url + '\n';
+        return fetch(r.url, init).then(function (resp) { clearTimeout(to);
+          return resp.text().then(function (txt) {
+            try { txt = JSON.stringify(JSON.parse(txt), null, 2); } catch (e) {}
+            out.textContent += 'HTTP ' + resp.status + ' ' + (resp.statusText || '') + '\n' + (txt.length > 3000 ? txt.slice(0, 3000) + '\n... (' + txt.length + ' characters)' : txt) + '\n';
+          });
+        }).catch(function (e) { clearTimeout(to); out.textContent += (e.name === 'AbortError' ? 'No answer after 40 s. Open this space\'s console in the same browser tab group so the simulator is running, then try again.' : 'Failed: ' + e.message) + '\n'; });
+      });
+    }, Promise.resolve());
   }
   function sh1(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
   function camel(s) { return s.charAt(0).toLowerCase() + s.slice(1); }
@@ -151,6 +199,7 @@
     el.innerHTML = '<div class="api-empty">Loading ' + esc(cloud.toUpperCase()) + ' reference…</div>';
     index().then(function (ix) {
       var list = (ix.clouds[cloud] || []).filter(function (s) { return s.o > 0 || s.ft > 0; });
+      var only = onlySvc(); if (only) list = list.filter(function (s) { return only.indexOf(s.id) >= 0; });
       var q = (filter || '').toLowerCase();
       var need = q ? Promise.all(list.map(function (s) { return service(cloud, s.f).then(function (d) { s._d = d; }); })) : Promise.resolve();
       return need.then(function () {
@@ -299,6 +348,8 @@
   /* ── SDK & CLI usage ───────────────────────────────────────────────────── */
   function pickOps(a) {   // deterministic representative ops: first read-style op, then first create-style op
     var rd = null, cr = null;
+    var lists = a.ops.filter(function (o) { return /(^|\.)list/i.test(o.n.split('.').pop()); }).sort(function (x, y) { return (x.p || []).filter(function (p) { return p[2] || p[3]; }).length - (y.p || []).filter(function (p) { return p[2] || p[3]; }).length; });
+    if (lists.length) rd = lists[0];
     a.ops.forEach(function (o) {
       var n = o.n.toLowerCase();
       if (!rd && /(^|\.)(list|describe|get)/.test(n.split('.').pop()) || (!rd && /list|get$/.test(n))) rd = rd || o;
@@ -324,17 +375,23 @@
   }
   // Same markup as the first SDK & CLI usage card (clouds.html cardHtml): underline tabs + copy icon + bordered code block,
   // so the host's existing .u-strip / .u-tab / .u-cp / pre.u-code styles apply unchanged (light + dark).
-  function usageTabs(list) {
+  function usageTabs(list, EP) {
     var h = '<div class="u-strip" role="tablist">' + list.map(function (s, i) {
       return '<button class="u-tab" type="button" role="tab" data-i="' + i + '" aria-selected="' + (i === 0) + '">' + esc(s[0]) + '</button>'; }).join('') +
-      '<button class="u-cp" type="button" title="Copy" aria-label="Copy"><span class="material-icons">content_copy</span></button></div>' +
-      '<pre class="u-code"><code>' + esc(list[0][1]) + '</code></pre>';
+      '<button class="u-cp" type="button" title="Copy" aria-label="Copy"><span class="material-icons">content_copy</span></button><button class="u-run" type="button" title="Run the curl example in this browser (no tunnel needed)">&#9654; Try it</button></div>' +
+      '<pre class="u-code"><code>' + esc(list[0][1]) + '</code></pre><pre class="u-out" hidden></pre>';
     return { html: h, wire: function (root) {
       var strip = root.querySelector('.u-strip'), code = root.querySelector('pre.u-code code'), cp = root.querySelector('.u-cp'), cur = 0;
       strip.querySelectorAll('.u-tab').forEach(function (t) {
         t.addEventListener('click', function () {
           cur = +t.dataset.i; strip.querySelectorAll('.u-tab').forEach(function (x) { x.setAttribute('aria-selected', String(x === t)); }); code.textContent = list[cur][1];
         });
+      });
+      var runB = root.querySelector('.u-run'), outEl = root.querySelector('.u-out');
+      runB.addEventListener('click', function () {
+        var cu = list.filter(function (s) { return /curl/i.test(s[0]); })[0];
+        if (!cu) { outEl.hidden = false; outEl.textContent = 'This service has no curl example to run.'; return; }
+        runB.disabled = true; runCurl(cu[1], EP, outEl).then(function () { runB.disabled = false; });
       });
       cp.addEventListener('click', function () {
         var ic = cp.querySelector('.material-icons');
@@ -371,13 +428,14 @@
     el.innerHTML ='<p class="sc-desc" style="margin:14px 0">Loading every ' + esc(cloud.toUpperCase()) + ' service…</p>';
     index().then(function (ix) {
       var list = (ix.clouds[cloud] || []).filter(function (s) { return s.o > 0; });
+      var only = onlySvc(); if (only) list = list.filter(function (s) { return only.indexOf(s.id) >= 0; });
       return Promise.all(list.map(function (s) { return service(cloud, s.f); })).then(function (docs) {
-        var h = '<div class="u-cloud-head" style="margin-top:22px"><span class="material-icons">menu_book</span>All ' + docs.length + ' services — CLI &amp; SDK examples generated from the registry</div><div class="u-grid">';
+        var h = (only ? '' : '<div class="u-cloud-head" style="margin-top:22px"><span class="material-icons">menu_book</span>All ' + docs.length + ' services — CLI &amp; SDK examples generated from the registry</div>') + '<div class="u-grid">';
         docs.forEach(function (d, di) {
           var a = d.apis.filter(function (x) { return x.ops.length; })[0]; if (!a) return;
           var ops = pickOps(a); if (!ops.length) ops = [a.ops[0]];
           var list2 = []; ops.forEach(function (o) { snips(cloud, a, o, EP).forEach(function (s) { var ex = list2.filter(function (e) { return e[0] === s[0]; })[0]; if (ex) ex[1] += '\n\n' + s[1]; else list2.push([s[0], s[1]]); }); });
-          var c = usageTabs(threeTabs(list2));
+          var c = usageTabs(threeTabs(list2), EP);
           h += '<div class="u-card nd-ucard" data-i="' + di + '"><div class="u-head"><h3>' + iconFor(cloud, d.title, (list[di] || {}).f) + esc(d.title) + '</h3></div>' + c.html + '<div class="u-note">' + d.ops + ' operations · ' + ops.map(function (o) { return esc(o.n); }).join(', ') + ' shown — all in <b>API reference</b></div></div>';
           d._w = c.wire;
         });

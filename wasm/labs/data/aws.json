@@ -128,6 +128,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -307,6 +313,12 @@
      "run": "python stop_session.py",
      "expect": "runtime still READY",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
     }
    ],
    "validate": [
@@ -498,6 +510,16 @@
      "needs_runtime": true
     }
    ],
+   "docs": [
+    {
+     "id": "lambda",
+     "title": "Lambda"
+    },
+    {
+     "id": "dynamodb",
+     "title": "DynamoDB"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -677,6 +699,16 @@
      "needs_runtime": true
     }
    ],
+   "docs": [
+    {
+     "id": "s3",
+     "title": "S3"
+    },
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -811,6 +843,12 @@
      "run": "python deploy_kb_search.py",
      "expect": "first source: s3://facilities-docs/docs/boiler-sop.md",
      "needs_runtime": true
+    }
+   ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
     }
    ],
    "validate": [
@@ -949,6 +987,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1069,6 +1113,12 @@
      "run": "python memory_recall.py",
      "expect": "long-term records for maria:",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
     }
    ],
    "validate": [
@@ -1213,6 +1263,12 @@
      "run": "python agent_via_gateway.py",
      "expect": "tools reached through the gateway: True",
      "needs_runtime": true
+    }
+   ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
     }
    ],
    "validate": [
@@ -1430,6 +1486,24 @@
      "needs_runtime": true
     }
    ],
+   "docs": [
+    {
+     "id": "states",
+     "title": "Step Functions"
+    },
+    {
+     "id": "sns",
+     "title": "Simple Notification Service"
+    },
+    {
+     "id": "sqs",
+     "title": "Simple Queue Service"
+    },
+    {
+     "id": "dynamodb",
+     "title": "DynamoDB"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1579,6 +1653,12 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "apigateway",
+     "title": "API Gateway"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1713,6 +1793,20 @@
      "needs_runtime": false
     }
    ],
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
+    },
+    {
+     "id": "sns",
+     "title": "Simple Notification Service"
+    },
+    {
+     "id": "sqs",
+     "title": "Simple Queue Service"
+    }
+   ],
    "validate": [
     {
      "kind": "CLI",
@@ -1822,6 +1916,20 @@
      "run": "python evaluators.py",
      "expect": "evaluators available:",
      "needs_runtime": false
+    }
+   ],
+   "docs": [
+    {
+     "id": "api-xray",
+     "title": "AWS X-Ray"
+    },
+    {
+     "id": "cloudwatch",
+     "title": "CloudWatch"
+    },
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock"
     }
    ],
    "validate": [
@@ -1950,6 +2058,20 @@
      "run": "python audit.py",
      "expect": "approval is fully audited: True",
      "needs_runtime": true
+    }
+   ],
+   "docs": [
+    {
+     "id": "kms",
+     "title": "Key Management Service"
+    },
+    {
+     "id": "cloudwatch",
+     "title": "CloudWatch"
+    },
+    {
+     "id": "s3",
+     "title": "S3"
     }
    ],
    "validate": [
