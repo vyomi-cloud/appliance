@@ -170,7 +170,7 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl[data-cloud="aws"] .vl-topbar{background:#232f3e;border-bottom:0;color:#fff}.vl[data-cloud="aws"] .vl-topbar .vl-crumb,.vl[data-cloud="aws"] .vl-topbar .vl-topprog{color:#d5dbdb}.vl[data-cloud="aws"] .vl-topbar .vl-back{background:transparent;color:#fff;border-color:#5f6b7a}.vl[data-cloud="aws"] .vl-bar{background:#414d5c}
 .vl[data-cloud="gcp"] .vl-topbar{background:#fff;border-bottom:1px solid #dadce0}
 .vl[data-cloud="azure"] .vl-topbar{background:#fff;border-bottom:1px solid #e0e0e0;box-shadow:0 1px 3px rgba(0,0,0,.08)}
-.vl .vl-cols{grid-template-columns:minmax(0,1fr);padding:16px 24px 36px}.vl .vl-outline{display:none}
+.vl .vl-cols{padding:16px 24px 36px}
 /* chapter hero */
 .vl .vl-article{gap:0;max-width:1380px;margin:0 auto}
 .vl .vl-chero{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:18px;align-items:center;padding:20px 24px;background:var(--card);border:1px solid var(--line);border-bottom:0;border-radius:12px 12px 0 0;border-top:4px solid var(--c)}
