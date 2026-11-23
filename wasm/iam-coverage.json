@@ -10,9 +10,9 @@
   },
   "gcp": {
    "services": 29,
-   "enforceable": 0,
-   "catalog_none": 3,
-   "permissions": 13642
+   "enforceable": 21,
+   "catalog_none": 0,
+   "permissions": 13808
   },
   "azure": {
    "services": 31,
@@ -346,9 +346,13 @@
     "storage"
    ],
    "permissions": 118,
-   "mapped_pct": 46.6,
-   "floor": 46,
-   "enforceable": false
+   "mapped_pct": 98.8,
+   "floor": 98,
+   "enforceable": true,
+   "strict_pct": 46.6,
+   "strict_floor": 46,
+   "surface_methods": 86,
+   "surface_mapped": 85
   },
   {
    "cloud": "gcp",
@@ -358,9 +362,13 @@
     "compute"
    ],
    "permissions": 1526,
-   "mapped_pct": 36.7,
-   "floor": 36,
-   "enforceable": false
+   "mapped_pct": 97.7,
+   "floor": 97,
+   "enforceable": true,
+   "strict_pct": 40.1,
+   "strict_floor": 40,
+   "surface_methods": 1018,
+   "surface_mapped": 995
   },
   {
    "cloud": "gcp",
@@ -370,9 +378,13 @@
     "container"
    ],
    "permissions": 1947,
-   "mapped_pct": 27.4,
-   "floor": 27,
-   "enforceable": false
+   "mapped_pct": 91.5,
+   "floor": 91,
+   "enforceable": true,
+   "strict_pct": 29.6,
+   "strict_floor": 29,
+   "surface_methods": 71,
+   "surface_mapped": 65
   },
   {
    "cloud": "gcp",
@@ -382,9 +394,13 @@
     "cloudsql"
    ],
    "permissions": 186,
-   "mapped_pct": 41.4,
-   "floor": 41,
-   "enforceable": false
+   "mapped_pct": 97.8,
+   "floor": 97,
+   "enforceable": true,
+   "strict_pct": 43.0,
+   "strict_floor": 43,
+   "surface_methods": 90,
+   "surface_mapped": 88
   },
   {
    "cloud": "gcp",
@@ -394,9 +410,13 @@
     "firestore"
    ],
    "permissions": 68,
-   "mapped_pct": 54.4,
-   "floor": 54,
-   "enforceable": false
+   "mapped_pct": 81.7,
+   "floor": 81,
+   "enforceable": false,
+   "strict_pct": 54.4,
+   "strict_floor": 54,
+   "surface_methods": 60,
+   "surface_mapped": 49
   },
   {
    "cloud": "gcp",
@@ -406,31 +426,47 @@
     "firestore"
    ],
    "permissions": 68,
-   "mapped_pct": 54.4,
-   "floor": 54,
-   "enforceable": false
+   "mapped_pct": 81.7,
+   "floor": 81,
+   "enforceable": false,
+   "strict_pct": 54.4,
+   "strict_floor": 54,
+   "surface_methods": 60,
+   "surface_mapped": 49
   },
   {
    "cloud": "gcp",
    "id": "marketplace",
    "title": "Marketplace",
-   "catalog": "none",
-   "reason": "Cloud Marketplace has no IAM permission page in the catalog slugs (gen_iam_catalog.py GCP_SLUGS); add the slug \"cloudcommerceconsumerprocurement\" or equivalent and regenerate",
-   "permissions": 0,
-   "mapped_pct": null,
-   "floor": 0,
-   "enforceable": false
+   "catalog": [
+    "consumerprocurement",
+    "commerceoffercatalog"
+   ],
+   "permissions": 68,
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 10.3,
+   "strict_floor": 10,
+   "surface_methods": 6,
+   "surface_mapped": 6
   },
   {
    "cloud": "gcp",
    "id": "cloud-hub",
    "title": "Cloud Hub",
-   "catalog": "none",
-   "reason": "Cloud Hub (Hub/Observability) has no slug in GCP_SLUGS",
-   "permissions": 0,
-   "mapped_pct": null,
-   "floor": 0,
-   "enforceable": false
+   "catalog": [
+    "servicehealth",
+    "apphub"
+   ],
+   "permissions": 60,
+   "mapped_pct": 97.6,
+   "floor": 97,
+   "enforceable": true,
+   "strict_pct": 65.0,
+   "strict_floor": 65,
+   "surface_methods": 41,
+   "surface_mapped": 40
   },
   {
    "cloud": "gcp",
@@ -440,9 +476,13 @@
     "redis"
    ],
    "permissions": 74,
-   "mapped_pct": 77.0,
-   "floor": 77,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 78.4,
+   "strict_floor": 78,
+   "surface_methods": 47,
+   "surface_mapped": 47
   },
   {
    "cloud": "gcp",
@@ -455,9 +495,13 @@
     "vpcaccess"
    ],
    "permissions": 1820,
-   "mapped_pct": 41.8,
-   "floor": 41,
-   "enforceable": false
+   "mapped_pct": 98.7,
+   "floor": 98,
+   "enforceable": true,
+   "strict_pct": 46.0,
+   "strict_floor": 46,
+   "surface_methods": 298,
+   "surface_mapped": 294
   },
   {
    "cloud": "gcp",
@@ -467,9 +511,13 @@
     "run"
    ],
    "permissions": 326,
-   "mapped_pct": 59.2,
-   "floor": 59,
-   "enforceable": false
+   "mapped_pct": 83.9,
+   "floor": 83,
+   "enforceable": false,
+   "strict_pct": 61.7,
+   "strict_floor": 61,
+   "surface_methods": 118,
+   "surface_mapped": 99
   },
   {
    "cloud": "gcp",
@@ -479,9 +527,13 @@
     "cloudfunctions"
    ],
    "permissions": 329,
-   "mapped_pct": 61.4,
-   "floor": 61,
-   "enforceable": false
+   "mapped_pct": 95.8,
+   "floor": 95,
+   "enforceable": true,
+   "strict_pct": 63.2,
+   "strict_floor": 63,
+   "surface_methods": 24,
+   "surface_mapped": 23
   },
   {
    "cloud": "gcp",
@@ -491,9 +543,13 @@
     "pubsub"
    ],
    "permissions": 79,
-   "mapped_pct": 60.8,
-   "floor": 60,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 62.0,
+   "strict_floor": 62,
+   "surface_methods": 46,
+   "surface_mapped": 46
   },
   {
    "cloud": "gcp",
@@ -503,9 +559,13 @@
     "cloudscheduler"
    ],
    "permissions": 31,
-   "mapped_pct": 51.6,
-   "floor": 51,
-   "enforceable": false
+   "mapped_pct": 81.2,
+   "floor": 81,
+   "enforceable": false,
+   "strict_pct": 51.6,
+   "strict_floor": 51,
+   "surface_methods": 16,
+   "surface_mapped": 13
   },
   {
    "cloud": "gcp",
@@ -515,9 +575,13 @@
     "eventarc"
    ],
    "permissions": 129,
-   "mapped_pct": 63.6,
-   "floor": 63,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 65.1,
+   "strict_floor": 65,
+   "surface_methods": 66,
+   "surface_mapped": 66
   },
   {
    "cloud": "gcp",
@@ -527,9 +591,13 @@
     "apigateway"
    ],
    "permissions": 64,
-   "mapped_pct": 46.9,
-   "floor": 46,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 57.8,
+   "strict_floor": 57,
+   "surface_methods": 30,
+   "surface_mapped": 30
   },
   {
    "cloud": "gcp",
@@ -539,9 +607,13 @@
     "secretmanager"
    ],
    "permissions": 40,
-   "mapped_pct": 60.0,
-   "floor": 60,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 60.0,
+   "strict_floor": 60,
+   "surface_methods": 36,
+   "surface_mapped": 36
   },
   {
    "cloud": "gcp",
@@ -551,9 +623,13 @@
     "cloudkms"
    ],
    "permissions": 92,
-   "mapped_pct": 56.5,
-   "floor": 56,
-   "enforceable": false
+   "mapped_pct": 97.7,
+   "floor": 97,
+   "enforceable": true,
+   "strict_pct": 70.7,
+   "strict_floor": 70,
+   "surface_methods": 87,
+   "surface_mapped": 85
   },
   {
    "cloud": "gcp",
@@ -563,9 +639,13 @@
     "iam"
    ],
    "permissions": 3053,
-   "mapped_pct": 15.9,
-   "floor": 15,
-   "enforceable": false
+   "mapped_pct": 88.2,
+   "floor": 88,
+   "enforceable": false,
+   "strict_pct": 19.9,
+   "strict_floor": 19,
+   "surface_methods": 144,
+   "surface_mapped": 127
   },
   {
    "cloud": "gcp",
@@ -576,9 +656,13 @@
     "orgpolicy"
    ],
    "permissions": 884,
-   "mapped_pct": 7.0,
-   "floor": 7,
-   "enforceable": false
+   "mapped_pct": 92.8,
+   "floor": 92,
+   "enforceable": true,
+   "strict_pct": 7.2,
+   "strict_floor": 7,
+   "surface_methods": 138,
+   "surface_mapped": 128
   },
   {
    "cloud": "gcp",
@@ -588,9 +672,13 @@
     "artifactregistry"
    ],
    "permissions": 78,
-   "mapped_pct": 76.9,
-   "floor": 76,
-   "enforceable": false
+   "mapped_pct": 94.2,
+   "floor": 94,
+   "enforceable": true,
+   "strict_pct": 80.8,
+   "strict_floor": 80,
+   "surface_methods": 69,
+   "surface_mapped": 65
   },
   {
    "cloud": "gcp",
@@ -600,9 +688,13 @@
     "clouddeploy"
    ],
    "permissions": 87,
-   "mapped_pct": 83.9,
-   "floor": 83,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 83.9,
+   "strict_floor": 83,
+   "surface_methods": 61,
+   "surface_mapped": 61
   },
   {
    "cloud": "gcp",
@@ -612,9 +704,13 @@
     "backupdr"
    ],
    "permissions": 305,
-   "mapped_pct": 32.8,
-   "floor": 32,
-   "enforceable": false
+   "mapped_pct": 70.3,
+   "floor": 70,
+   "enforceable": false,
+   "strict_pct": 37.0,
+   "strict_floor": 37,
+   "surface_methods": 91,
+   "surface_mapped": 64
   },
   {
    "cloud": "gcp",
@@ -624,20 +720,29 @@
     "cloudbuild"
    ],
    "permissions": 158,
-   "mapped_pct": 51.9,
-   "floor": 51,
-   "enforceable": false
+   "mapped_pct": 93.0,
+   "floor": 93,
+   "enforceable": true,
+   "strict_pct": 60.1,
+   "strict_floor": 60,
+   "surface_methods": 57,
+   "surface_mapped": 53
   },
   {
    "cloud": "gcp",
    "id": "security/binauthz",
    "title": "Binary Authorization",
-   "catalog": "none",
-   "reason": "Binary Authorization permissions (binaryauthorization.*) are not in GCP_SLUGS",
-   "permissions": 0,
-   "mapped_pct": null,
-   "floor": 0,
-   "enforceable": false
+   "catalog": [
+    "binaryauthorization"
+   ],
+   "permissions": 38,
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 55.3,
+   "strict_floor": 55,
+   "surface_methods": 21,
+   "surface_mapped": 21
   },
   {
    "cloud": "gcp",
@@ -647,9 +752,13 @@
     "securitycenter"
    ],
    "permissions": 1080,
-   "mapped_pct": 13.1,
-   "floor": 13,
-   "enforceable": false
+   "mapped_pct": 83.7,
+   "floor": 83,
+   "enforceable": false,
+   "strict_pct": 15.6,
+   "strict_floor": 15,
+   "surface_methods": 172,
+   "surface_mapped": 144
   },
   {
    "cloud": "gcp",
@@ -659,9 +768,13 @@
     "aiplatform"
    ],
    "permissions": 922,
-   "mapped_pct": 46.6,
-   "floor": 46,
-   "enforceable": false
+   "mapped_pct": 87.1,
+   "floor": 87,
+   "enforceable": false,
+   "strict_pct": 50.2,
+   "strict_floor": 50,
+   "surface_methods": 1159,
+   "surface_mapped": 1010
   },
   {
    "cloud": "gcp",
@@ -671,9 +784,13 @@
     "monitoring"
    ],
    "permissions": 94,
-   "mapped_pct": 54.3,
-   "floor": 54,
-   "enforceable": false
+   "mapped_pct": 100.0,
+   "floor": 100,
+   "enforceable": true,
+   "strict_pct": 59.6,
+   "strict_floor": 59,
+   "surface_methods": 56,
+   "surface_mapped": 56
   },
   {
    "cloud": "gcp",
@@ -683,9 +800,13 @@
     "logging"
    ],
    "permissions": 84,
-   "mapped_pct": 53.6,
-   "floor": 53,
-   "enforceable": false
+   "mapped_pct": 96.9,
+   "floor": 96,
+   "enforceable": true,
+   "strict_pct": 70.2,
+   "strict_floor": 70,
+   "surface_methods": 254,
+   "surface_mapped": 246
   },
   {
    "cloud": "azure",

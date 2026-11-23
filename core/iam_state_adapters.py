@@ -216,9 +216,47 @@ def gcp_member(raw: str) -> dict:
     return {"member": "user:" + raw, "type": "user"}
 
 
-def gcp_principal(headers, space) -> dict:
+def _bearer(headers) -> str:
+    auth = _h(headers, "authorization")
+    return auth.split(None, 1)[1].strip() if auth.lower().startswith("bearer ") and len(auth.split(None, 1)) == 2 else ""
+
+
+def gcp_token_principal(headers, iamc_store=None, sts_tokens=None):
+    """Identity behind an OPAQUE `ya29.` bearer token, or None. Two sources, both written at issuance: the IAM Credentials core
+    (generateAccessToken records sha256(token) -> service-account email, core/gcp_iamcredentials_core.remember_token) and the
+    Security Token Service exchange of Workload/Workforce Identity Federation (`gcp_sts_tokens`: token -> principal + attributes)."""
+    tok = _bearer(headers)
+    if not tok.startswith("ya29."):
+        return None
+    if sts_tokens:
+        t = sts_tokens.get(tok)
+        if isinstance(t, dict) and t.get("exp", 0) >= __import__("time").time():
+            prov = str(t.get("provider") or "")
+            pool = prov.split("/providers/", 1)[0] if "/providers/" in prov else ""
+            out = {"member": t.get("principal") or "", "type": "principal"}
+            if pool:
+                out["pool"] = "iam.googleapis.com/" + pool
+            if t.get("attributes"):
+                out["attributes"] = {"attribute." + k: v for k, v in t["attributes"].items()}
+            if out["member"]:
+                return out
+    if iamc_store is not None:
+        try:
+            from core import gcp_iamcredentials_core as _ic
+        except ImportError:                      # Pyodide flat layout
+            import gcp_iamcredentials_core as _ic
+        who = _ic.principal_for_token(iamc_store, tok)
+        if who:
+            return gcp_member(who)
+    return None
+
+
+def gcp_principal(headers, space, iamc_store=None, sts_tokens=None) -> dict:
     raw = _h(headers, "x-cloudlearn-principal")
     if not raw:
+        tp = gcp_token_principal(headers, iamc_store, sts_tokens)
+        if tp:
+            return tp
         c = _jwt_claims(headers)
         raw = c.get("email") or ""
     return gcp_member(raw or str((space or {}).get("active_principal") or "root"))
@@ -230,7 +268,112 @@ def _gcp_point(key: str) -> str:
     return k.split("googleapis.com/", 1)[1] if "googleapis.com/" in k else k
 
 
-def gcp_state(iam_state, store=None, project=None) -> dict:
+HIERARCHY_KEY = "gcp_iam_hierarchy"     # optional per-space / registry config: {"parents": {child: parent}, "groups": {"group:g@x": ["user:a@x"]}}
+
+
+def _rm_parent(p) -> str:
+    """Resource Manager parent (a "folders/1" string or the project's {"type","id"}) -> "folders/1" / "organizations/2"."""
+    if isinstance(p, dict):
+        t, i = str(p.get("type") or "").lower(), str(p.get("id") or "")
+        return ({"folder": "folders", "organization": "organizations"}.get(t, t + "s") + "/" + i) if t and i else ""
+    return str(p or "").strip("/")
+
+
+def _group_member(raw: str, group_emails: set) -> str:
+    raw = str(raw or "").strip()
+    if ":" in raw and raw.split(":", 1)[0] in ("user", "group", "serviceAccount", "domain"):
+        return raw
+    if raw.endswith("gserviceaccount.com"):
+        return "serviceAccount:" + raw
+    return ("group:" if raw in group_emails else "user:") + raw
+
+
+def gcp_hierarchy_extras(rm, config=None) -> dict:
+    """Hierarchy, groups and Principal Access Boundary for the engine, from the Resource Manager store `rm` (gcp_rm: projects with
+    parent, folders, Cloud Identity groups + memberships, PAB policies + bindings), plus an optional config document
+    (HIERARCHY_KEY) that fills what the store does not hold: {"parents": {"projects/p": "folders/1", "folders/1": "organizations/2"},
+    "groups": {"group:eng@x.com": ["user:a@x.com", "group:sub@x.com"]}}. The store wins over the config; both are optional.
+    Returns {"hierarchy", "groups", "pab_policies", "pab_bindings", "project_aliases"} (project_aliases: projects/<number> -> projects/<id>)."""
+    cfg = config if isinstance(config, dict) else {}
+    hier: dict = {}
+    aliases: dict = {}
+    for pid, p in (getattr(rm, "projects", None) or {}).items():
+        if not isinstance(p, dict):
+            continue
+        par = _rm_parent(p.get("parent"))
+        if par:
+            hier["projects/" + pid] = par
+        num = str(p.get("name") or "").rsplit("/", 1)[-1]
+        if num and num != pid:
+            aliases["projects/" + num] = "projects/" + pid
+    for fname, f in (getattr(rm, "folders", None) or {}).items():
+        if isinstance(f, dict) and f.get("state", "ACTIVE") != "DELETED":
+            par = _rm_parent(f.get("parent"))
+            if par:
+                hier[str(f.get("name") or fname)] = par
+    for child, par in (cfg.get("parents") or {}).items():
+        if isinstance(child, str) and isinstance(par, str):
+            hier.setdefault(_gcp_point(child), _gcp_point(par))
+    groups: dict = {}
+    glist = getattr(rm, "groups", None) or {}
+    emails = {g["groupKey"]["id"] for g in glist.values() if isinstance(g, dict) and (g.get("groupKey") or {}).get("id")}
+    for gname, g in glist.items():
+        email = ((g or {}).get("groupKey") or {}).get("id")
+        if not email:
+            continue
+        mem = []
+        for mn, m in (getattr(rm, "group_memberships", None) or {}).items():
+            if mn.startswith(gname + "/memberships/") and isinstance(m, dict):
+                mid = (m.get("preferredMemberKey") or {}).get("id")
+                if mid:
+                    mem.append(_group_member(mid, emails))
+        groups["group:" + email] = mem
+    for g, mem in (cfg.get("groups") or {}).items():
+        if isinstance(mem, (list, tuple)):
+            have = groups.setdefault(g, [])
+            have.extend(x for x in mem if x not in have)
+    pols = {n: dict(p) for n, p in (getattr(rm, "pab_policies", None) or {}).items() if isinstance(p, dict)}
+    binds = [dict(b) for b in (getattr(rm, "pab_bindings", None) or {}).values() if isinstance(b, dict)]
+    orgs = sorted(n for n in (getattr(rm, "organizations", None) or {}))
+    return {"hierarchy": hier, "groups": groups, "pab_policies": pols, "pab_bindings": binds, "project_aliases": aliases, "organizations": orgs}
+
+
+def _canon(point: str, aliases: dict) -> str:
+    """projects/<number>[/...] -> projects/<id>[/...] so a policy attached by project number applies to requests naming the id."""
+    for a, real in aliases.items():
+        if point == a or point.startswith(a + "/"):
+            return real + point[len(a):]
+    return point
+
+
+def apply_hierarchy(state: dict, extras: dict) -> dict:
+    """Merge gcp_hierarchy_extras() into an engine state (project-number aliases canonicalised in policy keys and PAB resources)."""
+    al = extras.get("project_aliases") or {}
+    if al:
+        for k in ("allow_policies", "deny_policies"):
+            state[k] = {_canon(pt, al): v for pt, v in (state.get(k) or {}).items()}
+        for pol in (extras.get("pab_policies") or {}).values():
+            for r in ((pol.get("details") or {}).get("rules") or pol.get("rules") or []):
+                r["resources"] = [_canon(_gcp_point(x) if "googleapis.com/" in str(x) else str(x).strip("/"), al) for x in r.get("resources") or []]
+    state["hierarchy"] = dict(state.get("hierarchy") or {}, **extras.get("hierarchy", {}))
+    # Every Vyomi project belongs to the one Vyomi-wide organization (core/gcp_resourcemanager_core.py): a project that is named by a
+    # policy or is a parent here but has no recorded parent hangs off it, so organization-level bindings and boundaries reach it.
+    orgs = extras.get("organizations") or []
+    if orgs:
+        hier = state["hierarchy"]
+        projs = {k for k in (state.get("allow_policies") or {}) if k.startswith("projects/") and k.count("/") == 1}
+        projs |= {v for v in hier.values() if v.startswith("projects/") and v.count("/") == 1}
+        for pk in projs:
+            if pk != "projects/_" and pk not in hier:
+                hier[pk] = orgs[0]
+    state["groups"] = dict(state.get("groups") or {}, **extras.get("groups", {}))
+    if extras.get("pab_policies"):
+        state["pab_policies"] = extras["pab_policies"]
+        state["pab_bindings"] = extras.get("pab_bindings") or []
+    return state
+
+
+def gcp_state(iam_state, store=None, project=None, rm=None, config=None) -> dict:
     """Engine `state` (core/iam_engine/gcp_eval.py): allow_policies {attachment_point: policy}, deny_policies {point: [policy]},
     custom_roles, hierarchy. Sources: the v4 IAM core slot (`store`: gcp_iam_policies / gcp_deny_policies / gcp_custom_roles, the
     authoritative records) and the pre-v4 `gcp_iam_state` view ({"policies": {project: policy}}) merged under it (store wins).
@@ -252,6 +395,8 @@ def gcp_state(iam_state, store=None, project=None) -> dict:
            "service_accounts": st.get("service_accounts") or {}, "hierarchy": {}}
     if project:
         out["hierarchy"]["projects/_"] = "projects/" + project
+    if rm is not None or config:
+        apply_hierarchy(out, gcp_hierarchy_extras(rm, config))
     return out
 
 
@@ -458,14 +603,26 @@ def _live(cloud, headers, query, space, path=""):
         return aws_state(s), aws_principal(headers, query, s)
     if cloud == "gcp":
         from core.app_context import gcp_iam_state
-        store, project = None, None
+        store, project, appliance_stores = None, None, None
         try:
             from core import appliance_stores, gcp_project
             store = appliance_stores.net_new_core_stores().get("gcp_iam")
             project = gcp_project.current().get("projectId") or gcp_project.DEFAULT_PROJECT_ID
         except Exception:
             pass
-        return gcp_state(gcp_iam_state, store, project), gcp_principal(headers, space)
+        rm = None
+        try:
+            rm = appliance_stores.net_new_core_stores().get("gcp_rm")
+        except Exception:
+            pass     # no Resource Manager store: hierarchy comes from the optional config alone
+        iamc = None
+        try:
+            from core import gcp_iamcredentials_core
+            iamc = gcp_iamcredentials_core.shared_store()
+        except Exception:
+            pass
+        sts = getattr(store, "gcp_sts_tokens", None) if store is not None else None
+        return gcp_state(gcp_iam_state, store, project, rm, ((space or app_context.STATE).get(HIERARCHY_KEY))), gcp_principal(headers, space, iamc, sts)
     try:
         from providers import azure_services      # the live ARM record map of the Azure space (resolved for the request's provider)
         arm = azure_services._state

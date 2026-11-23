@@ -1,0 +1,12 @@
+{
+"cloud":"gcp",
+"service":"commerceoffercatalog",
+"permissions":{
+"commerceoffercatalog.agreements.get":{},
+"commerceoffercatalog.agreements.list":{},
+"commerceoffercatalog.documents.get":{},
+"commerceoffercatalog.documents.list":{},
+"commerceoffercatalog.offers.get":{}
+},
+"roles":{}
+}

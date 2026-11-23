@@ -125,7 +125,9 @@ GCP_BASE = "https://cloud.google.com/iam/docs/roles-permissions/"
 GCP_SLUGS = ["storage", "compute", "container", "cloudsql", "firestore", "redis", "run", "cloudfunctions", "pubsub",
              "cloudscheduler", "eventarc", "apigateway", "iam", "resourcemanager", "artifactregistry", "clouddeploy", "backupdr",
              "cloudbuild", "aiplatform", "monitoring", "logging", "cloudkms", "secretmanager", "firebaseauth", "dns", "serviceusage",
-             "servicenetworking", "securitycenter", "orgpolicy", "iap", "vpcaccess", "cloudtasks", "bigquery", "workflows"]
+             "servicenetworking", "securitycenter", "orgpolicy", "iap", "vpcaccess", "cloudtasks", "bigquery", "workflows",
+             # added by WP gcp-coverage: Binary Authorization, Marketplace (consumer procurement + offer catalog), Cloud Hub (Service Health + App Hub)
+             "binaryauthorization", "consumerprocurement", "commerceoffercatalog", "servicehealth", "apphub"]
 
 
 def gcp_service(slug):
