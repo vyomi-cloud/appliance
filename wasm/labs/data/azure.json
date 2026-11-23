@@ -932,7 +932,7 @@
      "lang": "python",
      "code": "from kb import kb_search\n\nfor mode, q in ((\"text\", \"boiler pressure exceeds 30 psi\"), (\"text\", \"AHU-7 supply air temperature drift chilled water valve\"),\n                (\"vector\", \"what to do when boiler pressure is too high\"), (\"hybrid\", \"fire alarm evacuation procedure\"),\n                (\"semantic\", \"who signs off on boiler work\")):\n    hits = kb_search(q, mode)\n    extra = f\" reranker={hits[0]['reranker']}\" if mode == \"semantic\" else \"\"\n    print(f\"{mode:8} {q[:44]:44} -> {hits[0]['source']}{extra}\")\nprint(\"every hit has a source:\", all(h[\"source\"] for h in kb_search(\"fire alarm evacuation\")))\n",
      "run": "python try_search.py",
-     "expect": "every hit has a source: True",
+     "expect": "vector   what to do when boiler pressure is too high  -> boiler-sop.md\nhybrid   fire alarm evacuation procedure              -> fire-safety-sop.md",
      "needs_runtime": false
     }
    ],
@@ -1533,7 +1533,7 @@
      "lang": "python",
      "code": "from approval import request_approval, ledger_row, work_orders\nfrom azdata import call_function, FUNCTION_APP\n\nrequest_approval(\"req-demo0001\", \"B-12\", \"Work order for B-12: boiler pressure is 34 psi, above the 30 psi limit\", \"P1\", \"maria\")\nprint(\"ledger status:\", ledger_row(\"req-demo0001\")[\"status\"])\nprint(\"work orders requested by maria:\", len([w for w in work_orders() if w.get(\"requester\") == \"maria\"]))\npremature = call_function(FUNCTION_APP, \"create-work-order\", {\"request_id\": \"req-demo0001\"})\nprint(\"create-work-order before approval:\", premature[\"error\"])\nstranger = call_function(FUNCTION_APP, \"approval-decision\", {\"request_id\": \"req-demo0001\", \"decision\": \"APPROVE\", \"approver\": \"mallory@evil.test\"})\nprint(\"unauthorised approver:\", stranger[\"error\"], \"| ledger still\", ledger_row(\"req-demo0001\")[\"status\"])\n",
      "run": "python park_request.py",
-     "expect": "ledger still PENDING",
+     "expect": "ledger status: PENDING\nwork orders requested by maria: 0",
      "needs_runtime": false
     },
     {
@@ -2160,7 +2160,7 @@
      "text": "The vault `facilities-kv` through Azure Resource Manager, standard SKU, no access policies (the simulator does not enforce them: RBAC evaluation is simplified).",
      "file": "create_vault.py",
      "lang": "python",
-     "code": "from azure.mgmt.keyvault import KeyVaultManagementClient\nfrom azure.mgmt.keyvault.models import Sku, SkuFamily, SkuName, VaultCreateOrUpdateParameters, VaultProperties\nfrom azlab import arm, ensure_rg, RG, LOC\n\nensure_rg()\nv = arm(KeyVaultManagementClient).vaults.begin_create_or_update(\"rg-facilities\", \"facilities-kv\", VaultCreateOrUpdateParameters(location=LOC, properties=VaultProperties(\n    tenant_id=\"00000000-0000-0000-0000-000000000000\", sku=Sku(family=SkuFamily.A, name=SkuName.STANDARD), access_policies=[]))).result()\nprint(\"vault\", v.name, \"created; uri advertised by ARM:\", v.properties.vault_uri)\n",
+     "code": "from azure.mgmt.keyvault import KeyVaultManagementClient\nfrom azure.mgmt.keyvault.models import Sku, SkuFamily, SkuName, VaultCreateOrUpdateParameters, VaultProperties\nfrom azlab import arm, ensure_rg, RG, LOC\n\nensure_rg()\nv = arm(KeyVaultManagementClient).vaults.begin_create_or_update(RG, \"facilities-kv\", VaultCreateOrUpdateParameters(location=LOC, properties=VaultProperties(\n    tenant_id=\"00000000-0000-0000-0000-000000000000\", sku=Sku(family=SkuFamily.A, name=SkuName.STANDARD), access_policies=[]))).result()\nprint(\"vault\", v.name, \"created; uri advertised by ARM:\", v.properties.vault_uri)\n",
      "run": "python create_vault.py",
      "expect": "vault facilities-kv created",
      "needs_runtime": false
@@ -2182,7 +2182,7 @@
      "lang": "python",
      "code": "import os\nfrom azure.keyvault.keys import KeyClient\nfrom azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm, KeyWrapAlgorithm\nfrom cryptography.hazmat.primitives.ciphers.aead import AESGCM\nfrom azlab import DevToken, ENDPOINT\nfrom approval import ledger_row\n\nrow = ledger_row(\"req-demo0001\")\nrecord = f\"ledger record: work order {row['work_order_id']} approved by {row['approver']}\".encode()\n\nkc = KeyClient(vault_url=ENDPOINT, credential=DevToken(), verify_challenge_resource=False)\ncrypto = CryptographyClient(kc.get_key(\"ledger-key\").id, DevToken(), verify_challenge_resource=False)\n\ndek = AESGCM.generate_key(bit_length=256)\nnonce = os.urandom(12)\nciphertext = AESGCM(dek).encrypt(nonce, record, b\"approvalledger\")\nwrapped = crypto.wrap_key(KeyWrapAlgorithm.rsa_oaep_256, dek).encrypted_key\nprint(\"the data key is wrapped by ledger-key; wrapped differs from the key:\", wrapped != dek)\n\nunwrapped = crypto.unwrap_key(KeyWrapAlgorithm.rsa_oaep_256, wrapped).key\nprint(\"unwrap + decrypt restores the record:\", AESGCM(unwrapped).decrypt(nonce, ciphertext, b\"approvalledger\") == record)\n\nsealed = crypto.encrypt(EncryptionAlgorithm.rsa_oaep_256, b\"hello\")\nprint(\"direct encrypt/decrypt round trip:\", crypto.decrypt(EncryptionAlgorithm.rsa_oaep_256, sealed.ciphertext).plaintext == b\"hello\")\n",
      "run": "python envelope.py",
-     "expect": "direct encrypt/decrypt round trip: True",
+     "expect": "unwrap + decrypt restores the record: True",
      "needs_runtime": false
     },
     {
