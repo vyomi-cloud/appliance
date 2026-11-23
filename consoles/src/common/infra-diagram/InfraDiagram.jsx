@@ -20,7 +20,7 @@ function ResourceNode({ data }) {
       <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       <div style={{ width: 52, height: 52, margin: "0 auto", borderRadius: 10, padding: 4, background: "#fff", boxSizing: "border-box",
         border: `2px ${DASH[data.status]} ${RING[data.status]}`, boxShadow: data.selected ? "0 0 0 3px #0972d340" : "none" }}>
-        <ServiceIcon cloud={data.cloud || "aws"} id={data.icon} size={40} />
+        {data.Icon ? <data.Icon style={{ fontSize: 34, color: "#1a73e8" }} /> : <ServiceIcon cloud={data.cloud || "aws"} id={data.icon} size={40} />}
       </div>
       <div style={{ fontSize: 12, fontWeight: 600, color: "#16191f", marginTop: 4, lineHeight: "14px" }}>{clip(data.label, 20)}</div>
       <div style={{ fontSize: 10.5, color: "#5f6b7a", lineHeight: "13px" }}>{clip(data.typeLabel || data.type, 24)}</div>
@@ -114,7 +114,7 @@ export function buildFlow(graph, selected, availability, p) {
         const pos = { x: 8 + Math.floor(i / PER_COL) * (NW + GAP), y: SUBHEAD + 6 + (i % PER_COL) * (NH + GAP) };
         rf.push(n === users
           ? { id: users.id, type: "external", parentId: `sub.${d.key}.${sub.role}`, extent: "parent", position: pos, data: { label: users.label, type: "clients" }, selectable: false, zIndex: 2 }
-          : { id: n.id, type: "resource", parentId: `sub.${d.key}.${sub.role}`, extent: "parent", position: pos, zIndex: 2, data: { ...n, cloud: p.cloud, icon: p.iconOf(n), typeLabel: p.typeLabel ? p.typeLabel(n) : n.type, reason: availability[n.type]?.reason, selected: selected === n.id } });
+          : { id: n.id, type: "resource", parentId: `sub.${d.key}.${sub.role}`, extent: "parent", position: pos, zIndex: 2, data: { ...n, cloud: p.cloud, icon: p.iconOf ? p.iconOf(n) : null, Icon: p.Icon ? p.Icon(n) : null, typeLabel: p.typeLabel ? p.typeLabel(n) : n.type, reason: availability[n.type]?.reason, selected: selected === n.id } });
       });
       sx += sub.w + 8;
     });
