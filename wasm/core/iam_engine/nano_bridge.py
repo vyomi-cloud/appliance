@@ -37,6 +37,16 @@ def configure(host, manifest_catalogs_json="{}"):
     _host = host
     _known = {c: set(v) for c, v in json.loads(manifest_catalogs_json or "{}").items()}
     _apis.clear()
+    try:
+        from core import iam_state_nano
+        iam_state_nano.set_known({c: sorted(v) for c, v in _known.items()})
+    except ImportError:
+        pass
+    try:                              # map_aws reads core/iam_catalog/aws/<prefix>.json from disk by default: serve it from the preloaded text
+        from core.iam_engine import map_aws
+        map_aws.set_catalog_loader(lambda prefix: catalog_loader.load("aws", prefix) if prefix in _known.get("aws", ()) else None)
+    except (ImportError, AttributeError):
+        pass
 
 
 def set_state_override(fn):
@@ -48,6 +58,11 @@ def set_state_override(fn):
 def preload(cloud, service, text):
     catalog_loader.preload(cloud, service, text)
     _have.add((cloud, service))
+    try:
+        from core import iam_state_nano
+        iam_state_nano.on_preload(cloud, service, text)
+    except ImportError:
+        pass
 
 
 def preload_inventory(text):
@@ -62,20 +77,24 @@ def _registry():
 
 
 def state_and_principal(cloud, headers, query=""):
+    """(state, principal) from the in-browser stores (core/iam_state_nano.py). May raise iam_state_nano.NeedCatalogs."""
     if _state_override:
         return _state_override(cloud, headers, query)
-    from core import iam_state_adapters as A       # vendored when present (Mesh WP); same functions as the appliance
-    reg = _registry()
-    if cloud == "aws":
-        s = reg["iam"]
-        return A.aws_state(s), A.aws_principal(headers, query, s)
-    if cloud == "gcp":
-        st = reg.get("gcp_iam")
-        raw = {"policies": getattr(st, "policies", None) or {}, "service_accounts": getattr(st, "service_accounts", None) or {},
-               "bindings": getattr(st, "bindings", None) or []}
-        return A.gcp_state(raw), A.gcp_principal(headers, None)
-    arm = reg.get("az_arm")
-    return A.azure_state(getattr(arm, "state", None) or {}), A.azure_principal(headers, None)
+    from core import iam_state_nano as N
+    return N.state_and_principal(cloud, headers, query, _registry())
+
+
+def _needs(e):
+    return getattr(e, "needs", None) or [e.need]
+
+
+def _unidentified(cloud, principal, settings):
+    """AWS: credentials not in the IAM store act as the account root; GCP/Azure: a token with no identity claim acts as the project /
+    subscription owner. `unknownPrincipal: "deny"` turns that off (the engine then denies them). Same rule as core/middleware.py."""
+    if (settings or {}).get("unknownPrincipal", "root") == "deny":
+        return False
+    t = (principal or {}).get("type")
+    return t == "unknown" if cloud == "aws" else t == "root"
 
 
 # ----------------------------------------------------------------------------- host-backed settings + audit
@@ -181,7 +200,7 @@ def api(method, path, query_json="{}", body_json="null"):
         status, body = _api(cloud).handle(method, path, json.loads(query_json or "{}"), json.loads(body_json or "null"))
         return json.dumps({"status": status, "body": body})
     except catalog_loader.CatalogUnavailable as e:
-        return json.dumps({"need": [e.need]})
+        return json.dumps({"need": _needs(e)})
     except Exception as e:
         return json.dumps({"error": f"{type(e).__name__}: {e}"})
 
@@ -221,12 +240,18 @@ def check(req_json, settings_json):
               "host": headers.get("host", ""), "body": base64.b64decode(r.get("body_b64") or "")}
         settings = json.loads(settings_json) if settings_json else {}
         state, principal = state_and_principal(cloud, headers, qs)
+        if _unidentified(cloud, principal, settings):
+            if cloud == "aws":
+                acct = principal.get("account") or "000000000000"
+                principal = {"arn": f"arn:aws:iam::{acct}:root", "type": "root", "account": acct}
+            else:
+                return json.dumps({"ok": True})
         hr["principal"] = principal
         # preflight: the op map needs the service catalog; so does anything the engine reads. Python cannot await a fetch: ask the host.
         try:
             perms = gate.required_permissions(cloud, hr)
         except catalog_loader.CatalogUnavailable as e:
-            return json.dumps({"need": [e.need]})
+            return json.dumps({"need": _needs(e)})
         except OSError as e:
             n = _need_from_oserror(e)
             if n is None:
@@ -245,6 +270,6 @@ def check(req_json, settings_json):
         spec = gate.check(cloud, hr, state, settings, audit=audit_log(), bypass=lambda _hr: False)
         return json.dumps({"ok": True} if spec is None else {"deny": _wire(spec)})
     except catalog_loader.CatalogUnavailable as e:
-        return json.dumps({"need": [e.need]})
+        return json.dumps({"need": _needs(e)})
     except Exception as e:      # never raise into the dispatch path; the JS side decides open/closed from the modes
         return json.dumps({"error": f"{type(e).__name__}: {e}"})

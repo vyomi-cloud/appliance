@@ -445,8 +445,15 @@ builtins._embed_bridge_set = _embed_bridge_set
   // Faithful IAM (off by default; zero Python calls while the space's enforcement document is off): see nano-iam-hook.js.
   let _iam = null;
   import("./nano-iam-hook.js").then((m) => { _iam = { hook: m.createIamHook({ py, base: BASE }), guardWire: m.guardWire }; globalThis.NanoIamHook = _iam.hook; }).catch(() => {});
+  const armGuarded = async (method, params) => {
+    const { headers, body_b64, ...rest } = params;
+    const d = _iam && await _iam.guardWire(_iam.hook, { method, path: rest.path, query: rest.query, headers, body_b64 });
+    if (d) { let b = null; try { b = JSON.parse(atob(d.body_b64)); } catch (_) {} return { __http: { status: d.status, headers: d.headers, body: b } }; }
+    return dispatch("azure", "_arm", method, rest);
+  };
   const adispatch0 = async (prov, svc, op, params) => prov === "_iam"        // /api/iam/* (sw.js): the faithful-IAM API, same routes as Mesh
     ? (_iam ? _iam.hook.api(op, params.path, params.query, params.body) : { status: 503, body: { error: "IAM hook not ready" } })
+    : prov === "azure" && svc === "_arm" && params && params.headers ? await armGuarded(op, params)      // ARM via /_wire/subscriptions: credentials ride along, so the IAM gate can run
     : prov !== "_wire" ? dispatch(prov, svc, op, params)
     : (_iam && await _iam.guardWire(_iam.hook, params || {})) || JSON.parse(await py.runPythonAsync(
       `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));

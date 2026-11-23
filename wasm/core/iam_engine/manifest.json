@@ -109,7 +109,8 @@
   ]
  },
  "core": [
-  "iam_state_adapters.py"
+  "iam_state_adapters.py",
+  "iam_state_nano.py"
  ],
  "digest": "27c35d2c3c7fecf6",
  "engine": [
