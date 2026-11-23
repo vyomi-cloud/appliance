@@ -20,8 +20,10 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 
 from core.iam_engine import catalog_loader
+from core.iam_engine import routing
 
 _host = None
 _known = {}          # cloud -> set(service) available as catalogs in this bundle (from the manifest)
@@ -233,6 +235,8 @@ def check(req_json, settings_json):
     try:
         r = json.loads(req_json)
         cloud = r["cloud"]
+        if routing.classify(r.get("method", "GET"), r.get("path", "/"), r.get("headers") or {}, r.get("query") or "", "").get("exempt"):
+            return json.dumps({"ok": True})          # Entra (Graph, /oauth2, discovery) and Vyomi extensions: never gated
         headers = {str(k).lower(): v for k, v in (r.get("headers") or {}).items()}
         q = r.get("query") or {}
         qs = q if isinstance(q, str) else "&".join(f"{k}={v}" for k, v in q.items())
@@ -247,6 +251,17 @@ def check(req_json, settings_json):
             else:
                 return json.dumps({"ok": True})
         hr["principal"] = principal
+        route = routing.classify(hr["method"], hr["path"], headers, qs, hr["host"])      # shared path space: Azure OpenAI/SQL, GCS XML (same rules as Mesh)
+        if route.get("host"):
+            hr["host"] = route["host"]
+        if cloud == "azure" and re.match(r"^/(?:openai|azure-openai)(?:/|$)", routing.strip_wire(hr["path"]), re.I):
+            try:
+                from core import nano_registry, iam_state_adapters
+                acct = iam_state_adapters.azure_openai_account(getattr(nano_registry.get().get("az_arm"), "state", None), hr["path"], headers)
+            except Exception:
+                acct = ""
+            if acct:
+                hr["headers"]["x-vyomi-data-account"] = acct
         # preflight: the op map needs the service catalog; so does anything the engine reads. Python cannot await a fetch: ask the host.
         try:
             perms = gate.required_permissions(cloud, hr)

@@ -18,6 +18,7 @@ all, `preload()`s and retries (see nano_bridge.check)."""
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 from core.iam_engine import catalog_loader
@@ -170,12 +171,14 @@ def _scope_of(rec):
 
 def azure_state(reg) -> dict:
     arm = reg.get("az_arm")
-    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "groups": {}}
+    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "groups": {}, "data_scopes": {}}
     for rec in list((getattr(arm, "state", None) or {}).values()):
         if not isinstance(rec, dict):
             continue
         t = str(rec.get("_type") or rec.get("type") or "").lower()
         p = rec.get("properties") or {}
+        if t in _A._AZ_DATA and rec.get("id") and rec.get("name"):     # data-plane names (blob account, OpenAI account, SQL server ...) inherit from the ARM resource
+            out["data_scopes"][_A._AZ_DATA[t] % str(rec["name"]).lower()] = rec["id"]
         if t == _AZ_T[0]:
             out["role_assignments"].append({"id": rec.get("id") or rec.get("name") or "", "principal_id": p.get("principalId") or "",
                                             "principal_type": p.get("principalType"), "scope": _scope_of(rec),
@@ -191,6 +194,11 @@ def azure_state(reg) -> dict:
     g = reg.get("az_graph")
     for gid, members in (getattr(g, "group_members", None) or {}).items():
         out["groups"][gid] = sorted(members)
+    ds = out["data_scopes"]
+    first = next((v for k, v in ds.items() if k.startswith("/cognitiveservices/")), None)
+    m = re.match(r"^(/subscriptions/[^/]+)", str(first or ""), re.I)
+    if m:
+        ds["/cognitiveservices/_"] = m.group(1)           # an OpenAI request whose account cannot be told: authorize at the subscription
     _require(("azure", "_roles"))
     out["builtin_roles"] = _assigned_builtin_roles(out["role_assignments"])
     return out

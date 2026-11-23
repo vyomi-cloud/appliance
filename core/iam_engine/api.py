@@ -62,6 +62,16 @@ class IamApi:
         except Exception as exc:
             return 501, {"error": f"{cloud} engine not available: {exc}"}
         req = _request(cloud, body.get("principal") or {}, body["action"], body.get("resource") or "*", body.get("context"))
+        pr = body.get("principal") or {}
+        if cloud in ("gcp", "azure") and pr.get("type") == "root":
+            # Same rule as the gate (core/middleware.py): GCP/Azure have no root, the simulator's unidentified caller is the project /
+            # subscription owner. Without this the effective-access view said "implicit deny" for the owner the live gate lets through.
+            try:
+                strict = (self.store.get() or {}).get("unknownPrincipal", "root") == "deny"
+            except Exception:
+                strict = False
+            if not strict:
+                return 200, {"allowed": True, "reason": "owner_root", "matched": []}
         try:
             return 200, engine.evaluate(req, self.state_fn(cloud))
         except Exception as exc:

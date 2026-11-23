@@ -125,10 +125,10 @@ def _arm_provider(method, ns, rest, resource):
 
 
 # ----------------------------------------------------------------------------------------------- data plane
-_ALIAS = re.compile(r"^/azure-data/(blob|queue|table|keyvault|vault|servicebus|cosmos|appconfig)/([^/]+)(/.*)?$", re.I)
+_ALIAS = re.compile(r"^/azure-data/(blob|queue|table|keyvault|vault|servicebus|cosmos|appconfig|openai)/([^/]+)(/.*)?$", re.I)
 _HOST = (("blob.core.windows.net", "blob"), ("queue.core.windows.net", "queue"), ("table.core.windows.net", "table"),
          ("vault.azure.net", "keyvault"), ("servicebus.windows.net", "servicebus"), ("documents.azure.com", "cosmos"),
-         ("azconfig.io", "appconfig"))
+         ("azconfig.io", "appconfig"), ("openai.azure.com", "openai"), ("cognitiveservices.azure.com", "openai"))
 _SA = "Microsoft.Storage/storageAccounts/"
 
 
@@ -325,12 +325,119 @@ def _appconfig(method, path, store):
     return []
 
 
+# ----------------------------------------------------------------------------------------------- Azure OpenAI data plane
+# Data actions of Microsoft.CognitiveServices/accounts/OpenAI/* (verbatim from the catalog). The account is the resource
+# (`/cognitiveservices/<account>`, inherited from the ARM account via state["data_scopes"]); the simulator's `/openai/...` has no
+# account in the path, so the host adapter resolves it (key / deployment) and passes it as the `x-vyomi-data-account` header.
+_OAI = "Microsoft.CognitiveServices/accounts/OpenAI/"
+_OAI_OP = {"chat/completions": "deployments/chat/completions/action", "completions": "deployments/completions/action",
+           "embeddings": "deployments/embeddings/action", "images/generations": "images/generations/action",
+           "moderations": "moderations/action", "extensions/chat/completions": "deployments/extensions/chat/completions/action",
+           "realtime": "deployments/realtime/action"}
+_OAI_TOP = {"responses": "responses", "files": "files", "fine_tuning": "fine-tunes", "fine-tunes": "fine-tunes", "evals": "evals",
+            "assistants": "assistants", "vector_stores": "assistants/vector_stores", "threads": "assistants/threads",
+            "batches": "batches", "stored-completions": "stored-completions"}
+
+
+def _rw(method, base):
+    return "%s/%s" % (base, {"GET": "read", "HEAD": "read", "DELETE": "delete"}.get(method, "write"))
+
+
+def _openai(method, path, acct):
+    p = re.sub(r"^/(?:azure-openai|openai)(?=/|$)", "", path.split("?", 1)[0], flags=re.I)
+    p = re.sub(r"^/openai(?=/|$)", "", p, flags=re.I)            # /azure-openai/openai/... and /azure-data/openai/<acct>/openai/...
+    p = re.sub(r"^/v1(?=/|$)", "", p)
+    segs = [x for x in p.split("/") if x]
+    res = "/cognitiveservices/" + (acct or "_")
+    if not segs:
+        return _out(_OAI + "models/read", res, True)
+    if segs[0] == "deployments":
+        if len(segs) == 1 or (len(segs) == 2 and method != "POST"):
+            return _out(_OAI + _rw(method, "deployments"), res, True)
+        tail = "/".join(segs[2:])
+        if tail.startswith("audio"):
+            return _out(_OAI + "deployments/audio/action", res, True)
+        if tail in _OAI_OP:
+            return _out(_OAI + _OAI_OP[tail], res, True)
+        return _out(_OAI + _rw(method, "deployments"), res, True)
+    head = segs[0]
+    if head == "models":
+        return _out(_OAI + "models/read", res, True)
+    if head in ("chat", "completions", "embeddings", "images", "moderations", "audio", "realtime"):
+        tail = "/".join(segs)
+        if tail.startswith("audio"):
+            return _out(_OAI + "deployments/audio/action", res, True)
+        return _out(_OAI + _OAI_OP.get(tail, "deployments/" + head + "/action"), res, True)
+    base = _OAI_TOP.get(head)
+    if not base:
+        return []
+    if head == "threads" or head == "assistants" or head == "vector_stores":
+        rest = segs[1:]
+        if head == "threads":
+            for key, name in (("runs", "runs"), ("messages", "messages")):
+                if key in rest:
+                    nested = "/".join(["runs", "steps"] if "steps" in rest else [name])
+                    base = "assistants/threads/" + nested
+                    break
+        elif head == "vector_stores":
+            for key in ("file_batches", "files"):
+                if key in rest:
+                    base = "assistants/vector_stores/" + key
+                    break
+    if head == "batches" and segs[-1] == "cancel":
+        return _out(_OAI + "batches/cancel/action", res, True)
+    if head == "batches" and method == "POST":
+        return _out(_OAI + "batches/action", res, True)
+    if head == "evals" and method == "DELETE":
+        return _out(_OAI + "evals/write", res, True)
+    return _out(_OAI + _rw(method, base), res, True)
+
+
+# ----------------------------------------------------------------------------------------------- Azure SQL (`/azure-sql/...`)
+# The simulator's SQL data plane (query / security / mirror / recommendations) has no vendor dataAction: a T-SQL connection is
+# authorized by SQL or Entra logins, not Azure RBAC. What a caller can do through the simulator's HTTP surface is administer the
+# server/database, so it maps to the Microsoft.Sql control plane: GET -> read, PUT/POST (create, query, apply, sync) -> write,
+# DELETE -> delete, on servers/databases of the ARM server (`/sql/<server>`, inherited from the ARM resource).
+def _azure_sql(method, path):
+    segs = [x for x in re.sub(r"^/azure-sql", "", path.split("?", 1)[0], flags=re.I).split("/") if x]
+    if len(segs) < 2 or segs[0].lower() != "servers":
+        return []
+    res = "/sql/" + segs[1]
+    typ = "Microsoft.Sql/servers/databases" if len(segs) > 2 and segs[2].lower() == "databases" else "Microsoft.Sql/servers"
+    verb = {"GET": "read", "HEAD": "read", "DELETE": "delete"}.get(method, "write")
+    if typ.endswith("databases") and len(segs) == 5 and segs[4] in ("query", "queryinsights") and method == "POST":
+        verb = "read"                                    # a SELECT-style query is the closest thing to a read
+    return _out("%s/%s" % (typ, verb), res)
+
+
+def _strip_wire(path):
+    p = path
+    for pre in ("/nano/_wire", "/_wire"):
+        if p == pre or p.startswith(pre + "/"):
+            p = p[len(pre):] or "/"
+            break
+    return re.sub(r"^/arm(?=/(?:subscriptions|providers|tenants)(?:/|$))", "", p, flags=re.I) or "/"
+
+
 def required(method, path, body=None, host=None, headers=None):
     method = (method or "GET").upper()
     h, p, q = _split(path)
+    p = _strip_wire(p)                     # /_wire/arm/subscriptions/.. and /_wire/subscriptions/.. are the same ARM request
     host = host or h
     hdr = {k.lower(): v for k, v in (headers or {}).items()}
+    if re.match(r"^/(?:openai|azure-openai)(?:/|$)", p, re.I):
+        acct = hdr.get("x-vyomi-data-account")
+        if not acct and host and host.endswith(("openai.azure.com", "cognitiveservices.azure.com")):
+            acct = host.split(".")[0]
+        m = re.match(r"^/azure-openai/([^/]+)(/openai(?:/.*)?)$", p, re.I)      # /azure-openai/<account>/openai/...
+        if m:
+            acct, p = m.group(1), m.group(2)
+        return _openai(method, p, acct)
+    if re.match(r"^/azure-sql(?:/|$)", p, re.I):
+        return _azure_sql(method, p)
     kind, acct, dpath = _data_target(host, p)
+    if kind == "openai":
+        return _openai(method, dpath, acct)
     if kind:
         if kind == "blob":
             return _blob(method, dpath, q, headers, acct)
