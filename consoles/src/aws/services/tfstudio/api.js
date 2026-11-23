@@ -33,3 +33,33 @@ export const downloadZip = async (mode) => {
   const a = document.createElement("a"); a.href = href; a.download = "vyomi-terraform-export.zip"; document.body.appendChild(a); a.click(); a.remove();
   if (revoke) setTimeout(() => URL.revokeObjectURL(revoke), 10000);
 };
+
+/* Import: plan / apply / destroy a Terraform bundle ({ files: name -> text, binaries: name -> base64, variables }) against this backend. */
+const post = async (path, body) => {
+  const r = await fetch(getBase() + path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  return r.json();
+};
+export const planBundle = (bundle) => post("/api/terraform/plan", bundle);
+export const applyBundle = (bundle, targets, known) => post("/api/terraform/apply", { ...bundle, targets, known });
+export const destroyBundle = (ledger) => post("/api/terraform/destroy", { ledger });
+const LEDGER = "vyomi.tf.ledger";
+export const getLedger = () => { try { return JSON.parse(localStorage.getItem(LEDGER) || "[]"); } catch (_) { return []; } };
+export const setLedger = (l) => { try { localStorage.setItem(LEDGER, JSON.stringify(l)); } catch (_) { /* private mode */ } };
+
+/** Dropped / pasted files -> request bundle. .tf/.tfvars are text; a .zip is unpacked (its .tf/.tfvars as text, everything else, such as Lambda packages, as base64). */
+export async function readBundle(fileList, pasted) {
+  const files = {}, binaries = {};
+  const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode(...u8.subarray(i, i + 8192)); return btoa(s); };
+  const add = (name, u8) => { if (/\.(tf|tfvars)$/.test(name)) files[name] = new TextDecoder().decode(u8); else binaries[name] = b64(u8); };
+  for (const f of fileList) {
+    if (/\.zip$/i.test(f.name)) {
+      const { unzip } = await import("./zip.js"), es = (await unzip(await f.arrayBuffer())).filter((e) => !/(^|\/)(__MACOSX|\.DS_Store)/.test(e.name));
+      const top = es.length && es.every((e) => e.name.includes("/") && e.name.split("/")[0] === es[0].name.split("/")[0]) ? es[0].name.split("/")[0] + "/" : "";  // a zip of a folder: strip the folder
+      for (const e of es) add(e.name.replace(/^\.\//, "").slice(top.length), e.data);
+    }
+    else add(f.webkitRelativePath || f.name, new Uint8Array(await f.arrayBuffer()));
+  }
+  if (pasted && pasted.trim()) files["pasted.tf"] = pasted;
+  return { files, binaries };
+}
