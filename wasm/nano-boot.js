@@ -108,6 +108,7 @@ const CORES = [
   "azure_webapp_core.py",   // Azure App Service engine (Microsoft.Web: web apps + function apps, plans) — loaded before azure_arm_core which delegates to it
   "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
   "azure_health_core.py",      // Resource health + Advisor (derived from the stored ARM resources)
+  "azure_deploy_core.py", "azure_tf_hcl.py", "azure_tf_core.py",   // ARM template deployment engine + azurerm Terraform export/import (lazily imported)
   "azure_templates_core.py",   // Export template engine (ARM→Bicep/Terraform) — lazily imported by azure_arm_core
   "azure_support_core.py",  // Microsoft.Support support requests (imported by azure_arm_core)
   "azure_alerts_core.py",  // Microsoft.AlertsManagement alert evaluation + processing rules (imported by azure_arm_core; needs monitor + operationalinsights first)

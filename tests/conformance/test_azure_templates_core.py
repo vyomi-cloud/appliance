@@ -27,9 +27,9 @@ def test_export_group_roundtrips_real_resource():
     res = [x for x in b["template"]["resources"] if x["type"].lower() == "microsoft.network/dnszones"]
     assert res and res[0]["tags"] == {"env": "dev"} and res[0]["properties"]["zoneType"] == "Public"
     assert "param z1_com_name string = 'z1.com'" in b["bicep"]
-    assert "resource z1_com 'Microsoft.Network/dnszones@" in b["bicep"] and "zoneType: 'Public'" in b["bicep"]
-    assert 'resource "azapi_resource" "z1_com"' in b["terraform"] and "var.z1_com_name" in b["terraform"]
-    assert 'zoneType = "Public"' in b["terraform"]
+    assert "resource z1_com 'Microsoft.Network/dnsZones@" in b["bicep"]
+    assert 'resource "azurerm_dns_zone" "z1_com"' in b["terraform"] and 'name                = "z1.com"' in b["terraform"]
+    assert 'source  = "hashicorp/azurerm"' in b["terraform"]
 
 
 def test_single_resource_and_no_params_and_missing():
@@ -44,8 +44,8 @@ def test_single_resource_and_no_params_and_missing():
 
 
 def test_bicep_literals():
-    from core.azure_templates_core import _bval
-    assert _bval({"a-b": [1, True, None, "it's"]}) == "{\n  'a-b': [\n    1\n    true\n    null\n    'it\\'s'\n  ]\n}"
+    from core.azure_templates_core import _bval, _BX
+    assert _bval({"a-b": [1, True, None, "it's"]}, _BX(None, {})) == "{\n  'a-b': [\n    1\n    true\n    null\n    'it\\'s'\n  ]\n}"
 
 
 if __name__ == "__main__":

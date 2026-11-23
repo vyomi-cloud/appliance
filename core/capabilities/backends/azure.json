@@ -298,7 +298,7 @@
   },
   "differs": [
    "Activity log contains only control-plane operations Vyomi recorded since boot; the caller is a fixed placeholder",
-   "Export template: ARM is built from stored properties, Bicep is a deterministic decompilation, Terraform uses the generic azapi_resource form",
+   "Export template: ARM is built from stored properties, Bicep is a deterministic decompilation, Terraform maps ~40 ARM types to azurerm_* (azapi_resource for the rest); Deploy template / Import Terraform run against the ARM core",
    "Advisor and Resource health come from a small fixed rule set over stored configuration",
    "Diagnostic settings deliver to Log Analytics workspaces and storage accounts that exist in the simulator; Event Hub and partner destinations count as failed deliveries",
    "Resource Graph 'Open query' supports only a minimal Kusto subset over the Resources and ResourceContainers tables"
@@ -339,8 +339,8 @@
      "notes": "Same."
     },
     "differs": [
-     "Nested resources are exported flat",
-     "Terraform output uses azapi_resource, not azurerm_*"
+     "Nested resources are exported flat (named parent/child)",
+     "Terraform output uses azurerm_* for ~40 mapped types; other ARM types use azapi_resource"
     ],
     "notInScope": [],
     "sources": [

@@ -3,6 +3,7 @@
  * Cost Management pages are backed by real native ARM calls; everything else in the menu is
  * an honest NotSimulated panel. */
 import DeploymentStacks from "./DeploymentStacks.jsx";
+import DeployTemplate from "./DeployTemplate.jsx";
 import MarketplaceBrowser from "../../kit/MarketplaceBrowser.jsx";
 import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import { useEffect, useState } from "react";
@@ -673,6 +674,7 @@ function Deployments({ name }) {
   const { data, loading, error, reload } = useAsync(() => api.listDeployments(name), [name]);
   const [tpl, setTpl] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [deployOpen, setDeployOpen] = useState(false);
   const rows = data || [];
   const act = async (verb, fn, depName) => {
     setBusy(true);
@@ -689,6 +691,7 @@ function Deployments({ name }) {
         resourceName="deployment" rowKey={(r) => r.name} filterPlaceholder="Filter by deployment name"
         items={rows} loading={loading} error={error} onRefresh={reload}
         extraCommands={(selected) => <>
+          <ToolbarButton icon={<Add20Regular />} onClick={() => setDeployOpen(true)} data-testid="deploy-template-open">Deploy template</ToolbarButton>
           <ToolbarButton disabled={busy || selected.length !== 1} onClick={() => act("cancel", api.cancelDeployment, selected[0]?.name)}>Cancel</ToolbarButton>
           <ToolbarButton disabled={busy || selected.length !== 1} onClick={() => act("redeploy", api.redeployDeployment, selected[0]?.name)}>Redeploy</ToolbarButton>
         </>}
@@ -709,6 +712,7 @@ function Deployments({ name }) {
         ]}
       />
       </CapabilityContainer>
+      <DeployTemplate rg={name} open={deployOpen} onClose={() => setDeployOpen(false)} onDeployed={reload} />
       <Dialog open={!!tpl} onOpenChange={(_, d) => !d.open && setTpl(null)}>
         <DialogSurface aria-label="Template">
           <DialogBody>
