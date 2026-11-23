@@ -129,8 +129,14 @@ def aws_state(store) -> dict:
                 scps.append([json.loads(o.get("content") or "{}")])
             except Exception:
                 pass
-    return {"cloud": "aws", "account": getattr(store, "account_id", ""), "principals": principals, "groups": groups,
-            "scps": scps, "rcps": [], "resource_policies": {}, "resource_tags": {}}
+    out = {"cloud": "aws", "account": getattr(store, "account_id", ""), "principals": principals, "groups": groups,
+           "scps": scps, "rcps": [], "resource_policies": {}, "resource_tags": {}}
+    try:    # resource-based policies + attached SCP/RCP levels (core/iam_resource_policies.py); never blocks the identity-only path
+        from core import iam_resource_policies as _rp
+        out.update(_rp.aws_state_extras(store))
+    except Exception:
+        pass
+    return out
 
 
 # ----------------------------------------------------------------------------- GCP

@@ -347,7 +347,7 @@ IAM_ENGINE_SRC = os.path.join(SRC, "iam_engine")
 IAM_CATALOG_SRC = os.path.join(SRC, "iam_catalog")
 IAM_MANIFEST = os.path.join(OUT, "iam_engine", "manifest.json")
 # Host adapters outside the package (state + principal from the stores); vendored when present, mounted by the hook at /core/<name>.
-IAM_CORE_EXTRAS = [n + ".py" for n in ("iam_state_adapters", "iam_state_nano")]      # (built, not literal names: test_nano_core_manifest scans this file for the CORES list)
+IAM_CORE_EXTRAS = [n + ".py" for n in ("iam_state_adapters", "iam_state_nano", "iam_resource_policies")]      # (built, not literal names: test_nano_core_manifest scans this file for the CORES list)
 
 
 def iam_files():
