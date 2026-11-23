@@ -105,6 +105,8 @@ def export_instances(ctx: Ctx) -> None:
         v = vols[vid]
         if vid in root_vols:
             continue
+        if v.get("Attachments") and all(a.get("DeleteOnTermination") and a.get("InstanceId") not in live for a in v["Attachments"]):
+            continue  # the root volume of a terminated instance (the simulator can leave it listed): it goes with the instance
         attrs = {"availability_zone": v.get("AvailabilityZone"), "size": v.get("Size"), "type": v.get("VolumeType") if v.get("VolumeType") != "gp2" else None,
                  "encrypted": True if v.get("Encrypted") else None,
                  "kms_key_id": ctx.ref("aws_kms_key", v["KmsKeyId"], "arn") if v.get("KmsKeyId") else None,
