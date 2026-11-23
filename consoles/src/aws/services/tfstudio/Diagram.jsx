@@ -3,7 +3,7 @@
  * set plugs in through ICON_FOR / the `icons` prop. Availability is the tile's ring: solid green = in Vyomi, dashed amber = planned,
  * dotted red = not possible in Vyomi. */
 import { useEffect, useMemo } from "react";
-import { Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, ReactFlowProvider, useReactFlow } from "@xyflow/react";
+import { Background, Controls, Handle, MarkerType, MiniMap, Position, ReactFlow, ReactFlowProvider, useNodesState, useReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import dagre from "@dagrejs/dagre";
 import ServiceIcon from "../../../common/icons/ServiceIcon.jsx";
@@ -91,11 +91,21 @@ export function buildFlow(graph, selected, availability) {
 
 function Inner({ graph, selected, onSelect }) {
   const { fitView } = useReactFlow();
-  const flow = useMemo(() => buildFlow(graph, selected, graph.availability || {}), [graph, selected]);
-  useEffect(() => { const t = setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 50); return () => clearTimeout(t); }, [graph, fitView]);
+  const availability = graph.availability || {};
+  // Positions live in state so dragging a tile or a box sticks; selection only restyles, it never re-lays-out.
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  useEffect(() => {
+    setNodes(buildFlow(graph, null, availability).nodes);
+    const t = setTimeout(() => fitView({ padding: 0.12, duration: 250 }), 60);
+    return () => clearTimeout(t);
+  }, [graph]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setNodes((ns) => ns.map((n) => (n.type === "resource" ? { ...n, data: { ...n.data, selected: n.id === selected } } : n))); }, [selected, setNodes]);
+  const edges = useMemo(() => buildFlow(graph, selected, availability).edges, [graph, selected]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <ReactFlow nodes={flow.nodes} edges={flow.edges} nodeTypes={nodeTypes} fitView minZoom={0.2} maxZoom={1.8} nodesConnectable={false}
-      onNodeClick={(_, n) => n.type === "resource" && onSelect(n.id)} onPaneClick={() => onSelect(null)} proOptions={{ hideAttribution: true }}>
+    <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} nodeTypes={nodeTypes} minZoom={0.2} maxZoom={1.8}
+      nodesDraggable nodesConnectable={false} elementsSelectable panOnDrag zoomOnScroll zoomOnPinch zoomOnDoubleClick={false}
+      onNodeClick={(_, n) => n.type === "resource" && onSelect(n.id)} onPaneClick={() => onSelect(null)} proOptions={{ hideAttribution: true }}
+      style={{ cursor: "grab" }}>
       <Background gap={20} color="#d5d9d9" />
       <Controls showInteractive={false} />
       <MiniMap pannable zoomable nodeColor={(n) => (n.type === "group" ? "#d9c8ff" : RING[n.data?.status] || "#8a94a3")} style={{ height: 90, width: 140 }} />
