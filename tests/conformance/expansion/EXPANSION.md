@@ -72,6 +72,10 @@ new services.
 
 ## Definition of done (the gate checks every item)
 
+0. **IAM onboarding** (appliance rule 14) — the service has an entry in `core/iam_catalog/service_map.json` (its IAM catalog slice, or `none` + reason),
+   and `python3 scripts/gen_iam_coverage.py --bump-floors` was run and `wasm/iam-coverage.json` + `docs/architecture/v4.0/IAM-COVERAGE.md` committed.
+   `service-gate.yml` runs `tests/conformance/test_iam_onboarding_gate.py`; its failure message names the exact fix.
+
 1. **Engine** `core/<cloud>_<key>_core.py` (AWS: `core/<key>_core.py`) — the
    service's state + operations, substrate-free (pure Python, no network), so the
    same code runs offline and in Nano. Implement at least the resource lifecycle
