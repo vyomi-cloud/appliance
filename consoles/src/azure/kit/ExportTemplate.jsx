@@ -43,7 +43,7 @@ export default function ExportTemplate({ id, name, resourceGroup, all = false, t
       <CapabilityContainer id="azure.common.export_template" title="Template">
         <Checkbox label="Include parameters" checked={params} onChange={(_, d) => setParams(!!d.checked)} />
         <ErrorBar error={error} title="Failed to export the template" />
-        {loading ? <Loading /> : <Textarea readOnly aria-label={`${tab} template`} data-testid="export-text" value={text} style={{ width: "100%", minHeight: 320, fontFamily: "monospace" }} />}
+        {loading ? <Loading /> : <Textarea readOnly aria-label={`${tab} template`} data-testid="export-text" value={text} style={{ width: "100%" }} textarea={{ style: { minHeight: 420, fontFamily: "monospace", fontSize: 12 } }} resize="vertical" />}
       </CapabilityContainer>
     </>
   );

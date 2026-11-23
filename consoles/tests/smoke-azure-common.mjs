@@ -21,7 +21,7 @@ const arm = (method, path, body, v = "2021-04-01") => page.evaluate(async ([u, m
   return { status: r.status, text: await r.text() };
 }, [`${WIRE}/subscriptions/${SUB}${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, method, body]);
 
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch(process.env.CHROME_BIN ? { executablePath: process.env.CHROME_BIN } : {});
 page = await (await browser.newContext({ viewport: { width: 1500, height: 950 } })).newPage();
 await page.goto(UI, { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(Number(process.env.BOOT_MS || 2000));
@@ -37,7 +37,7 @@ ok((await ta.inputValue()).includes(ZONE), "ARM tab shows the zone template");
 await page.getByRole("tab", { name: "Bicep" }).click();
 ok((await ta.inputValue()).includes("resource ") && (await ta.inputValue()).includes("Microsoft.Network/dnszones@"), "Bicep tab is real Bicep");
 await page.getByRole("tab", { name: "Terraform" }).click();
-ok((await ta.inputValue()).includes('resource "azapi_resource"'), "Terraform tab is real HCL");
+ok((await ta.inputValue()).includes('resource "azurerm_dns_zone"'), "Terraform tab is real HCL (azurerm_dns_zone)");
 ok(!(await page.content()).includes("isn't backed by a Vyomi backend"), "no Not-simulated panel on export");
 
 // Activity log (shared): real events for a vnet, edit columns, server-side filters
