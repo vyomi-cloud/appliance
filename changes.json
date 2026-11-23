@@ -1,29 +1,19 @@
 {
- "at": "2026-11-23T16:18:07+00:00",
+ "at": "2026-11-23T17:18:08+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
    "service": "Amazon EC2",
    "kind": "announcement",
-   "key": "feed:aws:514df1a2756c",
-   "title": "AWS Parallel Computing Service now supports managed instance health checks",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-pcs-instance-health-checks/",
-   "detail": "AWS Parallel Computing Service (AWS PCS) now supports instance health checks, which can find hardware faults and software problems on accelerated instances beyond what Amazon EC2 detects today. For example, a fault such as an uncorrectable GPU memory error can stop or slow every job on a compute node. Instead of losing the next job to the same bad GPU, AWS PCS can take the compute node out of scheduling and replace its instance with a new one. You can turn on instance health checks for a compute node group in the AWS PCS console, AWS CLI, or AWS SDKs. Health monitoring watches NVIDIA GPUs, AWS",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:6c4aec1c5e1d",
-   "title": "AWS Parallel Computing Service now supports network topology-aware scheduling",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-pcs-network-topology-scheduling/",
-   "detail": "AWS Parallel Computing Service (AWS PCS) now supports network topology-aware scheduling, which can place the nodes of each multi-node Slurm job as close together as possible in the Amazon EC2 network. For example, a tightly-coupled MPI simulation or distributed training job exchanges data between its nodes many times per step, so nodes that are many network hops apart can slow every step. Instead of every node in a queue looking equally close to Slurm, AWS PCS can tell Slurm where each compute node sits in the network, so the job can run on nodes fewer hops apart. You can turn on network topol",
+   "key": "feed:aws:e7ea30ec47c1",
+   "title": "Announcing metal size for Amazon EC2 G7 instances",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-g7-metal-size/",
+   "detail": "Today, AWS announces the general availability of the metal size for Amazon Elastic Compute Cloud (Amazon EC2) G7 instances, accelerated by NVIDIA RTX PRO 4500 Blackwell Server Edition GPUs. G7 instances deliver up to 4.6x AI inference performance and up to 2.1x graphics performance compared to G6. Customers can use the metal size of G7 instances to run physical AI simulations, deploy AI agent sandboxes, and accelerate graphics workloads that need direct access to bare metal infrastructure. G7 metal instances enable customers to run specialized workloads that require a custom virtualization sta",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out"
  ]
 }
