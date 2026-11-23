@@ -67,7 +67,7 @@
           el("div", { className: "vl-eyebrow" }, "Hands-on course · " + course.cloud_name + " · " + course.ai_platform),
           el("h2", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
-          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", "13 layers"))),
+          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", "13 layers")), archLink()),
         el("div", { className: "vl-progcard" },
           el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
           el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })),
