@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-23T18:18:06+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**3 change(s), 0 actionable.**
+- · `announcement` AWS Partner Central expands analytics access with Partner Central Agents and Data Subscriptions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/partner-analytics-agent-s3/))
+- · `announcement` AgentCore runtime instances are now generally available in the AWS GovCloud (US-West) Region ([link](https://aws.amazon.com/agentcore-runtime-instances-aws-govcloud-us))
+- · `announcement` Amazon SageMaker Studio now supports training job submission and model deployment for SageMaker HyperPod clusters ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-studio-hyperpod/))
+
+Sources that failed this run (2): pypi/boto3: <urlopen error [Errno 104] Connection reset by peer>; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-23T17:18:08+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,14 +3011,3 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `spec-commit` Azure compute: [Compute Recommender] Preserve GA C# compatibility and regular IsZonal naming (#48078) ([link](https://github.com/Azure/azure-rest-api-specs/commit/0cfe0454095022e6e28fcc64775aef2e90abc227))
 - · `spec-commit` Azure keyvault: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
 - · `spec-commit` Azure operationalinsights: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
-- · `spec-commit` Azure resources: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
-- · `spec-commit` Azure sql: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
-- · `spec-commit` Azure storage: Upgrade stable TypeSpec 1.18 and TypeSpec Azure 0.74 dependencies (#48161) ([link](https://github.com/Azure/azure-rest-api-specs/commit/877ddd8c245dfc007825cfb5916d841c3face3c2))
-- · `announcement` Google Kubernetes Engine: Feature (November 11, 2026) ([link](https://docs.cloud.google.com/release-notes#November_11_2026))
-- · `release` pypi:boto3: 1.44.0 → 1.44.1
-- · `release` pypi:botocore: 1.44.0 → 1.44.1
-
-Sources that failed this run (15): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
