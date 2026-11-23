@@ -184,7 +184,7 @@
       if (j && (j.sandbox || j.restricted)) { closeCap(); expBtn.remove(); cap.remove(); window.__vySandbox = true; }
     }).catch(function () {});
     var m = document.createElement('div'); m.id = 'vy-modal';
-    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-lab" role="tablist"><button type="button" class="on" data-t="labs">Course</button><button type="button" data-t="usage">SDK &amp; CLI usage</button><button type="button" data-t="api">API reference</button></div><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
+    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
     var fr = m.querySelector('iframe');
     function close() { m.classList.remove('open'); fr.removeAttribute('src'); }
