@@ -1,0 +1,730 @@
+{
+ "cloud": "gcp",
+ "cloud_name": "Google Cloud",
+ "ai_platform": "Vertex AI",
+ "title": "Build the Enterprise Facilities agent on Google Cloud",
+ "image": "img/gcp.svg",
+ "image_size": [
+  1800,
+  1270
+ ],
+ "total_minutes": 445,
+ "layers": [
+  {
+   "id": 10,
+   "order": 1,
+   "title": "Foundation Models",
+   "short": "Models",
+   "objective": "Call a foundation model from code the way every other layer will: a chat turn, a tool-calling turn and an embedding.",
+   "learn": [
+    "One request shape for chat; tool calling: the model asks, your code runs the tool",
+    "Embeddings turn text into vectors for search",
+    "The model catalogue versus the model id your code uses"
+   ],
+   "services": [
+    "Vertex AI: Gemini generateContent, embedContent"
+   ],
+   "build": [
+    "models.list to see the catalogue; models.get resolves the id your app uses.",
+    "generateContent: a chat turn.",
+    "generateContent with function declarations (tool calling).",
+    "embedContent with text-embedding-005: a paraphrase ranks above unrelated text.",
+    "Attach your Model Armor template (chapter 11) to a model call and watch it block a prompt attack."
+   ],
+   "contract": {
+    "needs": [],
+    "names": {}
+   },
+   "checks": [
+    "catalogue lists models",
+    "generateContent answers",
+    "function calling returns a call or text",
+    "embedContent returns a vector"
+   ],
+   "simplified": [
+    "Answers come from one small local open model, not Gemini; quality is far lower.",
+    "Standard Gemini model ids resolve as compatibility aliases."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c10_models.py",
+   "code": {
+    "lang": "python",
+    "text": "from google import genai\nclient = genai.Client(vertexai=True, project=PROJECT, location=\"us-central1\")   # point at the simulator via the standard endpoint setting\nr = client.models.generate_content(model=MODEL_ID, contents=\"Reply with OK.\")\nprint(r.text)"
+   },
+   "checker": false,
+   "hotspot": [
+    10,
+    888,
+    480,
+    1092
+   ],
+   "level": "Beginner",
+   "minutes": 25,
+   "outcome": "A model client any layer can import: chat, tool calling and embeddings",
+   "lessons": 5,
+   "color": "#7c3aed"
+  },
+  {
+   "id": 3,
+   "order": 2,
+   "title": "Agent Runtime",
+   "short": "Runtime",
+   "objective": "Host a supervisor agent that routes work to Facilities, Maintenance and Analytics sub-agents, one isolated session at a time.",
+   "learn": [
+    "Supervisor and sub-agents: plan, route, synthesise",
+    "The agent harness: step, token and cost budgets, checkpoints, timeouts, a kill switch",
+    "Session isolation: separate state per session"
+   ],
+   "services": [
+    "Vertex AI Agent Engine",
+    "LangGraph"
+   ],
+   "build": [
+    "Write the supervisor and three sub-agents (entrypoint agent_engine_app.agent).",
+    "Create the Agent Engine from source.",
+    "Query it: the supervisor runs the Facilities, Maintenance and Analytics sub-agents.",
+    "Query with a second session id and prove isolation."
+   ],
+   "contract": {
+    "needs": [
+     10,
+     7
+    ],
+    "names": {
+     "engine": "facilities_supervisor"
+    }
+   },
+   "checks": [
+    "engine facilities_supervisor exists",
+    "query returns an answer",
+    "sessions isolated"
+   ],
+   "simplified": [
+    "Agent code runs in the simulator's own sandbox; Agent Engine scaling and quotas are not modelled."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c03_runtime.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    406,
+    124,
+    726,
+    850
+   ],
+   "level": "Intermediate",
+   "minutes": 40,
+   "outcome": "A supervisor agent and three sub-agents answering in isolated sessions",
+   "lessons": 4,
+   "color": "#2563eb"
+  },
+  {
+   "id": 7,
+   "order": 3,
+   "title": "Tools",
+   "short": "Tools",
+   "objective": "Build the tools the agents call: read-only lookups first, then write tools that sit behind approval.",
+   "learn": [
+    "A tool is a function with a clear input and output contract",
+    "Read-only tools versus approval-gated write tools",
+    "Tool code never trusts its caller"
+   ],
+   "services": [
+    "Cloud Run functions (2nd gen)",
+    "Firestore"
+   ],
+   "build": [
+    "Seed Firestore with assets and work orders.",
+    "generateUploadUrl, PUT the zip, CreateFunction for kb-search, asset-status, the MCP tool server, approval-decision and create-work-order.",
+    "Invoke kb-search (RAG from inside the function).",
+    "Invoke asset-status (Firestore read from inside the function)."
+   ],
+   "contract": {
+    "needs": [
+     6
+    ],
+    "names": {
+     "assets": "assets",
+     "work_orders": "work-orders",
+     "mcp": "facilities-tools"
+    }
+   },
+   "checks": [
+    "five functions exist",
+    "asset-status returns a seeded asset",
+    "kb-search returns documents"
+   ],
+   "simplified": [
+    "Functions run in a simulator sandbox; instance scaling, memory limits and cold starts are not modelled."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c07_tools.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1408,
+    124,
+    1588,
+    850
+   ],
+   "level": "Intermediate",
+   "minutes": 35,
+   "outcome": "Read-only and approval-gated tools your agents can call",
+   "lessons": 4,
+   "color": "#0f766e"
+  },
+  {
+   "id": 12,
+   "order": 4,
+   "title": "Knowledge Pipeline",
+   "short": "Pipeline",
+   "objective": "Turn documents into searchable knowledge, and re-index automatically when a new document lands.",
+   "learn": [
+    "Chunking and why chunk size matters",
+    "Embeddings and vector search",
+    "Event-driven ingestion: storage event, function, index job"
+   ],
+   "services": [
+    "Cloud Storage",
+    "Vertex AI RAG Engine",
+    "Eventarc",
+    "Cloud Run functions"
+   ],
+   "build": [
+    "Upload the SOPs and manuals to the facilities-docs bucket.",
+    "Create the RAG corpus facilities-kb.",
+    "import_rag_files from gs://facilities-docs/docs/ and list_rag_files.",
+    "Add a bucket notification (OBJECT_FINALIZE) to Pub/Sub.",
+    "Eventarc: object finalized, then function, then RAG import (event-driven re-index). A re-uploaded document replaces its old version."
+   ],
+   "contract": {
+    "needs": [
+     10
+    ],
+    "names": {
+     "bucket": "facilities-docs",
+     "corpus": "facilities-kb",
+     "docs_topic": "facilities-doc-events"
+    }
+   },
+   "checks": [
+    "documents in the bucket",
+    "corpus facilities-kb exists",
+    "files imported",
+    "a new upload is re-ingested"
+   ],
+   "simplified": [
+    "Embeddings come from a small local model; the vector store is a lightweight engine behind the same API."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c12_pipeline.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1214,
+    888,
+    1790,
+    1092
+   ],
+   "level": "Intermediate",
+   "minutes": 40,
+   "outcome": "Documents flowing into a searchable knowledge base, re-indexed on every upload",
+   "lessons": 5,
+   "color": "#15803d"
+  },
+  {
+   "id": 6,
+   "order": 5,
+   "title": "Knowledge Search (RAG)",
+   "short": "Search",
+   "objective": "Retrieve the right passages for a question, rank them, and keep the source so answers can cite it.",
+   "learn": [
+    "Vector, keyword and hybrid retrieval",
+    "Reranking",
+    "Why sources must travel with results"
+   ],
+   "services": [
+    "Vertex AI RAG Engine: retrieveContexts",
+    "Vertex AI Search"
+   ],
+   "build": [
+    "retrieveContexts for a boiler question; the boiler SOP ranks first.",
+    "retrieveContexts for an air-handler question; the HVAC manual ranks first.",
+    "Read the source URI of every context (needed for citations).",
+    "Create a Vertex AI Search data store over the same SOP and search it."
+   ],
+   "contract": {
+    "needs": [
+     12
+    ],
+    "names": {
+     "corpus": "facilities-kb"
+    }
+   },
+   "checks": [
+    "boiler SOP ranks first",
+    "HVAC manual ranks first",
+    "contexts carry source URIs"
+   ],
+   "simplified": [
+    "Ranking depends on a small local embedding model."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c06_knowledge.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1210,
+    124,
+    1390,
+    800
+   ],
+   "level": "Intermediate",
+   "minutes": 30,
+   "outcome": "Ranked retrieval that keeps the source of every passage",
+   "lessons": 4,
+   "color": "#2563eb"
+  },
+  {
+   "id": 11,
+   "order": 6,
+   "title": "Response Generation",
+   "short": "Response",
+   "objective": "Answer in plain language from the retrieved documents, with citations, and filter sensitive data out before the user sees it.",
+   "learn": [
+    "Grounding: answer only from retrieved text",
+    "Citations and how to check them",
+    "Output guardrails: sensitive-data masking and policy filters"
+   ],
+   "services": [
+    "Vertex AI grounding with RAG",
+    "Model Armor (response)"
+   ],
+   "build": [
+    "Generate an answer from retrieved contexts and cite the sources.",
+    "sanitizeModelResponse on the agent answer: sensitive data is flagged.",
+    "The clean agent answer passes the output filter.",
+    "generateContent with the RAG retrieval tool returns an answer with groundingMetadata."
+   ],
+   "contract": {
+    "needs": [
+     6,
+     10,
+     2
+    ],
+    "names": {
+     "armor": "facilities-guardrail"
+    }
+   },
+   "checks": [
+    "answer cites retrieved documents",
+    "sensitive data flagged in output",
+    "groundingMetadata present"
+   ],
+   "simplified": [
+    "Model Armor is a deterministic filter set, not Google's trained classifiers.",
+    "Answer quality is that of a small local model."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c11_response.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    918,
+    888,
+    1196,
+    1092
+   ],
+   "level": "Intermediate",
+   "minutes": 30,
+   "outcome": "Grounded answers with citations and sensitive data masked",
+   "lessons": 4,
+   "color": "#0f766e"
+  },
+  {
+   "id": 9,
+   "order": 7,
+   "title": "Agent Memory",
+   "short": "Memory",
+   "objective": "Give the agent memory: short-term events inside a session and long-term facts it can retrieve later.",
+   "learn": [
+    "Short-term memory is the events of one session",
+    "Long-term memory outlives a session",
+    "Scope memory per user and tenant; mind retention and poisoning"
+   ],
+   "services": [
+    "Vertex AI Agent Engine Sessions",
+    "Memory Bank"
+   ],
+   "build": [
+    "Create the memory host engine facilities_memory.",
+    "Create a session for the user and append a user turn and an agent turn.",
+    "List the events to replay the session.",
+    "Memory Bank: create a fact and retrieve it by similarity (long-term).",
+    "Generate memories from a conversation (model fact extraction)."
+   ],
+   "contract": {
+    "needs": [
+     3
+    ],
+    "names": {
+     "memory": "facilities_memory"
+    }
+   },
+   "checks": [
+    "engine exists",
+    "session events round-trip",
+    "fact retrievable by similarity"
+   ],
+   "simplified": [
+    "Fact extraction uses the small local model, so extracted facts are rougher than production."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c09_memory.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    498,
+    888,
+    900,
+    1092
+   ],
+   "level": "Intermediate",
+   "minutes": 25,
+   "outcome": "Short-term session memory and retrievable long-term facts",
+   "lessons": 5,
+   "color": "#2563eb"
+  },
+  {
+   "id": 4,
+   "order": 8,
+   "title": "Agent Gateway",
+   "short": "Gateway",
+   "objective": "Put one governed door in front of the tools: a tool catalogue, a policy check on every call and a rate limit.",
+   "learn": [
+    "Tool catalogue over MCP",
+    "Policy on every tool call: identity, role, attributes",
+    "Throttling, schema validation and audit with the user identity"
+   ],
+   "services": [
+    "Agent Platform agent gateway",
+    "MCP server registry",
+    "Cedar agent policy"
+   ],
+   "build": [
+    "Register the facilities MCP server in the agent registry.",
+    "Create facilities-gateway and wait for ACTIVE; attach the MCP server.",
+    "MCP tools/list, then tools/call through the gateway.",
+    "Attach a Cedar policy that permits read-only tools and denies the write tool."
+   ],
+   "contract": {
+    "needs": [
+     7
+    ],
+    "names": {
+     "gateway": "facilities-gateway",
+     "mcp": "facilities-tools",
+     "policy": "facilities-read-only-tools"
+    }
+   },
+   "checks": [
+    "gateway ACTIVE",
+    "tools/list shows tools",
+    "tools/call works",
+    "write tool is denied by policy"
+   ],
+   "simplified": [
+    "Cedar evaluation is simplified; check which policy features are enforced."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c04_gateway.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    744,
+    124,
+    949,
+    850
+   ],
+   "level": "Advanced",
+   "minutes": 40,
+   "outcome": "One governed gateway with a tool catalogue and a read-only policy",
+   "lessons": 4,
+   "color": "#7c3aed"
+  },
+  {
+   "id": 5,
+   "order": 9,
+   "title": "Actions and Approval",
+   "short": "Approval",
+   "objective": "Make write actions safe: park the action for a human, record every decision, and only then execute.",
+   "learn": [
+    "Risk levels: low auto-approves, medium and high need a human",
+    "Durable approval state and a callback",
+    "An approval ledger as the system of record; idempotency"
+   ],
+   "services": [
+    "Pub/Sub",
+    "Cloud Run functions",
+    "Firestore ledger"
+   ],
+   "build": [
+    "Agent writes a PENDING row to the Firestore ledger and publishes the request to the work-order-approval topic.",
+    "The approver reads the approver-inbox subscription.",
+    "The approval-decision function checks the approver and records APPROVED or REJECTED.",
+    "The waiting caller polls the ledger; create-work-order runs only on APPROVED.",
+    "Prove: nothing is written before approval, and an unauthorised approver is rejected."
+   ],
+   "contract": {
+    "needs": [
+     7,
+     2
+    ],
+    "names": {
+     "topic": "work-order-approval",
+     "inbox": "approver-inbox",
+     "ledger": "approval-ledger"
+    }
+   },
+   "checks": [
+    "request parks as PENDING",
+    "nothing written before approval",
+    "unauthorised approver rejected",
+    "approve creates the work order"
+   ],
+   "simplified": [
+    "This is assembled from Pub/Sub, functions and Firestore: Google Cloud has no waitForTaskToken-style workflow primitive in this reference. Workflows is the managed alternative and is not used here."
+   ],
+   "native": "Assembled pattern, not a single managed service.",
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c05_approval.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    967,
+    124,
+    1192,
+    850
+   ],
+   "level": "Advanced",
+   "minutes": 50,
+   "outcome": "Writes that wait for a human, with a ledger of every decision",
+   "lessons": 5,
+   "color": "#dc2626"
+  },
+  {
+   "id": 1,
+   "order": 10,
+   "title": "Access and Perimeter",
+   "short": "Access",
+   "objective": "Sign users in, carry their identity to every layer, and put a protected edge in front of the tools.",
+   "learn": [
+    "Identity provider, sign-in and tokens",
+    "Verify the token at the edge",
+    "A web firewall and rate limits"
+   ],
+   "services": [
+    "Identity Platform",
+    "API Gateway",
+    "Cloud Armor"
+   ],
+   "build": [
+    "Identity Platform: sign up and sign in to get an ID token; verify signature, audience and issuer.",
+    "Create a service account for the agent and generateIdToken.",
+    "Cloud Armor: create a security policy with a WAF rule.",
+    "API Gateway: create the API, config (OpenAPI with x-google-backend and JWT security) and gateway.",
+    "Invoke /search with a valid ID token."
+   ],
+   "contract": {
+    "needs": [
+     7
+    ],
+    "names": {
+     "users": "facilities-users",
+     "api": "facilities-api",
+     "gateway": "facilities-api-gw",
+     "service_account": "agent-sa"
+    }
+   },
+   "checks": [
+    "sign-in returns an ID token that verifies",
+    "security policy exists",
+    "/search needs a valid token"
+   ],
+   "simplified": [
+    "Tokens are real signed JWTs; federation and MFA are simplified."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c01_access.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    10,
+    124,
+    190,
+    850
+   ],
+   "level": "Intermediate",
+   "minutes": 35,
+   "outcome": "Sign-in, a verified token and a protected API edge",
+   "lessons": 5,
+   "color": "#7c3aed"
+  },
+  {
+   "id": 2,
+   "order": 11,
+   "title": "Channels and Input Guardrails",
+   "short": "Channels",
+   "objective": "Let people reach the agent, filter what comes in, and tell approvers what is waiting.",
+   "learn": [
+    "Input guardrails: prompt attacks and blocked terms",
+    "The approver inbox: a topic with a queue behind it"
+   ],
+   "services": [
+    "Model Armor (prompt)",
+    "Pub/Sub"
+   ],
+   "build": [
+    "Create the Model Armor template facilities-guardrail (prompt injection, responsible-AI, sensitive data).",
+    "sanitizeUserPrompt: a normal question is allowed.",
+    "A prompt injection is blocked.",
+    "Create the approver-inbox subscription on the work-order-approval topic; publish, pull and acknowledge."
+   ],
+   "contract": {
+    "needs": [],
+    "names": {
+     "armor": "facilities-guardrail",
+     "topic": "work-order-approval",
+     "inbox": "approver-inbox"
+    }
+   },
+   "checks": [
+    "template exists",
+    "normal question allowed",
+    "prompt injection blocked",
+    "message reaches the inbox"
+   ],
+   "simplified": [
+    "Model Armor is a deterministic filter set, not Google's trained classifiers."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c02_channels.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    208,
+    124,
+    388,
+    770
+   ],
+   "level": "Beginner",
+   "minutes": 30,
+   "outcome": "Input guardrails and an approver inbox",
+   "lessons": 4,
+   "color": "#2563eb"
+  },
+  {
+   "id": 8,
+   "order": 12,
+   "title": "AgentOps and Observability",
+   "short": "AgentOps",
+   "objective": "See what the agent did: a trace per step, metrics for KPIs, and structured logs tied to the trace.",
+   "learn": [
+    "Spans per agent and per tool",
+    "Metrics and logs correlated by trace id"
+   ],
+   "services": [
+    "Cloud Trace",
+    "Cloud Logging",
+    "Cloud Monitoring"
+   ],
+   "build": [
+    "Cloud Trace v2 batch_write_spans: one span per agent or tool step.",
+    "Cloud Trace v1 get_trace and list_traces read it back.",
+    "Cloud Logging log_struct and list_entries, correlated with the trace.",
+    "Cloud Monitoring: create, write and list a custom metric."
+   ],
+   "contract": {
+    "needs": [
+     3
+    ],
+    "names": {}
+   },
+   "checks": [
+    "trace readable",
+    "structured log with trace id",
+    "custom metric listed"
+   ],
+   "simplified": [
+    "Storage and query are simplified; alerting policies and SLOs are not simulated."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c08_observability.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1606,
+    124,
+    1790,
+    850
+   ],
+   "level": "Intermediate",
+   "minutes": 35,
+   "outcome": "Traces, metrics and logs you can read back",
+   "lessons": 4,
+   "color": "#ea580c"
+  },
+  {
+   "id": 13,
+   "order": 13,
+   "title": "Governance and Security",
+   "short": "Governance",
+   "objective": "Protect and audit the whole app: encrypt the sensitive records and prove who did what.",
+   "learn": [
+    "Envelope protection with an encryption context",
+    "An audit trail of the run and the approval events"
+   ],
+   "services": [
+    "Cloud KMS",
+    "Cloud Audit Logs"
+   ],
+   "build": [
+    "Create the key ring facilities and key ledger-key with rotation.",
+    "Envelope-encrypt the approval record with additional authenticated data.",
+    "Prove decrypting with the wrong AAD is refused.",
+    "Cloud Audit Logs: admin activity for the run (CreateKeyRing, CreateCryptoKey) and the approval topic creation."
+   ],
+   "contract": {
+    "needs": [
+     5
+    ],
+    "names": {
+     "keyring": "facilities",
+     "key": "ledger-key"
+    }
+   },
+   "checks": [
+    "key with rotation",
+    "wrong AAD refused",
+    "audit entries for the run"
+   ],
+   "simplified": [
+    "IAM evaluation is simplified; check the capability notes for what is enforced."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c13_governance.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    10,
+    1116,
+    1450,
+    1256
+   ],
+   "level": "Advanced",
+   "minutes": 30,
+   "outcome": "Encrypted records and an audit trail of the run",
+   "lessons": 4,
+   "color": "#7c3aed"
+  }
+ ]
+}

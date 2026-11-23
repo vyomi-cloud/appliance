@@ -1,0 +1,701 @@
+{
+ "title": "Build the Enterprise Facilities agent, end to end",
+ "cloud": "aws",
+ "reference": "Building Agentic AI Solution on AWS Bedrock: a reference architecture (13 layers)",
+ "image": "AI_E2E_Flow.jpeg",
+ "image_size": [
+  800,
+  600
+ ],
+ "layers": [
+  {
+   "id": 10,
+   "order": 1,
+   "title": "Foundation Models via Bedrock",
+   "short": "Models",
+   "aws": [
+    "Amazon Bedrock: Converse, InvokeModel, guardrails on model calls"
+   ],
+   "objective": "Call a foundation model from code, the way every other layer will: a chat turn, a tool-use turn, and an embedding.",
+   "concepts": [
+    "Converse API: one request shape for any chat model",
+    "Tool use: the model asks, your code runs the tool",
+    "Embeddings via InvokeModel",
+    "Model catalogue vs. the model id your code uses"
+   ],
+   "you_build": [
+    "List the models the account can use.",
+    "Send a Converse request and read the text and the token usage.",
+    "Send a Converse request with a toolConfig and handle stopReason.",
+    "Ask for an embedding with InvokeModel.",
+    "Attach the guardrail (layer 2) to a Converse call and watch it block a prompt attack."
+   ],
+   "contract": {
+    "provides": [
+     "a working model client other layers import (chat, tool use, embeddings)"
+    ],
+    "needs": [],
+    "names": {}
+   },
+   "checks": [
+    "ListFoundationModels returns models",
+    "Converse returns text and usage",
+    "Converse with toolConfig returns tool_use or end_turn",
+    "InvokeModel returns an embedding vector"
+   ],
+   "simplified": [
+    "Answers come from one small local open model, not the vendor model; quality is far lower than the real Claude or Nova.",
+    "The standard Bedrock model ids resolve as compatibility aliases so unmodified code works."
+   ],
+   "reference_fills": [],
+   "hotspot": [
+    4,
+    407,
+    198,
+    523
+   ]
+  },
+  {
+   "id": 3,
+   "order": 2,
+   "title": "AgentCore Runtime",
+   "short": "Runtime",
+   "aws": [
+    "Bedrock AgentCore Runtime",
+    "Strands or LangGraph (agent framework)"
+   ],
+   "objective": "Host a supervisor agent that routes work to Facilities, Maintenance and Analytics sub-agents, one isolated session at a time.",
+   "concepts": [
+    "Supervisor and sub-agents: plan, route, synthesise",
+    "The agent harness: step, token and cost budgets, checkpoints, timeouts and a kill switch",
+    "Session isolation: one agent process per session",
+    "Agent code is just code: package it, deploy it, invoke it"
+   ],
+   "you_build": [
+    "Write the supervisor and three sub-agents.",
+    "Package the agent code as a zip in S3.",
+    "CreateAgentRuntime named facilities-supervisor.",
+    "InvokeAgentRuntime with a session id and read the answer.",
+    "Invoke again with a second session id and prove the sessions do not share state."
+   ],
+   "contract": {
+    "provides": [
+     "a runtime named facilities-supervisor that answers questions and routes to sub-agents"
+    ],
+    "needs": [
+     "layer 10 model client",
+     "layer 7 tools (reference tools until you build yours)"
+    ],
+    "names": {
+     "runtime": "facilities-supervisor"
+    }
+   },
+   "checks": [
+    "CreateAgentRuntime facilities-supervisor exists and is READY",
+    "InvokeAgentRuntime returns an answer",
+    "two session ids are isolated",
+    "StopRuntimeSession ends a session"
+   ],
+   "simplified": [
+    "The simulator runs the agent code in its own sandbox; it does not run real AgentCore containers, and scaling and timeouts are not modelled."
+   ],
+   "reference_fills": [
+    10,
+    7
+   ],
+   "hotspot": [
+    166,
+    62,
+    317,
+    402
+   ]
+  },
+  {
+   "id": 7,
+   "order": 3,
+   "title": "Tools (AWS Lambda)",
+   "short": "Tools",
+   "aws": [
+    "AWS Lambda",
+    "Amazon DynamoDB"
+   ],
+   "objective": "Build the tools the agents call: read-only knowledge and asset lookups first, and write-capable tools that sit behind approval.",
+   "concepts": [
+    "Tools are functions with a clear input and output contract",
+    "Read-only tools vs approval-gated write tools",
+    "Tool code reads data, never trusts the caller"
+   ],
+   "you_build": [
+    "Create the DynamoDB tables for assets, work orders and the approval ledger and seed a few rows.",
+    "Deploy a kb-search tool.",
+    "Deploy an asset-status tool that reads DynamoDB.",
+    "Deploy request-approval and create-work-order (write) tools.",
+    "Invoke each tool with lambda:Invoke and check the result."
+   ],
+   "contract": {
+    "provides": [
+     "tool functions: kb-search, asset-status, request-approval, create-work-order",
+     "tables facilities-assets, facilities-work-orders, approval-ledger"
+    ],
+    "needs": [
+     "layer 6 retrieval for kb-search (reference until you build it)"
+    ],
+    "names": {
+     "assets": "facilities-assets",
+     "work_orders": "facilities-work-orders",
+     "ledger": "approval-ledger"
+    }
+   },
+   "checks": [
+    "four Lambda functions exist",
+    "asset-status returns a seeded asset",
+    "kb-search returns documents",
+    "write tools do not run without approval wiring"
+   ],
+   "simplified": [
+    "Lambda code runs in a simulator sandbox with the real SDKs; cold starts, memory limits and concurrency are not modelled."
+   ],
+   "reference_fills": [
+    6
+   ],
+   "hotspot": [
+    607,
+    62,
+    705,
+    398
+   ]
+  },
+  {
+   "id": 12,
+   "order": 4,
+   "title": "Knowledge Processing Pipeline",
+   "short": "Pipeline",
+   "aws": [
+    "Amazon S3",
+    "Bedrock Knowledge Bases",
+    "OpenSearch Serverless (vector store)"
+   ],
+   "objective": "Turn documents into searchable knowledge: upload, extract, chunk, embed and index, and re-index automatically when a new document lands.",
+   "concepts": [
+    "Chunking and why chunk size matters",
+    "Embeddings and vector search",
+    "Event-driven ingestion: S3 event, Lambda, ingestion job",
+    "Guardrail scan on documents before indexing"
+   ],
+   "you_build": [
+    "Upload SOPs and manuals to the facilities-docs bucket.",
+    "Create a vector collection and the knowledge base facilities-kb.",
+    "Create an S3 data source with fixed-size chunking.",
+    "Start an ingestion job and wait for COMPLETE.",
+    "Wire an S3 event to a Lambda that starts a new ingestion job."
+   ],
+   "contract": {
+    "provides": [
+     "knowledge base facilities-kb filled from facilities-docs"
+    ],
+    "needs": [
+     "layer 10 embedding model"
+    ],
+    "names": {
+     "bucket": "facilities-docs",
+     "kb": "facilities-kb"
+    }
+   },
+   "checks": [
+    "documents are in the bucket",
+    "knowledge base facilities-kb exists",
+    "ingestion job COMPLETE",
+    "a new upload triggers a new ingestion job"
+   ],
+   "simplified": [
+    "Embeddings come from a small local model; retrieval quality is far lower than production models.",
+    "The vector store is a lightweight engine behind the same API."
+   ],
+   "reference_fills": [
+    10
+   ],
+   "hotspot": [
+    500,
+    407,
+    797,
+    500
+   ]
+  },
+  {
+   "id": 6,
+   "order": 5,
+   "title": "Knowledge Search Layer (RAG)",
+   "short": "Search",
+   "aws": [
+    "Bedrock Knowledge Bases Retrieve and Rerank",
+    "Amazon OpenSearch Service"
+   ],
+   "objective": "Retrieve the right passages for a question, rank them, and keep the source location so answers can cite it.",
+   "concepts": [
+    "Vector retrieval vs hybrid retrieval",
+    "Metadata filtering and access-aware search",
+    "Reranking",
+    "Why sources must travel with results"
+   ],
+   "you_build": [
+    "Call Retrieve for a boiler question and check the boiler SOP ranks first.",
+    "Call Retrieve for an air-handler question and check the manual ranks first.",
+    "Read the source location from each result.",
+    "Call Rerank on a result set."
+   ],
+   "contract": {
+    "provides": [
+     "a retrieval function returning ranked passages with sources"
+    ],
+    "needs": [
+     "layer 12 knowledge base"
+    ],
+    "names": {
+     "kb": "facilities-kb"
+    }
+   },
+   "checks": [
+    "Retrieve ranks the boiler SOP first",
+    "Retrieve ranks the HVAC manual first for an AHU question",
+    "results include source locations",
+    "Rerank returns an ordered list"
+   ],
+   "simplified": [
+    "Ranking quality depends on a small local embedding model; BM25 hybrid search is limited."
+   ],
+   "reference_fills": [
+    12
+   ],
+   "hotspot": [
+    521,
+    62,
+    606,
+    338
+   ]
+  },
+  {
+   "id": 11,
+   "order": 6,
+   "title": "Response Generation",
+   "short": "Response",
+   "aws": [
+    "Bedrock RetrieveAndGenerate",
+    "Bedrock Guardrails (output)"
+   ],
+   "objective": "Answer in plain language from the retrieved documents, with citations, and filter personal data out before the user sees it.",
+   "concepts": [
+    "Grounding: answer only from retrieved text",
+    "Citations and how to check them",
+    "Output guardrails: PII anonymisation and policy filters"
+   ],
+   "you_build": [
+    "Generate an answer from retrieved passages and attach citations.",
+    "Run the answer through the output guardrail.",
+    "Check that a planted phone number or email is masked.",
+    "Try RetrieveAndGenerate as a one-call alternative."
+   ],
+   "contract": {
+    "provides": [
+     "a function that returns a grounded, cited, filtered answer"
+    ],
+    "needs": [
+     "layer 6 search",
+     "layer 10 model",
+     "layer 2 guardrail"
+    ],
+    "names": {
+     "guardrail": "facilities-guardrail"
+    }
+   },
+   "checks": [
+    "answer cites a retrieved document",
+    "PII is masked in the output",
+    "RetrieveAndGenerate returns an answer with citations"
+   ],
+   "simplified": [
+    "Guardrails are deterministic simple filters, not the vendor's trained classifiers.",
+    "Answer quality is that of a small local model."
+   ],
+   "reference_fills": [
+    6,
+    10,
+    2
+   ],
+   "hotspot": [
+    364,
+    407,
+    500,
+    500
+   ]
+  },
+  {
+   "id": 9,
+   "order": 7,
+   "title": "AgentCore Memory",
+   "short": "Memory",
+   "aws": [
+    "Bedrock AgentCore Memory"
+   ],
+   "objective": "Give the agent memory: short-term events within a session and long-term records it can retrieve later.",
+   "concepts": [
+    "Short-term memory: the events of one session",
+    "Long-term memory: records that outlive a session",
+    "Scoping by user and tenant; retention and poisoning risks"
+   ],
+   "you_build": [
+    "CreateMemory named facilities-memory.",
+    "Create events for a user and an assistant turn in a session.",
+    "List the events to replay the session.",
+    "Retrieve long-term memory records for a user."
+   ],
+   "contract": {
+    "provides": [
+     "memory facilities-memory with events and retrievable records"
+    ],
+    "needs": [
+     "layer 3 runtime session ids"
+    ],
+    "names": {
+     "memory": "facilities-memory"
+    }
+   },
+   "checks": [
+    "memory facilities-memory exists",
+    "CreateEvent and ListEvents round-trip",
+    "RetrieveMemoryRecords returns records"
+   ],
+   "simplified": [
+    "Long-term extraction is simplified; no vendor memory-extraction model."
+   ],
+   "reference_fills": [
+    3
+   ],
+   "hotspot": [
+    200,
+    407,
+    364,
+    523
+   ]
+  },
+  {
+   "id": 4,
+   "order": 8,
+   "title": "AgentCore Gateway",
+   "short": "Gateway",
+   "aws": [
+    "Bedrock AgentCore Gateway",
+    "Cedar policies"
+   ],
+   "objective": "Put one governed door in front of the tools: a tool catalogue, schema validation, and a policy check on every call.",
+   "concepts": [
+    "Tool catalogue over MCP",
+    "Policy on every tool call: identity, role, attributes",
+    "Schema validation and request throttling",
+    "Audit with the user's identity"
+   ],
+   "you_build": [
+    "CreateGateway named facilities-gateway and wait for READY.",
+    "Add the Lambda tools as a gateway target.",
+    "List tools over MCP (tools/list).",
+    "Call a tool over MCP (tools/call).",
+    "Create a policy engine with a Cedar policy that allows read-only tools only."
+   ],
+   "contract": {
+    "provides": [
+     "a gateway facilities-gateway exposing the tools over MCP with a policy"
+    ],
+    "needs": [
+     "layer 7 tools"
+    ],
+    "names": {
+     "gateway": "facilities-gateway"
+    }
+   },
+   "checks": [
+    "gateway facilities-gateway is READY",
+    "tools/list shows the tools",
+    "tools/call returns a tool result",
+    "a policy engine with a Cedar policy exists"
+   ],
+   "simplified": [
+    "Cedar policy evaluation in the simulator is simplified; check which policy features are enforced before relying on them."
+   ],
+   "reference_fills": [
+    7
+   ],
+   "hotspot": [
+    318,
+    62,
+    412,
+    402
+   ]
+  },
+  {
+   "id": 5,
+   "order": 9,
+   "title": "Actions and Approval",
+   "short": "Approval",
+   "aws": [
+    "AWS Step Functions (waitForTaskToken)",
+    "Amazon SNS and SQS",
+    "Amazon DynamoDB"
+   ],
+   "objective": "Make write actions safe: classify risk, park the action for a human, record every decision, and only then execute.",
+   "concepts": [
+    "Risk levels: low auto-approves, medium and high need a human",
+    "Durable approval state: the workflow waits for a callback",
+    "An approval ledger as the system of record",
+    "Idempotency and rollback"
+   ],
+   "you_build": [
+    "Create the state machine work-order-approval with a waitForTaskToken step.",
+    "Make the agent produce an approval request and check the execution is RUNNING and the ledger shows PENDING.",
+    "Check no work order exists before approval.",
+    "Approve with SendTaskSuccess and see the work order created.",
+    "Reject with SendTaskFailure and see nothing written."
+   ],
+   "contract": {
+    "provides": [
+     "an approval workflow and ledger: nothing is written until a human approves"
+    ],
+    "needs": [
+     "layer 7 write tools",
+     "approver inbox from layer 2"
+    ],
+    "names": {
+     "sm": "work-order-approval",
+     "ledger": "approval-ledger",
+     "topic": "approver-inbox",
+     "queue": "approver-inbox-queue"
+    }
+   },
+   "checks": [
+    "state machine work-order-approval exists",
+    "a request parks as RUNNING and PENDING",
+    "no write happens before approval",
+    "approval creates the work order",
+    "rejection writes nothing"
+   ],
+   "simplified": [
+    "Step Functions callback semantics are modelled; timeouts and service quotas are not."
+   ],
+   "reference_fills": [
+    7,
+    2
+   ],
+   "hotspot": [
+    413,
+    62,
+    521,
+    402
+   ]
+  },
+  {
+   "id": 1,
+   "order": 10,
+   "title": "Access and Perimeter Security",
+   "short": "Access",
+   "aws": [
+    "Amazon Cognito",
+    "Amazon API Gateway",
+    "AWS WAF"
+   ],
+   "objective": "Sign users in, carry their identity to every layer, and put a protected edge in front of the tools.",
+   "concepts": [
+    "User pools, sign-in and tokens",
+    "A JWT authorizer on the API",
+    "Rate-based WAF rules"
+   ],
+   "you_build": [
+    "CreateUserPool facilities-users and a client.",
+    "Create a user and sign in to get a JWT.",
+    "Call GetUser with the access token.",
+    "Create a WAF web ACL with a rate-based rule.",
+    "Create a REST API with a /search route that needs the token."
+   ],
+   "contract": {
+    "provides": [
+     "a user pool and an edge that only lets signed-in users reach the tools"
+    ],
+    "needs": [
+     "layer 7 tools behind the API"
+    ],
+    "names": {
+     "pool": "facilities-users"
+    }
+   },
+   "checks": [
+    "user pool facilities-users exists",
+    "sign-in returns a JWT",
+    "GetUser works with the token",
+    "a web ACL with a rate rule exists",
+    "the API route needs the token"
+   ],
+   "simplified": [
+    "Tokens are real signed JWTs, but account recovery, MFA and federation are simplified."
+   ],
+   "reference_fills": [
+    7
+   ],
+   "hotspot": [
+    4,
+    62,
+    94,
+    402
+   ]
+  },
+  {
+   "id": 2,
+   "order": 11,
+   "title": "Channels and Interface",
+   "short": "Channels",
+   "aws": [
+    "Bedrock Guardrails (input)",
+    "Amazon SNS and SQS"
+   ],
+   "objective": "Let people reach the agent through web, mobile, chat or API, filter what comes in, and tell approvers what is waiting.",
+   "concepts": [
+    "Input guardrails: prompt attacks and denied words",
+    "The approver inbox: topic fan-out to a queue"
+   ],
+   "you_build": [
+    "CreateGuardrail facilities-guardrail and a version.",
+    "Check a normal question passes.",
+    "Check a prompt injection is blocked.",
+    "Check a denied word is blocked.",
+    "Create the approver-inbox topic and a queue subscribed to it."
+   ],
+   "contract": {
+    "provides": [
+     "guardrail facilities-guardrail and the approver inbox"
+    ],
+    "needs": [
+     "none"
+    ],
+    "names": {
+     "guardrail": "facilities-guardrail",
+     "topic": "approver-inbox",
+     "queue": "approver-inbox-queue"
+    }
+   },
+   "checks": [
+    "guardrail exists with a version",
+    "benign input is allowed",
+    "prompt injection is blocked",
+    "a message to the topic reaches the queue"
+   ],
+   "simplified": [
+    "Guardrails are deterministic simple filters, not the vendor's trained classifiers."
+   ],
+   "reference_fills": [],
+   "hotspot": [
+    94,
+    62,
+    165,
+    330
+   ]
+  },
+  {
+   "id": 8,
+   "order": 12,
+   "title": "AgentOps and Observability",
+   "short": "AgentOps",
+   "aws": [
+    "AWS X-Ray",
+    "Amazon CloudWatch metrics and logs",
+    "AgentCore Evaluations"
+   ],
+   "objective": "See what the agent did: traces for every step, metrics for KPIs, structured logs tied to the trace, and evaluations.",
+   "concepts": [
+    "Spans per agent and per tool",
+    "Metrics and logs correlated by trace id",
+    "Evaluators for answer quality"
+   ],
+   "you_build": [
+    "Send one trace segment per agent and tool span.",
+    "Read the trace back.",
+    "Put KPI metrics and list them.",
+    "Write structured logs with the trace id and read them back.",
+    "List the available evaluators."
+   ],
+   "contract": {
+    "provides": [
+     "an observable agent: traces, metrics and logs you can query"
+    ],
+    "needs": [
+     "layer 3 runtime activity"
+    ],
+    "names": {}
+   },
+   "checks": [
+    "trace segments can be read back",
+    "metrics are listed",
+    "logs round-trip with the trace id",
+    "evaluators are listed"
+   ],
+   "simplified": [
+    "Trace and metric storage is simplified; canary and rollback workflow are not simulated."
+   ],
+   "reference_fills": [
+    3
+   ],
+   "hotspot": [
+    706,
+    62,
+    797,
+    402
+   ]
+  },
+  {
+   "id": 13,
+   "order": 13,
+   "title": "Governance and Security",
+   "short": "Governance",
+   "aws": [
+    "AWS KMS",
+    "AWS CloudTrail",
+    "Amazon S3 (SSE-KMS)",
+    "IAM"
+   ],
+   "objective": "Protect and audit the whole app: encrypt the sensitive records, and prove who did what.",
+   "concepts": [
+    "Envelope protection with an encryption context",
+    "SSE-KMS on stored objects",
+    "An audit trail of approval events"
+   ],
+   "you_build": [
+    "Create a KMS key with an alias and rotation.",
+    "Encrypt and decrypt an approval record with an encryption context.",
+    "Write an object with SSE-KMS.",
+    "Create a trail, start logging, and find the approval events in the trail."
+   ],
+   "contract": {
+    "provides": [
+     "a key and an audit trail covering the approval path"
+    ],
+    "needs": [
+     "layer 5 approval events"
+    ],
+    "names": {}
+   },
+   "checks": [
+    "KMS key with rotation exists",
+    "encrypt and decrypt round-trip with the context",
+    "an SSE-KMS object exists",
+    "CloudTrail lookup shows the approval events"
+   ],
+   "simplified": [
+    "IAM policy evaluation is simplified; check the capability notes for what is enforced."
+   ],
+   "reference_fills": [
+    5
+   ],
+   "hotspot": [
+    4,
+    525,
+    797,
+    596
+   ]
+  }
+ ]
+}

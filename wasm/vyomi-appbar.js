@@ -18,6 +18,8 @@
     ['usage', 'SDK & CLI usage', 'M4 17l6-6-6-6M12 19h8'],
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
+  // Vyomi Labs: the guided 13-layer enterprise-agent build for THIS console's cloud (Nano bundle only: pages live at <bundle>/labs/).
+  if (CL !== '/clouds') ITEMS.splice(3, 0, ['labs', 'Vyomi Labs', 'M9 3h6M10 3v6.5L4.6 18.6A2 2 0 0 0 6.3 21.5h11.4a2 2 0 0 0 1.7-2.9L14 9.5V3M7.5 15h9']);
   var css = '' +
     '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:1600;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
     'body:has(#nano-foot) #vy-appbar{bottom:34px}' +   /* Nano: sit above its relay-tunnel footer bar */
@@ -54,6 +56,7 @@
     '#vy-hd-tabs button.on{background:#000;color:#fff}' +
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
+    '#vy-modal.labs .box{width:min(1500px,97vw);height:min(94vh,1000px)}' +
     '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
     '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
     '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
@@ -190,7 +193,9 @@
       m.querySelector('#vy-modal-t').textContent = title;
       m.classList.toggle('sm', !!small); m.classList.toggle('api', view === 'api');
       m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
-      fr.src = CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
+      m.classList.toggle('labs', view === 'labs');
+      fr.src = view === 'labs' ? CL.replace(/clouds\.html$/, '') + 'labs/index.html?embed=1&cloud=' + cloud
+        : CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
       m.classList.add('open');
     }
     // Arrived from the enterprise dashboard (cloudpick.js): open the requested drawer view's modal straight away.
