@@ -191,3 +191,14 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-doc.azure .vl-vtab th{background:#f5f5f5}
 
 @media (max-width:800px){.vl .vl-doc{padding:22px 18px}.vl .vl-doc.gcp .vl-step{padding:20px 18px}.vl .vl-doc.gcp .vl-cl-head{padding:22px 18px}.vl .vl-inthis ul{columns:1}}
+
+/* deploy panel */
+.vl .vl-deploy{border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:10px;background:var(--card);padding:16px 18px;margin:10px 0 18px}
+.vl .vl-dhead{display:flex;gap:18px;align-items:center;justify-content:space-between}.vl .vl-dhead h3{font-size:17px;margin:0 0 3px}.vl .vl-dhead p{margin:0;font-size:13.5px}
+.vl .vl-drows{list-style:none;padding:0;margin:14px 0 0}.vl .vl-drow{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.vl .vl-dn{flex:none;width:22px;height:22px;border-radius:50%;background:var(--bg);border:1px solid var(--line);display:grid;place-items:center;font-size:11px;font-weight:700}.vl .vl-dt{flex:1;min-width:0}.vl .vl-drow code{font-size:12px;color:var(--muted)}
+.vl .vl-dchip{flex:none;font-size:11.5px;font-weight:700;border-radius:99px;padding:2px 10px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.vl .vl-dchip.ok{background:#dcfce7;color:#166534;border-color:#bbf7d0}.vl .vl-dchip.bad{background:#fee2e2;color:#991b1b;border-color:#fecaca}.vl .vl-dchip.warn{background:#fef3c7;color:#92400e;border-color:#fde68a}.vl .vl-dchip.run{background:#dbeafe;color:#1e40af;border-color:#bfdbfe}
+.vl .vl-dlog{margin:0 0 6px 32px;padding:0;background:transparent;color:var(--muted);font-size:12px;max-height:150px;overflow:auto;white-space:pre-wrap}.vl .vl-dlog:empty{display:none}
+.vl .vl-dres{margin-top:12px;padding:12px 14px;border-radius:8px}.vl .vl-dres.ok{background:#f0fdf4;border:1px solid #bbf7d0}.vl .vl-dres.bad{background:#fef2f2;border:1px solid #fecaca}.vl .vl-dres.warn{background:#fffbeb;border:1px solid #fde68a}
+.vl .vl-dlinks{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}.vl .vl-dlinks a.vl-btn{padding:5px 12px;font-size:13px}
