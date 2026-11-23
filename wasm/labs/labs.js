@@ -175,7 +175,7 @@
         sec("setup", "2", "Set up this layer on Vyomi", el("div", {},
           el("p", { className: "vl-muted", textContent: "Follow the steps in the " + course.cloud_name + " console. Each step has a button that opens exactly that service in the simulator, a screenshot of the form and the values to enter." }),
           el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)),
-          el("h3", { className: "vl-h3", textContent: "What you configured, in short" }), ul(l.build),
+          el("h3", { className: "vl-h3", textContent: "Still to do: the remaining steps (SDK or CLI)" }), ul(l.build),
           el("h3", { className: "vl-h3", textContent: "How it fits with the other layers" }), el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
           el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null)),
         sec("validate", "3", "Quick validation in the simulator", el("div", {},
