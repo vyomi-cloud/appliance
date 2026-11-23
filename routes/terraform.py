@@ -33,6 +33,51 @@ def register(app: FastAPI) -> None:
         )
         return export
 
+    @app.get("/__vyomi/lambda-code/{name}")
+    def lambda_code_download(name: str):
+        """Serves a function's original deployment package: the target of GetFunction's Code.Location."""
+        import base64
+        from fastapi.responses import Response
+        from core import lambda_core as _lc
+        from core.appliance_stores import lambda_store
+        fn = _lc._find_fn(lambda_store(), _lc._norm_name(name))
+        if not fn or not fn.get("code_zip"):
+            raise HTTPException(404, detail="NoDeploymentPackage")
+        return Response(base64.b64decode(fn["code_zip"]), media_type="application/zip")
+
+    @app.get("/api/terraform/export/bundle")
+    def api_terraform_export_bundle(format: str = "zip", region: str = "", mode: str = "sim"):
+        """Faithful export: the simulator's live AWS state as a Terraform bundle (HCL + variables + Lambda code) that rebuilds
+        the same stack. Reads through the simulator's own AWS API, the calls Terraform's provider makes."""
+        import os
+        from fastapi.responses import Response
+        from core.tf_export import build_aws, bundle_zip
+        ctx._enforce_tier_feature("terraform_export")
+        endpoint = os.environ.get("VYOMI_INTERNAL_ENDPOINT", "http://127.0.0.1:9000")
+        result = build_aws(endpoint, region or "us-east-1", real_cloud=(mode == "real"))
+        ctx._record_usage("terraform.export_bundle", {"resource_count": result["summary"]["resources"]})
+        if format == "json":
+            return {"files": result["files"], "summary": result["summary"], "portability": result["portability"], "graph": result["graph"]}
+        return Response(bundle_zip(result), media_type="application/zip",
+                        headers={"Content-Disposition": 'attachment; filename="vyomi-terraform-export.zip"'})
+
+    @app.get("/api/terraform/export/graph")
+    def api_terraform_export_graph(region: str = ""):
+        """The console's infrastructure diagram: nodes, dependency edges, containment groups, and per-type availability in Vyomi."""
+        import os
+        from core.tf_export import build_aws
+        ctx._enforce_tier_feature("terraform_export")
+        r = build_aws(os.environ.get("VYOMI_INTERNAL_ENDPOINT", "http://127.0.0.1:9000"), region or "us-east-1")
+        return {**r["graph"], "portability": r["portability"], "summary": r["summary"]}
+
+    @app.post("/api/terraform/classify")
+    async def api_terraform_classify(request: Request):
+        """Availability of Terraform resource types in Vyomi (for an uploaded template): supported | planned | not_possible."""
+        from core.tf_export.graph import classify
+        body = await request.json()
+        types = [t for t in (body.get("types") or []) if isinstance(t, str)][:500]
+        return {"availability": classify(types)}
+
     @app.post("/api/terraform/import")
     async def api_terraform_import(request: Request):
         from core.terraform_export import export_space_to_terraform_json

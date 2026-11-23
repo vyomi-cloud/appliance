@@ -487,6 +487,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
   <script type="module" src="./nano-boot.js?v=4"></script>
   <script src="./mesh-link.js"></script>
   <script src="./nano-disclaimer.js"></script>
+  <script src="./tf-studio.js"></script>
   <script src="./nano-back.js"></script>
 <script src="./nano-usage.js" data-cloud="aws" defer></script>
   <script src="./nano-connect.js"></script>
@@ -746,6 +747,7 @@ async function boot(){
   try {
     const r = await fetch(ORIGIN + "/api/aws/catalog"); CATALOG = await r.json();
     REGION = CATALOG.region; ACCOUNT = CATALOG.account;
+    CATALOG.services = (CATALOG.services || []).concat([{key:"tfstudio", label:"Infrastructure Studio", icon:"account_tree"}]);   // opens the Terraform diagram/export view, not a resource list
     const username = await deriveUsername();
     document.getElementById("acctText").textContent = `${username} @ ${ACCOUNT}`;
     document.getElementById("regionText").textContent = friendlyRegion(REGION);
@@ -843,6 +845,7 @@ function render(){
   if (STATE.view === "list")      return renderList(main);
   if (STATE.view === "childList") return renderChildList(main);
   if (STATE.view === "stub")      return renderStub(main);
+  if (STATE.view === "studio")    return window.VyomiStudio.mount(main, {cloud:"aws"});
   if (STATE.view === "detail")    return renderDetail(main);
   if (STATE.view === "create")    return renderCreate(main);
   main.append(el("div",{class:"empty"}, "Unknown view: "+STATE.view));
@@ -1033,8 +1036,9 @@ const SVC_MENU_INFO = {
   cloudwatch:     ["Management & Governance", "Monitor resources and applications"],
   logs:           ["Management & Governance", "Collect, search and analyse log data"],
   ssm:            ["Management & Governance", "Access insights and take action on your resources"],
+  tfstudio:       ["Management & Governance", "Diagram your stack and export or check it as Terraform"],
 };
-const SVC_MENU_ICON = { apigatewayv2: "apigateway", logs: "cloudwatch" };
+const SVC_MENU_ICON = { apigatewayv2: "apigateway", logs: "cloudwatch", tfstudio: "cloudformation" };
 const favKey = () => "vyomi.aws.favorites";
 function getFavs(){ try { return JSON.parse(localStorage.getItem(favKey()) || "[]"); } catch (_) { return []; } }
 function wireServicesMenu(){
@@ -1049,7 +1053,7 @@ function wireServicesMenu(){
     if (lib) { const box = el("span",{class:"sm-ic"}); box.innerHTML = '<svg viewBox="0 0 24 24">' + lib.aws(SVC_MENU_ICON[s.key] || s.key, cat) + '</svg>'; return box; }
     return el("span",{class:"sm-ic"}, el("span",{class:"material-symbols-outlined"}, s.icon || "apps"));
   };
-  const open = (s) => { close(); navigate({view:"list", service:s.key, child:null, item:null}); };
+  const open = (s) => { close(); navigate(s.key === "tfstudio" ? {view:"studio", service:"tfstudio", child:null, item:null} : {view:"list", service:s.key, child:null, item:null}); };
   const row = (s) => {
     const favs = getFavs(), fav = favs.includes(s.key);
     const star = el("button",{class:"sm-star"+(fav ? " fav" : ""),type:"button",title:fav ? "Remove from favorites" : "Add to favorites",

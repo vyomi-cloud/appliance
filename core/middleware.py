@@ -788,6 +788,45 @@ def flush_pending_state() -> None:
             pass
 
 
+_SIGV4_SCOPE_RE = re.compile(r"Credential=[^/\s,]+/\d{8}/[^/\s,]+/([^/\s,]+)/aws4_request")
+
+
+def _aws_throttle_response(request: Request, rps: int, retry_after: float):
+    """Return an AWS-shaped throttle error for a SigV4-signed request, else None.
+
+    A plain JSON 429 is not recognised by the AWS SDK retryers (Go v2 / Terraform's
+    AWS provider only back off on specific throttle error codes), so Terraform gave up
+    on the first burst over the Free-tier cap instead of slowing down. Real AWS
+    answers with a protocol-specific throttle code, which the SDKs retry with backoff.
+    The limit itself is unchanged; only the shape of the rejection is."""
+    auth = request.headers.get("authorization", "")
+    m = _SIGV4_SCOPE_RE.search(auth)
+    if not m:
+        return None
+    service = m.group(1).lower()
+    msg = f"Rate exceeded: the tier allows {rps} requests/second"
+    ra = str(max(1, int(retry_after + 0.999)))
+    hdrs = {"Retry-After": ra}
+    if service == "s3":
+        body = (f'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code>'
+                f'<Message>{msg}</Message><RequestId>0</RequestId></Error>')
+        return Response(body, status_code=503, media_type="application/xml", headers=hdrs)
+    if request.headers.get("x-amz-target"):
+        hdrs["x-amzn-ErrorType"] = "ThrottlingException"
+        return JSONResponse({"__type": "ThrottlingException", "message": msg}, status_code=400,
+                            media_type="application/x-amz-json-1.1", headers=hdrs)
+    if service in ("apigateway", "lambda", "execute-api"):
+        hdrs["x-amzn-ErrorType"] = "TooManyRequestsException"
+        return JSONResponse({"message": msg}, status_code=429, headers=hdrs)
+    if service == "ec2":
+        body = (f'<?xml version="1.0" encoding="UTF-8"?><Response><Errors><Error><Code>RequestLimitExceeded</Code>'
+                f'<Message>{msg}</Message></Error></Errors><RequestID>0</RequestID></Response>')
+        return Response(body, status_code=503, media_type="text/xml", headers=hdrs)
+    body = (f'<ErrorResponse xmlns="http://sts.amazonaws.com/doc/2011-06-15/"><Error><Type>Sender</Type>'
+            f'<Code>Throttling</Code><Message>{msg}</Message></Error><RequestId>0</RequestId></ErrorResponse>')
+    return Response(body, status_code=400, media_type="text/xml", headers=hdrs)
+
+
 async def _rate_limit_middleware(request: Request, call_next):
     """Per-tenant token-bucket rate limit. Bypasses health probes + static."""
     p = request.url.path
@@ -803,6 +842,9 @@ async def _rate_limit_middleware(request: Request, call_next):
         rps = _tp.rate_limit_rps(tier)
         allowed, retry_after = _rate_limit_tenant(tid, rps)
         if not allowed:
+            _aws = _aws_throttle_response(request, rps, retry_after)
+            if _aws is not None:
+                return _aws
             return JSONResponse({
                 "error": {
                     "ok": False, "code": "rate_limited",
