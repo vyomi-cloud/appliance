@@ -61,15 +61,6 @@ def register(app: FastAPI) -> None:
         return Response(bundle_zip(result), media_type="application/zip",
                         headers={"Content-Disposition": 'attachment; filename="vyomi-terraform-export.zip"'})
 
-    @app.get("/terraform-studio", include_in_schema=False)
-    def terraform_studio():
-        """Vyomi Infrastructure Studio: infrastructure diagram, export, and template availability check."""
-        import os
-        from fastapi.responses import HTMLResponse
-        path = os.path.join(os.path.dirname(__file__), "..", "static", "tf-studio", "index.html")
-        with open(path, encoding="utf-8") as fh:
-            return HTMLResponse(fh.read())
-
     @app.get("/api/terraform/export/graph")
     def api_terraform_export_graph(region: str = ""):
         """The console's infrastructure diagram: nodes, dependency edges, containment groups, and per-type availability in Vyomi."""
