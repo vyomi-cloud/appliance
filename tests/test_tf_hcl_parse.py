@@ -133,10 +133,10 @@ def test_operators_conditionals_functions():
     assert ev('format("%s-%03d-%v", "n", 7, true)') == "n-007-true"
     assert ev('lower("ABC")') == "abc" and ev('join(",", var.list)') == "x,y" and ev('length(var.list)') == 2
     assert ev('lookup({a="1"}, "b", "dflt")') == "dflt" and ev('element(var.list, 3)') == "y"
-    assert ev('try(var.missing_thing, "fallback")') == "fallback" or True
+    assert ev('try(var.missing_thing, "fallback")') == "fallback"
     assert ev('coalesce("", "x")') == "x" and ev('concat(["a"], ["b"])') == ["a", "b"]
     assert ev('cidrsubnet("10.0.0.0/16", 8, 3)') == "10.0.3.0/24"
-    assert ev('filebase64sha256("x.zip")') == "RhFMKiUJhgESoLnymaz/EpHNYhQ8wq2RxIiLp/WeCjw=" or True
+    assert ev('filebase64sha256("x.zip")') == "J3CJ2RwL308uaGK6fkoHYFEZQx9dE/cm3TUrBvGyBqk="
     assert ev('file("a.txt")') == "FILE:a.txt"
     assert ev('toset(["b","a","b"])') == ["a", "b"] and ev('base64encode("hi")') == "aGk="
 
