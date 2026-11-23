@@ -30,6 +30,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, KeyValue, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
+import { EnforcementPanel } from "./Enforcement.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { LastAccessedTab, CloudTrailPolicyGenerator } from "./LastAccessed.jsx";
 import { SshKeysSection, ServiceCredentialsSection, SigningCertsSection } from "./CredentialSections.jsx";
@@ -398,6 +399,7 @@ export default function UserDetail({ params }) {
           { id: "tags", label: "Tags", content: <TagsTab userName={userName} /> },
           { id: "security", label: "Security credentials", content: <SecurityCredentialsTab userName={userName} /> },
           { id: "last-accessed", label: "Last Accessed", content: <LastAccessedTab arn={user.Arn} /> },
+          { id: "enforcement", label: "Enforcement", content: <EnforcementPanel service="iam" resource={user.Arn} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="user" names={[userName]}

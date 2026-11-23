@@ -16,6 +16,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, fmtDate, NotSimulatedContainer, PageHeader, Section } from "../../kit/common.jsx";
 import { getProject } from "../../project.js";
 import * as api from "./api.js";
+import { EnforcementPanel } from "./Enforcement.jsx";
 
 const TABS = [["allow", "Allow"], ["deny", "Deny"], ["recommendations", "Recommendations history"]];
 const TAB_ROUTE = { allow: "#/iam-admin/iam", deny: "#/iam-admin/iam/deny", recommendations: "#/iam-admin/iam/log" };
@@ -76,6 +77,7 @@ function Allow({ openGrant }) {
 
   return (
     <>
+      <Box sx={{ mb: 2 }}><EnforcementPanel service="iam" resource={`//cloudresourcemanager.googleapis.com/projects/${project}`} title="IAM enforcement for project" /></Box>
       <Typography variant="h3" component="h2" sx={{ mb: 1 }}>Permissions for project</Typography>
       <FormControlLabel sx={{ mb: 2 }} control={<Checkbox checked={includeGoogle} onChange={(e) => setIncludeGoogle(e.target.checked)} inputProps={{ "aria-label": "Include Google-provided role grants" }} />}
         label="Include Google-provided role grants" />
