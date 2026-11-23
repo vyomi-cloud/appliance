@@ -1,6 +1,16 @@
 {
- "at": "2026-11-23T07:17:48+00:00",
+ "at": "2026-11-23T08:17:49+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "keyvault",
+   "kind": "spec-commit",
+   "key": "azure:keyvault:39bb02accf",
+   "title": "Azure keyvault: KeyVault: Add NSP C# naming customizations (#48425)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/39bb02accfa5355b4d5489c7aacfac6b023c5cb4",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
