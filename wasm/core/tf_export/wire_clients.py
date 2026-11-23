@@ -88,7 +88,10 @@ class WireClient:
             body = urlencode(body, doseq=True)
         body = body.encode() if isinstance(body, str) else (body or b"")
         query = req["query_string"] if isinstance(req["query_string"], dict) else dict(parse_qsl(req["query_string"] or ""))
-        status, rh, rb = self._t(req["method"], req["url_path"], query, headers, body)
+        path, _, qs = req["url_path"].partition("?")  # S3 sub-resources (?versioning, ?policy ...) ride in url_path; an in-process router wants them as query
+        if qs:
+            query = {**dict(parse_qsl(qs, keep_blank_values=True)), **query}
+        status, rh, rb = self._t(req["method"], path, query, headers, body)
         parsed = self._par.parse({"status_code": status, "headers": {k: v for k, v in rh.items()}, "body": rb}, opm.output_shape)
         if status >= 300:
             raise ClientError(parsed, op)

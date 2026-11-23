@@ -435,6 +435,8 @@ async function route(method, path, body, query) {
   // Infrastructure Studio: the Terraform exporter (core/tf_export) over Nano's own AWS state.
   if (method === "GET" && path === "/api/terraform/export/graph") return { tuple: ["aws", "_tf", "Graph", { region: (query && query.region) || "" }] };
   if (method === "GET" && path === "/api/terraform/export/bundle") return { tuple: ["aws", "_tf", "Bundle", { mode: (query && query.mode) || "sim", region: (query && query.region) || "" }] };
+  if (method === "POST" && ((path === "/api/terraform/plan" || path === "/api/terraform/apply") && body && body.files || path === "/api/terraform/destroy"))
+    return { tuple: ["aws", "_tf", path.slice("/api/terraform/".length).replace(/^./, c => c.toUpperCase()), body] };
   if (method === "POST" && path === "/api/terraform/classify") return { tuple: ["aws", "_tf", "Classify", { types: (body && body.types) || [] }] };
 
   // Instance-type catalog for the compute launch wizard (EC2 / GCE / Azure VM).

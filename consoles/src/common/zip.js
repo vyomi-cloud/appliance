@@ -23,3 +23,26 @@ export const bundleEntries = (bundle) => [
   ...Object.entries(bundle.files || {}).map(([name, text]) => ({ name, data: new TextEncoder().encode(text) })),
   ...Object.entries(bundle.binaries || {}).map(([name, b64]) => ({ name, data: Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0)) })),
 ];
+
+/** Read a .zip (stored or deflate) -> [{ name, data: Uint8Array }]. Deflate uses the browser's DecompressionStream. */
+export async function unzip(buf) {
+  const b = new Uint8Array(buf), dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  let e = b.length - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error("not a zip file");
+  const n = dv.getUint16(e + 10, true);
+  let p = dv.getUint32(e + 16, true);
+  const dec = new TextDecoder(), out = [];
+  for (let i = 0; i < n; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) throw new Error("bad zip directory");
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nlen = dv.getUint16(p + 28, true), xlen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true);
+    const lho = dv.getUint32(p + 42, true), name = dec.decode(b.subarray(p + 46, p + 46 + nlen));
+    p += 46 + nlen + xlen + clen;
+    if (name.endsWith("/")) continue;
+    const start = lho + 30 + dv.getUint16(lho + 26, true) + dv.getUint16(lho + 28, true), raw = b.subarray(start, start + csize);
+    if (method === 0) out.push({ name, data: raw.slice() });
+    else if (method === 8) out.push({ name, data: new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()) });
+    else throw new Error(`${name}: unsupported zip method ${method}`);
+  }
+  return out;
+}

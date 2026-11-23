@@ -57,7 +57,9 @@ def register(app: FastAPI) -> None:
         result = build_aws(endpoint, region or "us-east-1", real_cloud=(mode == "real"))
         ctx._record_usage("terraform.export_bundle", {"resource_count": result["summary"]["resources"]})
         if format == "json":
-            return {"files": result["files"], "summary": result["summary"], "portability": result["portability"], "graph": result["graph"]}
+            import base64
+            return {"files": result["files"], "summary": result["summary"], "portability": result["portability"], "graph": result["graph"],
+                    "binaries": {k: base64.b64encode(v).decode() for k, v in result["binaries"].items()}}
         return Response(bundle_zip(result), media_type="application/zip",
                         headers={"Content-Disposition": 'attachment; filename="vyomi-terraform-export.zip"'})
 
@@ -220,8 +222,40 @@ def register(app: FastAPI) -> None:
             "import_count": len(terraform_state.get("imports", {})),
         }
 
+    def _hcl(op: str, payload: dict):
+        """Import / apply of a Terraform bundle (HCL file map) through the simulator's own AWS API (core.tf_export.apply)."""
+        import os
+        from core.tf_export import _clients
+        from core.tf_export.apply import handle
+        ctx._enforce_tier_feature("terraform_export")
+        region = (payload or {}).get("region") or "us-east-1"
+        clients = _clients(os.environ.get("VYOMI_INTERNAL_ENDPOINT", "http://127.0.0.1:9000"), region)
+        out = handle(op, payload, clients, region)
+        ctx._record_usage(f"terraform.hcl_{op.lower()}", {"summary": out.get("summary", {})})
+        return out
+
+    async def _body(request: Request) -> dict:
+        try:
+            b = await request.json()
+        except Exception:  # noqa: BLE001
+            return {}
+        return b if isinstance(b, dict) else {}
+
+    @app.post("/api/terraform/destroy")
+    async def api_terraform_destroy(request: Request):
+        """Remove what a Terraform import created (the ``ledger`` its apply returned) or whatever the posted bundle describes."""
+        from fastapi.concurrency import run_in_threadpool
+        return await run_in_threadpool(_hcl, "Destroy", await _body(request))
+
     @app.post("/api/terraform/plan")
-    def api_terraform_plan():
+    async def api_terraform_plan(request: Request):
+        from fastapi.concurrency import run_in_threadpool
+        body = await _body(request)
+        if body.get("files"):  # a Terraform bundle: what an import would create here
+            return await run_in_threadpool(_hcl, "Plan", body)
+        return await run_in_threadpool(_legacy_plan)
+
+    def _legacy_plan():
         from core.terraform_export import export_space_to_terraform_json
         from core.terraform_workflow import (
             build_plan_summary as terraform_build_plan_summary,
@@ -293,6 +327,9 @@ def register(app: FastAPI) -> None:
             payload = await request.json()
         except Exception:
             payload = {}
+        if isinstance(payload, dict) and payload.get("files"):  # a Terraform bundle: create it here (idempotent)
+            from fastapi.concurrency import run_in_threadpool
+            return await run_in_threadpool(_hcl, "Apply", payload)
         plan_id = str((payload or {}).get("plan_id") or "").strip()
         confirm = bool((payload or {}).get("confirm", False))
         if not confirm:

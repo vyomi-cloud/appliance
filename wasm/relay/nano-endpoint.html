@@ -93,7 +93,7 @@ const CORES = [
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["tf_export/__init__.py", "tf_export/core.py", "tf_export/hcl.py", "tf_export/graph.py", "tf_export/wire_clients.py", "tf_export/aws_apigw.py", "tf_export/aws_compute.py", "tf_export/aws_data.py", "tf_export/aws_dynamodb.py", "tf_export/aws_iam.py", "tf_export/aws_kms.py", "tf_export/aws_lambda.py", "tf_export/aws_messaging.py", "tf_export/aws_network.py", "tf_export/aws_ops.py", "tf_export/aws_storage.py", "netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
+const CORE_PKGS = ["tf_export/__init__.py", "tf_export/core.py", "tf_export/hcl.py", "tf_export/graph.py", "tf_export/wire_clients.py", "tf_export/hcl_parse.py", "tf_export/apply.py", "tf_export/aws_apply.py", "tf_export/aws_apigw.py", "tf_export/aws_compute.py", "tf_export/aws_data.py", "tf_export/aws_dynamodb.py", "tf_export/aws_iam.py", "tf_export/aws_kms.py", "tf_export/aws_lambda.py", "tf_export/aws_messaging.py", "tf_export/aws_network.py", "tf_export/aws_ops.py", "tf_export/aws_storage.py", "netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 async function boot() {
   const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";   // fallback

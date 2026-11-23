@@ -163,7 +163,7 @@ const CORES = [
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["tf_export/__init__.py", "tf_export/core.py", "tf_export/hcl.py", "tf_export/graph.py", "tf_export/wire_clients.py", "tf_export/aws_apigw.py", "tf_export/aws_compute.py", "tf_export/aws_data.py", "tf_export/aws_dynamodb.py", "tf_export/aws_iam.py", "tf_export/aws_kms.py", "tf_export/aws_lambda.py", "tf_export/aws_messaging.py", "tf_export/aws_network.py", "tf_export/aws_ops.py", "tf_export/aws_storage.py", "netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
+const CORE_PKGS = ["tf_export/__init__.py", "tf_export/core.py", "tf_export/hcl.py", "tf_export/graph.py", "tf_export/wire_clients.py", "tf_export/hcl_parse.py", "tf_export/apply.py", "tf_export/aws_apply.py", "tf_export/aws_apigw.py", "tf_export/aws_compute.py", "tf_export/aws_data.py", "tf_export/aws_dynamodb.py", "tf_export/aws_iam.py", "tf_export/aws_kms.py", "tf_export/aws_lambda.py", "tf_export/aws_messaging.py", "tf_export/aws_network.py", "tf_export/aws_ops.py", "tf_export/aws_storage.py", "netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
@@ -290,7 +290,7 @@ def _disp0(d):
     if prov == "_wire":   # v4 consoles: native wire via the relay's AwsWireRouter (same stores)
         from wasm.providers import wire_adapter as _W
         return json.dumps(_W.handle(d.get("params") or {}))
-    if d.get("service") == "_tf":     # Infrastructure Studio: Terraform export graph/bundle/classify
+    if d.get("service") == "_tf":     # Infrastructure Studio: Terraform export graph/bundle/classify + import plan/apply/destroy
         from wasm.providers import tf_adapter as _T
         return json.dumps(_T.handle(d["op"], d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
