@@ -574,12 +574,14 @@ def plan(ctx, template):
                 pass    # dependency on a resource outside this template (already exists)
             elif t is None and d:
                 raise TemplateError("InvalidTemplate", f"The resource '{r['type']}/{r['name']}' depends on '{d}', which is not defined in this template.")
+        r["explicit"] = set(r["deps"])
         # children depend on parent
         pe = r["_parent"]
         if pe is not None:
             for p in expanded_by_ent.get(id(pe), []):
                 if r["name"].lower().startswith(p["name"].lower() + "/"):
                     r["deps"].add(_res_id(ctx.sub, ctx.rg, p["type"], p["name"], p["scope"]).lower())
+                    r["explicit"].add(_res_id(ctx.sub, ctx.rg, p["type"], p["name"], p["scope"]).lower())
         # implicit: any string in the body equal to (or under) another template resource's id
         strs = []
         _walk_strings(r["body"], strs)
@@ -600,6 +602,10 @@ def plan(ctx, template):
                 done.add(r["id"].lower())
                 remaining.remove(r)
                 progressed = True
+        if not progressed and any(x["deps"] != x["explicit"] for x in remaining):
+            for x in remaining:     # reference-only edges (two resources pointing at each other, e.g. NIC <-> VM) are not ordering constraints
+                x["deps"] = set(x["explicit"])
+            continue
         if not progressed:
             names = ", ".join(f"{x['type']}/{x['name']}" for x in remaining)
             raise TemplateError("InvalidTemplate", f"Circular dependency detected on resource(s): {names}.")

@@ -1534,11 +1534,23 @@ class AzureArm:
                 return _err(405, "MethodNotAllowed", "Use POST to export a template.")
             from core import azure_templates_core as _tpl
             r = _tpl.export_group(self.state, sub, rg, (payload or {}).get("resources"),
-                                  {c["type"].lower(): c["api_version"] for c in CATALOG},
+                                  {f'{c["namespace"]}/{c["type"]}'.lower(): c["api_version"] for c in CATALOG},
                                   (payload or {}).get("vyomiIncludeParameters", True) is not False)
             if r["status"] >= 300:
                 return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
             return _ok(r["body"])
+
+        # POST .../resourceGroups/{rg}/importTerraform  {"terraform": "<hcl>"} (Vyomi extension) -> {template, unsupported, warnings, mapped}
+        if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "importterraform" and len(rest_segs) == idx + 1:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST to import Terraform.")
+            if not isinstance((payload or {}).get("terraform"), str):
+                return _err(400, "InvalidRequestContent", "The request content was invalid: 'terraform' (HCL text) is required.")
+            from core import azure_templates_core as _tpl
+            res = _tpl.import_terraform(payload["terraform"])
+            if res.get("error"):
+                return _err(400, "InvalidTerraform", res["error"])
+            return _ok(res)
 
         # POST .../resourceGroups/{rg}/validateMoveResources | moveResources — really re-parents resources
         # (core/azure_templates_core.move_resources): validation + id/reference rewrite.

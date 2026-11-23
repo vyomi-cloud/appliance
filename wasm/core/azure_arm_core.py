@@ -1542,6 +1542,18 @@ class AzureArm:
                 return _err(r["status"], r["body"]["error"]["code"], r["body"]["error"]["message"])
             return _ok(r["body"])
 
+        # POST .../resourceGroups/{rg}/importTerraform  {"terraform": "<hcl>"} (Vyomi extension) -> {template, unsupported, warnings, mapped}
+        if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() == "importterraform" and len(rest_segs) == idx + 1:
+            if method != "POST":
+                return _err(405, "MethodNotAllowed", "Use POST to import Terraform.")
+            if not isinstance((payload or {}).get("terraform"), str):
+                return _err(400, "InvalidRequestContent", "The request content was invalid: 'terraform' (HCL text) is required.")
+            from core import azure_templates_core as _tpl
+            res = _tpl.import_terraform(payload["terraform"])
+            if res.get("error"):
+                return _err(400, "InvalidTerraform", res["error"])
+            return _ok(res)
+
         # POST .../resourceGroups/{rg}/validateMoveResources | moveResources — really re-parents resources
         # (core/azure_templates_core.move_resources): validation + id/reference rewrite.
         if rg is not None and idx < len(rest_segs) and rest_segs[idx].lower() in ("validatemoveresources", "moveresources") and len(rest_segs) == idx + 1:
@@ -3586,31 +3598,33 @@ class AzureArm:
         (properties.parameters, falling back to the template's own defaultValue); any other
         ARM template function (concat/resourceId/reference/copy loops) is left as-is, so that
         resource's own PUT will fail its own validation rather than silently "succeed"."""
-        props = rec.get("properties") or {}
-        template = props.get("template") or {}
-        resources = template.get("resources")
-        if not isinstance(resources, list) or not resources:
-            return [], []
-        values = {k: v.get("defaultValue") for k, v in (template.get("parameters") or {}).items()}
-        for k, v in (props.get("parameters") or {}).items():
-            values[k] = v.get("value", v) if isinstance(v, dict) else v
-        variables = template.get("variables") or {}
-        provisioned, errors = [], []
-        for entry in resources:
-            entry = _resolve_template_expr(entry, values, variables)
-            rtype, rname = entry.get("type"), entry.get("name")
-            if not rtype or not rname:
-                errors.append({"error": "a template resource is missing type/name"})
-                continue
-            path = (f"/subscriptions/{sub}/resourceGroups/{rg}/providers/{rtype}/{rname}" if rg is not None
-                   else f"/subscriptions/{sub}/providers/{rtype}/{rname}")
-            body = {k: v for k, v in entry.items() if k not in ("type", "name", "apiVersion", "dependsOn", "condition", "comments")}
-            resp = self.handle("PUT", path, {"api-version": entry.get("apiVersion")} if entry.get("apiVersion") else {}, body)
-            if resp["status"] >= 400:
-                errors.append({"resource": f"{rtype}/{rname}", "status": resp["status"], "error": resp["body"]})
-            else:
-                provisioned.append({"id": resp["body"].get("id", path), "resourceType": rtype, "resourceName": rname})
+        try:
+            from core import azure_deploy_core as _dep
+        except ImportError:
+            import azure_deploy_core as _dep  # type: ignore
+        provisioned, errors, outputs = _dep.execute(self, sub, rg, rec)
+        if outputs:
+            rec.setdefault("properties", {})["outputs"] = outputs
         return provisioned, errors
+
+    def _deployment_preview(self, action, name, rid, sub, rg, payload):
+        """POST .../deployments/{n}/whatIf | validate -- the template in the request body (properties.template/parameters/mode)
+        is evaluated against the live state without provisioning anything (core/azure_deploy_core.py)."""
+        try:
+            from core import azure_deploy_core as _dep
+        except ImportError:
+            import azure_deploy_core as _dep  # type: ignore
+        props = (payload or {}).get("properties") or {}
+        if not props.get("template"):
+            stored = self.state.get((rid or "").lower())
+            if not stored:
+                return _err(400, "InvalidRequestContent", "The request content was invalid: 'properties.template' is required.")
+            props = stored.get("properties") or {}
+        rec = {"name": name, "properties": {"template": props.get("template"), "parameters": props.get("parameters") or {}, "mode": props.get("mode", "Incremental")}}
+        if action == "validate":
+            r = _dep.validate(self, sub, rg, rec)
+            return _err(400, r["error"]["code"], r["error"]["message"]) if "error" in r and False else _ok(r, 400 if "error" in r else 200)
+        return _ok(_dep.what_if(self, sub, rg, rec, mode=props.get("mode", "Incremental")))
 
     def _deployment_action(self, action, name, rid, sub, rg):
         rec = self.state.get(rid.lower())
@@ -4477,6 +4491,8 @@ class AzureArm:
         typ = type_chain[1].lower() if len(type_chain) > 1 else ""
         if ns == "microsoft.resources" and typ == "deployments" and action in ("cancel", "redeploy"):
             return self._deployment_action(action, resource_name, parent_rid, sub, rg)
+        if ns == "microsoft.resources" and typ == "deployments" and action in ("whatif", "validate"):
+            return self._deployment_preview(action, resource_name, parent_rid, sub, rg, payload)
         if action in ("reconcile", "vyomipush", "run") and any(m in (parent_rid or "").lower() for m in (
                 "/providers/microsoft.kubernetesconfiguration/fluxconfigurations/", "/vyomiautomateddeployments/")):
             rec = self.state.get(parent_rid.lower())
