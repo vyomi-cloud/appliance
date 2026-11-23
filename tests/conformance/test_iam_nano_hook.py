@@ -145,6 +145,8 @@ def bridge(overlay, monkeypatch):
     nb.set_state_override(lambda cloud, h, q: ({"allow": ("s3:GetObject",)}, {"arn": "arn:aws:iam::1:user/ro", "type": "user"}))
     yield nb, host, cl
     nb.set_state_override(None); cl.reset()
+    from core.iam_engine import map_aws as _ma
+    _ma.set_catalog_loader(None)          # configure() installs the Nano (memory) catalog loader into the real map module: do not leak it
 
 
 def test_bridge_check_need_then_allow_then_deny_and_audit(bridge):

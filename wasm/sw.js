@@ -1076,10 +1076,17 @@ async function handleWire(request, url) {
   const query = Object.fromEntries(url.searchParams.entries());
   const hasBody = !["GET", "HEAD"].includes(method);
   const raw = hasBody ? await request.arrayBuffer() : new ArrayBuffer(0);
+  if (/^\/api\/iam\/(aws|gcp|azure)\//.test(wirePath)) {        // the address the v4 consoles use for the faithful-IAM API (same handler as BASE/api/iam/*)
+    let body = null;
+    if (raw.byteLength) { try { body = JSON.parse(new TextDecoder().decode(raw)); } catch (_) { return json({ error: "invalid JSON body" }, 400); } }
+    const r = await runInPage(["_iam", "api", method, { path: wirePath, query, body }]);
+    return json(r && r.body !== undefined ? r.body : r, (r && r.status) || 200);
+  }
   if (wirePath.startsWith("/subscriptions/")) {
     let body = null;
     if (raw.byteLength) { const t = new TextDecoder().decode(raw); try { body = JSON.parse(t); } catch (_) { body = { raw: t }; } }
-    const res = await runInPage(["azure", "_arm", method, { path: wirePath, query, body }]);
+    const armHeaders = {}; request.headers.forEach((v, k) => { armHeaders[k] = v; });      // the IAM hook needs the Bearer token (nano-iam-hook.js guardWire)
+    const res = await runInPage(["azure", "_arm", method, { path: wirePath, query, body, headers: armHeaders, body_b64: raw.byteLength ? b64FromBuf(raw) : "" }]);
     const h = (res && res.__http) || { status: 200, body: res };
     return json(h.body === undefined ? null : h.body, h.status, h.headers);
   }
@@ -1154,7 +1161,7 @@ self.addEventListener("fetch", (event) => {
         return json(res, 200);
       }
       // Faithful IAM API (same routes/bodies as Mesh): served by the page's core.iam_engine.api via nano-iam-hook.js.
-      if (apiPath.startsWith("/api/iam/")) {
+      if (/^\/api\/iam\/(aws|gcp|azure)\//.test(apiPath)) {      // NOT /api/iam/users|roles|...: those are the AWS console adapter routes below
         let body = null;
         if (method !== "GET" && method !== "HEAD") { try { const t = await event.request.text(); body = t ? JSON.parse(t) : null; } catch (_) { return json({ error: "invalid JSON body" }, 400); } }
         const res = await runInPage(["_iam", "api", method, { path: apiPath, query: Object.fromEntries(url.searchParams), body }]);
