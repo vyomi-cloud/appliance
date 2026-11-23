@@ -4,7 +4,8 @@ something the reference app does for that cloud (so the learner builds what the 
 import json
 import os
 
-from .build_diagrams import COL, LAYER_COLOR, hotspots
+from .build_diagrams import COL, ICON, LAYER_COLOR, hotspots
+from .setup_steps import STEPS
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "wasm", "labs", "data")
 ORDER = [10, 3, 7, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
@@ -145,6 +146,16 @@ v("azure", 2, ("CLI", "The inbox receives requests", "az servicebus topic subscr
 v("azure", 8, ("CLI", "Spans are readable with KQL", "az monitor log-analytics query -w <workspace-id> --analytics-query 'AppTraces | take 5'", "Your agent log lines"), ("Console", "The custom metric appears", "Application Insights, Metrics, facilities.tool_calls", "A non-empty series"))
 v("azure", 13, ("CLI", "The key exists", "az keyvault key list --vault-name facilities-kv -o table", "ledger-key"), ("CLI", "The run is in the activity log", "az monitor activity-log list -g <rg> --max-events 5", "Recent control-plane operations from your run"))
 
+def _setup(cloud, lid):
+    """Setup steps with the console deep link and the screenshot (only when the real capture exists)."""
+    out = []
+    for n, st in enumerate(STEPS[cloud][lid], 1):
+        shot = f"img/steps/{cloud}-{lid}-{n}.jpg"
+        out.append(dict(st, n=n, shot=shot if os.path.exists(os.path.join(os.path.dirname(__file__), "..", "..", "wasm", "labs", shot)) else None))
+    return out
+
+LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
+
 C = {}  # cloud -> layer -> dict(services, build, names, checks, simplified, native, ref, code)
 C["aws"] = {
  10: dict(services=["Amazon Bedrock Runtime: Converse, InvokeModel"], build=["ListFoundationModels to see what you can call.", "Converse: send a user message and read the text and token usage.", "Converse with toolConfig and handle stopReason.", "InvokeModel with the Titan embedding model.", "Attach your guardrail (chapter 11) to a Converse call and watch it stop a prompt attack."],
@@ -263,7 +274,7 @@ def build():
                                reference="examples/enterprise-facilities-agent/facilities/" + ("" if cloud == "aws" else "") + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
                                code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
                                level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
-                               about=INTRO[lid][0], why=INTRO[lid][1], prereq=PRE, validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
+                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
                    image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:

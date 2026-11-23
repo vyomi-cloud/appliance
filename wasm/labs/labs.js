@@ -101,6 +101,21 @@
       return t;
     }
 
+    function consoleUrl(route) { return base + "../v4/" + cloud + "/#" + route; }
+    function setupStep(st) {
+      var vals = Object.keys(st.fill || {});
+      var open = st.route ? el("a", { className: "vl-btn primary", href: consoleUrl(st.route), target: "_blank", rel: "noopener" }, "Open in " + course.cloud_name + " console", icon("M7 17L17 7M9 7h8v8", 16)) : null;
+      var shot = st.shot ? el("a", { className: "vl-shot", href: base + st.shot, target: "_blank", rel: "noopener", title: "Open the full-size screenshot" },
+        el("img", { src: base + st.shot, alt: "Screenshot: " + st.title, loading: "lazy" }), el("span", { className: "vl-shotcap", textContent: "Real screenshot from the Vyomi " + course.cloud_name + " console" })) : null;
+      return el("li", { className: "vl-step2" },
+        el("div", { className: "vl-s2head" }, el("span", { className: "vl-s2n", textContent: st.n }), el("div", {}, el("h3", { textContent: st.title }), st.service ? el("span", { className: "vl-chip", textContent: st.service }) : null), open),
+        el("div", { className: "vl-s2body" + (shot ? "" : " noshot") },
+          el("div", {}, ul(st.do), vals.length ? el("table", { className: "vl-vtab" }, el("thead", {}, el("tr", {}, el("th", { textContent: "Field" }), el("th", { textContent: "Enter" }))),
+            el("tbody", {}, vals.map(function (k) { return el("tr", {}, el("td", { textContent: k }), el("td", {}, el("code", { textContent: st.fill[k] }))); }))) : null,
+            st.note ? el("p", { className: "vl-native", textContent: st.note }) : null),
+          shot));
+    }
+
     /* ---------- chapter view (full view) ---------- */
     function chapterView(l) {
       var i = course.layers.indexOf(l), prev = course.layers[i - 1], nxt = course.layers[i + 1], out = el("div", { className: "vl-result" });
@@ -109,10 +124,14 @@
       var top = el("div", { className: "vl-topbar" }, back, el("span", { className: "vl-crumb", textContent: course.cloud_name + " · Chapter " + l.order + " of " + course.layers.length }),
         el("span", { className: "vl-topprog" }, el("span", { textContent: nDone() + " of " + course.layers.length + " complete" }), el("span", { className: "vl-bar" }, el("i", { style: "width:" + (100 * nDone() / course.layers.length) + "%" }))));
 
-      var side = el("nav", { className: "vl-outline", "aria-label": "Course outline" }, el("h4", { textContent: "Course outline" }),
+      var collapsed = lsGet("vyomi.labs.ui").outline === 0;
+      var side = el("nav", { className: "vl-outline" + (collapsed ? " collapsed" : ""), "aria-label": "Course outline" });
+      var tg = el("button", { type: "button", className: "vl-collapse", title: collapsed ? "Expand outline" : "Collapse outline", "aria-expanded": String(!collapsed) }, icon("M15 6l-6 6 6 6", 16));
+      tg.onclick = function () { var c = !side.classList.contains("collapsed"); side.classList.toggle("collapsed", c); tg.setAttribute("aria-expanded", String(!c)); tg.title = c ? "Expand outline" : "Collapse outline"; cols.classList.toggle("oc", c); var u = lsGet("vyomi.labs.ui"); u.outline = c ? 0 : 1; lsSet("vyomi.labs.ui", u); };
+      side.append(el("div", { className: "vl-ohead" }, el("h4", { textContent: "Course outline" }), tg),
         el("ol", {}, course.layers.map(function (x) {
-          var b = el("button", { type: "button", className: (x.id === l.id ? "cur " : "") + (done(x.id) ? "done" : ""), onclick: function () { go(x.id); } },
-            el("span", { className: "vl-oi" }, done(x.id) ? icon(P.check, 12) : pad(x.order)), el("span", { textContent: x.short }));
+          var b = el("button", { type: "button", title: x.order + ". " + x.title, className: (x.id === l.id ? "cur " : "") + (done(x.id) ? "done" : ""), onclick: function () { go(x.id); } },
+            el("span", { className: "vl-oi", style: "--c:" + x.color }, icon(x.icon, 17), done(x.id) ? el("i", { className: "vl-tick" }, icon(P.check, 9)) : null), el("span", { className: "vl-ol", textContent: x.order + ". " + x.short }));
           if (x.id === l.id) b.setAttribute("aria-current", "true"); return el("li", {}, b); })));
 
       var needs = l.contract.needs.length ? el("dd", { className: "vl-needs" }, l.contract.needs.map(function (id) { return el("button", { type: "button", textContent: byId(id).short, onclick: function () { go(id); } }); }),
@@ -154,7 +173,9 @@
           el("h3", { className: "vl-h3", textContent: "What you will learn" }), ul(l.learn),
           el("h3", { className: "vl-h3", textContent: "Before you start" }), ul(l.prereq))),
         sec("setup", "2", "Set up this layer on Vyomi", el("div", {},
-          el("p", { className: "vl-muted", textContent: "Work through the lessons in order. Use the " + course.cloud_name + " console in Vyomi, the CLI or an SDK; they all talk to the same simulator." }),
+          el("p", { className: "vl-muted", textContent: "Follow the steps in the " + course.cloud_name + " console. Each step has a button that opens exactly that service in the simulator, a screenshot of the form and the values to enter." }),
+          el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)),
+          el("h3", { className: "vl-h3", textContent: "Then connect it in code" }),
           el("ol", { className: "vl-lessons" }, l.build.map(function (t) { return el("li", {}, el("span", { textContent: t })); })), code,
           el("h3", { className: "vl-h3", textContent: "How it fits with the other layers" }), el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
           el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null)),
@@ -169,12 +190,8 @@
           prev ? el("button", { type: "button", className: "vl-pg", onclick: function () { go(prev.id); } }, el("small", { textContent: "Previous" }), el("span", {}, icon(P.back, 16), prev.title)) : el("span"),
           nxt ? el("button", { type: "button", className: "vl-pg r", onclick: function () { go(nxt.id); } }, el("small", { textContent: "Next" }), el("span", {}, nxt.title, icon(P.arrow, 16))) : el("span")));
 
-      var toc = [["intro", "Introduction"], ["setup", "Set up on Vyomi"], ["validate", "Quick validation"], ["ref", "Reference solution"]];
-      var rail = el("aside", { className: "vl-rail" },
-        el("div", { className: "vl-railcard" }, el("h4", { textContent: "Where this fits" }), diagram(l.id, false)),
-        el("div", { className: "vl-railcard" }, el("h4", { textContent: "On this page" }), el("ul", { className: "vl-toc" }, toc.map(function (t) {
-          return el("li", {}, el("a", { href: "#vl-" + t[0], textContent: t[1], onclick: function (e) { e.preventDefault(); var n = root.querySelector("#vl-" + t[0]); n && n.scrollIntoView({ behavior: "smooth", block: "start" }); } })); }))));
-      return el("div", { className: "vl-reader" }, top, el("div", { className: "vl-cols" }, side, main, rail));
+      var cols = el("div", { className: "vl-cols" + (collapsed ? " oc" : "") }, side, main);
+      return el("div", { className: "vl-reader" }, top, cols);
     }
 
     var q = parseInt(opts.layer, 10);

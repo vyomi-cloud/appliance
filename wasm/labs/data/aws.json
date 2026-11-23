@@ -69,10 +69,41 @@
     "One place for model ids, token limits and fallbacks",
     "Cost and quality decisions live here instead of being scattered across services"
    ],
+   "icon": "M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 2.8A3 3 0 0 0 5 13a3.2 3.2 0 0 0 3 4.5A3 3 0 0 0 12 20V4a3 3 0 0 0-3 0zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 2.8A3 3 0 0 1 19 13a3.2 3.2 0 0 1-3 4.5A3 3 0 0 1 12 20",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Browse the model catalogue",
+     "route": "/bedrock/models",
+     "do": [
+      "Open Bedrock, then Model catalog.",
+      "Confirm a chat model and an embedding model are listed; you will use their ids in code."
+     ],
+     "fill": {},
+     "service": "Amazon Bedrock",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-10-1.jpg"
+    },
+    {
+     "title": "Try a chat in the playground",
+     "route": "/bedrock/playground",
+     "do": [
+      "Open Playground, choose a chat model.",
+      "Send: Reply with OK."
+     ],
+     "fill": {},
+     "service": "Amazon Bedrock",
+     "note": "",
+     "click": false,
+     "n": 2,
+     "shot": "img/steps/aws-10-2.jpg"
+    }
    ],
    "validate": [
     {
@@ -149,10 +180,29 @@
     "Budgets, timeouts and a kill switch contain runaway agents and runaway cost",
     "A managed host gives you deployments, versions and rollback"
    ],
+   "icon": "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12L4 7.5M12 12v9",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the AgentCore runtime",
+     "route": "/bedrock/agentcore",
+     "do": [
+      "Open Bedrock AgentCore, Runtime, then create a runtime.",
+      "Name it, point it at your agent code, keep the default network mode."
+     ],
+     "fill": {
+      "Name": "facilities-supervisor"
+     },
+     "service": "Bedrock AgentCore",
+     "note": "",
+     "click": true,
+     "n": 1,
+     "shot": "img/steps/aws-3-1.jpg"
+    }
    ],
    "validate": [
     {
@@ -230,10 +280,46 @@
     "Narrow, typed tools make behaviour testable and auditable",
     "Separating read from write is what makes approval gates possible"
    ],
+   "icon": "M14.5 6a4 4 0 0 0 4.7 5.2l-8.7 8.7a2.2 2.2 0 0 1-3.1-3.1l8.7-8.7A4 4 0 0 0 14.5 6z",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the assets table",
+     "route": "/dynamodb/create-table",
+     "do": [
+      "Open DynamoDB, Create table.",
+      "Partition key is a string; keep on-demand capacity."
+     ],
+     "fill": {
+      "Table name": "assets",
+      "Partition key": "asset_id"
+     },
+     "service": "Amazon DynamoDB",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-7-1.jpg"
+    },
+    {
+     "title": "Create the read-only tool",
+     "route": "/lambda/create/function",
+     "do": [
+      "Open Lambda, Create function, Author from scratch.",
+      "Runtime Python 3.12; paste the handler from the reference solution."
+     ],
+     "fill": {
+      "Function name": "asset-status"
+     },
+     "service": "AWS Lambda",
+     "note": "",
+     "click": false,
+     "n": 2,
+     "shot": "img/steps/aws-7-2.jpg"
+    }
    ],
    "validate": [
     {
@@ -312,10 +398,45 @@
     "Event-driven ingestion removes manual re-indexing and stale answers",
     "Scanning documents before indexing keeps sensitive or malicious content out"
    ],
+   "icon": "M5 7c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 7l1.5 12c.2 1 2.6 2 5.5 2s5.3-1 5.5-2L19 7",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the document bucket",
+     "route": "/s3/create",
+     "do": [
+      "Open S3, Create bucket.",
+      "Keep Block all public access on."
+     ],
+     "fill": {
+      "Bucket name": "facilities-docs"
+     },
+     "service": "Amazon S3",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-12-1.jpg"
+    },
+    {
+     "title": "Create the knowledge base",
+     "route": "/bedrock/knowledge-bases",
+     "do": [
+      "Open Bedrock, Knowledge bases, Create.",
+      "Choose the bucket as the data source and an embeddings model, then Sync."
+     ],
+     "fill": {
+      "Name": "facilities-kb"
+     },
+     "service": "Bedrock Knowledge Bases",
+     "note": "",
+     "click": true,
+     "n": 2,
+     "shot": "img/steps/aws-12-2.jpg"
+    }
    ],
    "validate": [
     {
@@ -389,10 +510,27 @@
     "Access-aware search keeps users from seeing what they must not",
     "Ranked, sourced results make every answer verifiable"
    ],
+   "icon": "M10.5 18a7.5 7.5 0 1 0 0-15 7.5 7.5 0 0 0 0 15zM16 16l5 5",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Test retrieval on the knowledge base",
+     "route": "/bedrock/knowledge-bases",
+     "do": [
+      "Open the knowledge base, Test.",
+      "Ask: boiler pressure above 30 psi, and check the first source is the boiler SOP."
+     ],
+     "fill": {},
+     "service": "Bedrock Knowledge Bases",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-6-1.jpg"
+    }
    ],
    "validate": [
     {
@@ -464,10 +602,29 @@
     "Output filters stop personal data and policy violations leaving the system",
     "Grounding limits the model to approved knowledge"
    ],
+   "icon": "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the guardrail",
+     "route": "/bedrock/guardrails",
+     "do": [
+      "Open Bedrock, Guardrails, Create guardrail.",
+      "Add a sensitive-information filter (email, phone) set to anonymise, on output."
+     ],
+     "fill": {
+      "Name": "facilities-guardrail"
+     },
+     "service": "Bedrock Guardrails",
+     "note": "",
+     "click": true,
+     "n": 1,
+     "shot": "img/steps/aws-11-1.jpg"
+    }
    ],
    "validate": [
     {
@@ -535,10 +692,29 @@
     "Scoping by user and tenant prevents leakage between people",
     "Retention and deletion rules are a compliance requirement"
    ],
+   "icon": "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the memory",
+     "route": "/bedrock/agentcore",
+     "do": [
+      "Open Bedrock AgentCore, Memory, Create memory.",
+      "Enable the short-term events and a long-term strategy; set an expiry."
+     ],
+     "fill": {
+      "Name": "facilities-memory"
+     },
+     "service": "Bedrock AgentCore Memory",
+     "note": "",
+     "click": true,
+     "n": 1,
+     "shot": "img/steps/aws-9-1.jpg"
+    }
    ],
    "validate": [
     {
@@ -608,10 +784,29 @@
     "Policies use the real user's identity and role",
     "Central audit and rate limits protect the systems behind the tools"
    ],
+   "icon": "M6 19a2 2 0 1 0 0-.01M18 5a2 2 0 1 0 0-.01M8 19h6a4 4 0 0 0 0-8h-4a4 4 0 0 1 0-8h6",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the gateway",
+     "route": "/bedrock/agentcore",
+     "do": [
+      "Open Bedrock AgentCore, Gateways, Create gateway.",
+      "Add your Lambda tools as targets."
+     ],
+     "fill": {
+      "Name": "facilities-gateway"
+     },
+     "service": "Bedrock AgentCore Gateway",
+     "note": "",
+     "click": true,
+     "n": 1,
+     "shot": "img/steps/aws-4-1.jpg"
+    }
    ],
    "validate": [
     {
@@ -696,10 +891,75 @@
     "The decision ledger is the audit record regulators ask for",
     "Idempotency and rollback make retries and mistakes safe"
    ],
+   "icon": "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8 12l3 3 5-6",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the approval state machine",
+     "route": "/states/create",
+     "do": [
+      "Open Step Functions, Create state machine.",
+      "Use a task with the waitForTaskToken pattern that publishes to the approver topic."
+     ],
+     "fill": {
+      "Name": "work-order-approval"
+     },
+     "service": "AWS Step Functions",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-5-1.jpg"
+    },
+    {
+     "title": "Create the ledger table",
+     "route": "/dynamodb/create-table",
+     "do": [
+      "Open DynamoDB, Create table."
+     ],
+     "fill": {
+      "Table name": "approval-ledger",
+      "Partition key": "request_id"
+     },
+     "service": "Amazon DynamoDB",
+     "note": "",
+     "click": false,
+     "n": 2,
+     "shot": "img/steps/aws-5-2.jpg"
+    },
+    {
+     "title": "Create the approver topic",
+     "route": "/sns/create-topic",
+     "do": [
+      "Open SNS, Create topic, type Standard."
+     ],
+     "fill": {
+      "Name": "approver-inbox"
+     },
+     "service": "Amazon SNS",
+     "note": "",
+     "click": false,
+     "n": 3,
+     "shot": "img/steps/aws-5-3.jpg"
+    },
+    {
+     "title": "Create the inbox queue",
+     "route": "/sqs/create-queue",
+     "do": [
+      "Open SQS, Create queue, type Standard, then subscribe it to the topic."
+     ],
+     "fill": {
+      "Name": "approver-inbox-queue"
+     },
+     "service": "Amazon SQS",
+     "note": "",
+     "click": false,
+     "n": 4,
+     "shot": "img/steps/aws-5-4.jpg"
+    }
    ],
    "validate": [
     {
@@ -776,10 +1036,27 @@
     "Edge protection and rate limits blunt abuse and cost attacks",
     "Standard identity providers plug into enterprise single sign-on"
    ],
+   "icon": "M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3M12 14.5v2.5",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the user pool and WAF rule",
+     "route": null,
+     "do": [
+      "The simulator has no console view for Cognito or WAF yet.",
+      "Use the CLI commands under Quick validation to create and check them."
+     ],
+     "fill": {},
+     "service": "Amazon Cognito, AWS WAF",
+     "note": "No console view yet: this layer is set up with the CLI.",
+     "click": false,
+     "n": 1,
+     "shot": null
+    }
    ],
    "validate": [
     {
@@ -857,10 +1134,41 @@
     "Approvers need one reliable place to see pending requests",
     "Every channel shares the same controls"
    ],
+   "icon": "M4 5h16v11H9l-5 4zM8 10h.01M12 10h.01M16 10h.01",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the approver topic",
+     "route": "/sns/create-topic",
+     "do": [
+      "Open SNS, Create topic."
+     ],
+     "fill": {
+      "Name": "approver-inbox"
+     },
+     "service": "Amazon SNS",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-2-1.jpg"
+    },
+    {
+     "title": "Review the guardrail",
+     "route": "/bedrock/guardrails",
+     "do": [
+      "Open the guardrail from layer 11 and attach it to input as well."
+     ],
+     "fill": {},
+     "service": "Bedrock Guardrails",
+     "note": "",
+     "click": false,
+     "n": 2,
+     "shot": "img/steps/aws-2-2.jpg"
+    }
    ],
    "validate": [
     {
@@ -928,10 +1236,28 @@
     "A trace ties a bad answer to the exact tool call that caused it",
     "Metrics feed evaluation, service levels and cost control"
    ],
+   "icon": "M4 20V4M4 20h16M8 16v-5M12 16V8M16 16v-7",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the log group",
+     "route": "/cloudwatch/logs/create",
+     "do": [
+      "Open CloudWatch, Log groups, Create log group."
+     ],
+     "fill": {
+      "Log group name": "/facilities/agent"
+     },
+     "service": "Amazon CloudWatch",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-8-1.jpg"
+    }
    ],
    "validate": [
     {
@@ -1005,10 +1331,29 @@
     "Audit trails answer who approved what, and when",
     "Controls apply across every layer, not one at a time"
    ],
+   "icon": "M12 3l8 3v6c0 5-3.4 8-8 9-4.6-1-8-4-8-9V6l8-3zM8.5 12l2.5 2.5 4.5-5",
    "prereq": [
     "The simulator is running: you are in its console.",
     "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
     "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "setup": [
+    {
+     "title": "Create the ledger key",
+     "route": "/kms/create-key",
+     "do": [
+      "Open KMS, Create key: symmetric, encrypt and decrypt.",
+      "Give it an alias and turn on automatic rotation."
+     ],
+     "fill": {
+      "Alias": "facilities-ledger-key"
+     },
+     "service": "AWS KMS",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": "img/steps/aws-13-1.jpg"
+    }
    ],
    "validate": [
     {
