@@ -125,6 +125,15 @@
       return wrap;
     }
 
+    function layerCrop(l) {   // just this layer's region of the architecture, enlarged (not the whole diagram)
+      var W = course.image_size[0], H = course.image_size[1], pad = 14, h = l.hotspot;
+      var x1 = Math.max(0, h[0] - pad), y1 = Math.max(0, h[1] - pad), x2 = Math.min(W, h[2] + pad), y2 = Math.min(H, h[3] + pad), w = x2 - x1, hh = y2 - y1;
+      var view = el("div", { className: "vl-crop" }), img = el("img", { src: base + course.image, alt: l.title + " layer", draggable: "false" });
+      view.style.cssText = "padding-bottom:" + (100 * hh / w).toFixed(2) + "%";
+      img.style.cssText = "width:" + (100 * W / w).toFixed(3) + "%;left:" + (-100 * x1 / w).toFixed(3) + "%;top:" + (-100 * y1 / hh).toFixed(3) + "%";
+      view.append(img); var cw = el("div", { className: "vl-cropwrap" }, view); cw.style.maxWidth = "360px"; return cw;
+    }
+
     function tile(l, nx) {
       var st = done(l.id) ? "done" : l.id === nx ? "next" : "todo";
       var stText = st === "done" ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : st === "next" ? "Up next" : "Not started";
@@ -309,7 +318,9 @@
       /* ---- the chapter as a native tutorial: AWS hands-on, Google codelab or Microsoft Learn layout ---- */
       var N = l.minutes, tm = { build: Math.max(5, Math.round(N * 0.5)), cons: Math.max(5, Math.round(N * 0.25)), val: Math.max(5, Math.round(N * 0.2)), clean: 5 };
       var hasLab = l.lab && l.lab.length;
-      var archFig = el("figure", { className: "vl-fig" }, diagram(l.id, false), el("figcaption", { textContent: "Highlighted: where this chapter's layer sits in the " + course.cloud_name + " architecture." }));
+      var archFig = el("div", { className: "vl-detail" }, el("figure", { className: "vl-fig" }, layerCrop(l), el("figcaption", { textContent: "Layer " + l.order + ": " + l.title + " in the " + course.cloud_name + " architecture." })),
+        el("div", { className: "vl-dcol" }, el("h4", { textContent: "Services in this layer" }), el("div", { className: "vl-dsv" }, l.services.map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); })),
+          el("h4", { textContent: "What you build" }), ul(l.build), el("h4", { textContent: "It is working when" }), ul(l.checks)));
       var facts = function (rows) { return el("table", { className: "vl-facts" }, el("tbody", {}, rows.map(function (r) { return el("tr", {}, el("th", { textContent: r[0] }), el("td", {}, r[1])); }))); };
       var svcList = el("span", { className: "vl-svclist" }, l.services.map(function (x) { return el("span", {}, x); }));
       var next = nxt ? el("div", { className: "vl-nextcard" }, el("small", { textContent: "Next" }), el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Chapter " + nxt.order + ": " + nxt.title, icon(P.arrow, 16))) : el("p", { className: "vl-muted", textContent: "That was the last chapter. You now have the full enterprise agent." });
@@ -345,7 +356,7 @@
         el("div", { className: "vl-grid2" }, card(cloud === "aws" ? "What you will accomplish" : "What you'll learn", chk(l.learn)), card("Why it matters in the enterprise", el("div", {}, el("p", { textContent: l.about }), ul(l.why)))),
         el("div", { className: "vl-grid2" }, card("Prerequisites", ul(l.prereq)),
           card(cloud === "aws" ? "Tutorial details" : "At a glance", facts([[cloud === "aws" ? "AWS experience" : "Level", l.level], ["Time", "~" + N + " minutes (estimate)"], ["Cost", "Free: runs on your Vyomi simulator"], ["Services", svcList], ["Updated", course.updated]]))),
-        card("Where this layer sits", archFig, "vl-wide"));
+        card("This layer in detail", archFig, "vl-wide"));
       var L = { aws: ["Overview", "Task 1: Build the code", "Task 2: Create the resources", "Task 3: Connect to other layers", "Task 4: Validate your work", "Task 5: Clean up resources"],
         gcp: ["Before you begin", "Build the code", "Create the resources", "Connect the layers", "Validate", "Clean up"],
         azure: ["Prerequisites", "Build the code", "Create the resources", "Connect to other layers", "Validate", "Clean up and next steps"] }[cloud];
