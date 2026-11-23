@@ -265,7 +265,7 @@
         el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null);
       var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Confirm the layer works before moving on. Run each check in the simulator." }), el("ol", { className: "vl-vals" }, valRows),
         el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), el("p", { className: "vl-muted", textContent: how }), el("div", { className: "vl-actions" }, check, statusEl), out);
-      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark), next, el("p", { className: "vl-muted" }, "Reference solution (peek only after you have tried): ", el("code", { textContent: l.reference })));
+      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, statusEl), el("p", { className: "vl-muted" }, "Reference solution (peek only after you have tried): ", el("code", { textContent: l.reference })));
       /* ---- the chapter workspace: a hero, then ONE section at a time (compact), in each cloud's own tutorial structure ---- */
       var chk = function (arr) { return el("ul", { className: "vl-checks" }, arr.map(function (t) { return el("li", {}, icon(P.check, 15), t); })); };
       var card = function (title, body, cls) { return el("section", { className: "vl-card " + (cls || "") }, el("h3", { textContent: title }), body); };
@@ -294,7 +294,7 @@
         curPane = i; pbtn.forEach(function (b, k) { b.classList.toggle("cur", k === i); b.classList.toggle("past", k < i); if (k === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
         var p = PANES[i];
         var pager = el("div", { className: "vl-pager2" }, i ? el("button", { type: "button", className: "vl-btn", onclick: function () { showPane(i - 1, true); } }, icon(P.back, 16), PANES[i - 1].t) : el("span"),
-          i < PANES.length - 1 ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { showPane(i + 1, true); } }, PANES[i + 1].t, icon(P.arrow, 16)) : null);
+          i < PANES.length - 1 ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { showPane(i + 1, true); } }, PANES[i + 1].t, icon(P.arrow, 16)) : (nxt ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Next chapter: " + nxt.title, icon(P.arrow, 16)) : el("span", { className: "vl-muted", textContent: "That was the last chapter." })));
         content.replaceChildren(el("div", { className: "vl-phead" }, el("h2", { textContent: p.t }), el("span", { className: "vl-dur", textContent: p.dur + " min" })), p.body, pager);
         if (scroll) { window.scrollTo(0, 0); }
       }
