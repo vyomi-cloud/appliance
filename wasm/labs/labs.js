@@ -20,6 +20,18 @@
   var P = { clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2", book: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z",
     check: "M5 12l5 5 9-10", arrow: "M5 12h14M13 6l6 6-6 6", back: "M19 12H5M11 18l-6-6 6-6", flag: "M5 21V4M5 4h11l-2 4 2 4H5", copy: "M9 9h11v11H9zM5 15V4h11" };
 
+  var KW = "def|class|import|from|return|if|else|elif|for|while|in|not|and|or|try|except|finally|with|as|raise|lambda|None|True|False|pass|yield|async|await|is|echo|export|pip|install";
+  var D3 = String.fromCharCode(34, 34, 34), S3 = String.fromCharCode(39, 39, 39);
+  var TOK = new RegExp("(#[^\\n]*)|(" + D3 + "[\\s\\S]*?" + D3 + "|" + S3 + "[\\s\\S]*?" + S3 + "|\"(?:\\\\.|[^\"\\\\\\n])*\"|'(?:\\\\.|[^'\\\\\\n])*')|\\b(" + KW + ")\\b|\\b(\\d+(?:\\.\\d+)?)\\b|(\\b[A-Za-z_]\\w*(?=\\())", "g");
+  function hl(code) {   // tiny Python/bash highlighter: comments, strings, keywords, numbers, calls
+    var f = document.createDocumentFragment(), last = 0, m; TOK.lastIndex = 0;
+    while ((m = TOK.exec(code))) {
+      if (m.index > last) f.append(code.slice(last, m.index));
+      var c = m[1] ? "c" : m[2] ? "s" : m[3] ? "k" : m[4] ? "n" : "f"; f.append(el("span", { className: "t" + c, textContent: m[0] })); last = m.index + m[0].length;
+    }
+    if (last < code.length) f.append(code.slice(last)); return f;
+  }
+
   function mount(host, opts) {
     opts = opts || {};
     var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, hasApi = false, store = {};
@@ -33,7 +45,7 @@
 
     function load(c) {
       cloud = c; root.dataset.cloud = c; store = lsGet(KEY()); sel = null;
-      return fetch(base + "data/" + c + ".json").then(function (r) { return r.json(); }).then(function (d) {
+      return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
         course = d;
         return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; });
       }).then(function () { render(); });
@@ -49,26 +61,26 @@
         var b = el("button", { type: "button", textContent: c[1] }); b.setAttribute("aria-current", c[0] === cloud); b.onclick = function () { if (c[0] !== cloud) load(c[0]); }; return b; })) : null;
       var cta = el("button", { type: "button", className: "vl-btn primary lg", onclick: function () { go(nx || course.layers[0].id); } },
         nx ? (n ? "Continue: " : "Start: ") + byId(nx).title : "Review the course", icon(P.arrow, 18));
+      var labN = course.layers.reduce(function (a, l) { return a + (l.lab ? l.lab.length : 0); }, 0);
+      var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
       var hero = el("header", { className: "vl-hero" },
         el("div", { className: "vl-herotxt" },
-          el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name),
+          el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform),
           el("h1", { textContent: course.title }),
-          el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Each chapter defines a layer the others use, every step runs on the Vyomi simulator, and anything you have not built yet runs on our reference version so the app always works." }),
-          el("div", { className: "vl-stats" },
-            el("span", {}, icon(P.book, 16), course.layers.length + " chapters"), el("span", {}, icon(P.clock, 16), "about " + hm(course.total_minutes) + " (estimate)"),
-            el("span", {}, icon(P.flag, 16), "Beginner to Advanced")), cloudTabs),
+          el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
+          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", "13 layers")), cloudTabs),
         el("div", { className: "vl-progcard" },
           el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
-          el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " chapters complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: chapter " + byId(nx).order + ", " + byId(nx).title : "Course complete" })), cta));
+          el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })), cta));
 
       var map = el("section", { className: "vl-map", "aria-label": "Reference architecture" },
-        el("div", { className: "vl-sechead" }, el("h2", { textContent: "The reference architecture" }), el("p", { className: "vl-muted", textContent: "Native " + course.cloud_name + " services (" + course.ai_platform + "). Select any layer to open its chapter." })),
+        el("div", { className: "vl-sechead" }, el("h2", { textContent: "Reference architecture" }), el("p", { className: "vl-muted", textContent: "Native " + course.cloud_name + " services. Select any layer to open its chapter." })),
         diagram(null, true), el("ul", { className: "vl-legend" }, el("li", {}, el("i", { className: "vl-dot" }), "Not started"), el("li", {}, el("i", { className: "vl-dot done" }), "Complete"), el("li", {}, el("i", { className: "vl-dot next" }), "Up next")));
 
       var tiles = el("section", { className: "vl-contents", "aria-label": "Course contents" },
-        el("div", { className: "vl-sechead" }, el("h2", { textContent: "Course contents" }), el("p", { className: "vl-muted", textContent: "Recommended order, one chapter at a time. You can start anywhere." })),
+        el("div", { className: "vl-sechead" }, el("h2", { textContent: "Course contents" }), el("p", { className: "vl-muted", textContent: "Recommended order. You can start anywhere." })),
         el("div", { className: "vl-tiles" }, course.layers.map(function (l) { return tile(l, nx); })));
-      return el("div", { className: "vl-page" }, hero, map, tiles);
+      return el("div", { className: "vl-page" }, hero, tiles, map);
     }
 
     function diagram(highlight, clickable) {
@@ -88,14 +100,16 @@
 
     function tile(l, nx) {
       var st = done(l.id) ? "done" : l.id === nx ? "next" : "todo";
-      var svc = l.services.slice(0, 2).join(", ") + (l.services.length > 2 ? " +" + (l.services.length - 2) : "");
-      var kv = function (k, v) { return el("div", { className: "vl-kv" }, el("dt", { textContent: k }), el("dd", { textContent: v })); };
       var stText = st === "done" ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : st === "next" ? "Up next" : "Not started";
+      var m = function (ic, t) { return el("span", {}, icon(ic, 13), t); };
+      var steps = (l.lab || []).length;
       var t = el("button", { type: "button", className: "vl-tile " + st, style: "--c:" + l.color },
-        el("span", { className: "vl-thead" }, el("span", { className: "vl-chno", textContent: pad(l.order) }), el("span", { className: "vl-ttitle", textContent: l.title }), el("span", { className: "vl-state " + st, textContent: stText })),
+        el("span", { className: "vl-thead" }, el("span", { className: "vl-ticon" }, icon(l.icon, 20)), el("span", { className: "vl-chno", textContent: "Chapter " + pad(l.order) }), el("span", { className: "vl-state " + st, textContent: stText })),
+        el("span", { className: "vl-ttitle", textContent: l.title }),
         el("span", { className: "vl-outcome", textContent: l.outcome }),
-        el("dl", { className: "vl-kvs" }, kv("Level", l.level), kv("Duration", "~" + l.minutes + " min"), kv("Lessons", String(l.lessons)), kv("Services", svc)),
-        el("span", { className: "vl-tfoot" }, el("span", { className: "vl-cta" }, st === "done" ? "Review chapter" : st === "next" ? "Continue" : "Open chapter", icon(P.arrow, 14))),
+        el("span", { className: "vl-tmeta" }, m(P.clock, "~" + l.minutes + " min"), m("M4 6h16M4 12h16M4 18h10", (steps || l.lessons) + (steps ? " code steps" : " lessons")), m(P.flag, l.level)),
+        el("span", { className: "vl-tsvc" }, l.services.slice(0, 2).map(function (x) { return el("i", { textContent: x }); }), l.services.length > 2 ? el("i", { textContent: "+" + (l.services.length - 2) }) : null),
+        el("span", { className: "vl-tfoot" }, el("span", { className: "vl-cta" }, st === "done" ? "Review" : st === "next" ? "Continue" : "Open", icon(P.arrow, 14))),
         el("span", { className: "vl-pbar" }, el("i", { style: "width:" + (st === "done" ? 100 : 0) + "%" })));
       t.onclick = function () { go(l.id); };
       return t;
@@ -157,12 +171,17 @@
     }
     function copyBtn(text) { return el("button", { type: "button", className: "vl-copy", title: "Copy", onclick: function (e) { try { navigator.clipboard.writeText(text); e.currentTarget.textContent = "Copied"; } catch (_) {} } }, "Copy"); }
     function labBlock(bk, i) {
-      return el("li", { className: "vl-block" },
-        el("div", { className: "vl-bhead" }, el("span", { className: "vl-s2n", textContent: i + 1 }), el("div", {}, el("h3", { textContent: bk.title }), el("p", { className: "vl-muted", textContent: bk.text }))),
-        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), bk.file), copyBtn(bk.code)),
-        el("pre", { className: "vl-pre", textContent: bk.code }),
+      var li = el("li", { className: "vl-block" + (i === 0 ? " open" : "") });
+      var head = el("button", { type: "button", className: "vl-bhead", "aria-expanded": String(i === 0) },
+        el("span", { className: "vl-s2n", textContent: i + 1 }), el("span", { className: "vl-btitle" }, el("b", { textContent: bk.title }), el("small", { textContent: bk.text })),
+        el("code", { className: "vl-bfile", textContent: bk.run || bk.file }), el("span", { className: "vl-chev" }, icon("M6 9l6 6 6-6", 16)));
+      head.onclick = function () { var o = li.classList.toggle("open"); head.setAttribute("aria-expanded", String(o)); };
+      var pre = el("pre", { className: "vl-pre" }); pre.append(hl(bk.code));
+      li.append(head, el("div", { className: "vl-bbody" },
+        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "Save as " + bk.file), copyBtn(bk.code)), pre,
         bk.run ? el("div", { className: "vl-runrow" }, el("span", { className: "vl-runlbl", textContent: "Run" }), el("code", { textContent: bk.run }), copyBtn(bk.run)) : el("div", { className: "vl-runrow muted" }, el("span", { className: "vl-runlbl", textContent: "Nothing to run yet; the next step uses this file." })),
-        bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null);
+        bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null));
+      return li;
     }
     function consoleUrl(route) { return base + "../v4/" + cloud + "/#" + route; }
     function settingsTable(st, withDesc) {
@@ -238,7 +257,7 @@
         el("p", { className: "vl-muted", textContent: "Keep the resources if you are continuing: later chapters build on them." }));
       var buildBody = el("div", {}, hasLab ? el("div", {}, (function () { var d = deployPanel(l); if (cloud !== "aws") d.querySelector("button").disabled = true; return d; })(),
           el("p", { className: "vl-muted", textContent: "Complete these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
-          el("ol", { className: "vl-blocks" }, l.lab.map(labBlock))) :
+          (function () { var ol = el("ol", { className: "vl-blocks" }, l.lab.map(labBlock)), allOpen = false; var tg2 = el("button", { type: "button", className: "vl-btn sm", textContent: "Expand all" }); tg2.onclick = function () { allOpen = !allOpen; [].forEach.call(ol.children, function (x) { x.classList.toggle("open", allOpen); }); tg2.textContent = allOpen ? "Collapse all" : "Expand all"; }; return el("div", {}, el("div", { className: "vl-blocktools" }, tg2), ol); })()) :
         el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "Create the resources in the console steps below. The runnable, verified code for this chapter is still being added." }), ul(l.build)));
       var consBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Open each service in the " + course.cloud_name + " console, enter the values shown and compare with the screenshot." }),
         el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)));
@@ -247,53 +266,51 @@
       var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Confirm the layer works before moving on. Run each check in the simulator." }), el("ol", { className: "vl-vals" }, valRows),
         el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), el("p", { className: "vl-muted", textContent: how }), el("div", { className: "vl-actions" }, check, statusEl), out);
       var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark), next, el("p", { className: "vl-muted" }, "Reference solution (peek only after you have tried): ", el("code", { textContent: l.reference })));
-      var hd = function (id, text, extra) { return el("h2", { id: "vl-" + id, className: "vl-h2" }, text, extra || null); };
-      var secs = [];   // [anchor id, heading, body, minutes-badge]
-      var main;
-      if (cloud === "aws") {
-        /* AWS hands-on tutorial: facts table, Overview, What you will accomplish, Prerequisites, Application architecture, Tasks, Clean Up Resources */
-        var tasks = [["build", "Build the Code", tm.build, buildBody], ["console", "Create the Resources in the Console", tm.cons, consBody], ["fits", "Connect It to the Other Layers", 5, fitsBody], ["validate", "Validate Your Work", tm.val, valBody], ["clean", "Clean Up Resources", tm.clean, cleanup]];
-        main = el("article", { className: "vl-article vl-doc aws" },
-          el("h1", { textContent: l.title }),
-          facts([["AWS experience", l.level], ["Minimum time to complete", "~" + N + " minutes (estimate)"], ["Cost to complete", "Free: runs on your Vyomi simulator"], ["Services used", svcList], ["Last updated", course.updated]]),
-          hd("overview", "Overview"), el("p", { textContent: l.about }), ul(l.why),
-          hd("accomplish", "What you will accomplish"), ul(l.learn),
-          hd("prereq", "Prerequisites"), ul(l.prereq),
-          hd("arch", "Application architecture"), archFig,
-          hd("tasks", "Tasks"), el("p", { textContent: "This chapter is divided into " + tasks.length + " tasks. Complete each task in order before moving on." }),
-          el("ol", { className: "vl-tasklist" }, tasks.map(function (t, i) { return el("li", {}, el("a", { href: "#vl-t" + i, onclick: function (e) { e.preventDefault(); var n = root.querySelector("#vl-t" + i); n && n.scrollIntoView({ behavior: "smooth", block: "start" }); } }, "Task " + (i + 1) + ": " + t[1]), " (" + t[2] + " minutes)"); })),
-          tasks.map(function (t, i) { return el("section", { className: "vl-task", id: "vl-t" + i }, el("h2", { className: "vl-h2" }, "Task " + (i + 1) + ": " + t[1], el("span", { className: "vl-mins", textContent: " (" + t[2] + " minutes)" })), t[3]); }),
-          closing);
-      } else if (cloud === "gcp") {
-        /* Google codelab: Before you begin (Prerequisites, What you'll learn, What you'll need), numbered steps with Duration, Clean up, Congratulations */
-        var steps = [["Before you begin", 2, el("div", {}, el("h3", { className: "vl-h3", textContent: "Prerequisites" }), ul(l.prereq), el("h3", { className: "vl-h3", textContent: "What you'll learn" }), ul(l.learn),
-            el("h3", { className: "vl-h3", textContent: "What you'll need" }), ul(["The Vyomi " + course.cloud_name + " console open in a browser tab", "Python 3 and a terminal, for the code steps", "About " + N + " minutes"]), el("h3", { className: "vl-h3", textContent: "Why this matters" }), el("p", { textContent: l.about }), ul(l.why)) ],
-          ["Architecture", 1, archFig], ["Build the code", tm.build, buildBody], ["Create the resources in the console", tm.cons, consBody], ["Connect it to the other layers", 3, fitsBody], ["Validate", tm.val, valBody], ["Clean up", tm.clean, cleanup]];
-        main = el("article", { className: "vl-article vl-doc gcp" },
-          el("div", { className: "vl-cl-head" }, el("h1", { textContent: l.title }), el("div", { className: "vl-cl-meta" }, el("span", { textContent: "Duration: ~" + N + " min (estimate)" }), el("span", { textContent: "Level: " + l.level }), el("span", { textContent: "Last updated: " + course.updated })), el("div", { className: "vl-chips" }, l.services.map(function (x) { return el("span", { className: "vl-chip", textContent: x }); }))),
-          steps.map(function (t, i) { return el("section", { className: "vl-step", id: "vl-t" + i }, el("h2", { className: "vl-h2" }, el("span", { className: "vl-stepno", textContent: i + 1 }), t[0], el("span", { className: "vl-dur", textContent: "Duration: " + t[1] + " min" })), t[2]); }),
-          el("section", { className: "vl-step" }, el("h2", { className: "vl-h2" }, el("span", { className: "vl-stepno", textContent: "✓" }), "Congratulations!"), el("p", { textContent: "You have built " + l.title.toLowerCase() + ": " + l.outcome.charAt(0).toLowerCase() + l.outcome.slice(1) + "." }), closing));
-      } else {
-        /* Microsoft Learn: intro, In this article, Prerequisites, Sign in, numbered steps with Setting / Suggested value / Description tables, Clean up resources, Next steps */
-        var items = [["prereq", "Prerequisites"], ["signin", "Sign in to the Vyomi Azure console"], ["build", "Build the code"], ["create", "Create the resources"], ["fits", "Connect it to the other layers"], ["validate", "Validate"], ["clean", "Clean up resources"], ["next", "Next steps"]];
-        var azSteps = (l.setup || []).map(function (st) {
-          return el("li", { className: "vl-az-step" }, el("p", {}, el("b", { textContent: st.title + ". " }), st.route ? el("a", { href: consoleUrl(st.route), target: "_blank", rel: "noopener", textContent: "Open " + (st.service || "the service") + " in the console" }) : null), ul(st.do), settingsTable(st, true),
-            st.shot ? el("a", { className: "vl-shot", href: base + st.shot, target: "_blank", rel: "noopener" }, el("img", { src: base + st.shot, alt: "Screenshot: " + st.title, loading: "lazy" })) : null, st.note ? el("p", { className: "vl-native", textContent: st.note }) : null);
-        });
-        main = el("article", { className: "vl-article vl-doc azure" },
-          el("div", { className: "vl-crumbs", textContent: "Microsoft Azure  /  Vyomi Labs  /  " + l.title }),
-          el("h1", { textContent: l.title }), el("div", { className: "vl-azmeta", textContent: "Chapter " + l.order + " of " + course.layers.length + " · " + l.level + " · about " + N + " min (estimate) · Updated " + course.updated }),
-          el("p", { textContent: l.about + " " + l.objective }), ul(l.why),
-          el("nav", { className: "vl-inthis", "aria-label": "In this article" }, el("h4", { textContent: "In this article" }), el("ul", {}, items.map(function (t) { return el("li", {}, el("a", { href: "#vl-" + t[0], textContent: t[1], onclick: function (e) { e.preventDefault(); var n = root.querySelector("#vl-" + t[0]); n && n.scrollIntoView({ behavior: "smooth", block: "start" }); } })); }))),
-          hd("prereq", "Prerequisites"), ul(l.prereq), archFig,
-          hd("signin", "Sign in to the Vyomi Azure console"), el("p", {}, "Open the ", el("a", { href: base + "../v4/azure/", target: "_blank", rel: "noopener", textContent: "Vyomi Azure console" }), ". No account is needed: it runs on your simulator."),
-          hd("build", "Build the code"), buildBody,
-          hd("create", "Create the resources"), el("p", { textContent: "Use these steps to create the resources in the console." }), el("ol", { className: "vl-az-steps" }, azSteps),
-          hd("fits", "Connect it to the other layers"), fitsBody,
-          hd("validate", "Validate"), valBody,
-          hd("clean", "Clean up resources"), cleanup,
-          hd("next", "Next steps"), closing);
+      /* ---- the chapter workspace: a hero, then ONE section at a time (compact), in each cloud's own tutorial structure ---- */
+      var chk = function (arr) { return el("ul", { className: "vl-checks" }, arr.map(function (t) { return el("li", {}, icon(P.check, 15), t); })); };
+      var card = function (title, body, cls) { return el("section", { className: "vl-card " + (cls || "") }, el("h3", { textContent: title }), body); };
+      var introBody = el("div", { className: "vl-intro" },
+        el("div", { className: "vl-grid2" }, card(cloud === "aws" ? "What you will accomplish" : "What you'll learn", chk(l.learn)), card("Why it matters in the enterprise", el("div", {}, el("p", { textContent: l.about }), ul(l.why)))),
+        el("div", { className: "vl-grid2" }, card("Prerequisites", ul(l.prereq)),
+          card(cloud === "aws" ? "Tutorial details" : "At a glance", facts([[cloud === "aws" ? "AWS experience" : "Level", l.level], ["Time", "~" + N + " minutes (estimate)"], ["Cost", "Free: runs on your Vyomi simulator"], ["Services", svcList], ["Updated", course.updated]]))),
+        card("Where this layer sits", archFig, "vl-wide"));
+      var L = { aws: ["Overview", "Task 1: Build the code", "Task 2: Create the resources", "Task 3: Connect to other layers", "Task 4: Validate your work", "Task 5: Clean up resources"],
+        gcp: ["Before you begin", "Build the code", "Create the resources", "Connect the layers", "Validate", "Clean up"],
+        azure: ["Prerequisites", "Build the code", "Create the resources", "Connect to other layers", "Validate", "Clean up and next steps"] }[cloud];
+      var PANES = [
+        { t: L[0], dur: 2, body: introBody },
+        { t: L[1], dur: tm.build, body: buildBody, badge: hasLab ? String(l.lab.length) : "" },
+        { t: L[2], dur: tm.cons, body: consBody, badge: (l.setup || []).length ? String(l.setup.length) : "" },
+        { t: L[3], dur: 5, body: fitsBody },
+        { t: L[4], dur: tm.val, body: valBody },
+        { t: L[5], dur: tm.clean, body: el("div", {}, cleanup, closing) }];
+      var curPane = 0, content = el("div", { className: "vl-pane" }), nav = el("nav", { className: "vl-pnav", "aria-label": cloud === "azure" ? "In this article" : cloud === "gcp" ? "Codelab steps" : "Tasks" });
+      nav.append(el("h4", { textContent: cloud === "azure" ? "In this article" : cloud === "gcp" ? "Steps" : "Tasks" }));
+      var pbtn = PANES.map(function (p, i) {
+        var b = el("button", { type: "button", className: "vl-pb" }, el("span", { className: "vl-pn", textContent: i + 1 }), el("span", { className: "vl-pt", textContent: p.t }), p.badge ? el("em", { className: "vl-pbadge", textContent: p.badge }) : null, el("small", { className: "vl-pd", textContent: p.dur + " min" }));
+        b.onclick = function () { showPane(i, true); }; nav.append(b); return b;
+      });
+      function showPane(i, scroll) {
+        curPane = i; pbtn.forEach(function (b, k) { b.classList.toggle("cur", k === i); b.classList.toggle("past", k < i); if (k === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
+        var p = PANES[i];
+        var pager = el("div", { className: "vl-pager2" }, i ? el("button", { type: "button", className: "vl-btn", onclick: function () { showPane(i - 1, true); } }, icon(P.back, 16), PANES[i - 1].t) : el("span"),
+          i < PANES.length - 1 ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { showPane(i + 1, true); } }, PANES[i + 1].t, icon(P.arrow, 16)) : null);
+        content.replaceChildren(el("div", { className: "vl-phead" }, el("h2", { textContent: p.t }), el("span", { className: "vl-dur", textContent: p.dur + " min" })), p.body, pager);
+        if (scroll) { window.scrollTo(0, 0); }
       }
+      function gotoDeploy() { showPane(1, false); var d = content.querySelector(".vl-deploy"); d && d.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      var chipo = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
+      var hero = el("header", { className: "vl-chero", style: "--c:" + l.color },
+        el("div", { className: "vl-cicon" }, icon(l.icon, 30)),
+        el("div", { className: "vl-ctext" },
+          el("div", { className: "vl-crumbs2", textContent: course.cloud_name + "  /  Vyomi Labs  /  Chapter " + l.order + " of " + course.layers.length }),
+          el("h1", { textContent: l.title }), el("p", { textContent: l.outcome }),
+          el("div", { className: "vl-cchips" }, chipo(P.flag, l.level), chipo(P.clock, "~" + N + " min"), hasLab ? chipo("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", l.lab.length + " code steps") : null, l.services.slice(0, 3).map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); }))),
+        el("div", { className: "vl-cside" }, hasLab ? el("button", { type: "button", className: "vl-btn primary lg", onclick: gotoDeploy }, icon("M8 5v14l11-7z", 16), "Deploy this chapter") : null,
+          el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
+      var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody" }, nav, content));
+      showPane(0, false);
+      var main = article;
 
       var cols = el("div", { className: "vl-cols" + (collapsed ? " oc" : "") }, side, main);
       return el("div", { className: "vl-reader" }, top, cols);

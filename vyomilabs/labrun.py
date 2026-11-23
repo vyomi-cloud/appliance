@@ -6,7 +6,6 @@ import subprocess
 import sys
 import tempfile
 
-from . import ROOT, ensure_reference_on_path
 
 
 def main(argv=None):
@@ -15,18 +14,11 @@ def main(argv=None):
     if "--endpoint" in argv:
         i = argv.index("--endpoint"); endpoint_arg = argv[i + 1]; del argv[i:i + 2]
     cloud, layers = argv[0], [int(x) for x in argv[1:]]
-    ensure_reference_on_path()
-    for k, v in (("AWS_ACCESS_KEY_ID", "test"), ("AWS_SECRET_ACCESS_KEY", "test"), ("AWS_DEFAULT_REGION", "us-east-1"), ("CLOUDLEARN_TIER_ENFORCE", "0")):
-        os.environ.setdefault(k, v)
-    sys.path.insert(0, os.path.join(ROOT, "tools", "llm_stub"))
-    import stub_llm_server
-    os.environ.setdefault("VYOMI_LLM_ENDPOINT", stub_llm_server.start())
-    from facilities.server import start_in_process
-    endpoint = endpoint_arg or start_in_process()
     import importlib
+    endpoint, env = importlib.import_module(f"vyomilabs.labenv_{cloud}").start(endpoint_arg)
     lab = importlib.import_module(f"vyomilabs.content.labs_{cloud}").LAB
     work = tempfile.mkdtemp(prefix="vy-labrun-")
-    env = dict(os.environ, AWS_ENDPOINT_URL=endpoint, PYTHONPATH=work)
+    env = dict(env, PYTHONPATH=work)
     bad = 0
     for lid in layers:
         print(f"== chapter {lid}")
