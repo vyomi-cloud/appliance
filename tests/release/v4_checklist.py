@@ -354,10 +354,10 @@ def check_branch_doc(root: Path, branch: str | None):
 # ── IAM (rule 14): faithful IAM must be intact on every release ──────────────
 IAM_TESTS = {
     "global": ["test_iam_catalog", "test_iam_modes", "test_iam_gate", "test_iam_enforcement_api", "test_iam_nano_hook",
-               "test_iam_state_nano", "test_iam_resource_policies", "test_iam_onboarding_gate", "test_service_inventory"],
-    "aws": ["test_iam_engine_aws", "test_iam_map_aws", "test_iam_mesh_server_e2e"],
-    "gcp": ["test_iam_engine_gcp", "test_iam_map_gcp", "test_iam_mesh_gcp_e2e"],
-    "azure": ["test_iam_engine_azure", "test_iam_map_azure", "test_iam_mesh_azure_e2e"],
+               "test_iam_state_nano", "test_iam_resource_policies", "test_iam_onboarding_gate", "test_service_inventory", "test_iam_gate_gaps"],
+    "aws": ["test_iam_engine_aws", "test_iam_map_aws", "test_iam_mesh_server_e2e", "test_iam_aws_gaps"],
+    "gcp": ["test_iam_engine_gcp", "test_iam_map_gcp", "test_iam_mesh_gcp_e2e", "test_iam_gcp_coverage", "test_iam_gcp_hierarchy_e2e"],
+    "azure": ["test_iam_engine_azure", "test_iam_map_azure", "test_iam_mesh_azure_e2e", "test_iam_azure_gaps"],
 }
 
 
