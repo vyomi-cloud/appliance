@@ -58,3 +58,6 @@ Merge result: 675 IAM pytest cases pass together, the 9 script-style IAM/RBAC su
 - Re-run live-UI GCP/Azure "Allowed" cases against the merged backend (harness in the ui-live branch doc).
 - `root` gets would-deny on ARM `roleDefinitions` reads in audit mode (ui-live finding, not yet investigated).
 - Nothing has run in CI; nothing is on the trunk.
+
+## Release gate
+`tests/release/v4_checklist.py` (run by `v4-release-checklist.yml` on every release) now has `iam-faithful` (global: gate/Nano/resource-policy/onboarding tests, `gen_iam_coverage.py --check`, `build_cores.py --check`) and a per-cloud `iam-enforcement` check (engine + request map + real-server e2e for that cloud). A FAIL blocks the release unless waived with `--waive iam-faithful=<reason>`.

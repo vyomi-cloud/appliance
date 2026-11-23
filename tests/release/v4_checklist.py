@@ -351,14 +351,53 @@ def check_branch_doc(root: Path, branch: str | None):
         else R(cid, "global", FAIL, f"no docs/architecture/v4.0/branches/{topic}.md (pre-push hook asks for one)")
 
 
+# ── IAM (rule 14): faithful IAM must be intact on every release ──────────────
+IAM_TESTS = {
+    "global": ["test_iam_catalog", "test_iam_modes", "test_iam_gate", "test_iam_enforcement_api", "test_iam_nano_hook",
+               "test_iam_state_nano", "test_iam_resource_policies", "test_iam_onboarding_gate", "test_service_inventory"],
+    "aws": ["test_iam_engine_aws", "test_iam_map_aws", "test_iam_mesh_server_e2e"],
+    "gcp": ["test_iam_engine_gcp", "test_iam_map_gcp", "test_iam_mesh_gcp_e2e"],
+    "azure": ["test_iam_engine_azure", "test_iam_map_azure", "test_iam_mesh_azure_e2e"],
+}
+
+
+def _iam_pytest(root: Path, cid: str, scope: str, names):
+    files = [f"tests/conformance/{n}.py" for n in names]
+    missing = [f for f in files if not (root / f).exists()]
+    if missing:
+        return R(cid, scope, FAIL, f"IAM test files missing: {', '.join(missing)}")
+    env = dict(os.environ, PYTHONPATH=f"{root}:{root}/core", CLOUDLEARN_TIER_ENFORCE="0")
+    rc, out = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *files], root, timeout=900, env=env)
+    last = (out.strip().splitlines() or [""])[-1][:160]
+    return R(cid, scope, PASS, last) if rc == 0 else R(cid, scope, FAIL, f"IAM tests failed: {last}")
+
+
+def check_iam_global(root: Path):
+    cid = "iam-faithful"
+    r = _iam_pytest(root, cid, "global", IAM_TESTS["global"])
+    if r["status"] != PASS:
+        return r
+    rc, out = run([sys.executable, "scripts/gen_iam_coverage.py", "--check"], root, timeout=300)
+    if rc != 0:
+        return R(cid, "global", FAIL, "wasm/iam-coverage.json is stale: run scripts/gen_iam_coverage.py: " + out.strip()[-120:])
+    rc, out = run([sys.executable, "wasm/build_cores.py", "--check"], root, timeout=300)
+    if rc != 0:
+        return R(cid, "global", FAIL, "vendored IAM engine/catalogs stale: run python3 wasm/build_cores.py")
+    return R(cid, "global", PASS, r["reason"] + "; coverage current; vendored IAM copies current")
+
+
+def check_iam_cloud(root: Path, cloud: str):
+    return _iam_pytest(root, "iam-enforcement", cloud, IAM_TESTS[cloud])
+
+
 # ── driver ─────────────────────────────────────────────────────────────────
 def run_checks(root: Path, cloud: str, version: str | None, sha: str | None, results: Path | None, branch: str | None):
     out = [check_known_issues(root, None), check_wasm_core_sync(root), check_loader_lists(root), check_pyodide(root),
            check_no_bak(root), check_suites_valid(root), check_image_published(root, sha), check_tunnel_sync(root),
-           check_branch_doc(root, branch)]
+           check_branch_doc(root, branch), check_iam_global(root)]
     for c in (CLOUDS if cloud == "all" else (cloud,)):
         out += [check_known_issues(root, c), check_suites_registered(root, c), check_results(root, c, results),
-                check_console_bundle(root, c)]
+                check_console_bundle(root, c), check_iam_cloud(root, c)]
     return out
 
 
