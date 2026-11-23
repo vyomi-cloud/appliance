@@ -59,4 +59,7 @@ check("service pages are edge to edge on every console (own gutters: AWS 24, GCP
 check("GCP: collapsed drawer on a service page hangs from the header (no 44px row cutting the nav's top); collapsed nav rail stacks the service icon above the Expand button (they overlapped in the 48px row)",
   /#vy-md\.c-gcp\.nav:not\(\.open\) \.md-tabrow\{height:0\}/.test(css) && /nav\.MuiBox-root>div:has\(>button\[aria-label="Expand navigation"\]\)\{flex-direction:column !important/.test(readFileSync(join(ROOT, "wasm/vyomi-appbar.js"), "utf8")));
 
+check("collapsed tab is exactly the expanded tab's size on every console (no fixed 24px height; only the corner radii flip)",
+  !/\.md-tab\{[^}]*height:24px/.test(css) && /#vy-md\.c-aws\.nav:not\(\.open\) \.md-tab\{[^}]*border-radius:0 0 var\(--md-br\) var\(--md-br\)/.test(css) && /#vy-md\.c-gcp\.nav:not\(\.open\) \.md-tab\{[^}]*border-radius:0 0 var\(--md-br\) var\(--md-br\)/.test(css));
+
 process.exit(failed ? 1 : 0);
