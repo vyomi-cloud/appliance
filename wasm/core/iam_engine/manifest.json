@@ -129,6 +129,7 @@
   "map_gcp.py",
   "modes.py",
   "nano_bridge.py",
+  "routing.py",
   "types.py"
  ]
 }

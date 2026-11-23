@@ -20,6 +20,7 @@ def _xe(text):
 
 from core.iam_engine import audit as _audit
 from core.iam_engine import modes as _modes
+from core.iam_engine import routing as _routing
 from core.iam_engine.types import request as _request
 
 # Internal / console traffic is not cloud API traffic: never gated.
@@ -43,7 +44,7 @@ def is_internal(http_request: dict) -> bool:
         return True
     if _signed_aws(http_request):
         return False
-    return p.startswith(INTERNAL_PREFIXES)
+    return _routing.strip_wire(p).startswith(INTERNAL_PREFIXES)      # `/_wire/<native path>` is the native request (it is gated); other `/_x` paths are internal
 
 
 def engines_available(cloud, engines=None, maps=None) -> bool:
@@ -72,7 +73,7 @@ def _full_path(hr):
     if isinstance(q, dict):
         from urllib.parse import urlencode
         q = urlencode(q, doseq=True)
-    return str(hr.get("path") or "/") + (("?" + q) if q else "")
+    return _routing.strip_wire(hr.get("path") or "/") + (("?" + q) if q else "")
 
 
 def _bare_host(hr):

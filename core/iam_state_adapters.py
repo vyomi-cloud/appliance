@@ -209,7 +209,8 @@ def azure_principal(headers, space) -> dict:
 # ARM type -> the data-plane resource prefix core/iam_engine/map_azure.py reports (so data actions inherit from the ARM resource's scope)
 _AZ_DATA = {"microsoft.storage/storageaccounts": "/%s", "microsoft.keyvault/vaults": "/vaults/%s",
             "microsoft.servicebus/namespaces": "/namespaces/%s", "microsoft.documentdb/databaseaccounts": "/databaseAccounts/%s",
-            "microsoft.appconfiguration/configurationstores": "/configurationStores/%s"}
+            "microsoft.appconfiguration/configurationstores": "/configurationStores/%s",
+            "microsoft.cognitiveservices/accounts": "/cognitiveservices/%s", "microsoft.sql/servers": "/sql/%s"}
 _RA_TAIL = re.compile(r"/providers/microsoft\.authorization/(?:roleassignments|denyassignments)/[^/]+$", re.I)
 
 
@@ -238,6 +239,31 @@ def _flat_deny(rec) -> dict:
             "do_not_apply_to_child_scopes": bool(props.get("doNotApplyToChildScopes"))}
 
 
+def azure_openai_account(arm_resources, path, headers) -> str:
+    """Which Cognitive Services account does a bare `/openai/...` data-plane request address? (The simulator host carries no account;
+    a real endpoint is `<account>.openai.azure.com`.) Order: an `api-key` equal to one account's key, the account that owns the
+    `/deployments/<name>` in the path, the only account there is. '' when it cannot be told (the gate then falls back to scopes that
+    cover every account: subscription / management group / root)."""
+    accts = [r for r in (arm_resources or {}).values() if isinstance(r, dict)
+             and str(r.get("_type") or r.get("type") or "").lower() == "microsoft.cognitiveservices/accounts"]
+    key = _h(headers, "api-key")
+    if key:
+        for r in accts:
+            if key in [str(v) for v in (r.get("_keys") or {}).values()]:
+                return str(r.get("name") or "")
+    m = re.search(r"/deployments/([^/?]+)", str(path or ""))
+    if m:
+        want = m.group(1).lower()
+        for r in (arm_resources or {}).values():
+            if isinstance(r, dict) and str(r.get("_type") or r.get("type") or "").lower() == "microsoft.cognitiveservices/accounts/deployments" \
+                    and str(r.get("name") or "").split("/")[-1].lower() == want:
+                mm = re.search(r"/accounts/([^/]+)/deployments/", str(r.get("id") or ""), re.I)
+                if mm:
+                    return mm.group(1)
+    names = [str(r.get("name") or "") for r in accts]
+    return names[0] if len(names) == 1 else ""
+
+
 def azure_state(arm_resources, rbac_store=None) -> dict:
     """Engine `state` (core/iam_engine/azure_eval.py). `arm_resources`: the flat ARM record map of the Azure space (role assignments, custom
     role definitions and deny assignments are ARM resources there, in ARM shape: properties.principalId ... -> flattened here).
@@ -256,6 +282,11 @@ def azure_state(arm_resources, rbac_store=None) -> dict:
                 out["role_definitions"].append(rec)
         elif t == "microsoft.authorization/denyassignments":
             out["deny_assignments"].append(_flat_deny(rec))
+    ds = out["data_scopes"]                    # an OpenAI request whose account cannot be told: authorize at the subscription that holds accounts
+    first = next((v for k, v in ds.items() if k.startswith("/cognitiveservices/")), None)
+    m = re.match(r"^(/subscriptions/[^/]+)", str(first or ""), re.I)
+    if m:
+        ds["/cognitiveservices/_"] = m.group(1)
     for a in (getattr(rbac_store, "_azure_role_assignments", None) or {}).values():
         if not isinstance(a, dict):
             continue

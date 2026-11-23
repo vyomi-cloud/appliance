@@ -55,18 +55,44 @@ export function anyEnforce(doc) {
   return [doc.global, doc.space, ...Object.values(doc.services || {}), ...Object.values(doc.resources || {})].some((m) => m === "enforce");
 }
 
-/** Which cloud does a wire request belong to? null = not SDK/CLI traffic (no credentials) => never gated. */
-export function cloudOf(req) {
-  const h = {}; for (const k of Object.keys(req.headers || {})) h[k.toLowerCase()] = req.headers[k];
-  const q = req.query || {};
-  const auth = h.authorization || "";
-  if (/^AWS4-HMAC-SHA256/i.test(auth) || q["X-Amz-Algorithm"] || q["x-amz-algorithm"] || /^AWS /.test(auth)) return "aws";
-  if (/^Bearer /i.test(auth) || h["x-ms-version"] || h["x-goog-api-client"]) {
-    const p = String(req.path || "");
-    return (/^\/subscriptions\//i.test(p) || h["x-ms-version"] || /\.(blob|queue|table|file|vault)\.|\/providers\/microsoft\./i.test(p)) ? "azure" : "gcp";
-  }
-  return null;
+// Mirror of core/iam_engine/routing.py (a test keeps the two in step): Entra / Vyomi extensions are exempt; Azure data planes that share the
+// AWS-looking path space (/openai, /azure-openai, /azure-sql, /contentsafety) and the `/_wire/arm` alias are Azure; Cloud Storage XML API calls
+// (storage.googleapis.com host, GOOG auth, Google HMAC key, x-goog-* headers) are GCP, not S3. A signed AWS request is never Azure/Entra.
+const ENTRA = /^\/(?:v1\.0|beta)(?:\/|$)|\/oauth2(?:\/v2\.0)?\/(?:token|authorize|devicecode|logout)$|^\/[^/]+\/(?:v2\.0\/)?\.well-known\/openid-configuration$|^\/[^/]+\/discovery\/(?:v2\.0\/)?keys$|^\/discovery\/(?:v2\.0\/)?keys$|^\/common\/userrealm\//i;
+const COGNITO_POOL = /^\/[a-z0-9-]+_[A-Za-z0-9]+\//;
+const AZURE_DP = /^\/(?:openai|azure-openai|azure-sql|contentsafety)(?:\/|$)/i;
+const VYOMI_EXT = /^\/openai\/vyomi\//i;
+export function stripWire(path) {
+  let p = String(path || "/");
+  for (const pre of ["/nano/_wire", "/_wire"]) if (p === pre || p.startsWith(pre + "/")) { p = p.slice(pre.length) || "/"; break; }
+  return /^\/arm(?:\/(?:subscriptions|providers|tenants)(?:\/|$))/i.test(p) ? p.slice(4) : p;
 }
+function signedAws(h, q) {
+  const a = h.authorization || "";
+  return a.startsWith("AWS4-") || a.startsWith("AWS ") || !!h["x-amz-target"] || /X-Amz-Algorithm/i.test(JSON.stringify(Object.keys(q || {}))) || !!(q && (q["X-Amz-Credential"] || q.AWSAccessKeyId));
+}
+function gcsXml(h, q) {
+  const host = String(h.host || "").toLowerCase().replace(/:\d+$/, ""), a = h.authorization || "";
+  if (/(?:^|\.)storage\.googleapis\.com$/.test(host)) return true;
+  if (/^GOOG(?:1|4)/i.test(a) || (a.startsWith("AWS4-") && /Credential=GOOG/i.test(a)) || (a.startsWith("AWS ") && a.slice(4).startsWith("GOOG"))) return true;
+  if (q && (q["X-Goog-Algorithm"] || q.GoogleAccessId || /^GOOG/.test(String(q["X-Amz-Credential"] || "")))) return true;
+  return Object.keys(h).some((k) => k.startsWith("x-goog-")) && !a.startsWith("AWS4-");
+}
+/** -> {cloud: "aws"|"gcp"|"azure"|null, exempt: bool}. null cloud = not SDK/CLI traffic (no credentials) => never gated. */
+export function routeOf(req) {
+  const h = {}; for (const k of Object.keys(req.headers || {})) h[k.toLowerCase()] = req.headers[k];
+  const q = req.query || {}, auth = h.authorization || "", p = stripWire(req.path).split("?", 1)[0];
+  if (p !== "/" && gcsXml(h, q)) return { cloud: "gcp", exempt: false };
+  if (/^AWS4-HMAC-SHA256/i.test(auth) || q["X-Amz-Algorithm"] || q["x-amz-algorithm"] || /^AWS /.test(auth)) return { cloud: "aws", exempt: false };
+  if (VYOMI_EXT.test(p) || (ENTRA.test(p) && !COGNITO_POOL.test(p) && !p.startsWith("/identities/"))) return { cloud: null, exempt: true };
+  if (AZURE_DP.test(p) || /^\/(?:subscriptions|providers|tenants)(?:\/|$)/i.test(p)) return (auth || h["api-key"] || h["x-ms-version"]) ? { cloud: "azure", exempt: false } : { cloud: null, exempt: false };
+  if (/^Bearer /i.test(auth) || h["x-ms-version"] || h["x-goog-api-client"]) {
+    return { cloud: (h["x-ms-version"] || /\.(blob|queue|table|file|vault)\.|\/providers\/microsoft\./i.test(p)) ? "azure" : "gcp", exempt: false };
+  }
+  return { cloud: null, exempt: false };
+}
+/** Which cloud does a wire request belong to? null = not SDK/CLI traffic (no credentials) or exempt (Entra) => never gated. */
+export const cloudOf = (req) => routeOf(req).cloud;
 
 const DENY_503 = (cloud) => ({
   status: 503, headers: { "content-type": "application/json" },
