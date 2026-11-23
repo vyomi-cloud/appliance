@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-23T00:17:43+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-22T23:17:43+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2995,14 +3003,6 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **1 change(s), 0 actionable.**
 - · `spec-commit` Azure compute: Remove Compute and BulkActions C# safe flatten opt-outs (#48084) ([link](https://github.com/Azure/azure-rest-api-specs/commit/4f229a4bfcb883cc5e71ba600d399ab259976ef7))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-11T07:00:01+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
