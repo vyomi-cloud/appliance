@@ -21,7 +21,8 @@ APIS = ["storage:v1", "compute:v1", "container:v1", "sqladmin:v1", "sqladmin:v1b
         "cloudresourcemanager:v3", "cloudresourcemanager:v1", "artifactregistry:v1", "clouddeploy:v1", "backupdr:v1",
         "cloudbuild:v1", "aiplatform:v1", "monitoring:v3", "logging:v2", "cloudkms:v1", "secretmanager:v1", "dns:v1",
         "cloudtasks:v2", "workflows:v1", "bigquery:v2", "serviceusage:v1", "orgpolicy:v2", "securitycenter:v1",
-        "vpcaccess:v1", "servicenetworking:v1", "iap:v1", "identitytoolkit:v1", "iamcredentials:v1", "serviceusage:v1beta1"]
+        "vpcaccess:v1", "servicenetworking:v1", "iap:v1", "identitytoolkit:v1", "iamcredentials:v1", "serviceusage:v1beta1",
+        "binaryauthorization:v1", "apphub:v1"]
 
 # permission-prefix aliases: discovery id prefix -> permission prefixes to try
 PREFIX = {"firestore": ["datastore"], "sql": ["cloudsql"], "sqladmin": ["cloudsql"], "cloudresourcemanager": ["resourcemanager"], "identitytoolkit": ["firebaseauth"],
@@ -193,6 +194,197 @@ RULES = [
 ]
 RULES_IGNORED = True
 
+# --- second pass (added by WP gcp-coverage) ------------------------------------------------------------------------------------
+# Applied only to methods the first-pass derive() could not resolve. Results are flagged f=1 (heuristic, same as fallback verbs)
+# unless the permission is the verbatim <api>.<noun>.<verb> of the method. Every permission is validated against the catalog
+# (`bad_perms` must stay empty), so nothing is invented.
+MODS = ("network", "organization", "org", "region", "zone", "global", "folder", "project")
+EXTRA_VERBS = {"addAttestationRule": ["setAttestationRules"], "removeAttestationRule": ["setAttestationRules"],
+               "listAttestationRules": ["getAttestationRules"], "patch": ["update"]}
+OP_VERBS = {"get": ["get"], "list": ["list", "get"], "wait": ["get"], "cancel": ["cancel", "update"], "delete": ["delete", "update"]}
+
+
+def _singular(s):
+    return s[:-3] + "y" if s.endswith("ies") else (s[:-1] if s.endswith("s") and not s.endswith("ss") else s)
+
+
+def _variants(x):
+    out = [x, _norm(x)]
+    y = x
+    for _ in range(2):                       # strip up to two leading scope words: regionNetworkFirewallPolicies -> firewallPolicies
+        for m in MODS:
+            if y.lower().startswith(m) and len(y) > len(m) and y[len(m)].isupper():
+                y = y[len(m):]
+                y = y[:1].lower() + y[1:]
+                out.append(y)
+                break
+    if x.lower().startswith("region") and "Network" in x:
+        out.append(x.replace("Network", "", 1))          # regionNetworkFirewallPolicies -> regionFirewallPolicies
+    return list(dict.fromkeys(out))
+
+
+def _cap(x):
+    return x[:1].upper() + x[1:]
+
+
+def derive_ext(mid, lower):
+    """Wider noun search: raw/scope-stripped nouns, camel-joined parent+child nouns (tensorboards.experiments -> tensorboardExperiments),
+    long-running `operations.*` methods resolved against the parent resource, `<api>.googleapis.com_<noun>.<verb>` permission names."""
+    import itertools
+    parts = mid.split(".")
+    api, verb = parts[0], parts[-1]
+    mc = parts[1:-1]
+    op = len(mc) > 1 and mc[-1] == "operations"
+    if op:
+        mc = mc[:-1]
+    chain = [p for p in mc[:-1] if p not in DROP] + mc[-1:]
+    if not chain:
+        return None, False
+    if op:
+        vl, base = OP_VERBS.get(verb, [verb]), []
+    else:
+        base = VERB.get(verb, []) + [verb]
+        fb = fallback_verbs(verb)
+        if re.search(r"(Rule|Association|Rules)$", verb):
+            fb = ["get", "list"] if verb.startswith(("get", "list")) else ["update"]
+        vl = EXTRA_VERBS.get(verb, []) + base + fb
+    for pre in [api] + PREFIX.get(api, []):
+        for take in (1, 2, 3):
+            if len(chain) < take:
+                continue
+            seg = chain[-take:]
+            names = set()
+            if take == 1:
+                names |= set(_variants(seg[0]))
+            else:
+                for combo in itertools.product(*[_variants(x) for x in seg]):
+                    names.add(".".join(combo))
+                    names.add(combo[-2] + _cap(combo[-1]))
+                    names.add(_singular(combo[-2]) + _cap(combo[-1]))
+                pre_els = seg[:-1]
+                for r in range(1, len(pre_els) + 1):
+                    for sub in itertools.combinations(pre_els, r):
+                        w = "".join(_cap(_singular(x)) if i else _singular(x) for i, x in enumerate(sub))
+                        for lv in _variants(seg[-1]):
+                            names.add(w + _cap(lv))
+            for n in sorted(names):
+                for v in vl:
+                    for c in ("%s.%s.%s" % (pre, n, v), "%s.googleapis.com_%s.%s" % (pre, n, v)):
+                        if c.lower() in lower:
+                            return lower[c.lower()], not (n == chain[-1] and v in base)
+    return None, False
+
+
+def _grp(prefix, table, reason):
+    """prefix regex (matched against the Discovery id minus the verb) + {verb regex: permission(s)} -> alias rows."""
+    return [(r"^%s\.(?:%s)$" % (prefix, vr), ([perm] if isinstance(perm, str) else list(perm)), reason) for vr, perm in table.items()]
+
+
+_CRUD = lambda ns, n: {"create": ns + "." + n + ".create", "get": ns + "." + n + ".get", "list": ns + "." + n + ".list",
+                       "patch|update": ns + "." + n + ".update", "delete": ns + "." + n + ".delete"}
+# Documented-permission aliases: the method's Discovery id does not name its permission (resource renamed in IAM, or several API
+# resources are governed by one permission family). Reason strings say which.
+ALIASES = (
+    _grp(r"sql\.(?:backups|Backups)", {"(?i:createBackup)": "cloudsql.backupRuns.create", "(?i:deleteBackup)": "cloudsql.backupRuns.delete",
+         "(?i:getBackup)": "cloudsql.backupRuns.get", "(?i:listBackups)": "cloudsql.backupRuns.list", "(?i:updateBackup)": "cloudsql.backupRuns.update"},
+         "Cloud SQL backups (v1 backups.*) are governed by the cloudsql.backupRuns.* family")
+    + _grp(r"sql\.connect", {"generateEphemeral": "cloudsql.instances.connect", "get": "cloudsql.instances.connect", "resolve": "cloudsql.instances.connect"},
+           "connect API requires cloudsql.instances.connect")
+    + _grp(r"sql\.operations", {"get": "cloudsql.instances.get", "list": "cloudsql.instances.list", "cancel": "cloudsql.instances.update"},
+           "Cloud SQL operations inherit the instance permission (no cloudsql.operations.* permission exists in the catalog)")
+    + _grp(r"cloudbuild\.(?:projects\.(?:locations\.)?)?triggers", {"create|run|webhook": "cloudbuild.builds.create", "get": "cloudbuild.builds.get",
+           "list": "cloudbuild.builds.list", "patch|delete": "cloudbuild.builds.update"}, "build triggers are governed by cloudbuild.builds.* (roles/cloudbuild.builds.editor)")
+    + _grp(r"cloudbuild\.projects\.(?:locations\.)?(?:githubEnterpriseConfigs|bitbucketServerConfigs)", {"create": "cloudbuild.integrations.create",
+           "get": "cloudbuild.integrations.get", "list|repos\.list": "cloudbuild.integrations.list", "patch|connectedRepositories\.batchCreate|removeBitbucketServerConnectedRepository": "cloudbuild.integrations.update",
+           "delete": "cloudbuild.integrations.delete"}, "GitHub Enterprise / Bitbucket Server configs are cloudbuild.integrations.*")
+    + _grp(r"cloudbuild\.projects\.(?:locations\.)?operations", {"cancel": "cloudbuild.builds.update"}, "cancelling an operation cancels the build: builds.update")
+    + _grp(r"logging\.(?:projects\.|folders\.|organizations\.|billingAccounts\.)?(?:locations\.)?savedQueries", {"create": "logging.queries.share",
+           "get": "logging.queries.getShared", "list": "logging.queries.listShared", "patch": "logging.queries.updateShared", "delete": "logging.queries.deleteShared"},
+           "saved queries are logging.queries.* (shared)")
+    + _grp(r"logging\.(?:projects\.|folders\.|organizations\.|billingAccounts\.)?(?:locations\.)?recentQueries", {"list": "logging.queries.usePrivate"}, "recent queries are private queries")
+    + _grp(r"logging\.projects\.metrics", {"create": "logging.logMetrics.create", "get": "logging.logMetrics.get", "list": "logging.logMetrics.list",
+           "update": "logging.logMetrics.update", "delete": "logging.logMetrics.delete"}, "logs-based metrics are logging.logMetrics.*")
+    + _grp(r"logging(?:\.(?:projects|folders|organizations|billingAccounts))?", {"getSettings": "logging.settings.get", "updateSettings": "logging.settings.update"}, "logging settings")
+    + [(r"^logging\.entries\.tail$", ["logging.logEntries.list"], "tailLogEntries streams entries.list"),
+       (r"^logging\.entries\.copy$", ["logging.buckets.copyLogEntries"], "copy log entries")]
+    + _grp(r"securitycenter\.(?:projects|folders|organizations)\.notificationConfigs", {"create": "securitycenter.notificationconfig.create", "get": "securitycenter.notificationconfig.get",
+           "list": "securitycenter.notificationconfig.list", "patch": "securitycenter.notificationconfig.update", "delete": "securitycenter.notificationconfig.delete"}, "SCC notification configs")
+    + _grp(r"securitycenter\.organizations", {"getOrganizationSettings": "securitycenter.organizationsettings.get", "updateOrganizationSettings": "securitycenter.organizationsettings.update"}, "SCC organization settings")
+    + _grp(r"securitycenter\.(?:projects|folders|organizations)\.assets", {"updateSecurityMarks": "securitycenter.assetsecuritymarks.update"}, "asset security marks")
+    + _grp(r"securitycenter\.(?:projects|folders|organizations)\.securityHealthAnalyticsSettings\.customModules", {"create": "securitycenter.securityhealthanalyticscustommodules.create",
+           "get": "securitycenter.securityhealthanalyticscustommodules.get", "list|listDescendant": "securitycenter.securityhealthanalyticscustommodules.list",
+           "patch": "securitycenter.securityhealthanalyticscustommodules.update", "delete": "securitycenter.securityhealthanalyticscustommodules.delete",
+           "simulate": "securitycenter.securityhealthanalyticscustommodules.simulate"}, "Security Health Analytics custom modules")
+    + _grp(r"securitycenter\.(?:projects|folders|organizations)\.securityHealthAnalyticsSettings\.effectiveCustomModules", {"get": "securitycenter.effectivesecurityhealthanalyticscustommodules.get",
+           "list": "securitycenter.effectivesecurityhealthanalyticscustommodules.list"}, "effective SHA custom modules")
+    + _grp(r"cloudresourcemanager\.liens", {"create|delete": "resourcemanager.projects.updateLiens", "get|list": "resourcemanager.projects.get"}, "liens are governed by projects.updateLiens / projects.get")
+    + _grp(r"cloudresourcemanager\.organizations", {"setOrgPolicy|clearOrgPolicy": "orgpolicy.policy.set"}, "legacy v1 org policy methods require orgpolicy.policy.set")
+    + _grp(r"cloudkms(?:\.(?:projects|folders))?", {"getAutokeyConfig": "cloudkms.autokeyConfigs.get", "updateAutokeyConfig": "cloudkms.autokeyConfigs.update",
+           "getKajPolicyConfig|showEffectiveKeyAccessJustificationsEnrollmentConfig|showEffectiveKeyAccessJustificationsPolicyConfig": "cloudkms.kajPolicyConfigs.get",
+           "updateKajPolicyConfig": "cloudkms.kajPolicyConfigs.update"}, "KMS autokey / key access justifications config")
+    + _grp(r"cloudkms\.projects\.locations", {"ekmConfig\.getIamPolicy": "cloudkms.ekmConfigs.getIamPolicy", "ekmConfig\.setIamPolicy": "cloudkms.ekmConfigs.setIamPolicy",
+           "updateEkmConfig": "cloudkms.ekmConfigs.update"}, "EKM config")
+    + _grp(r"container\.projects\.zones\.clusters\.nodePools", {"get|list|fetchNodePoolUpgradeInfo": "container.clusters.get", "create|delete|update|autoscaling|rollback|setManagement|setSize": "container.clusters.update"},
+           "legacy zonal node pool methods follow the node-pool rule: reads clusters.get, mutations clusters.update")
+    + _grp(r"artifactregistry\.projects", {"getProjectSettings": "artifactregistry.projectsettings.get", "updateProjectSettings": "artifactregistry.projectsettings.update"}, "project settings")
+    + _grp(r"artifactregistry\.projects\.locations\.repositories\.\w+", {"import|upload": "artifactregistry.repositories.uploadArtifacts"}, "package import/upload writes artifacts")
+    + _grp(r"redis\.projects\.locations\.clusters\.tokenAuthUsers", {"get|list|authTokens\.get|authTokens\.list": "redis.clusters.get", "addAuthToken|delete|authTokens\.delete": "redis.clusters.update"}, "cluster token auth users are managed through clusters")
+    + _grp(r"redis\.projects\.locations\.aclPolicies\.revisions", {"get": "redis.aclPolicies.get", "list": "redis.aclPolicies.list"}, "ACL policy revisions")
+    + _grp(r"storage\.rapidCaches", {"insert": "storage.anywhereCaches.create", "get": "storage.anywhereCaches.get", "list": "storage.anywhereCaches.list",
+           "update|disable": "storage.anywhereCaches.update"}, "rapidCaches is the pre-GA name of anywhereCaches")
+    + _grp(r"monitoring\.services\.serviceLevelObjectives", {"create": "monitoring.slos.create", "get": "monitoring.slos.get", "list": "monitoring.slos.list", "patch": "monitoring.slos.update", "delete": "monitoring.slos.delete"}, "SLOs")
+    + [(r"^monitoring\.projects\.collectdTimeSeries\.create$", ["monitoring.timeSeries.create"], "collectd writes time series"),
+       (r"^monitoring\.projects\.groups\.members\.list$", ["monitoring.groups.get"], "listing members reads the group"),
+       (r"^monitoring\.uptimeCheckIps\.list$", ["monitoring.uptimeCheckConfigs.list"], "uptime check IPs"),
+              (r"^cloudtasks\.projects\.locations\.queues\.tasks\.(batchCreate|buffer)$", ["cloudtasks.tasks.create"], "task creation"),
+       (r"^cloudtasks\.projects\.locations\.queues\.tasks\.batchDelete$", ["cloudtasks.tasks.delete"], "task deletion"),
+       (r"^bigquery\.models\.patch$", ["bigquery.models.updateMetadata"], "patch updates metadata"),
+       (r"^pubsub\.projects\.schemas\.validateMessage$", ["pubsub.schemas.validate"], "validate message"),
+       (r"^eventarc\.projects\.locations\.updateGoogleChannelConfig$", ["eventarc.googleChannelConfigs.update"], "google channel config"),
+       (r"^serviceusage\.services\.batchEnable$", ["serviceusage.services.enable"], "batch enable"),
+       (r"^serviceusage\.services\.batchGet$", ["serviceusage.services.get"], "batch get")]
+    + _grp(r"serviceusage\.services\.consumerQuotaMetrics(?:\.limits(?:\.(?:adminOverrides|consumerOverrides))?)?", {"get|list": "serviceusage.quotas.get",
+           "create|delete|patch|importAdminOverrides|importConsumerOverrides": "serviceusage.quotas.update"}, "quota metrics and overrides")
+    + _grp(r"serviceusage\.services\.consumerQuotaMetrics\.limits\.(?:adminOverrides|consumerOverrides)", {"list": "serviceusage.quotas.get"}, "quota override list")
+    + _grp(r"servicenetworking\.services", {"connections\.create|connections\.patch": "servicenetworking.services.addPeering", "connections\.deleteConnection": "servicenetworking.services.deleteConnection",
+           "connections\.list": "servicenetworking.services.get", "dnsRecordSets\.add": "servicenetworking.services.addDnsRecordSet", "dnsRecordSets\.get|dnsRecordSets\.list": "servicenetworking.services.get",
+           "dnsRecordSets\.remove": "servicenetworking.services.removeDnsRecordSet", "dnsRecordSets\.update": "servicenetworking.services.updateDnsRecordSet",
+           "dnsZones\.add": "servicenetworking.services.addDnsZone", "dnsZones\.remove": "servicenetworking.services.removeDnsZone",
+           "projects\.global\.networks\.dnsZones\.(?:get|list)": "servicenetworking.services.get", "projects\.global\.networks\.get": "servicenetworking.services.getConsumerConfig",
+           "projects\.global\.networks\.getVpcServiceControls": "servicenetworking.services.getVpcServiceControls", "projects\.global\.networks\.updateConsumerConfig": "servicenetworking.services.updateConsumerConfig",
+           "projects\.global\.networks\.peeredDnsDomains\.create": "servicenetworking.services.createPeeredDnsDomain", "projects\.global\.networks\.peeredDnsDomains\.delete": "servicenetworking.services.deletePeeredDnsDomain",
+           "projects\.global\.networks\.peeredDnsDomains\.list": "servicenetworking.services.listPeeredDnsDomains"}, "Service Networking")
+    + [(r"^iap\.(?:getIamPolicy)$", ["iap.web.getIamPolicy"], "IAP web resource policy"), (r"^iap\.setIamPolicy$", ["iap.web.setIamPolicy"], "IAP web resource policy"),
+       (r"^iap\.getIapSettings$", ["iap.web.getSettings"], "IAP settings"), (r"^iap\.updateIapSettings$", ["iap.web.updateSettings"], "IAP settings")]
+    + _grp(r"iap\.projects\.iap_tunnel\.locations\.destGroups", {"create": "iap.tunnelDestGroups.create", "get": "iap.tunnelDestGroups.get", "list": "iap.tunnelDestGroups.list",
+           "patch": "iap.tunnelDestGroups.update", "delete": "iap.tunnelDestGroups.delete"}, "IAP TCP destination groups")
+    + _grp(r"compute\.(?:region)?InstanceGroupManagerResizeRequests", {"insert|cancel|delete": "compute.instanceGroupManagers.update", "get|list": "compute.instanceGroupManagers.get"}, "resize requests act on the managed instance group")
+    + _grp(r"compute\.(?:imageViews|imageFamilyViews)", {"get": "compute.images.get", "list": "compute.images.list"}, "image views read images")
+    + _grp(r"compute\.projects", {"enableXpnHost": "compute.organizations.enableXpnHost", "disableXpnHost": "compute.organizations.disableXpnHost",
+           "enableXpnResource": "compute.organizations.enableXpnResource", "disableXpnResource": "compute.organizations.disableXpnResource"}, "Shared VPC administration is compute.organizations.*Xpn*")
+    + _grp(r"backupdr\.projects\.locations\.backupVaults\.dataSources", {"get": "backupdr.bvdatasources.get", "list": "backupdr.bvdatasources.list", "patch": "backupdr.bvdatasources.update",
+           "abandonBackup": "backupdr.bvdatasources.abandonBackup", "fetchAccessToken": "backupdr.bvdatasources.fetchAccessToken", "finalizeBackup": "backupdr.bvdatasources.finalizeBackup",
+           "initiateBackup": "backupdr.bvdatasources.initiateBackup", "remove": "backupdr.bvdatasources.remove", "setInternalStatus": "backupdr.bvdatasources.setInternalStatus"},
+           "backup vault data sources are the bvdatasources.* permission family")
+    + _grp(r"backupdr\.projects\.locations\.backupVaults\.dataSources\.backups", {"get": "backupdr.bvbackups.get", "list": "backupdr.bvbackups.list", "patch": "backupdr.bvbackups.update",
+           "delete": "backupdr.bvbackups.delete", "restore": "backupdr.bvbackups.restore"}, "backup vault backups are the bvbackups.* permission family")
+    + _grp(r"backupdr\.projects\.locations\.autoProtectionPolicies\.bindings", {"create": "backupdr.autoprotectionbindings.create", "get": "backupdr.autoprotectionbindings.get",
+           "list": "backupdr.autoprotectionbindings.list", "initiateDelete": "backupdr.autoprotectionbindings.delete"}, "auto protection bindings")
+    + _grp(r"firestore\.projects\.databases\.documents", {"listen": "datastore.entities.get", "partitionQuery|executePipeline": "datastore.entities.list", "write": "datastore.entities.update"},
+           "Firestore streaming/pipeline document methods use the datastore.entities.* permissions (Firestore in Native mode shares them)")
+    + [(r"^binaryauthorization\.(?:projects|systempolicy)\.getPolicy$", ["binaryauthorization.policy.get"], "get policy"),
+       (r"^binaryauthorization\.projects\.updatePolicy$", ["binaryauthorization.policy.update"], "update policy"),
+       (r"^binaryauthorization\.projects\.platforms\.gke\.policies\.evaluate$", ["binaryauthorization.platformPolicies.evaluatePolicy"], "evaluate platform policy"),
+       (r"^binaryauthorization\.projects\.platforms\.policies\.replacePlatformPolicy$", ["binaryauthorization.platformPolicies.replace"], "replace platform policy"),
+       (r"^apphub\.projects\.locations\.discoveredServices\.lookup$", ["apphub.discoveredServices.get"], "lookup reads the discovered service"),
+       (r"^apphub\.projects\.locations\.discoveredWorkloads\.lookup$", ["apphub.discoveredWorkloads.get"], "lookup reads the discovered workload"),
+       (r"^apphub\.projects\.locations\.lookupServiceProjectAttachment$", ["apphub.serviceProjectAttachments.lookup"], "lookup attachment"),
+       (r"^apphub\.projects\.locations\.detachServiceProjectAttachment$", ["apphub.serviceProjectAttachments.detach"], "detach attachment")]
+    + _grp(r"identitytoolkit\.(?:projects\.(?:tenants\.)?)?accounts", {"lookup|query|batchGet": "firebaseauth.users.get", "update": "firebaseauth.users.update",
+           "delete|batchDelete": "firebaseauth.users.delete", "batchCreate|signUp": "firebaseauth.users.create", "sendOobCode": "firebaseauth.users.sendEmail"}, "Identity Toolkit admin account methods")
+    + _grp(r"identitytoolkit\.projects(?:\.tenants)?", {"createSessionCookie": "firebaseauth.users.createSession", "queryAccounts": "firebaseauth.users.get"}, "session cookies / query")
+)
+
 
 def load_perms():
     perms = set()
@@ -315,8 +507,9 @@ def main():
             mid = m["id"]
             verb = mid.split(".")[-1]
             path = (sp + "/" + m.get("flatPath", m["path"]).lstrip("/")).replace("//", "/")
-            # also keep the non-flat variant (uses {+name})
-            variants = {(sp + "/" + m["path"].lstrip("/")).replace("//", "/")}
+            # The flatPath names every collection (/v1/projects/{p}/locations/{l}/indexes/{i}); the plain path is the generic /v1/{+name},
+            # which cannot tell resources apart. Use the flat template when Discovery has one (precise matching), else the plain one.
+            variants = {path} if m.get("flatPath") else {(sp + "/" + m["path"].lstrip("/")).replace("//", "/")}
             if verb in NO_PERMISSION_VERBS:
                 perm = []
             elif next((r for r in RULES if r[1] and re.match(r[0], mid)), None):
@@ -326,7 +519,13 @@ def main():
                 perm = list(OVERRIDES[mid][0])
             else:
                 p1, fb = derive(mid, perms, lower)
+                if not p1:
+                    p1, fb = derive_ext(mid, lower)
                 perm = [p1] if p1 else None
+                if perm is None:
+                    al = next((a for a in ALIASES if re.match(a[0], mid) and all(x in perms for x in a[1])), None)
+                    if al:
+                        perm, fb = list(al[1]), True
                 if fb:
                     fallbacks.add(mid)
             if perm is None:

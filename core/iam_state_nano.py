@@ -81,10 +81,16 @@ def on_preload(cloud, service, text):
 
 
 # ----------------------------------------------------------------------------- GCP
-def gcp_principal(headers) -> dict:
-    """x-cloudlearn-principal (test / console override) > Bearer JWT `email` claim > the project owner ("root").
-    Opaque `ya29.` access tokens carry no identity in Nano (the token endpoint keeps no token table): they act as `root`."""
-    raw = _h(headers, "x-cloudlearn-principal") or _jwt_claims(headers).get("email") or ""
+def gcp_principal(headers, reg=None) -> dict:
+    """x-cloudlearn-principal (test / console override) > opaque `ya29.` token recorded at issuance (IAM Credentials generateAccessToken,
+    WIF token exchange: reg["gcp_iamc"].tokens / reg["gcp_iam"].gcp_sts_tokens) > Bearer JWT `email` claim > the project owner ("root").
+    A `ya29.` token the simulator never issued (or an expired one) still acts as `root`, like a request with no identity."""
+    raw = _h(headers, "x-cloudlearn-principal")
+    if not raw:
+        tp = _A.gcp_token_principal(headers, (reg or {}).get("gcp_iamc"), getattr(((reg or {}).get("gcp_iam")), "gcp_sts_tokens", None))
+        if tp:
+            return tp
+        raw = _jwt_claims(headers).get("email") or ""
     return gcp_member(raw)
 
 
@@ -142,6 +148,9 @@ def gcp_state(reg, known=None) -> dict:
             hier["projects/_/buckets/" + b] = "projects/" + projects[0]
     roles = {b.get("role") for p in allow.values() for b in p["bindings"] if b.get("role")}
     state = {"cloud": "gcp", "allow_policies": allow, "deny_policies": deny, "custom_roles": custom, "hierarchy": hier}
+    rm, cfg = reg.get("gcp_rm"), reg.get(_A.HIERARCHY_KEY)
+    if rm is not None or cfg:
+        _A.apply_hierarchy(state, _A.gcp_hierarchy_extras(rm, cfg))      # folders/organization, groups and PAB from the Resource Manager store
     stems = _gcp_stems(sorted(r for r in roles if r not in custom), known if known is not None else _known("gcp"))
     _require(*[("gcp", x) for x in stems])
     if stems:
@@ -242,5 +251,5 @@ def state_and_principal(cloud, headers, query="", reg=None):
     if cloud == "gcp":
         _require(("gcp", "_methods"))
         st = gcp_state(reg)
-        return st, gcp_principal(headers)
+        return st, gcp_principal(headers, reg)
     return azure_state(reg), azure_principal(headers)

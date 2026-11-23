@@ -20,7 +20,7 @@ _TABLE_PATHS = (os.path.join(_HERE, "..", "iam_catalog", "gcp", "_methods.json")
                 os.path.join(_HERE, "iam_catalog", "gcp", "_methods.json"))
 _STATE = {}
 _SKIP_TOKENS = {"projects", "locations", "organizations", "folders", "regions", "zones", "global", "v1", "v2", "v1beta1", "beta"}
-_VERSION_PREFIX = re.compile(r"^/(?:[a-z][a-z0-9]*/)?v\d+(?:alpha\d*|beta\d*)?(?:p\d+\w*)?/")
+_VERSION_PREFIX = re.compile(r"^/(?:[a-z][a-z0-9]*/)?(?:v\d+(?:alpha\d*|beta\d*)?(?:p\d+\w*)?|beta|alpha)/")
 _PERM_SET = {}
 
 
@@ -48,6 +48,21 @@ def _load():
     return _STATE
 
 
+_VER_SEG = re.compile(r"/(v\d+)(?:alpha\d*|beta\d*|p\d+\w*)?(?=/|:|$)")
+
+
+def _version_tolerant(escaped, tpl):
+    """The Discovery table lists one version per method (v1, v2, v1beta4); the same method is served under /v1beta1, /v1alpha,
+    /compute/beta ...: accept the major version with any alpha/beta suffix, and Compute's /compute/{v1,beta,alpha}/."""
+    if tpl.startswith("/compute/v1/"):
+        return escaped.replace(re.escape("/compute/v1/"), "/compute/(?:v1|beta|alpha)/", 1)
+    m = _VER_SEG.search(tpl)
+    if not m or m.start() > 12:
+        return escaped
+    major = m.group(1)
+    return escaped.replace(re.escape(m.group(0)), "/" + major + r"(?:alpha\d*|beta\d*|p\d+\w*)?", 1)
+
+
 def _compile(tpl):
     out, lit, i = [], 0, 0
     for part in re.split(r"(\{[^}]+\})", tpl):
@@ -59,7 +74,7 @@ def _compile(tpl):
         else:
             out.append(re.escape(part))
             lit += len(part)
-    return re.compile("^" + "".join(out) + "$"), lit
+    return re.compile("^" + _version_tolerant("".join(out), tpl) + "$"), lit
 
 
 def _split_url(url):
@@ -251,11 +266,42 @@ def _deny_policy(method, path):
              "resource": "//iam.googleapis.com/policies/" + unquote(m.group(1)) + "/denypolicies" + ("/" + m.group(2) if m.group(2) else "")}]
 
 
+# Vyomi's own aggregate surfaces (core/gcp_hub_core.py; Google has no public Discovery API for the Marketplace / Cloud Hub console pages).
+# Each is mapped to the permission of the real product it stands for (reason per row); ids are `vyomi.*` pseudo method ids so the
+# coverage report counts them like Discovery methods.
+VYOMI_ROUTES = (
+    ("vyomi.marketplace.products.list", "GET", r"^/vyomi/gcp/([^/]+)/marketplace/products/?$", ["commerceoffercatalog.offers.get"], "commerceoffercatalog.googleapis.com", "projects/{0}", "browsing the offer catalog needs offers.get (no list permission exists)"),
+    ("vyomi.marketplace.products.get", "GET", r"^/vyomi/gcp/([^/]+)/marketplace/products/[^/]+/?$", ["commerceoffercatalog.offers.get"], "commerceoffercatalog.googleapis.com", "projects/{0}", "offer details"),
+    ("vyomi.marketplace.subscriptions.create", "POST", r"^/vyomi/gcp/([^/]+)/marketplace/subscriptions/?$", ["consumerprocurement.orders.place"], "cloudcommerceconsumerprocurement.googleapis.com", "projects/{0}", "subscribing places an order"),
+    ("vyomi.marketplace.subscriptions.list", "GET", r"^/vyomi/gcp/([^/]+)/marketplace/subscriptions/?$", ["consumerprocurement.orders.list"], "cloudcommerceconsumerprocurement.googleapis.com", "projects/{0}", "list orders"),
+    ("vyomi.marketplace.subscriptions.get", "GET", r"^/vyomi/gcp/([^/]+)/marketplace/subscriptions/[^/]+/?$", ["consumerprocurement.orders.get"], "cloudcommerceconsumerprocurement.googleapis.com", "projects/{0}", "get order"),
+    ("vyomi.marketplace.subscriptions.delete", "DELETE", r"^/vyomi/gcp/([^/]+)/marketplace/subscriptions/[^/]+/?$", ["consumerprocurement.orders.cancel"], "cloudcommerceconsumerprocurement.googleapis.com", "projects/{0}", "cancel order"),
+    ("vyomi.hub.overview", "GET", r"^/vyomi/gcp/([^/]+)/hub/overview/?$", ["servicehealth.events.list", "apphub.applications.list"], "servicehealth.googleapis.com", "projects/{0}", "Cloud Hub overview = Service Health incidents + App Hub applications"),
+)
+_VYOMI = None
+
+
+def _vyomi(method, path):
+    global _VYOMI
+    if _VYOMI is None:
+        _VYOMI = [(r[0], r[1], re.compile(r[2]), r[3], r[4], r[5]) for r in VYOMI_ROUTES]
+    for _id, m, rx, perms, host, res in _VYOMI:
+        mm = rx.match(path) if m == method else None
+        if mm:
+            r = "//%s/%s" % (host, res.format(*mm.groups()))
+            return [{"action": a, "resource": r, "service": host} for a in perms]
+    return None
+
+
 def required(method, url, body=None, host=None):
     st = _load()
     h, path, q = _split_url(url)
     h = host or h
     method = (method or "GET").upper()
+    if path.startswith("/vyomi/gcp/"):
+        vy = _vyomi(method, path)
+        if vy is not None:
+            return vy
     if h and (h == "storage.googleapis.com" or h.endswith(".storage.googleapis.com")) \
             and not re.match(r"^/(?:upload/|download/)?storage/v1/", path):
         return _xml_storage(method, path, q, h)
@@ -294,4 +340,41 @@ def required(method, url, body=None, host=None):
         out = [{"action": e["perm"][0], "resource": resource, "service": svc}] if e["perm"] else []
         out.append({"action": "storage.objects.create", "resource": resource, "service": svc})
     out += [x for x in _extras(e["id"], body, rel) if _is_perm(x["action"])]
+    return out
+
+
+# --------------------------------------------------------------------------- coverage (used by scripts/gen_iam_coverage.py and tests)
+
+def _synth(tpl):
+    """A concrete request path for a method template (every {var} filled; `{+x}` gets a multi-segment name)."""
+    n = [0]
+
+    def f(m):
+        n[0] += 1
+        v = m.group(1)
+        return ("projects/p/locations/l/things/t%d" % n[0]) if v.startswith("+") else "n%d" % n[0]
+    return re.sub(r"\{([^}]+)\}", f, tpl)
+
+
+def surface():
+    """Every method the table knows, one record each: {"id","api","mapped","perm"} where mapped = a synthesized request for the method
+    resolves back to the method's own permission set (round trip through required()); methods that need no permission
+    (testIamPermissions) count as mapped. Discovery methods with no catalog permission are listed as unmapped ("unmatched")."""
+    st = _load()
+    data = st["data"]
+    seen, out = set(), []
+    for e in data["methods"]:
+        if e["id"] in seen:
+            continue
+        seen.add(e["id"])
+        got = {r["action"] for r in required(e["m"], _synth(e["p"]), host=e["h"])}
+        want = set(e["perm"])
+        ok = (got >= want) and (bool(want) or e["id"].endswith(".testIamPermissions"))
+        out.append({"id": e["id"], "api": e["id"].split(".")[0], "mapped": bool(ok), "perm": sorted(want), "heuristic": bool(e.get("f"))})
+    for mid in data.get("unmatched", []):
+        out.append({"id": mid, "api": mid.split(".")[0], "mapped": False, "perm": [], "heuristic": False})
+    for r in VYOMI_ROUTES:
+        url = "/vyomi/gcp/p/" + r[2].split("/vyomi/gcp/([^/]+)/", 1)[1].replace("[^/]+", "x").replace("/?$", "")
+        got = {x["action"] for x in required(r[1], url)}
+        out.append({"id": r[0], "api": r[0].split(".")[1], "mapped": got >= set(r[3]), "perm": sorted(r[3]), "heuristic": False})
     return out

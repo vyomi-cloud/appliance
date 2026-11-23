@@ -1,5 +1,5 @@
 {
- "$doc": "ONE mapping from wasm/service-inventory.json service ids to the IAM catalog slices that cover them (aws: IAM prefixes = core/iam_catalog/aws/<p>.json; gcp: page slugs = core/iam_catalog/gcp/<s>.json; azure: providers = core/iam_catalog/azure/<P>.json, optional \"filters\" = action prefixes narrowing a shared provider). catalog \"none\" needs a reason. \"floor\" = minimum request-map coverage percent (integer); floors only go up (raise with: python3 scripts/gen_iam_coverage.py --bump-floors). Rule 14 in V4-BRANCH-ARCHITECTURE.md.",
+ "$doc": "ONE mapping from wasm/service-inventory.json service ids to the IAM catalog slices that cover them (aws: IAM prefixes = core/iam_catalog/aws/<p>.json; gcp: page slugs = core/iam_catalog/gcp/<s>.json; azure: providers = core/iam_catalog/azure/<P>.json, optional \"filters\" = action prefixes narrowing a shared provider). catalog \"none\" needs a reason. \"floor\" = minimum request-map coverage percent (integer); floors only go up (raise with: python3 scripts/gen_iam_coverage.py --bump-floors). Rule 14 in V4-BRANCH-ARCHITECTURE.md. GCP entries also carry \"apis\" (id prefixes of the Discovery methods the service's clients can address; + optional \"id_prefixes\" narrowing a shared API such as compute) and \"strict_floor\" (floor of the catalog-reachability column; \"floor\" applies to the method-surface column that defines enforceable).",
  "services": {
   "aws": {
    "s3": {
@@ -168,53 +168,94 @@
     "catalog": [
      "storage"
     ],
-    "floor": 46
+    "apis": [
+     "storage"
+    ],
+    "floor": 98,
+    "strict_floor": 46
    },
    "compute": {
     "catalog": [
      "compute"
     ],
-    "floor": 36
+    "apis": [
+     "compute"
+    ],
+    "floor": 97,
+    "strict_floor": 40
    },
    "kubernetes": {
     "catalog": [
      "container"
     ],
-    "floor": 27
+    "apis": [
+     "container"
+    ],
+    "floor": 91,
+    "strict_floor": 29
    },
    "sql": {
     "catalog": [
      "cloudsql"
     ],
-    "floor": 41
+    "apis": [
+     "sql"
+    ],
+    "floor": 97,
+    "strict_floor": 43
    },
    "firestore": {
     "catalog": [
      "firestore"
     ],
-    "floor": 54
+    "apis": [
+     "firestore"
+    ],
+    "floor": 81,
+    "strict_floor": 54
    },
    "datastore": {
     "catalog": [
      "firestore"
     ],
-    "floor": 54
+    "apis": [
+     "firestore"
+    ],
+    "floor": 81,
+    "strict_floor": 54
    },
    "marketplace": {
-    "catalog": "none",
-    "reason": "Cloud Marketplace has no IAM permission page in the catalog slugs (gen_iam_catalog.py GCP_SLUGS); add the slug \"cloudcommerceconsumerprocurement\" or equivalent and regenerate",
-    "floor": 0
+    "catalog": [
+     "consumerprocurement",
+     "commerceoffercatalog"
+    ],
+    "apis": [
+     "marketplace"
+    ],
+    "floor": 100,
+    "strict_floor": 10
    },
    "cloud-hub": {
-    "catalog": "none",
-    "reason": "Cloud Hub (Hub/Observability) has no slug in GCP_SLUGS",
-    "floor": 0
+    "catalog": [
+     "servicehealth",
+     "apphub"
+    ],
+    "apis": [
+     "hub",
+     "apphub"
+    ],
+    "floor": 97,
+    "strict_floor": 65
    },
    "memorystore": {
     "catalog": [
      "redis"
     ],
-    "floor": 77
+    "apis": [
+     "redis"
+    ],
+    "floor": 100,
+    "strict_floor": 78
    },
    "networking": {
     "catalog": [
@@ -223,121 +264,234 @@
      "servicenetworking",
      "vpcaccess"
     ],
-    "floor": 41
+    "apis": [
+     "dns",
+     "servicenetworking",
+     "vpcaccess",
+     "compute"
+    ],
+    "id_prefixes": [
+     "dns.",
+     "servicenetworking.",
+     "vpcaccess.",
+     "compute.networks.",
+     "compute.subnetworks.",
+     "compute.firewalls.",
+     "compute.routes.",
+     "compute.routers.",
+     "compute.addresses.",
+     "compute.globalAddresses.",
+     "compute.forwardingRules.",
+     "compute.globalForwardingRules.",
+     "compute.vpnGateways.",
+     "compute.vpnTunnels.",
+     "compute.targetVpnGateways.",
+     "compute.externalVpnGateways.",
+     "compute.firewallPolicies.",
+     "compute.networkFirewallPolicies.",
+     "compute.regionNetworkFirewallPolicies.",
+     "compute.regionFirewallPolicies.",
+     "compute.interconnects.",
+     "compute.interconnectAttachments.",
+     "compute.networkEndpointGroups.",
+     "compute.globalNetworkEndpointGroups.",
+     "compute.packetMirrorings."
+    ],
+    "floor": 98,
+    "strict_floor": 46
    },
    "run": {
     "catalog": [
      "run"
     ],
-    "floor": 59
+    "apis": [
+     "run"
+    ],
+    "floor": 83,
+    "strict_floor": 61
    },
    "functions": {
     "catalog": [
      "cloudfunctions"
     ],
-    "floor": 61
+    "apis": [
+     "cloudfunctions"
+    ],
+    "floor": 95,
+    "strict_floor": 63
    },
    "pubsub": {
     "catalog": [
      "pubsub"
     ],
-    "floor": 60
+    "apis": [
+     "pubsub"
+    ],
+    "floor": 100,
+    "strict_floor": 62
    },
    "cloudscheduler": {
     "catalog": [
      "cloudscheduler"
     ],
-    "floor": 51
+    "apis": [
+     "cloudscheduler"
+    ],
+    "floor": 81,
+    "strict_floor": 51
    },
    "eventarc": {
     "catalog": [
      "eventarc"
     ],
-    "floor": 63
+    "apis": [
+     "eventarc"
+    ],
+    "floor": 100,
+    "strict_floor": 65
    },
    "apigateway": {
     "catalog": [
      "apigateway"
     ],
-    "floor": 46
+    "apis": [
+     "apigateway"
+    ],
+    "floor": 100,
+    "strict_floor": 57
    },
    "security/secret-manager": {
     "catalog": [
      "secretmanager"
     ],
-    "floor": 60
+    "apis": [
+     "secretmanager"
+    ],
+    "floor": 100,
+    "strict_floor": 60
    },
    "security/kms": {
     "catalog": [
      "cloudkms"
     ],
-    "floor": 56
+    "apis": [
+     "cloudkms"
+    ],
+    "floor": 97,
+    "strict_floor": 70
    },
    "iam-admin": {
     "catalog": [
      "iam"
     ],
-    "floor": 15
+    "apis": [
+     "iam",
+     "iamcredentials"
+    ],
+    "floor": 88,
+    "strict_floor": 19
    },
    "resource-manager": {
     "catalog": [
      "resourcemanager",
      "orgpolicy"
     ],
-    "floor": 7
+    "apis": [
+     "cloudresourcemanager",
+     "orgpolicy"
+    ],
+    "floor": 92,
+    "strict_floor": 7
    },
    "artifacts": {
     "catalog": [
      "artifactregistry"
     ],
-    "floor": 76
+    "apis": [
+     "artifactregistry"
+    ],
+    "floor": 94,
+    "strict_floor": 80
    },
    "clouddeploy": {
     "catalog": [
      "clouddeploy"
     ],
-    "floor": 83
+    "apis": [
+     "clouddeploy"
+    ],
+    "floor": 100,
+    "strict_floor": 83
    },
    "backupdr": {
     "catalog": [
      "backupdr"
     ],
-    "floor": 32
+    "apis": [
+     "backupdr"
+    ],
+    "floor": 70,
+    "strict_floor": 37
    },
    "cloudbuild": {
     "catalog": [
      "cloudbuild"
     ],
-    "floor": 51
+    "apis": [
+     "cloudbuild"
+    ],
+    "floor": 93,
+    "strict_floor": 60
    },
    "security/binauthz": {
-    "catalog": "none",
-    "reason": "Binary Authorization permissions (binaryauthorization.*) are not in GCP_SLUGS",
-    "floor": 0
+    "catalog": [
+     "binaryauthorization"
+    ],
+    "apis": [
+     "binaryauthorization"
+    ],
+    "floor": 100,
+    "strict_floor": 55
    },
    "security/scc": {
     "catalog": [
      "securitycenter"
     ],
-    "floor": 13
+    "apis": [
+     "securitycenter"
+    ],
+    "floor": 83,
+    "strict_floor": 15
    },
    "vertex-ai": {
     "catalog": [
      "aiplatform"
     ],
-    "floor": 46
+    "apis": [
+     "aiplatform"
+    ],
+    "floor": 87,
+    "strict_floor": 50
    },
    "monitoring": {
     "catalog": [
      "monitoring"
     ],
-    "floor": 54
+    "apis": [
+     "monitoring"
+    ],
+    "floor": 100,
+    "strict_floor": 59
    },
    "logs": {
     "catalog": [
      "logging"
     ],
-    "floor": 53
+    "apis": [
+     "logging"
+    ],
+    "floor": 96,
+    "strict_floor": 70
    }
   },
   "azure": {
