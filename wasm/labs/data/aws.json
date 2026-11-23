@@ -29,7 +29,7 @@
     "ListFoundationModels to see what you can call.",
     "Converse: send a user message and read the text and token usage.",
     "Converse with toolConfig and handle stopReason.",
-    "InvokeModel with the Titan embedding model.",
+    "InvokeModel with the embedding model the simulator hosts.",
     "Attach your guardrail (chapter 11) to a Converse call and watch it stop a prompt attack."
    ],
    "contract": {

@@ -1,6 +1,6 @@
 """Hands-on lab blocks for the Microsoft Azure course. Every block is complete, copy-paste code: the learner saves `file`, runs `run`, and sees `expect`.
 vyomilabs/labrun.py executes these blocks in order against a clean local Azure simulator (vyomilabs/labenv_azure.py), so what the guide shows is what has actually run.
-The model is the repo's deterministic test stub (tools/llm_stub), not a real GPT deployment: calls and shapes are identical, replies are fixed and short."""
+The model is the repo's deterministic test stub (tools/llm_stub), not a large hosted model: calls and shapes are identical, replies are fixed and short."""
 
 
 def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False):
@@ -1204,7 +1204,7 @@ PIP9 = "pip install azure-core azure-data-tables openai requests"
 LAB[9] = [
  b("Install the libraries", "Chapter 9 gives the agent memory. Azure splits it honestly in two. SHORT-TERM memory (the events of one session) is a managed feature: an Assistants / Foundry *thread* stores the messages and their metadata. LONG-TERM memory (facts that outlive a session) is NOT a managed Azure service: Azure has no counterpart to AgentCore Memory or Vertex AI Memory Bank, so you build it yourself as an application pattern on Azure Table storage, and this chapter says so in the code. It uses `azlab.py` and `azdata.py` (chapters 10 and 7).",
    "install9.sh", PIP9, lang="bash"),
- b("Short-term memory: a thread", "Create a thread with metadata (who and which session), add two user messages, read them back in order, update the metadata, then run an assistant on the thread: the run reads the whole thread and appends its reply to it. The thread is the session's memory: the service keeps the messages for you. Be clear about what this block proves: the model here is the repo's deterministic test stub, which only echoes the last user message, so it verifies the mechanics (history in order, metadata, a run that completes and appends to the same thread), not that a model recalls the badge number. A real GPT deployment would answer '4412' to a question about the badge.",
+ b("Short-term memory: a thread", "Create a thread with metadata (who and which session), add two user messages, read them back in order, update the metadata, then run an assistant on the thread: the run reads the whole thread and appends its reply to it. The thread is the session's memory: the service keeps the messages for you. Be clear about what this block proves: the model here is the repo's deterministic test stub, which only echoes the last user message, so it verifies the mechanics (history in order, metadata, a run that completes and appends to the same thread), not that a model recalls the badge number. A larger model would answer '4412' to a question about the badge.",
    "short_term.py", '''
 import time
 from azlab import aoai, CHAT
@@ -1353,7 +1353,7 @@ for name, model in ((CHAT, chat_model), (EMBED, embed_model)):
         "properties": {"model": model}}).result()
 print("deployments:", sorted(d.name for d in cs.deployments.list(RG, OPENAI_ACCOUNT)))
 ''', run="python create_openai.py", expect="deployments: ['chat', 'embed']"),
- b("Write the model client", "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a real GPT deployment.",
+ b("Write the model client", "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a larger hosted model.",
    "models.py", '''
 import json
 from azlab import aoai, CHAT, EMBED
@@ -1412,7 +1412,7 @@ PIP11 = "pip install azure-core azure-ai-contentsafety azure-search-documents op
 LAB[11] = [
  b("Install the libraries", "Chapter 11 generates answers that are grounded in what chapter 6 retrieved and checks them before the user sees them. It uses the `openai` library (chat, Assistants file search, and Azure OpenAI On Your Data), `azure-ai-contentsafety` for the output filter and the retrieval helper `kb.py` from chapter 6. Scope note: Azure AI Content Safety flags harmful text (hate, sexual, violence, self-harm). Masking personal data is a different Azure service (Azure AI Language PII detection) that the simulator does not offer, so this chapter does not claim to do it.",
    "install11.sh", PIP11, lang="bash"),
- b("Write the grounded answer function", "Retrieve, number the passages, and instruct the model to answer only from them and cite like [1]. The function returns the answer together with the numbered citations (source file plus the passage), so a user interface can show where each claim came from. The reply here is the repo's deterministic test stub, which simply quotes the first passage; a real GPT deployment writes a fuller answer.",
+ b("Write the grounded answer function", "Retrieve, number the passages, and instruct the model to answer only from them and cite like [1]. The function returns the answer together with the numbered citations (source file plus the passage), so a user interface can show where each claim came from. The reply here is the repo's deterministic test stub, which simply quotes the first passage; a larger model writes a fuller answer.",
    "respond.py", '''
 from azlab import aoai, CHAT
 from kb import kb_search

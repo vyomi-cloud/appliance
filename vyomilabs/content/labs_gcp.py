@@ -313,7 +313,7 @@ def build():
 def ask(question, user="anonymous"):
     return build().invoke({"question": question, "user": user, "tools": [], "spans": [], "facts": []})
 '''),
- b("Try the agent in your own process", "Before hosting it, run the graph locally. The question needs all three sub-agents: the SOP (Facilities), asset B-12 (Maintenance) and a count (Analytics). The answer text comes from the deterministic test stub in this verification (it repeats the first retrieved passage); real Gemini would write a sentence.",
+ b("Try the agent in your own process", "Before hosting it, run the graph locally. The question needs all three sub-agents: the SOP (Facilities), asset B-12 (Maintenance) and a count (Analytics). The answer text comes from the deterministic test stub in this verification (it repeats the first retrieved passage); a larger model would write a sentence.",
    "try_agent.py", '''
 from agents import ask
 
@@ -815,7 +815,7 @@ print("original restored serves 30 psi:", "30 psi" in boiler_text())
 LAB[6] = [
  b("Install the libraries", "Chapter 6 retrieves passages from the knowledge base built in chapter 12 (the corpus facilities-kb) and exposes search as a read-only tool using the functions.py deploy helper from chapter 7.",
    "install_6.sh", "pip install google-cloud-aiplatform google-cloud-functions", lang="bash"),
- b("Rank passages for a question", "retrieveContexts on the RAG Engine returns the top-k passages with a score and the gs:// source of each. Ask about the boiler, then about the AHU: the right document must come first each time. Retrieval here uses the simulator's lexical vectors without a real embedding model, so scores are indicative, not Gemini-quality.",
+ b("Rank passages for a question", "retrieveContexts on the RAG Engine returns the top-k passages with a score and the gs:// source of each. Ask about the boiler, then about the AHU: the right document must come first each time. Retrieval here uses the simulator's lexical vectors without a real embedding model, so scores are indicative, not production-quality.",
    "search.py", '''
 import gcp
 import rag
@@ -924,7 +924,7 @@ LAB[11] = [
    "install_11.sh", "pip install google-genai google-cloud-modelarmor google-cloud-aiplatform", lang="bash"),
  b("Write the Model Armor helper", "Model Armor screens text with filters: prompt-injection and jailbreak, harmful content and sensitive data. This helper creates the template facilities-guardrail (or reuses it) and tells you whether a screening result matched a filter.",
    "guardrail.py", GUARDRAIL_PY),
- b("Write the grounded answer function", "Retrieve passages, number them, and ask the model to answer only from them, so every claim can be traced to a source. In this verification the model is the deterministic test stub: it answers with the first retrieved passage and a [1] marker, which is enough to prove the grounding and citation plumbing; a real Gemini would write a fluent sentence.",
+ b("Write the grounded answer function", "Retrieve passages, number them, and ask the model to answer only from them, so every claim can be traced to a source. In this verification the model is the deterministic test stub: it answers with the first retrieved passage and a [1] marker, which is enough to prove the grounding and citation plumbing; a larger model would write a fluent sentence.",
    "respond.py", '''
 import models
 from search import search
@@ -1079,7 +1079,7 @@ assert "boiler" in found[0].memory.fact.lower()
 other = list(client.agent_engines.memories.retrieve(name=engine, scope={"user_id": "someone-else"}, similarity_search_params={"search_query": "boiler", "top_k": 3}))
 print("another user's memories:", len(other))
 ''', run="python remember.py", expect="another user's memories: 0"),
- b("Let the model extract facts from a conversation", "Instead of writing facts by hand, ask Memory Bank to generate them from a conversation. This step uses the model; in this verification that is the deterministic test stub, so the call is proven to work but the facts it extracts are not real Gemini output.",
+ b("Let the model extract facts from a conversation", "Instead of writing facts by hand, ask Memory Bank to generate them from a conversation. This step uses the model; in this verification that is the deterministic test stub, so the call is proven to work but the facts it extracts are not what a larger model would extract.",
    "generate_memories.py", '''
 import gcp
 import memory
