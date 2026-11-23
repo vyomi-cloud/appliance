@@ -164,10 +164,35 @@ def gen_gcp():
         print(f"  {slug:20} {len(doc['permissions']):5} permissions {len(doc['roles']):4} roles")
     print("gcp total permissions:", tp, "roles:", tr)
 
+AZ_ROLES_RAW = "https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/built-in-roles/"
+AZ_ROLE_CATEGORIES = ["privileged", "general", "compute", "networking", "storage", "web-and-mobile", "containers", "databases", "analytics",
+                      "ai-machine-learning", "internet-of-things", "integration", "identity", "security", "devops", "migration", "monitor",
+                      "management-and-governance", "hybrid-multicloud"]
+
+
+def gen_azure_roles():
+    """Azure built-in role definitions (verbatim JSON blocks from the per-category built-in-roles pages) -> core/iam_catalog/azure/_roles.json."""
+    import re
+    roles = {}
+    for cat in AZ_ROLE_CATEGORIES:
+        for blk in re.findall(r"```json\n(.*?)\n```", _az_text(AZ_ROLES_RAW + cat + ".md"), re.S):
+            try: j = json.loads(blk)
+            except ValueError: continue
+            if j.get("type") != "Microsoft.Authorization/roleDefinitions" or not j.get("roleName"): continue
+            perms = j.get("permissions") or [{}]
+            g = lambda k: [x for p in perms for x in p.get(k, [])]
+            roles[j["name"]] = {"id": j["name"], "roleName": j["roleName"], "description": j.get("description", ""), "category": cat,
+                                "actions": g("actions"), "notActions": g("notActions"), "dataActions": g("dataActions"),
+                                "notDataActions": g("notDataActions"), "assignableScopes": j.get("assignableScopes", [])}
+    doc = {"cloud": "azure", "kind": "roles", "roles": dict(sorted(roles.items(), key=lambda kv: kv[1]["roleName"].lower()))}
+    with open(os.path.join(ROOT, "core", "iam_catalog", "azure", "_roles.json"), "w") as f:
+        json.dump(doc, f, indent=0, separators=(",", ":")); f.write("\n")
+    print("azure built-in roles:", len(roles))
+
 
 def check(cloud):
     d = os.path.join(ROOT, "core", "iam_catalog", cloud); n = 0
-    for f in sorted(os.listdir(d)):
+    for f in sorted(x for x in os.listdir(d) if not x.startswith("_")):
         j = json.load(open(os.path.join(d, f))); assert j["cloud"] == cloud and (j.get("actions") or j.get("dataActions") or j.get("permissions")), f
         n += len(j.get("actions", {})) + len(j.get("dataActions", {})) + len(j.get("permissions", {}))
     print(cloud, "catalog ok:", n, "permissions")
@@ -177,6 +202,7 @@ if __name__ == "__main__":
     cloud = sys.argv[1] if len(sys.argv) > 1 else "aws"
     if "--offline-check" in sys.argv: check(cloud)
     elif cloud == "aws": gen_aws()
+    elif cloud == "azure" and "roles" in sys.argv[2:]: gen_azure_roles()
     elif cloud == "azure": gen_azure()
     elif cloud == "gcp": gen_gcp()
     else: sys.exit(f"{cloud}: generator not written yet (see the design doc, phase 0)")
