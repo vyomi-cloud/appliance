@@ -68,7 +68,7 @@ def register(app: FastAPI) -> None:
         from core.tf_export import build_aws
         ctx._enforce_tier_feature("terraform_export")
         r = build_aws(os.environ.get("VYOMI_INTERNAL_ENDPOINT", "http://127.0.0.1:9000"), region or "us-east-1")
-        return {**r["graph"], "portability": r["portability"], "summary": r["summary"]}
+        return {**r["graph"], "region": region or "us-east-1", "portability": r["portability"], "summary": r["summary"]}
 
     @app.post("/api/terraform/classify")
     async def api_terraform_classify(request: Request):
