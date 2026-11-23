@@ -44,6 +44,10 @@ def handle(op: str, params: dict) -> dict:
         r = _build(region, (params or {}).get("mode") == "real")
         return {"files": r["files"], "summary": r["summary"], "portability": r["portability"], "graph": r["graph"],
                 "binaries": {k: base64.b64encode(v).decode() for k, v in r["binaries"].items()}}
+    if op in ("Plan", "Apply", "Destroy"):  # Terraform import: the SAME engine as the appliance, creating through the native wire
+        from core.tf_export.apply import handle
+        from core.tf_export.wire_clients import make_clients
+        return handle(op, params or {}, make_clients(_transport, region, _models_dir()), region)
     if op == "Classify":
         from core.tf_export.graph import classify
         return {"availability": classify([t for t in ((params or {}).get("types") or []) if isinstance(t, str)][:500])}
