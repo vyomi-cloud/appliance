@@ -184,7 +184,7 @@
       if (j && (j.sandbox || j.restricted)) { closeCap(); expBtn.remove(); cap.remove(); window.__vySandbox = true; }
     }).catch(function () {});
     var m = document.createElement('div'); m.id = 'vy-modal';
-    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
+    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-lab" role="tablist"><button type="button" class="on" data-t="labs">Course</button><button type="button" data-t="api">API reference</button></div><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
     var fr = m.querySelector('iframe');
     function close() { m.classList.remove('open'); fr.removeAttribute('src'); }
@@ -194,7 +194,7 @@
       m.querySelectorAll('#vy-hd-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
       try { fr.contentWindow.__apiCloud(b.dataset.c); } catch (e) {} }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
-    function labTab(t) {   // Vyomi Labs dialog: Course | SDK & CLI usage | API reference
+    function labTab(t) {   // Vyomi Labs dialog: Course | API reference
       m.querySelectorAll('#vy-hd-lab button').forEach(function (x) { x.classList.toggle('on', x.dataset.t === t); });
       m.classList.toggle('api', t === 'api');
       m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
