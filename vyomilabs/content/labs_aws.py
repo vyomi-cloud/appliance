@@ -15,8 +15,15 @@ LAB[10] = [
 import json
 import boto3
 
-CHAT_MODEL = "anthropic.claude-3-haiku-20240307-v1:0"
-EMBED_MODEL = "amazon.titan-embed-text-v2:0"
+def _pick():
+    """The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask it, never hard-code a vendor id."""
+    ms = [m for m in boto3.client("bedrock").list_foundation_models()["modelSummaries"] if m["modelId"].startswith("vyomi.")]
+    chat = [m["modelId"] for m in ms if "EMBEDDING" not in m["outputModalities"]]
+    emb = [m["modelId"] for m in ms if "EMBEDDING" in m["outputModalities"]]
+    return chat[0], emb[0]
+
+
+CHAT_MODEL, EMBED_MODEL = _pick()
 _rt = boto3.client("bedrock-runtime")
 
 
@@ -227,7 +234,7 @@ from langgraph.graph import END, StateGraph
 
 import mcp_client
 
-MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+from models import CHAT_MODEL as MODEL_ID
 LAMBDAS = {"kb_search": "facilities-kb-search", "asset_status": "facilities-asset-status"}
 GATEWAY = {}
 
@@ -572,9 +579,11 @@ oss.create_security_policy(name="facilities-enc", type="encryption", policy=json
 c = oss.create_collection(name="facilities-kb", type="VECTORSEARCH")["createCollectionDetail"]
 print("collection", c["name"], c["arn"])
 ''', run="python vector_store.py", expect="collection facilities-kb"),
- b("Create the knowledge base and its data source", "The knowledge base turns text into vectors with Titan Text Embeddings v2 and stores them in the collection. The data source points at `docs/` in the bucket and cuts documents into 200-token chunks with 10% overlap.",
+ b("Create the knowledge base and its data source", "The knowledge base turns text into vectors with the embedding model this simulator hosts and stores them in the collection. The data source points at `docs/` in the bucket and cuts documents into 200-token chunks with 10% overlap.",
    "knowledge_base.py", r'''
 import boto3
+
+from models import EMBED_MODEL
 
 REGION = "us-east-1"
 ag = boto3.client("bedrock-agent")
@@ -583,7 +592,7 @@ coll = boto3.client("opensearchserverless").batch_get_collection(names=["facilit
 kb = ag.create_knowledge_base(
     name="facilities-kb", roleArn="arn:aws:iam::123456789012:role/facilities-role",
     knowledgeBaseConfiguration={"type": "VECTOR", "vectorKnowledgeBaseConfiguration": {
-        "embeddingModelArn": "arn:aws:bedrock:%s::foundation-model/amazon.titan-embed-text-v2:0" % REGION}},
+        "embeddingModelArn": "arn:aws:bedrock:%s::foundation-model/%s" % (REGION, EMBED_MODEL)}},
     storageConfiguration={"type": "OPENSEARCH_SERVERLESS", "opensearchServerlessConfiguration": {
         "collectionArn": coll, "vectorIndexName": "facilities-index",
         "fieldMapping": {"vectorField": "embedding", "textField": "text", "metadataField": "metadata"}}})["knowledgeBase"]
@@ -700,6 +709,7 @@ from search import search
 
 QUERY = "elevator door fault"
 hits = search(QUERY, 4)
+# Rerank takes a reranking-model ARN; the simulator scores with its own hosted embedding model
 out = boto3.client("bedrock-agent-runtime").rerank(
     queries=[{"type": "TEXT", "textQuery": {"text": QUERY}}],
     sources=[{"type": "INLINE", "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": h["content"]["text"]}}} for h in hits],
@@ -825,13 +835,14 @@ print("agent answer passes the output guardrail:", check["action"] == "NONE")
 import boto3
 
 from guardrail import ensure_guardrail
+from models import CHAT_MODEL
 
 ag = boto3.client("bedrock-agent")
 kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
 r = boto3.client("bedrock-agent-runtime").retrieve_and_generate(
     input={"text": "What should I do when boiler pressure exceeds 30 psi?"},
     retrieveAndGenerateConfiguration={"type": "KNOWLEDGE_BASE", "knowledgeBaseConfiguration": {
-        "knowledgeBaseId": kb, "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-haiku-20240307-v1:0",
+        "knowledgeBaseId": kb, "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/" + CHAT_MODEL,
         "generationConfiguration": {"guardrailConfiguration": {"guardrailId": ensure_guardrail(), "guardrailVersion": "DRAFT"}}}})
 print("answer:", r["output"]["text"][:140].replace("\n", " "))
 print("citation blocks:", len(r["citations"]))

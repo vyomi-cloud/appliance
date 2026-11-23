@@ -157,14 +157,14 @@ print("threat flagged:", any(v and v > 0 for v in bad.values()), "| categories:"
    "content_filter.py", '''
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from openai import BadRequestError
-from azlab import arm, aoai, RG, OPENAI_ACCOUNT
+from azlab import arm, aoai, pick_models, RG, OPENAI_ACCOUNT
 
 cs = arm(CognitiveServicesManagementClient)
 filters = [{"name": n, "severityThreshold": "Low", "blocking": True, "enabled": True, "source": s}
            for n in ("Violence", "Hate", "SelfHarm", "Sexual") for s in ("Prompt", "Completion")]
 cs.rai_policies.create_or_update(RG, OPENAI_ACCOUNT, "facilities-guardrail", {"properties": {"mode": "Blocking", "basePolicyName": "Microsoft.Default", "contentFilters": filters}})
 cs.deployments.begin_create_or_update(RG, OPENAI_ACCOUNT, "chat-guarded", {"sku": {"name": "Standard", "capacity": 1}, "properties": {
-    "model": {"format": "OpenAI", "name": "gpt-4o", "version": "2024-11-20"}, "raiPolicyName": "facilities-guardrail"}}).result()
+    "model": pick_models()[0], "raiPolicyName": "facilities-guardrail"}}).result()
 print("policy facilities-guardrail bound to deployment chat-guarded")
 
 try:
@@ -695,7 +695,7 @@ ix = index_client().get_index(INDEX)
 print("fields:", [(f.name, "vector" if f.name == "content_vector" else "text/key") for f in ix.fields])
 print("vector dimensions:", next(f.vector_search_dimensions for f in ix.fields if f.name == "content_vector"))
 print("semantic configurations:", [c.name for c in ix.semantic_search.configurations])
-''', run="python inspect_index.py", expect="vector dimensions: 1536"),
+''', run="python inspect_index.py", expect="vector dimensions:"),
  b("Embed the documents and store the vectors", "Chapter 12's indexer loaded the text (the four SOPs plus the water-leak SOP you uploaded in its last block, five documents in all). Vector search needs one embedding per document: ask your `embed` deployment for the vectors, then `merge_documents` writes them into `content_vector` without touching the rest of the document. Embeddings come from the repo's deterministic test stub, so similarity is crude: real `text-embedding-3` vectors rank far better.",
    "embed_docs.py", '''
 from azure.core.credentials import AzureKeyCredential
@@ -1322,6 +1322,15 @@ def ensure_rg():
     arm(ResourceManagementClient).resource_groups.create_or_update(RG, {"location": LOC})
 
 
+def pick_models():
+    """The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Returns (chat, embedding) as
+    the {format, name, version} a deployment needs. Never hard-code a vendor model."""
+    from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
+    ms = [{"format": m.model.format, "name": m.model.name, "version": m.model.version} for m in arm(CognitiveServicesManagementClient).models.list(LOC) if m.kind == "OpenAI"]
+    emb = [m for m in ms if "embed" in m["name"] or "minilm" in m["name"]]
+    return [m for m in ms if m not in emb][0], emb[0]
+
+
 def aoai(api_version="2024-10-21"):
     from openai import AzureOpenAI
     key = ("aoai", api_version)
@@ -1332,18 +1341,19 @@ def aoai(api_version="2024-10-21"):
  b("Create the Azure OpenAI account and the two deployments", "Azure OpenAI is a resource: an account of kind `OpenAI`, and inside it one *deployment* per model. Your code never names the model, it names the deployment (`chat`, `embed`). Resource group first, then the account, then the deployments, all through the real `azure-mgmt-cognitiveservices` client.",
    "create_openai.py", '''
 from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
-from azlab import arm, ensure_rg, RG, LOC, OPENAI_ACCOUNT, CHAT, EMBED
+from azlab import arm, ensure_rg, pick_models, RG, LOC, OPENAI_ACCOUNT, CHAT, EMBED
 
 ensure_rg()
 cs = arm(CognitiveServicesManagementClient)
 cs.accounts.begin_create(RG, OPENAI_ACCOUNT, {"location": LOC, "kind": "OpenAI", "sku": {"name": "S0"},
                                               "properties": {"customSubDomainName": OPENAI_ACCOUNT}}).result()
-for name, model, version in ((CHAT, "gpt-4o", "2024-11-20"), (EMBED, "text-embedding-3-small", "1")):
+chat_model, embed_model = pick_models()
+for name, model in ((CHAT, chat_model), (EMBED, embed_model)):
     cs.deployments.begin_create_or_update(RG, OPENAI_ACCOUNT, name, {"sku": {"name": "Standard", "capacity": 1},
-        "properties": {"model": {"format": "OpenAI", "name": model, "version": version}}}).result()
+        "properties": {"model": model}}).result()
 print("deployments:", sorted(d.name for d in cs.deployments.list(RG, OPENAI_ACCOUNT)))
 ''', run="python create_openai.py", expect="deployments: ['chat', 'embed']"),
- b("Write the model client", "Every other chapter imports these three functions, so keep the names. The model in this guide is the repo's deterministic test stub, so replies are short and fixed; the calls are identical to what you would send to a real GPT deployment.",
+ b("Write the model client", "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a real GPT deployment.",
    "models.py", '''
 import json
 from azlab import aoai, CHAT, EMBED
@@ -1367,7 +1377,7 @@ def chat_with_tools(prompt, tools):
 def embed(text):
     return aoai().embeddings.create(model=EMBED, input=[text]).data[0].embedding
 '''),
- b("Try chat, a tool call and an embedding", "A chat turn, a tool-calling turn (the model asks for `asset_status`, your code would run it) and an embedding with 1536 numbers. The tool definition is the one the agents use later.",
+ b("Try chat, a tool call and an embedding", "A chat turn, a tool-calling turn (the model asks for `asset_status`, your code would run it) and an embedding (a list of numbers: its length depends on the embedding model your simulator hosts). The tool definition is the one the agents use later.",
    "try_models.py", '''
 from models import chat, chat_with_tools, embed
 
@@ -1379,8 +1389,8 @@ r = chat_with_tools("What is the status of asset B-12?", [TOOL])
 print("tools: finish_reason =", r["finish_reason"], "| tool =", r["tool_use"])
 
 print("embed: vector of", len(embed("boiler pressure limit")), "numbers")
-''', run="python try_models.py", expect="embed: vector of 1536 numbers"),
- b("Streaming, smaller embeddings and an unknown deployment", "`stream=True` returns chunks as they are produced. `dimensions=256` shrinks an embedding (a text-embedding-3 feature). Calling a deployment that does not exist is a 404 `DeploymentNotFound`: the most common first mistake, so see it once.",
+''', run="python try_models.py", expect="embed: vector of"),
+ b("Streaming, smaller embeddings and an unknown deployment", "`stream=True` returns chunks as they are produced. `dimensions=256` shrinks an embedding (ask for a shorter vector). Calling a deployment that does not exist is a 404 `DeploymentNotFound`: the most common first mistake, so see it once.",
    "try_more.py", '''
 from openai import NotFoundError
 from azlab import aoai, CHAT, EMBED
@@ -1553,8 +1563,9 @@ from azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, S
                                                    SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,
                                                    VectorSearch, VectorSearchProfile)
 from azdata import search_endpoint, search_key, INDEX
+from models import embed
 
-DIMS = 1536
+DIMS = len(embed("dimension probe"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)
 
 
 def kb_index():

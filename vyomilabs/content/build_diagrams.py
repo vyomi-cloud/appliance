@@ -283,7 +283,7 @@ def draw(cloud):
     d.arrow([(PANEL[7][2], 300), (PANEL[8][0], 300)], "blue")
 
     # 10 Models
-    x1, y1, x2, y2 = PANEL[10]; d.panel(10, "Foundation Models", t["name"] if False else None)
+    x1, y1, x2, y2 = PANEL[10]; d.panel(10, "Models", t["name"] if False else None)
     for i, nm in enumerate(t["models"]):
         ax = x1 + 14 + i * 226; d.rect(ax, y1 + 54, ax + 216, y1 + 100, COL["purple"] + "77", "#fff", 9, 1.6); d.icon("brain", ax + 12, y1 + 64, 26, COL["purple"]); d.lines(ax + 48, y1 + 82, nm, 160, 13.5, 800, maxl=2)
     d.rect(x1 + 14, y1 + 112, x2 - 14, y1 + 192, COL["purple"] + "77", "#fff", 9, 1.6); d.icon("route", x1 + 24, y1 + 130, 30, COL["purple"]); d.text(x1 + 70, y1 + 130, "Model router", 14, 800)

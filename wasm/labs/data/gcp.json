@@ -14,16 +14,16 @@
   {
    "id": 10,
    "order": 1,
-   "title": "Foundation Models",
+   "title": "Models",
    "short": "Models",
-   "objective": "Call a foundation model from code the way every other layer will: a chat turn, a tool-calling turn and an embedding.",
+   "objective": "Call a model this simulator hosts from code the way every other layer will: a chat turn, a tool-calling turn and an embedding.",
    "learn": [
     "One request shape for chat; tool calling: the model asks, your code runs the tool",
     "Embeddings turn text into vectors for search",
-    "The model catalogue versus the model id your code uses"
+    "The models Vyomi hosts: small open models in your browser on Nano, the Mesh model pool on a Mesh"
    ],
    "services": [
-    "Vertex AI: Gemini generateContent, embedContent"
+    "Vertex AI: generateContent, embedContent"
    ],
    "build": [
     "models.list to see the catalogue; models.get resolves the id your app uses.",
@@ -43,8 +43,8 @@
     "embedContent returns a vector"
    ],
    "simplified": [
-    "Answers come from one small local open model, not Gemini; quality is far lower.",
-    "Standard Gemini model ids resolve as compatibility aliases."
+    "Answers come from the open models Vyomi hosts (small in-browser models on Nano, the Mesh pool on a Mesh); quality is that of those models.",
+    "Your code asks the Model Garden which models exist instead of using a vendor model id."
    ],
    "native": null,
    "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c10_models.py",
@@ -95,7 +95,7 @@
    "lab": [
     {
      "title": "Install the libraries",
-     "text": "Chapter 10 needs the Google Gen AI SDK (which talks to Gemini on Vertex AI) and google-auth. Run this once in a fresh virtual environment (Python 3.11 or newer).",
+     "text": "Chapter 10 needs the Google Gen AI SDK (which talks to the Vertex AI generateContent API) and google-auth. Run this once in a fresh virtual environment (Python 3.11 or newer).",
      "file": "install_10.sh",
      "lang": "bash",
      "code": "pip install google-genai google-auth google-api-core\n",
@@ -115,22 +115,22 @@
     },
     {
      "title": "Write the model client",
-     "text": "Every other layer imports these three functions, so keep the names. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.",
+     "text": "Every other layer imports these three functions, so keep the names. The model ids are not hard-coded: models.py asks the simulator's Model Garden which models it hosts. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.",
      "file": "models.py",
      "lang": "python",
-     "code": "from google.genai import types\n\nimport gcp\n\nCHAT_MODEL = \"gemini-2.0-flash\"\nEMBED_MODEL = \"text-embedding-005\"\n_client = gcp.genai_client()\n\n\ndef chat(prompt, system=None, max_tokens=300):\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt,\n                                        config=types.GenerateContentConfig(system_instruction=system, max_output_tokens=max_tokens, temperature=0))\n    return r.text\n\n\ndef chat_with_tools(prompt, declarations):\n    \"\"\"declarations: a list of types.FunctionDeclaration. Returns the function calls the model asked for (the model never runs them: your code does).\"\"\"\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt, config=types.GenerateContentConfig(\n        tools=[types.Tool(function_declarations=declarations)], automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))\n    return {\"calls\": [{\"name\": c.name, \"args\": dict(c.args)} for c in (r.function_calls or [])], \"text\": r.text if not r.function_calls else \"\"}\n\n\ndef embed(texts):\n    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts)\n    return [e.values for e in r.embeddings]\n",
+     "code": "from google.genai import types\n\nimport gcp\n\ndef _pick():\n    \"\"\"The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask its Model Garden, never hard-code a vendor id.\"\"\"\n    r = gcp.authed_session().get(gcp.ENDPOINT + \"/v1beta1/publishers\")\n    r.raise_for_status()\n    ids = [m[\"name\"].split(\"/\")[-1] for m in r.json()[\"publisherModels\"]]\n    emb = [i for i in ids if \"embed\" in i or \"minilm\" in i]\n    return [i for i in ids if i not in emb][0], emb[0]\n\n\nCHAT_MODEL, EMBED_MODEL = _pick()\n_client = gcp.genai_client()\n\n\ndef chat(prompt, system=None, max_tokens=300):\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt,\n                                        config=types.GenerateContentConfig(system_instruction=system, max_output_tokens=max_tokens, temperature=0))\n    return r.text\n\n\ndef chat_with_tools(prompt, declarations):\n    \"\"\"declarations: a list of types.FunctionDeclaration. Returns the function calls the model asked for (the model never runs them: your code does).\"\"\"\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt, config=types.GenerateContentConfig(\n        tools=[types.Tool(function_declarations=declarations)], automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))\n    return {\"calls\": [{\"name\": c.name, \"args\": dict(c.args)} for c in (r.function_calls or [])], \"text\": r.text if not r.function_calls else \"\"}\n\n\ndef embed(texts):\n    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts)\n    return [e.values for e in r.embeddings]\n",
      "run": null,
      "expect": null,
      "needs_runtime": false
     },
     {
      "title": "Try all three calls",
-     "text": "A chat call, a tool-calling call and an embedding. In this verification the model behind generateContent is the Vyomi deterministic test stub, so the chat reply is a fixed rule-based answer, not real Gemini; the SDK calls, the request shapes and the tool-calling flow are exactly what you would write against real Vertex AI.",
+     "text": "A chat call, a tool-calling call and an embedding. The model behind generateContent is one the simulator hosts (a small open model in your browser on Nano, the Mesh model pool on a Mesh), so answers are those of a small open model; the SDK calls, the request shapes and the tool-calling flow are exactly what you would write against real Vertex AI.",
      "file": "try_models.py",
      "lang": "python",
      "code": "from google.genai import types\n\nfrom models import chat, chat_with_tools, embed\n\nprint(\"chat:\", chat(\"Reply with the single word OK.\"))\n\nASSET_STATUS = types.FunctionDeclaration(\n    name=\"asset_status\", description=\"status of an asset by id\",\n    parameters=types.Schema(type=\"OBJECT\", properties={\"asset_id\": types.Schema(type=\"STRING\")}, required=[\"asset_id\"]))\nr = chat_with_tools(\"What is the status of asset B-12?\", [ASSET_STATUS])\nprint(\"tools: the model asked for\", r[\"calls\"])\n\nv = embed([\"boiler pressure limit\", \"boiler pressure maximum\", \"elevator contract renewal\"])\ncos = lambda a, b: sum(x * y for x, y in zip(a, b)) / ((sum(x * x for x in a) ** .5) * (sum(y * y for y in b) ** .5))\nprint(\"embed: vectors of\", len(v[0]), \"numbers; paraphrase %.2f, unrelated %.2f\" % (cos(v[0], v[1]), cos(v[0], v[2])))\n",
      "run": "python try_models.py",
-     "expect": "embed: vectors of 768 numbers",
+     "expect": "embed: vectors of",
      "needs_runtime": false
     }
    ],
@@ -139,11 +139,6 @@
      "id": "vertex-ai",
      "title": "Vertex AI",
      "f": "vertex-ai.json"
-    },
-    {
-     "id": "gemini",
-     "title": "Gemini Developer API",
-     "f": "gemini.json"
     }
    ],
    "ops": [
@@ -162,14 +157,6 @@
     {
      "f": "vertex-ai.json",
      "n": "aiplatform.projects.locations.customJobs.list"
-    },
-    {
-     "f": "gemini.json",
-     "n": "models.list"
-    },
-    {
-     "f": "gemini.json",
-     "n": "models.get"
     }
    ],
    "validate": [
@@ -1235,11 +1222,11 @@
      "needs_runtime": false
     },
     {
-     "title": "Ask Gemini to ground itself on the corpus",
+     "title": "Ask the model to ground itself on the corpus",
      "text": "Vertex AI can also ground generateContent directly on the RAG corpus, with no retrieval code of your own: add a Retrieval tool pointing at the corpus. The response carries groundingMetadata listing the chunks it used.",
      "file": "grounded_generate.py",
      "lang": "python",
-     "code": "from google.genai import types\n\nimport gcp\nimport rag\n\ncorpus = rag.corpus_name()\ntool = types.Tool(retrieval=types.Retrieval(vertex_rag_store=types.VertexRagStore(\n    rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=2)))\nclient = gcp.genai_client()          # keep a reference: a garbage-collected genai client closes its HTTP session\nr = client.models.generate_content(model=\"gemini-2.0-flash\", contents=\"What should I do when boiler pressure exceeds 30 psi?\",\n                                   config=types.GenerateContentConfig(tools=[tool]))\nmeta = r.candidates[0].grounding_metadata\nchunks = meta.grounding_chunks or []\nprint(\"grounding chunks:\", len(chunks))\nassert chunks and r.text\nprint(\"generateContent grounded on the RAG corpus\")\n",
+     "code": "from google.genai import types\n\nimport gcp\nimport rag\n\ncorpus = rag.corpus_name()\ntool = types.Tool(retrieval=types.Retrieval(vertex_rag_store=types.VertexRagStore(\n    rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=2)))\nfrom models import CHAT_MODEL\nclient = gcp.genai_client()          # keep a reference: a garbage-collected genai client closes its HTTP session\nr = client.models.generate_content(model=CHAT_MODEL, contents=\"What should I do when boiler pressure exceeds 30 psi?\",\n                                   config=types.GenerateContentConfig(tools=[tool]))\nmeta = r.candidates[0].grounding_metadata\nchunks = meta.grounding_chunks or []\nprint(\"grounding chunks:\", len(chunks))\nassert chunks and r.text\nprint(\"generateContent grounded on the RAG corpus\")\n",
      "run": "python grounded_generate.py",
      "expect": "generateContent grounded on the RAG corpus",
      "needs_runtime": false
