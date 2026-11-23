@@ -10,6 +10,8 @@ import os
 from typing import Any, Callable
 from urllib.parse import parse_qsl, urlsplit
 
+AWS_SERVICES = ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager", "dynamodb", "sqs", "sns", "events", "kms", "stepfunctions", "ecr", "cloudwatch", "backup")  # every service the exporter reads; also the botocore models Nano ships (wasm/build_botocore_lite.py KEEP)
+
 Transport = Callable[[str, str, dict, dict, bytes], "tuple[int, dict, bytes]"]
 
 
@@ -89,7 +91,7 @@ class WireClient:
         return parsed
 
 
-def make_clients(transport: Transport, region: str, models_dir: str | None = None, names=("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager"), endpoint: str = "http://nano.local") -> dict[str, WireClient]:
+def make_clients(transport: Transport, region: str, models_dir: str | None = None, names=AWS_SERVICES, endpoint: str = "http://nano.local") -> dict[str, WireClient]:
     models_dir = models_dir or os.environ.get("VYOMI_BOTOCORE_DATA", "")
     return {n: WireClient(n, transport, region, models_dir, endpoint) for n in names}
 

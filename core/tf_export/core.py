@@ -75,11 +75,36 @@ class Ctx:
     def skip(self, rtype: str, ident: str, why: str) -> None:
         self.skipped.append({"type": rtype, "id": ident, "why": why})
 
+    def arn_exprs(self) -> dict[str, "hcl.Ref"]:
+        """Every exported resource whose identity is an ARN -> a reference to its ``arn`` attribute."""
+        out: dict[str, hcl.Ref] = {}
+        for (rtype, ident), address in sorted(self.addr.items()):
+            if ident.startswith("arn:") and rtype not in _NO_ARN_ATTR and ident not in out:
+                out[ident] = hcl.Ref(f"{address}.arn")
+        return out
+
+    def refify(self, v, own: str = ""):
+        """Replace string values that are exactly the ARN of an exported resource with a reference to it (policies, state machines, alarms).
+        ``own`` is the ARN of the resource being written: it stays literal, since a resource cannot reference itself."""
+        arns = {a: r for a, r in self.arn_exprs().items() if a != own}
+
+        def walk(x):
+            if isinstance(x, str):
+                return arns.get(x, x)
+            if isinstance(x, dict):
+                return {k: walk(y) for k, y in x.items()}
+            if isinstance(x, (list, tuple)):
+                return [walk(y) for y in x]
+            return x
+        return walk(v)
+
     def variable(self, name: str, value: Any, description: str = "", sensitive: bool = True) -> hcl.Ref:
         self.variables[name] = {"description": description, "sensitive": sensitive}
         self.tfvars[name] = value
         return hcl.Ref(f"var.{name}")
 
+
+_NO_ARN_ATTR = {"aws_secretsmanager_secret_version", "aws_iam_role_policy_attachment"}
 
 Exporter = Callable[[Ctx], None]
 _REGISTRY: list[tuple[int, str, Exporter]] = []
@@ -94,6 +119,26 @@ def exporter(order: int, name: str):
 
 def registered() -> list[tuple[int, str, Exporter]]:
     return sorted(_REGISTRY, key=lambda t: t[0])
+
+
+def paged(fn, key: str, token_in: str = "NextToken", token_out: str = "NextToken", **kw) -> list:
+    """Collect every page of a list/describe call that has no botocore paginator."""
+    out: list = []
+    tok = None
+    while True:
+        r = fn(**kw, **({token_in: tok} if tok else {}))
+        out += r.get(key, [])
+        tok = r.get(token_out)
+        if not tok:
+            return out
+
+
+def attempt(fn, *a, **kw):
+    """The call's result, or None when the configuration does not exist on this resource."""
+    try:
+        return fn(*a, **kw)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def tags_of(items) -> dict[str, str]:
@@ -132,7 +177,8 @@ def _interpolate_blocks(blocks, interp):
             for b in blocks]
 
 
-_SET_ATTRS = {"subnet_ids", "vpc_security_group_ids", "security_groups", "depends_on", "cidr_blocks", "ipv6_cidr_blocks"}
+_SET_ATTRS = {"subnet_ids", "vpc_security_group_ids", "security_groups", "depends_on", "cidr_blocks", "ipv6_cidr_blocks",
+              "resources", "not_resources", "alarm_actions", "ok_actions", "insufficient_data_actions", "non_key_attributes"}
 
 
 def _sorted_sets(attrs: dict) -> dict:
