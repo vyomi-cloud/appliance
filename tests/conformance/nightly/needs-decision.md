@@ -158,3 +158,10 @@ Tunnel check (6): NOT RUN, no Codespace leg. Checks 2-5: only the existing suite
 - DECISION: nano-cores is red only for tests of modules outside the Nano vendor list (`sns_delivery`, `mesh_selfcheck`, `k3s_runtime`) and uvicorn-needing GCP/identity cores. Either vendor them (trunk-owned list) or make `nano-cores` skip tests that import non-vendored modules. Shared, not changed.
 - NOT REPRODUCED: offline-sdk-{go,java}-aws-sns email delivery (green on re-run; baseline suite ran while the 30-entry delivery log was shared).
 - ENV: offline-ui-* / nano UI suites need Playwright + fastapi (absent on this runner); the runner exports `AWS_REGION` in a form the CLI rejects (offline-cli-aws is green with `AWS_REGION=us-east-1`).
+
+## GCP nightly 2026-11-23 (nightly/gcp-2026-11-23)
+- FIXED (product): offline `/gcf/{project}/{location}/{function}` answered 422 `query.request Field required` for every call (unresolved `request: Request` annotation under `from __future__ import annotations` in core/gcp_eventing.py), so the API Gateway data plane could never reach its function backend. Test `test_gcp_gcf_trigger_url_api.py` (suite `offline-api-gcp-gcf-trigger-url`), fails before, passes after.
+- FIXED (harness): post_create event_delivery probe read the Eventarc create LRO's `name` as the trigger name; real Eventarc returns an operation, the trigger is its `response.name`/`metadata.target`. Delivery itself was already green.
+- NOT REPRODUCED: offline-api-gcp-vault-console-secrets (green on re-run).
+- ENV: the appliance image on this runner serves no console (`/console/gcp` is 404; `static/` holds only swagger, the v4 consoles are built by `consoles/build.mjs` and are not in the image), so every offline-ui-gcp-* Playwright suite times out waiting for the rail. DECISION: build/bake the v4 console into the CI image (shared, `.github`/packaging, not touched) or point those suites at the v4 console.
+- Checks 2-5 (UI actions, validation, bidi, crawl): only existing suites ran; crawl-gcp-ui, validation-gcp-ui, bidi-gcp-* remain `pending`. Check 6 (tunnel): NOT RUN, no Codespace leg.

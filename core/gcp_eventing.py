@@ -90,6 +90,10 @@ def register(app) -> None:
         hdrs = {k: v for k, v in hdrs.items() if k.lower() != "content-type"}
         return Response(content=out.get("body", b""), status_code=int(out.get("status", 200)), headers=hdrs, media_type=ct)
 
+    # `from __future__ import annotations` leaves `request: Request` a string that FastAPI resolves against module globals, where
+    # Request is only a local import: it then read `request` as a required query parameter (every /gcf call answered 422).
+    _gcf.__annotations__["request"] = Request
+
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
     app.add_api_route("/gcf/{project}/{location}/{function}", _gcf, methods=methods, include_in_schema=False)
     app.add_api_route("/gcf/{project}/{location}/{function}/{rest:path}", _gcf, methods=methods, include_in_schema=False)
