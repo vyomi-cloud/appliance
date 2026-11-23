@@ -1,15 +1,25 @@
 {
- "at": "2026-11-23T21:18:14+00:00",
+ "at": "2026-11-23T22:18:13+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "sdk",
-   "service": "cli:aws",
+   "service": "pypi:boto3",
    "kind": "release",
-   "key": "ver:cli:aws:2.42.2",
-   "title": "cli:aws: 2.42.1 \u2192 2.42.2",
+   "key": "ver:pypi:boto3:1.44.10",
+   "title": "pypi:boto3: 1.44.9 \u2192 1.44.10",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "pypi:botocore",
+   "kind": "release",
+   "key": "ver:pypi:botocore:1.44.10",
+   "title": "pypi:botocore: 1.44.9 \u2192 1.44.10",
    "actionable": false
   }
  ],
- "errors": []
+ "errors": [
+  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
+ ]
 }
