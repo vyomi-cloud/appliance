@@ -72,7 +72,7 @@ function ExportTab() {
           {!graph && !err && <Box color="text-status-inactive">Reading your stack...</Box>}
         </SpaceBetween>
       </Container>
-      <ColumnLayout columns={3}>
+      <ColumnLayout columns={2}>
         <Container header={<Header variant="h3">Selected</Header>}>
           {node ? (
             <SpaceBetween size="xs">
@@ -86,10 +86,15 @@ function ExportTab() {
         <Container header={<Header variant="h3">Unavailable in Vyomi</Header>}>
           {gaps.length ? gaps.map(([t, v]) => <Box key={t} variant="small"><b>{t}</b> <span style={{ color: COL[v.status] }}>({v.status.replace("_", " ")})</span><br />{v.reason}</Box>) : <Box color="text-status-inactive">None.</Box>}
         </Container>
-        <Container header={<Header variant="h3">Before you apply on real AWS</Header>}>
-          {bundle ? (bundle.portability || []).map((p, i) => <Box key={i} variant="small"><b style={{ color: p.severity === "error" ? "#d13212" : p.severity === "warn" ? "#b7791f" : undefined }}>{p.severity}</b> {p.message}{p.resource ? <><br /><span style={{ color: "#5f6b7a" }}>{p.resource}</span></> : null}</Box>) : <Box color="text-status-inactive">-</Box>}
-        </Container>
       </ColumnLayout>
+      <Container header={<Header variant="h2" description="Notes from the exporter about moving this stack to a real AWS account.">Before you apply on real AWS</Header>}>
+        {bundle ? (() => { const all = bundle.portability || [], warns = all.filter((p) => p.severity !== "info"), infos = all.filter((p) => p.severity === "info");
+          const item = (p, i) => <Box key={i} variant="small"><b>{p.message}</b>{p.resource ? <><br /><span style={{ color: "#5f6b7a" }}>{p.resource}</span></> : null}</Box>;
+          return <ColumnLayout columns={2}>
+            <Alert type={warns.some((p) => p.severity === "error") ? "error" : "warning"} header={`Warnings (${warns.length})`}><SpaceBetween size="xs">{warns.length ? warns.map(item) : "None."}</SpaceBetween></Alert>
+            <Alert type="info" header={`Info (${infos.length})`}><SpaceBetween size="xs">{infos.length ? infos.map(item) : "None."}</SpaceBetween></Alert>
+          </ColumnLayout>; })() : <Box color="text-status-inactive">-</Box>}
+      </Container>
       <Container header={<Header variant="h2" actions={<SpaceBetween direction="horizontal" size="xs">
         <Select selectedOption={file ? { value: file, label: file } : null} onChange={({ detail }) => setFile(detail.selectedOption.value)} options={files.map((f) => ({ value: f, label: f }))} placeholder="File" ariaLabel="Terraform file" />
         <Button variant="primary" iconName="download" disabled={!bundle} onClick={() => api.downloadZip(mode.value)}>Download .zip</Button></SpaceBetween>}>Terraform files</Header>}>
