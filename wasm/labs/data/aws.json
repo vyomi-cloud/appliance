@@ -62,7 +62,32 @@
    "minutes": 25,
    "outcome": "A model client any layer can import: chat, tool calling and embeddings",
    "lessons": 5,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "The model layer is how every other layer talks to a large language model: one chat call, one tool-calling call and one embedding call. You write it once and every layer imports it.",
+   "why": [
+    "Swap or upgrade models without touching agent code",
+    "One place for model ids, token limits and fallbacks",
+    "Cost and quality decisions live here instead of being scattered across services"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The model catalogue is reachable",
+     "how": "aws bedrock list-foundation-models --query 'modelSummaries[].modelId'",
+     "expect": "A list of model ids"
+    },
+    {
+     "kind": "CLI",
+     "what": "A chat call answers",
+     "how": "aws bedrock-runtime converse --model-id <chat-model-id> --messages '[{\"role\":\"user\",\"content\":[{\"text\":\"Reply with OK\"}]}]'",
+     "expect": "output.message with text, and a usage block with token counts"
+    }
+   ]
   },
   {
    "id": 3,
@@ -117,7 +142,32 @@
    "minutes": 40,
    "outcome": "A supervisor agent and three sub-agents answering in isolated sessions",
    "lessons": 5,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "The runtime hosts the supervisor agent and its sub-agents and keeps every user session isolated: separate state, budgets and timeouts per session.",
+   "why": [
+    "Isolation stops one user's session from leaking into another's",
+    "Budgets, timeouts and a kill switch contain runaway agents and runaway cost",
+    "A managed host gives you deployments, versions and rollback"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The runtime exists and is ready",
+     "how": "aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id <runtime-id>",
+     "expect": "status READY, name facilities-supervisor"
+    },
+    {
+     "kind": "Console",
+     "what": "See it in the Vyomi console",
+     "how": "Bedrock AgentCore, Runtime, facilities-supervisor",
+     "expect": "Status Ready"
+    }
+   ]
   },
   {
    "id": 7,
@@ -173,7 +223,32 @@
    "minutes": 35,
    "outcome": "Read-only and approval-gated tools your agents can call",
    "lessons": 5,
-   "color": "#0f766e"
+   "color": "#0f766e",
+   "about": "Tools are the functions the agents may call: read-only lookups and write operations. Each one has a narrow contract, validates its input and never trusts its caller.",
+   "why": [
+    "An agent is only as safe as the tools you hand it",
+    "Narrow, typed tools make behaviour testable and auditable",
+    "Separating read from write is what makes approval gates possible"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The four tools are deployed",
+     "how": "aws lambda list-functions --query 'Functions[].FunctionName'",
+     "expect": "kb-search, asset-status, request-approval, create-work-order"
+    },
+    {
+     "kind": "CLI",
+     "what": "A read-only tool returns data",
+     "how": "aws lambda invoke --function-name asset-status --cli-binary-format raw-in-base64-out --payload '{\"asset_id\":\"AHU-1\"}' out.json && cat out.json",
+     "expect": "A JSON status for a seeded asset"
+    }
+   ]
   },
   {
    "id": 12,
@@ -230,7 +305,32 @@
    "minutes": 40,
    "outcome": "Documents flowing into a searchable knowledge base, re-indexed on every upload",
    "lessons": 5,
-   "color": "#15803d"
+   "color": "#15803d",
+   "about": "The pipeline turns documents such as SOPs and manuals into searchable knowledge: store, extract, chunk, embed, index, and re-index automatically when a document changes.",
+   "why": [
+    "Answers are only as current as the index",
+    "Event-driven ingestion removes manual re-indexing and stale answers",
+    "Scanning documents before indexing keeps sensitive or malicious content out"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "Documents are stored",
+     "how": "aws s3 ls s3://facilities-docs/ --recursive",
+     "expect": "The SOPs and manuals you uploaded"
+    },
+    {
+     "kind": "CLI",
+     "what": "Ingestion finished",
+     "how": "aws bedrock-agent list-ingestion-jobs --knowledge-base-id <kb-id> --data-source-id <ds-id> --query 'ingestionJobSummaries[0].status'",
+     "expect": "COMPLETE"
+    }
+   ]
   },
   {
    "id": 6,
@@ -282,7 +382,26 @@
    "minutes": 30,
    "outcome": "Ranked retrieval that keeps the source of every passage",
    "lessons": 4,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "Retrieval finds the passages that answer a question and ranks them, keeping the source of each one so the answer can cite it.",
+   "why": [
+    "Grounding answers in your own documents reduces hallucination",
+    "Access-aware search keeps users from seeing what they must not",
+    "Ranked, sourced results make every answer verifiable"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "Retrieval ranks the right document first",
+     "how": "aws bedrock-agent-runtime retrieve --knowledge-base-id <kb-id> --retrieval-query text='boiler pressure above 30 psi'",
+     "expect": "The boiler SOP is the first result, with its source location"
+    }
+   ]
   },
   {
    "id": 11,
@@ -338,7 +457,26 @@
    "minutes": 30,
    "outcome": "Grounded answers with citations and sensitive data masked",
    "lessons": 4,
-   "color": "#0f766e"
+   "color": "#0f766e",
+   "about": "Response generation writes the final answer from the retrieved text, with citations, and filters sensitive data out before the user sees it.",
+   "why": [
+    "Citations let users and auditors verify an answer",
+    "Output filters stop personal data and policy violations leaving the system",
+    "Grounding limits the model to approved knowledge"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "Personal data is masked on output",
+     "how": "aws bedrock-runtime apply-guardrail --guardrail-identifier <id> --guardrail-version DRAFT --source OUTPUT --content '[{\"text\":{\"text\":\"Contact jane@corp.com\"}}]'",
+     "expect": "The email address is anonymised in the returned output"
+    }
+   ]
   },
   {
    "id": 9,
@@ -390,7 +528,26 @@
    "minutes": 25,
    "outcome": "Short-term session memory and retrievable long-term facts",
    "lessons": 4,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "Memory gives the agent continuity: short-term events inside a session and long-term facts that persist across sessions.",
+   "why": [
+    "Users should not have to repeat themselves",
+    "Scoping by user and tenant prevents leakage between people",
+    "Retention and deletion rules are a compliance requirement"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "A session can be replayed",
+     "how": "aws bedrock-agentcore list-events --memory-id <memory-id> --actor-id <user> --session-id <session>",
+     "expect": "Your user turn and the assistant turn, in order"
+    }
+   ]
   },
   {
    "id": 4,
@@ -444,7 +601,32 @@
    "minutes": 40,
    "outcome": "One governed gateway with a tool catalogue and a read-only policy",
    "lessons": 4,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "The gateway is the single governed door to the tools: a catalogue of what exists, a policy check on every call, and throttling and audit.",
+   "why": [
+    "One enforcement point instead of ad hoc checks in every tool",
+    "Policies use the real user's identity and role",
+    "Central audit and rate limits protect the systems behind the tools"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The gateway is ready",
+     "how": "aws bedrock-agentcore-control list-gateways",
+     "expect": "facilities-gateway with status READY"
+    },
+    {
+     "kind": "Console",
+     "what": "The tools are listed",
+     "how": "Bedrock AgentCore, Gateway, facilities-gateway, Targets",
+     "expect": "Your Lambda tools as a target"
+    }
+   ]
   },
   {
    "id": 5,
@@ -507,7 +689,32 @@
    "minutes": 50,
    "outcome": "Writes that wait for a human, with a ledger of every decision",
    "lessons": 5,
-   "color": "#dc2626"
+   "color": "#dc2626",
+   "about": "Write actions are parked until a human approves. The workflow keeps durable state, records every decision, and executes only after approval.",
+   "why": [
+    "Irreversible or costly actions need an accountable human",
+    "The decision ledger is the audit record regulators ask for",
+    "Idempotency and rollback make retries and mistakes safe"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "A request is parked, not executed",
+     "how": "aws stepfunctions list-executions --state-machine-arn <arn> --status-filter RUNNING",
+     "expect": "One RUNNING execution waiting for approval"
+    },
+    {
+     "kind": "CLI",
+     "what": "The ledger shows the decision",
+     "how": "aws dynamodb scan --table-name approval-ledger",
+     "expect": "A row with status PENDING, then APPROVED or REJECTED after the decision"
+    }
+   ]
   },
   {
    "id": 1,
@@ -562,7 +769,32 @@
    "minutes": 35,
    "outcome": "Sign-in, a verified token and a protected API edge",
    "lessons": 4,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "Access verifies who the user is, carries that identity to every layer, and puts a protected edge in front of the tools.",
+   "why": [
+    "Every tool call should be made on behalf of a known user",
+    "Edge protection and rate limits blunt abuse and cost attacks",
+    "Standard identity providers plug into enterprise single sign-on"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The user pool exists",
+     "how": "aws cognito-idp list-user-pools --max-results 10",
+     "expect": "facilities-users"
+    },
+    {
+     "kind": "CLI",
+     "what": "A rate-based WAF rule is in place",
+     "how": "aws wafv2 list-web-acls --scope REGIONAL",
+     "expect": "Your web ACL"
+    }
+   ]
   },
   {
    "id": 2,
@@ -618,7 +850,26 @@
    "minutes": 30,
    "outcome": "Input guardrails and an approver inbox",
    "lessons": 4,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "Channels are how people reach the agent. Input guardrails screen what comes in, and an approver inbox tells people what is waiting for them.",
+   "why": [
+    "Prompt injection and abusive input are screened before they reach the agent",
+    "Approvers need one reliable place to see pending requests",
+    "Every channel shares the same controls"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The inbox receives requests",
+     "how": "aws sqs receive-message --queue-url <approver-inbox-queue-url>",
+     "expect": "The approval request that was published to the topic"
+    }
+   ]
   },
   {
    "id": 8,
@@ -670,7 +921,32 @@
    "minutes": 35,
    "outcome": "Traces, metrics and logs you can read back",
    "lessons": 5,
-   "color": "#ea580c"
+   "color": "#ea580c",
+   "about": "AgentOps lets you see what the agent did: a trace per step, metrics for KPIs and structured logs tied to the trace.",
+   "why": [
+    "You cannot fix or trust what you cannot see",
+    "A trace ties a bad answer to the exact tool call that caused it",
+    "Metrics feed evaluation, service levels and cost control"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "Logs carry the trace id",
+     "how": "aws logs filter-log-events --log-group-name <log-group> --filter-pattern <trace-id>",
+     "expect": "Structured log lines for the run"
+    },
+    {
+     "kind": "CLI",
+     "what": "KPIs are published",
+     "how": "aws cloudwatch list-metrics --namespace <your-namespace>",
+     "expect": "Your agent metrics"
+    }
+   ]
   },
   {
    "id": 13,
@@ -722,7 +998,32 @@
    "minutes": 30,
    "outcome": "Encrypted records and an audit trail of the run",
    "lessons": 4,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "Governance protects and audits the whole application: encryption of sensitive records and an audit trail of who did what.",
+   "why": [
+    "Regulated data needs encryption with managed keys",
+    "Audit trails answer who approved what, and when",
+    "Controls apply across every layer, not one at a time"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The key rotates",
+     "how": "aws kms list-aliases",
+     "expect": "Your alias; then aws kms get-key-rotation-status shows enabled"
+    },
+    {
+     "kind": "CLI",
+     "what": "The run is in the audit trail",
+     "how": "aws cloudtrail lookup-events --max-results 5",
+     "expect": "Recent events including StartExecution and SendTaskSuccess"
+    }
+   ]
   }
  ]
 }

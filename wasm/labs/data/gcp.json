@@ -62,7 +62,32 @@
    "minutes": 25,
    "outcome": "A model client any layer can import: chat, tool calling and embeddings",
    "lessons": 5,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "The model layer is how every other layer talks to a large language model: one chat call, one tool-calling call and one embedding call. You write it once and every layer imports it.",
+   "why": [
+    "Swap or upgrade models without touching agent code",
+    "One place for model ids, token limits and fallbacks",
+    "Cost and quality decisions live here instead of being scattered across services"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "SDK",
+     "what": "A chat call answers",
+     "how": "client.models.generate_content(model=MODEL_ID, contents='Reply with OK').text",
+     "expect": "OK, plus usage metadata"
+    },
+    {
+     "kind": "SDK",
+     "what": "An embedding comes back",
+     "how": "client.models.embed_content(model='text-embedding-005', contents='boiler pressure')",
+     "expect": "A vector of numbers"
+    }
+   ]
   },
   {
    "id": 3,
@@ -116,7 +141,32 @@
    "minutes": 40,
    "outcome": "A supervisor agent and three sub-agents answering in isolated sessions",
    "lessons": 4,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "The runtime hosts the supervisor agent and its sub-agents and keeps every user session isolated: separate state, budgets and timeouts per session.",
+   "why": [
+    "Isolation stops one user's session from leaking into another's",
+    "Budgets, timeouts and a kill switch contain runaway agents and runaway cost",
+    "A managed host gives you deployments, versions and rollback"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "Console",
+     "what": "The agent engine is active",
+     "how": "Vertex AI, Agent Engine, facilities_supervisor",
+     "expect": "Status Active"
+    },
+    {
+     "kind": "SDK",
+     "what": "It answers a question",
+     "how": "remote_agent.query(user_id='u1', message='Status of AHU-1?')",
+     "expect": "An answer produced by the supervisor and its sub-agents"
+    }
+   ]
   },
   {
    "id": 7,
@@ -171,7 +221,32 @@
    "minutes": 35,
    "outcome": "Read-only and approval-gated tools your agents can call",
    "lessons": 4,
-   "color": "#0f766e"
+   "color": "#0f766e",
+   "about": "Tools are the functions the agents may call: read-only lookups and write operations. Each one has a narrow contract, validates its input and never trusts its caller.",
+   "why": [
+    "An agent is only as safe as the tools you hand it",
+    "Narrow, typed tools make behaviour testable and auditable",
+    "Separating read from write is what makes approval gates possible"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The five functions are deployed",
+     "how": "gcloud functions list --gen2 --region=us-central1",
+     "expect": "kb-search, asset-status, the MCP tool server, approval-decision, create-work-order"
+    },
+    {
+     "kind": "Console",
+     "what": "Seed data is present",
+     "how": "Firestore, Data, assets",
+     "expect": "Your seeded assets"
+    }
+   ]
   },
   {
    "id": 12,
@@ -230,7 +305,32 @@
    "minutes": 40,
    "outcome": "Documents flowing into a searchable knowledge base, re-indexed on every upload",
    "lessons": 5,
-   "color": "#15803d"
+   "color": "#15803d",
+   "about": "The pipeline turns documents such as SOPs and manuals into searchable knowledge: store, extract, chunk, embed, index, and re-index automatically when a document changes.",
+   "why": [
+    "Answers are only as current as the index",
+    "Event-driven ingestion removes manual re-indexing and stale answers",
+    "Scanning documents before indexing keeps sensitive or malicious content out"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "Documents are stored",
+     "how": "gcloud storage ls gs://facilities-docs/docs/",
+     "expect": "The SOPs and manuals"
+    },
+    {
+     "kind": "Console",
+     "what": "The corpus is filled",
+     "how": "Vertex AI, RAG Engine, facilities-kb, Files",
+     "expect": "Your imported files"
+    }
+   ]
   },
   {
    "id": 6,
@@ -283,7 +383,26 @@
    "minutes": 30,
    "outcome": "Ranked retrieval that keeps the source of every passage",
    "lessons": 4,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "Retrieval finds the passages that answer a question and ranks them, keeping the source of each one so the answer can cite it.",
+   "why": [
+    "Grounding answers in your own documents reduces hallucination",
+    "Access-aware search keeps users from seeing what they must not",
+    "Ranked, sourced results make every answer verifiable"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "SDK",
+     "what": "Retrieval ranks the right document first",
+     "how": "rag.retrieval_query(rag_resources=[...], text='boiler pressure above 30 psi', rag_retrieval_config=...)",
+     "expect": "The boiler SOP first, with its source URI"
+    }
+   ]
   },
   {
    "id": 11,
@@ -339,7 +458,26 @@
    "minutes": 30,
    "outcome": "Grounded answers with citations and sensitive data masked",
    "lessons": 4,
-   "color": "#0f766e"
+   "color": "#0f766e",
+   "about": "Response generation writes the final answer from the retrieved text, with citations, and filters sensitive data out before the user sees it.",
+   "why": [
+    "Citations let users and auditors verify an answer",
+    "Output filters stop personal data and policy violations leaving the system",
+    "Grounding limits the model to approved knowledge"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "SDK",
+     "what": "Sensitive data is flagged on output",
+     "how": "model_armor.sanitize_model_response(name=TEMPLATE, model_response_data=...)",
+     "expect": "A filter match for the planted sensitive data"
+    }
+   ]
   },
   {
    "id": 9,
@@ -393,7 +531,26 @@
    "minutes": 25,
    "outcome": "Short-term session memory and retrievable long-term facts",
    "lessons": 5,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "Memory gives the agent continuity: short-term events inside a session and long-term facts that persist across sessions.",
+   "why": [
+    "Users should not have to repeat themselves",
+    "Scoping by user and tenant prevents leakage between people",
+    "Retention and deletion rules are a compliance requirement"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "Console",
+     "what": "Sessions and facts are stored",
+     "how": "Vertex AI, Agent Engine, facilities_memory, Sessions",
+     "expect": "Your session events; a fact retrievable by similarity"
+    }
+   ]
   },
   {
    "id": 4,
@@ -450,7 +607,32 @@
    "minutes": 40,
    "outcome": "One governed gateway with a tool catalogue and a read-only policy",
    "lessons": 4,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "The gateway is the single governed door to the tools: a catalogue of what exists, a policy check on every call, and throttling and audit.",
+   "why": [
+    "One enforcement point instead of ad hoc checks in every tool",
+    "Policies use the real user's identity and role",
+    "Central audit and rate limits protect the systems behind the tools"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "Console",
+     "what": "The gateway is active",
+     "how": "Agent Platform, Gateways, facilities-gateway",
+     "expect": "Status Active with the MCP server attached"
+    },
+    {
+     "kind": "SDK",
+     "what": "Tools are listed over MCP",
+     "how": "POST tools/list to the gateway",
+     "expect": "Your tools"
+    }
+   ]
   },
   {
    "id": 5,
@@ -509,7 +691,32 @@
    "minutes": 50,
    "outcome": "Writes that wait for a human, with a ledger of every decision",
    "lessons": 5,
-   "color": "#dc2626"
+   "color": "#dc2626",
+   "about": "Write actions are parked until a human approves. The workflow keeps durable state, records every decision, and executes only after approval.",
+   "why": [
+    "Irreversible or costly actions need an accountable human",
+    "The decision ledger is the audit record regulators ask for",
+    "Idempotency and rollback make retries and mistakes safe"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "A request is waiting for the approver",
+     "how": "gcloud pubsub subscriptions pull approver-inbox --limit=1",
+     "expect": "The approval request message"
+    },
+    {
+     "kind": "Console",
+     "what": "The ledger shows the decision",
+     "how": "Firestore, Data, approval-ledger",
+     "expect": "PENDING, then APPROVED or REJECTED"
+    }
+   ]
   },
   {
    "id": 1,
@@ -567,7 +774,32 @@
    "minutes": 35,
    "outcome": "Sign-in, a verified token and a protected API edge",
    "lessons": 5,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "Access verifies who the user is, carries that identity to every layer, and puts a protected edge in front of the tools.",
+   "why": [
+    "Every tool call should be made on behalf of a known user",
+    "Edge protection and rate limits blunt abuse and cost attacks",
+    "Standard identity providers plug into enterprise single sign-on"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The WAF policy exists",
+     "how": "gcloud compute security-policies list",
+     "expect": "Your Cloud Armor policy"
+    },
+    {
+     "kind": "CLI",
+     "what": "The gateway is deployed",
+     "how": "gcloud api-gateway gateways list --location=us-central1",
+     "expect": "facilities-api-gw"
+    }
+   ]
   },
   {
    "id": 2,
@@ -620,7 +852,26 @@
    "minutes": 30,
    "outcome": "Input guardrails and an approver inbox",
    "lessons": 4,
-   "color": "#2563eb"
+   "color": "#2563eb",
+   "about": "Channels are how people reach the agent. Input guardrails screen what comes in, and an approver inbox tells people what is waiting for them.",
+   "why": [
+    "Prompt injection and abusive input are screened before they reach the agent",
+    "Approvers need one reliable place to see pending requests",
+    "Every channel shares the same controls"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The inbox receives requests",
+     "how": "gcloud pubsub subscriptions pull approver-inbox --auto-ack --limit=1",
+     "expect": "The message published to work-order-approval"
+    }
+   ]
   },
   {
    "id": 8,
@@ -671,7 +922,32 @@
    "minutes": 35,
    "outcome": "Traces, metrics and logs you can read back",
    "lessons": 4,
-   "color": "#ea580c"
+   "color": "#ea580c",
+   "about": "AgentOps lets you see what the agent did: a trace per step, metrics for KPIs and structured logs tied to the trace.",
+   "why": [
+    "You cannot fix or trust what you cannot see",
+    "A trace ties a bad answer to the exact tool call that caused it",
+    "Metrics feed evaluation, service levels and cost control"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "Structured logs are written",
+     "how": "gcloud logging read 'jsonPayload.agent:*' --limit=3",
+     "expect": "Your structured agent log entries"
+    },
+    {
+     "kind": "Console",
+     "what": "The trace is readable",
+     "how": "Trace, Trace explorer",
+     "expect": "One span per agent or tool step"
+    }
+   ]
   },
   {
    "id": 13,
@@ -724,7 +1000,32 @@
    "minutes": 30,
    "outcome": "Encrypted records and an audit trail of the run",
    "lessons": 4,
-   "color": "#7c3aed"
+   "color": "#7c3aed",
+   "about": "Governance protects and audits the whole application: encryption of sensitive records and an audit trail of who did what.",
+   "why": [
+    "Regulated data needs encryption with managed keys",
+    "Audit trails answer who approved what, and when",
+    "Controls apply across every layer, not one at a time"
+   ],
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."
+   ],
+   "validate": [
+    {
+     "kind": "CLI",
+     "what": "The key exists and rotates",
+     "how": "gcloud kms keys list --location=us-central1 --keyring=facilities",
+     "expect": "ledger-key with a rotation period"
+    },
+    {
+     "kind": "CLI",
+     "what": "The run is in the audit log",
+     "how": "gcloud logging read 'protoPayload.serviceName=\"cloudkms.googleapis.com\"' --limit=3",
+     "expect": "CreateKeyRing and CreateCryptoKey entries"
+    }
+   ]
   }
  ]
 }

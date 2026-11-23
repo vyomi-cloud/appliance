@@ -62,6 +62,89 @@ META = {
  13: ("Advanced", 30, "Encrypted records and an audit trail of the run"),
 }
 
+# Introduction text, shared by all clouds: what the layer is and why an enterprise needs it
+INTRO = {
+ 10: ("The model layer is how every other layer talks to a large language model: one chat call, one tool-calling call and one embedding call. You write it once and every layer imports it.",
+      ["Swap or upgrade models without touching agent code", "One place for model ids, token limits and fallbacks", "Cost and quality decisions live here instead of being scattered across services"]),
+ 3: ("The runtime hosts the supervisor agent and its sub-agents and keeps every user session isolated: separate state, budgets and timeouts per session.",
+     ["Isolation stops one user's session from leaking into another's", "Budgets, timeouts and a kill switch contain runaway agents and runaway cost", "A managed host gives you deployments, versions and rollback"]),
+ 7: ("Tools are the functions the agents may call: read-only lookups and write operations. Each one has a narrow contract, validates its input and never trusts its caller.",
+     ["An agent is only as safe as the tools you hand it", "Narrow, typed tools make behaviour testable and auditable", "Separating read from write is what makes approval gates possible"]),
+ 12: ("The pipeline turns documents such as SOPs and manuals into searchable knowledge: store, extract, chunk, embed, index, and re-index automatically when a document changes.",
+      ["Answers are only as current as the index", "Event-driven ingestion removes manual re-indexing and stale answers", "Scanning documents before indexing keeps sensitive or malicious content out"]),
+ 6: ("Retrieval finds the passages that answer a question and ranks them, keeping the source of each one so the answer can cite it.",
+     ["Grounding answers in your own documents reduces hallucination", "Access-aware search keeps users from seeing what they must not", "Ranked, sourced results make every answer verifiable"]),
+ 11: ("Response generation writes the final answer from the retrieved text, with citations, and filters sensitive data out before the user sees it.",
+      ["Citations let users and auditors verify an answer", "Output filters stop personal data and policy violations leaving the system", "Grounding limits the model to approved knowledge"]),
+ 9: ("Memory gives the agent continuity: short-term events inside a session and long-term facts that persist across sessions.",
+     ["Users should not have to repeat themselves", "Scoping by user and tenant prevents leakage between people", "Retention and deletion rules are a compliance requirement"]),
+ 4: ("The gateway is the single governed door to the tools: a catalogue of what exists, a policy check on every call, and throttling and audit.",
+     ["One enforcement point instead of ad hoc checks in every tool", "Policies use the real user's identity and role", "Central audit and rate limits protect the systems behind the tools"]),
+ 5: ("Write actions are parked until a human approves. The workflow keeps durable state, records every decision, and executes only after approval.",
+     ["Irreversible or costly actions need an accountable human", "The decision ledger is the audit record regulators ask for", "Idempotency and rollback make retries and mistakes safe"]),
+ 1: ("Access verifies who the user is, carries that identity to every layer, and puts a protected edge in front of the tools.",
+     ["Every tool call should be made on behalf of a known user", "Edge protection and rate limits blunt abuse and cost attacks", "Standard identity providers plug into enterprise single sign-on"]),
+ 2: ("Channels are how people reach the agent. Input guardrails screen what comes in, and an approver inbox tells people what is waiting for them.",
+     ["Prompt injection and abusive input are screened before they reach the agent", "Approvers need one reliable place to see pending requests", "Every channel shares the same controls"]),
+ 8: ("AgentOps lets you see what the agent did: a trace per step, metrics for KPIs and structured logs tied to the trace.",
+     ["You cannot fix or trust what you cannot see", "A trace ties a bad answer to the exact tool call that caused it", "Metrics feed evaluation, service levels and cost control"]),
+ 13: ("Governance protects and audits the whole application: encryption of sensitive records and an audit trail of who did what.",
+      ["Regulated data needs encryption with managed keys", "Audit trails answer who approved what, and when", "Controls apply across every layer, not one at a time"]),
+}
+PRE = ["The simulator is running: you are in its console.", "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+       "Layers this one needs are built, or you are happy to use the reference version (listed under How it fits)."]
+
+# Quick validation, per cloud and layer: (kind, what to check, how, what you should see). kind = CLI | SDK | Console
+V = {"aws": {}, "gcp": {}, "azure": {}}
+def v(c, lid, *items): V[c][lid] = list(items)
+v("aws", 10, ("CLI", "The model catalogue is reachable", "aws bedrock list-foundation-models --query 'modelSummaries[].modelId'", "A list of model ids"),
+  ("CLI", "A chat call answers", "aws bedrock-runtime converse --model-id <chat-model-id> --messages '[{\"role\":\"user\",\"content\":[{\"text\":\"Reply with OK\"}]}]'", "output.message with text, and a usage block with token counts"))
+v("aws", 3, ("CLI", "The runtime exists and is ready", "aws bedrock-agentcore-control get-agent-runtime --agent-runtime-id <runtime-id>", "status READY, name facilities-supervisor"),
+  ("Console", "See it in the Vyomi console", "Bedrock AgentCore, Runtime, facilities-supervisor", "Status Ready"))
+v("aws", 7, ("CLI", "The four tools are deployed", "aws lambda list-functions --query 'Functions[].FunctionName'", "kb-search, asset-status, request-approval, create-work-order"),
+  ("CLI", "A read-only tool returns data", "aws lambda invoke --function-name asset-status --cli-binary-format raw-in-base64-out --payload '{\"asset_id\":\"AHU-1\"}' out.json && cat out.json", "A JSON status for a seeded asset"))
+v("aws", 12, ("CLI", "Documents are stored", "aws s3 ls s3://facilities-docs/ --recursive", "The SOPs and manuals you uploaded"),
+  ("CLI", "Ingestion finished", "aws bedrock-agent list-ingestion-jobs --knowledge-base-id <kb-id> --data-source-id <ds-id> --query 'ingestionJobSummaries[0].status'", "COMPLETE"))
+v("aws", 6, ("CLI", "Retrieval ranks the right document first", "aws bedrock-agent-runtime retrieve --knowledge-base-id <kb-id> --retrieval-query text='boiler pressure above 30 psi'", "The boiler SOP is the first result, with its source location"))
+v("aws", 11, ("CLI", "Personal data is masked on output", "aws bedrock-runtime apply-guardrail --guardrail-identifier <id> --guardrail-version DRAFT --source OUTPUT --content '[{\"text\":{\"text\":\"Contact jane@corp.com\"}}]'", "The email address is anonymised in the returned output"))
+v("aws", 9, ("CLI", "A session can be replayed", "aws bedrock-agentcore list-events --memory-id <memory-id> --actor-id <user> --session-id <session>", "Your user turn and the assistant turn, in order"))
+v("aws", 4, ("CLI", "The gateway is ready", "aws bedrock-agentcore-control list-gateways", "facilities-gateway with status READY"),
+  ("Console", "The tools are listed", "Bedrock AgentCore, Gateway, facilities-gateway, Targets", "Your Lambda tools as a target"))
+v("aws", 5, ("CLI", "A request is parked, not executed", "aws stepfunctions list-executions --state-machine-arn <arn> --status-filter RUNNING", "One RUNNING execution waiting for approval"),
+  ("CLI", "The ledger shows the decision", "aws dynamodb scan --table-name approval-ledger", "A row with status PENDING, then APPROVED or REJECTED after the decision"))
+v("aws", 1, ("CLI", "The user pool exists", "aws cognito-idp list-user-pools --max-results 10", "facilities-users"), ("CLI", "A rate-based WAF rule is in place", "aws wafv2 list-web-acls --scope REGIONAL", "Your web ACL"))
+v("aws", 2, ("CLI", "The inbox receives requests", "aws sqs receive-message --queue-url <approver-inbox-queue-url>", "The approval request that was published to the topic"))
+v("aws", 8, ("CLI", "Logs carry the trace id", "aws logs filter-log-events --log-group-name <log-group> --filter-pattern <trace-id>", "Structured log lines for the run"), ("CLI", "KPIs are published", "aws cloudwatch list-metrics --namespace <your-namespace>", "Your agent metrics"))
+v("aws", 13, ("CLI", "The key rotates", "aws kms list-aliases", "Your alias; then aws kms get-key-rotation-status shows enabled"), ("CLI", "The run is in the audit trail", "aws cloudtrail lookup-events --max-results 5", "Recent events including StartExecution and SendTaskSuccess"))
+
+v("gcp", 10, ("SDK", "A chat call answers", "client.models.generate_content(model=MODEL_ID, contents='Reply with OK').text", "OK, plus usage metadata"), ("SDK", "An embedding comes back", "client.models.embed_content(model='text-embedding-005', contents='boiler pressure')", "A vector of numbers"))
+v("gcp", 3, ("Console", "The agent engine is active", "Vertex AI, Agent Engine, facilities_supervisor", "Status Active"), ("SDK", "It answers a question", "remote_agent.query(user_id='u1', message='Status of AHU-1?')", "An answer produced by the supervisor and its sub-agents"))
+v("gcp", 7, ("CLI", "The five functions are deployed", "gcloud functions list --gen2 --region=us-central1", "kb-search, asset-status, the MCP tool server, approval-decision, create-work-order"), ("Console", "Seed data is present", "Firestore, Data, assets", "Your seeded assets"))
+v("gcp", 12, ("CLI", "Documents are stored", "gcloud storage ls gs://facilities-docs/docs/", "The SOPs and manuals"), ("Console", "The corpus is filled", "Vertex AI, RAG Engine, facilities-kb, Files", "Your imported files"))
+v("gcp", 6, ("SDK", "Retrieval ranks the right document first", "rag.retrieval_query(rag_resources=[...], text='boiler pressure above 30 psi', rag_retrieval_config=...)", "The boiler SOP first, with its source URI"))
+v("gcp", 11, ("SDK", "Sensitive data is flagged on output", "model_armor.sanitize_model_response(name=TEMPLATE, model_response_data=...)", "A filter match for the planted sensitive data"))
+v("gcp", 9, ("Console", "Sessions and facts are stored", "Vertex AI, Agent Engine, facilities_memory, Sessions", "Your session events; a fact retrievable by similarity"))
+v("gcp", 4, ("Console", "The gateway is active", "Agent Platform, Gateways, facilities-gateway", "Status Active with the MCP server attached"), ("SDK", "Tools are listed over MCP", "POST tools/list to the gateway", "Your tools"))
+v("gcp", 5, ("CLI", "A request is waiting for the approver", "gcloud pubsub subscriptions pull approver-inbox --limit=1", "The approval request message"), ("Console", "The ledger shows the decision", "Firestore, Data, approval-ledger", "PENDING, then APPROVED or REJECTED"))
+v("gcp", 1, ("CLI", "The WAF policy exists", "gcloud compute security-policies list", "Your Cloud Armor policy"), ("CLI", "The gateway is deployed", "gcloud api-gateway gateways list --location=us-central1", "facilities-api-gw"))
+v("gcp", 2, ("CLI", "The inbox receives requests", "gcloud pubsub subscriptions pull approver-inbox --auto-ack --limit=1", "The message published to work-order-approval"))
+v("gcp", 8, ("CLI", "Structured logs are written", "gcloud logging read 'jsonPayload.agent:*' --limit=3", "Your structured agent log entries"), ("Console", "The trace is readable", "Trace, Trace explorer", "One span per agent or tool step"))
+v("gcp", 13, ("CLI", "The key exists and rotates", "gcloud kms keys list --location=us-central1 --keyring=facilities", "ledger-key with a rotation period"), ("CLI", "The run is in the audit log", "gcloud logging read 'protoPayload.serviceName=\"cloudkms.googleapis.com\"' --limit=3", "CreateKeyRing and CreateCryptoKey entries"))
+
+v("azure", 10, ("CLI", "Both deployments exist", "az cognitiveservices account deployment list -g <rg> -n facilities-openai -o table", "chat and embed"), ("SDK", "A chat call answers", "client.chat.completions.create(model='chat', messages=[...])", "A reply and token usage"))
+v("azure", 3, ("CLI", "The container app is running", "az containerapp show -g <rg> -n facilities-supervisor --query properties.provisioningState", "Succeeded"), ("Console", "The agents exist", "Azure AI Foundry, Agents", "The supervisor and the three sub-agents"))
+v("azure", 7, ("CLI", "The four functions are deployed", "az functionapp function list -g <rg> -n facilities-tools -o table", "kb-search, asset-status, approval-decision, create-work-order"), ("Console", "Seed data is present", "Storage account, Tables, assets", "Your seeded assets"))
+v("azure", 12, ("CLI", "Documents are stored", "az storage blob list --account-name facilitiesdocs -c docs -o table", "The four SOP documents"), ("Console", "The index is filled", "AI Search, Indexers, facilities-kb", "A successful run and the documents searchable"))
+v("azure", 6, ("SDK", "Search ranks the right document first", "search_client.search(search_text='boiler pressure above 30 psi')", "The boiler SOP first, with its source name"))
+v("azure", 11, ("SDK", "Harmful output is flagged", "content_safety_client.analyze_text(AnalyzeTextOptions(text=...))", "A severity above the threshold for harmful text, none for the clean answer"))
+v("azure", 9, ("Console", "Short-term history is kept", "Azure AI Foundry, Threads", "Your thread messages in order"), ("CLI", "Long-term facts are stored", "az storage entity query --table-name longtermmemory --account-name <account>", "Your stored user fact"))
+v("azure", 4, ("CLI", "The tool catalogue is listed", "az apim api operation list -g <rg> --service-name facilities-apim --api-id <api-id> -o table", "Three operations"), ("SDK", "The write tool is denied without an approval id", "POST the write operation without the approval header", "403 from the policy expression"))
+v("azure", 5, ("CLI", "A request is waiting for the approver", "az servicebus topic subscription show -g <rg> --namespace-name facilities-bus --topic-name work-order-approval -n approver-inbox --query messageCount", "1 while the request is pending"), ("CLI", "The ledger shows the decision", "az storage entity query --table-name approvalledger --account-name <account>", "PENDING, then APPROVED or REJECTED"))
+v("azure", 1, ("CLI", "The gateway exists", "az apim show -g <rg> -n facilities-apim --query provisioningState", "Succeeded"), ("CLI", "The WAF policy exists", "az network front-door waf-policy list -g <rg> -o table", "facilitieswaf"))
+v("azure", 2, ("CLI", "The inbox receives requests", "az servicebus topic subscription show -g <rg> --namespace-name facilities-bus --topic-name work-order-approval -n approver-inbox --query messageCount", "A message count above 0 after a request is published"))
+v("azure", 8, ("CLI", "Spans are readable with KQL", "az monitor log-analytics query -w <workspace-id> --analytics-query 'AppTraces | take 5'", "Your agent log lines"), ("Console", "The custom metric appears", "Application Insights, Metrics, facilities.tool_calls", "A non-empty series"))
+v("azure", 13, ("CLI", "The key exists", "az keyvault key list --vault-name facilities-kv -o table", "ledger-key"), ("CLI", "The run is in the activity log", "az monitor activity-log list -g <rg> --max-events 5", "Recent control-plane operations from your run"))
+
 C = {}  # cloud -> layer -> dict(services, build, names, checks, simplified, native, ref, code)
 C["aws"] = {
  10: dict(services=["Amazon Bedrock Runtime: Converse, InvokeModel"], build=["ListFoundationModels to see what you can call.", "Converse: send a user message and read the text and token usage.", "Converse with toolConfig and handle stopReason.", "InvokeModel with the Titan embedding model.", "Attach your guardrail (chapter 11) to a Converse call and watch it stop a prompt attack."],
@@ -179,7 +262,8 @@ def build():
                                contract=dict(needs=deps, names=d["names"]), checks=d["checks"], simplified=d["simplified"], native=d.get("native"),
                                reference="examples/enterprise-facilities-agent/facilities/" + ("" if cloud == "aws" else "") + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
                                code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
-                               level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]]))
+                               level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
+                               about=INTRO[lid][0], why=INTRO[lid][1], prereq=PRE, validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
                    image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:

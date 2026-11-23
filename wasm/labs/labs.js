@@ -88,16 +88,14 @@
 
     function tile(l, nx) {
       var st = done(l.id) ? "done" : l.id === nx ? "next" : "todo";
-      var svc = l.services.slice(0, 3);
-      var meter = el("span", { className: "vl-meter", title: l.level }, [1, 2, 3].map(function (i) { return el("i", { className: i <= LEVEL[l.level] ? "on" : "" }); }));
+      var svc = l.services.slice(0, 2).join(", ") + (l.services.length > 2 ? " +" + (l.services.length - 2) : "");
+      var kv = function (k, v) { return el("div", { className: "vl-kv" }, el("dt", { textContent: k }), el("dd", { textContent: v })); };
+      var stText = st === "done" ? (done(l.id) === "verified" ? "Verified" : "Complete") : st === "next" ? "Up next" : "Not started";
       var t = el("button", { type: "button", className: "vl-tile " + st, style: "--c:" + l.color },
-        el("span", { className: "vl-stripe" }),
-        el("span", { className: "vl-trow" }, el("span", { className: "vl-chno", textContent: "Chapter " + pad(l.order) }), el("span", { className: "vl-lvl" }, meter, l.level)),
-        el("h3", { textContent: l.title }), el("p", { className: "vl-outcome", textContent: l.outcome }),
-        el("span", { className: "vl-svcs" }, svc.map(function (s) { return el("span", { className: "vl-chip", textContent: s }); }), l.services.length > 3 ? el("span", { className: "vl-chip more", textContent: "+" + (l.services.length - 3) }) : null),
-        el("span", { className: "vl-tfoot" },
-          el("span", { className: "vl-meta" }, el("span", {}, icon(P.clock, 14), "~" + l.minutes + " min"), el("span", {}, icon(P.book, 14), l.lessons + " lessons")),
-          el("span", { className: "vl-state " + st }, st === "done" ? [icon(P.check, 14), done(l.id) === "verified" ? "Verified" : "Complete"] : st === "next" ? ["Up next", icon(P.arrow, 14)] : ["Start", icon(P.arrow, 14)])),
+        el("span", { className: "vl-thead" }, el("span", { className: "vl-chno", textContent: pad(l.order) }), el("span", { className: "vl-ttitle", textContent: l.title }), el("span", { className: "vl-state " + st, textContent: stText })),
+        el("span", { className: "vl-outcome", textContent: l.outcome }),
+        el("dl", { className: "vl-kvs" }, kv("Level", l.level), kv("Duration", "~" + l.minutes + " min"), kv("Lessons", String(l.lessons)), kv("Services", svc)),
+        el("span", { className: "vl-tfoot" }, el("span", { className: "vl-cta" }, st === "done" ? "Review chapter" : st === "next" ? "Continue" : "Open chapter", icon(P.arrow, 14))),
         el("span", { className: "vl-pbar" }, el("i", { style: "width:" + (st === "done" ? 100 : 0) + "%" })));
       t.onclick = function () { go(l.id); };
       return t;
@@ -138,25 +136,40 @@
 
       function sec(id, no, title, body) { return el("section", { className: "vl-sec", id: "vl-" + id }, el("h2", {}, el("span", { className: "vl-no", textContent: no }), title), body); }
       var code = l.code ? el("div", { className: "vl-code" }, el("button", { type: "button", className: "vl-copy", title: "Copy", onclick: function (e) { try { navigator.clipboard.writeText(l.code.text); e.currentTarget.textContent = "Copied"; } catch (_) {} } }, "Copy"), el("pre", { textContent: l.code.text })) : null;
+      var valRows = l.validate.map(function (v) {
+        return el("li", { className: "vl-val" }, el("div", { className: "vl-valhead" }, el("span", { className: "vl-kind " + v.kind.toLowerCase(), textContent: v.kind }), el("b", { textContent: v.what })),
+          v.kind === "Console" ? el("div", { className: "vl-path" }, v.how) : el("div", { className: "vl-code sm" }, el("button", { type: "button", className: "vl-copy", title: "Copy", onclick: function (e) { try { navigator.clipboard.writeText(v.how); e.currentTarget.textContent = "Copied"; } catch (_) {} } }, "Copy"), el("pre", { textContent: v.how })),
+          el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), v.expect));
+      });
       var main = el("article", { className: "vl-article" },
         el("header", { className: "vl-chhead", style: "--c:" + l.color },
           el("div", { className: "vl-eyebrow" }, "Chapter " + pad(l.order) + " · " + l.level),
           el("h1", { textContent: l.title }), el("p", { className: "vl-lede", textContent: l.objective }),
-          el("div", { className: "vl-meta big" }, el("span", {}, icon(P.clock, 16), "~" + l.minutes + " min (estimate)"), el("span", {}, icon(P.book, 16), l.lessons + " lessons"), el("span", {}, icon(P.flag, 16), l.checks.length + " checks")),
+          el("div", { className: "vl-meta big" }, el("span", {}, icon(P.clock, 16), "~" + l.minutes + " min (estimate)"), el("span", {}, icon(P.book, 16), l.lessons + " lessons"), el("span", {}, icon(P.flag, 16), l.validate.length + " quick validations")),
           el("div", { className: "vl-chips" }, l.services.map(function (s) { return el("span", { className: "vl-chip", textContent: s }); })),
           el("div", { className: "vl-outbox" }, el("b", { textContent: "You will have: " }), l.outcome)),
-        sec("learn", "1", "What you will learn", ul(l.learn)),
-        sec("build", "2", "Build it", el("div", {}, el("ol", { className: "vl-lessons" }, l.build.map(function (t) { return el("li", {}, el("span", { textContent: t })); })), code)),
-        sec("fits", "3", "How it fits with the other layers", el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names))),
-        sec("check", "4", "How it is checked", el("div", {}, ul(l.checks), el("p", { className: "vl-muted", textContent: how }))),
-        sec("simplified", "5", "What the simulator simplifies", el("div", {}, el("div", { className: "vl-note" }, ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null)),
-        sec("ref", "6", "Reference solution", el("p", { className: "vl-muted" }, "Peek only after you have tried: ", el("code", { textContent: l.reference }))),
-        el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, check, statusEl), out),
+        sec("intro", "1", "Introduction", el("div", {},
+          el("h3", { className: "vl-h3", textContent: "About this layer" }), el("p", { textContent: l.about }),
+          el("h3", { className: "vl-h3", textContent: "Why an enterprise needs it" }), ul(l.why),
+          el("h3", { className: "vl-h3", textContent: "What you will learn" }), ul(l.learn),
+          el("h3", { className: "vl-h3", textContent: "Before you start" }), ul(l.prereq))),
+        sec("setup", "2", "Set up this layer on Vyomi", el("div", {},
+          el("p", { className: "vl-muted", textContent: "Work through the lessons in order. Use the " + course.cloud_name + " console in Vyomi, the CLI or an SDK; they all talk to the same simulator." }),
+          el("ol", { className: "vl-lessons" }, l.build.map(function (t) { return el("li", {}, el("span", { textContent: t })); })), code,
+          el("h3", { className: "vl-h3", textContent: "How it fits with the other layers" }), el("dl", { className: "vl-contract" }, [el("dt", { textContent: "Needs" }), needs].concat(names)),
+          el("div", { className: "vl-note" }, el("b", { textContent: "What the simulator simplifies" }), ul(l.simplified)), l.native ? el("p", { className: "vl-native", textContent: l.native }) : null)),
+        sec("validate", "3", "Quick validation in the simulator", el("div", {},
+          el("p", { className: "vl-muted", textContent: "Confirm the layer works before moving on. Each check can be run in the simulator right now; paste the command, or follow the console path." }),
+          el("ol", { className: "vl-vals" }, valRows),
+          el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), el("p", { className: "vl-muted", textContent: how }),
+          el("div", { className: "vl-actions" }, check, statusEl), out)),
+        sec("ref", "4", "Reference solution", el("p", { className: "vl-muted" }, "Peek only after you have tried: ", el("code", { textContent: l.reference }))),
+        el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark)),
         el("div", { className: "vl-pager" },
           prev ? el("button", { type: "button", className: "vl-pg", onclick: function () { go(prev.id); } }, el("small", { textContent: "Previous" }), el("span", {}, icon(P.back, 16), prev.title)) : el("span"),
           nxt ? el("button", { type: "button", className: "vl-pg r", onclick: function () { go(nxt.id); } }, el("small", { textContent: "Next" }), el("span", {}, nxt.title, icon(P.arrow, 16))) : el("span")));
 
-      var toc = [["learn", "What you will learn"], ["build", "Build it"], ["fits", "How it fits"], ["check", "How it is checked"], ["simplified", "What is simplified"], ["ref", "Reference solution"]];
+      var toc = [["intro", "Introduction"], ["setup", "Set up on Vyomi"], ["validate", "Quick validation"], ["ref", "Reference solution"]];
       var rail = el("aside", { className: "vl-rail" },
         el("div", { className: "vl-railcard" }, el("h4", { textContent: "Where this fits" }), diagram(l.id, false)),
         el("div", { className: "vl-railcard" }, el("h4", { textContent: "On this page" }), el("ul", { className: "vl-toc" }, toc.map(function (t) {
