@@ -699,9 +699,14 @@ def _create_preview(store, project, loc, pid, payload, call):
     pv = {"name": name, "createTime": ts, "labels": payload.get("labels") or {}, "state": "CREATING", "deployment": payload.get("deployment", ""),
           "previewMode": payload.get("previewMode") or "DEFAULT", "serviceAccount": payload.get("serviceAccount", ""), "terraformBlueprint": {k: v for k, v in bp.items() if k != "vyomiFiles"}}
     try:
-        files = _blueprint_files(store, bp, call)
-        if not bp and payload.get("deployment"):
+        if not bp and payload.get("deployment"):   # preview the deployment's own configuration against the project as it is now
+            dep = store.deployments.get(payload["deployment"])
+            if not dep:
+                raise _E(404, "NOT_FOUND", "Deployment '%s' was not found." % payload["deployment"])
             files = store.files.get(payload["deployment"]) or {}
+            inputs = (dep.get("terraformBlueprint") or {}).get("inputValues")
+        else:
+            files = _blueprint_files(store, bp, call)
         items, unsupported = plan(project, files, inputs, call)
         pv["state"] = "SUCCEEDED"
         pv["previewArtifacts"] = {"content": "gs://vyomi-im-%s/previews/%s/plan" % (project, pid), "artifacts": "gs://vyomi-im-%s/previews/%s/artifacts" % (project, pid)}
@@ -789,6 +794,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b"", call=None)
                     return _json(200, _delete_deployment(store, project, loc, segs[5], query, call))
             if dname not in store.deployments:
                 raise _E(404, "NOT_FOUND", "Resource '%s' was not found" % dname)
+            if len(segs) == 7 and segs[6] == "vyomiFiles" and method == "GET":   # Vyomi extension: the configuration the deployment holds
+                return _json(200, {"files": store.files.get(dname, {})})
             if len(segs) >= 7 and segs[6] == "revisions":
                 if len(segs) == 7 and method == "GET":
                     rows = [v for n, v in sorted(store.revisions.items(), reverse=True) if n.startswith(dname + "/revisions/")]
