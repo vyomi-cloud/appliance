@@ -1,4 +1,4 @@
-/* Network Intelligence Center > Network Topology: the project's VPC network, its subnets, firewall rules and the workloads and data
+/* Vyomi addition (not a native GCP page, so it is not named Network Topology): the project's VPC network, its subnets, firewall rules and the workloads and data
  * services around them, read from the real Google APIs (compute, run, sql, storage, pubsub) and drawn in the shared layered view. */
 import { useMemo } from "react";
 import { Box } from "@mui/material";
@@ -45,7 +45,7 @@ export default function NetworkTopology() {
 
   return (
     <Box sx={{ p: 2 }}>
-      <PageHeader title="Network Topology" />
+      <PageHeader title="Vyomi layered view" />
       <Box>
         {loading || !graph ? <p>Loading…</p> : !graph.nodes.length ? <p>No resources in this project.</p> : <InfraDiagram graph={graph} profile={GCP_PROFILE} height={620} />}
       </Box>

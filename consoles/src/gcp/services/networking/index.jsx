@@ -64,7 +64,7 @@ export default {
     { text: "Serverless VPC access", href: "#/networking/serverless-vpc-access", icon: CloudQueueIcon },
     { text: "Packet mirroring", href: "#/networking/packet-mirroring", icon: ArticleIcon },
     { text: "VPC Flow Logs", href: "#/networking/vpc-flow-logs", icon: SettingsEthernetIcon },
-    { text: "Network Topology", href: "#/networking/topology", icon: HubIcon },
+    { text: "Vyomi layered view", href: "#/networking/topology", icon: HubIcon },
     { text: "Connectivity Tests", href: "#/networking/connectivity-tests/list", icon: NetworkCheckIcon, match: ["#/networking/connectivity-tests/add", "#/networking/connectivity-tests/details"] },
   ],
   routes: [
