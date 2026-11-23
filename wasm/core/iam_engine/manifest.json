@@ -67,9 +67,11 @@
    "Microsoft.Sql",
    "Microsoft.Storage",
    "Microsoft.StreamAnalytics",
-   "Microsoft.Web"
+   "Microsoft.Web",
+   "_roles"
   ],
   "gcp": [
+   "_methods",
    "aiplatform",
    "apigateway",
    "artifactregistry",
@@ -106,11 +108,24 @@
    "workflows"
   ]
  },
- "core": [],
- "digest": "f0fe98d2c2aab546",
+ "core": [
+  "iam_state_adapters.py"
+ ],
+ "digest": "27c35d2c3c7fecf6",
  "engine": [
   "__init__.py",
+  "api.py",
+  "audit.py",
+  "aws_eval.py",
+  "aws_routes_data.py",
+  "azure_eval.py",
   "catalog_loader.py",
+  "gate.py",
+  "gcp_eval.py",
+  "map_aws.py",
+  "map_azure.py",
+  "map_gcp.py",
+  "modes.py",
   "nano_bridge.py",
   "types.py"
  ]

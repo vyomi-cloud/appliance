@@ -16,7 +16,7 @@ _SCALARS = ("global", "space")
 
 
 def default_settings() -> dict:
-    return {"global": "off", "space": "off", "services": {}, "resources": {}, "allowUnmapped": False}
+    return {"global": "off", "space": "off", "services": {}, "resources": {}, "allowUnmapped": False, "unknownPrincipal": "root"}
 
 
 def _norm_mode(value):
@@ -33,7 +33,7 @@ def validate(doc) -> tuple[dict, list]:
     if not isinstance(doc, dict):
         return out, ["settings must be an object"]
     for k in doc:
-        if k not in ("global", "space", "services", "resources", "allowUnmapped"):
+        if k not in ("global", "space", "services", "resources", "allowUnmapped", "unknownPrincipal"):
             errors.append(f"unknown key '{k}'")
     for k in _SCALARS:
         if k in doc:
@@ -60,6 +60,13 @@ def validate(doc) -> tuple[dict, list]:
             out["allowUnmapped"] = doc["allowUnmapped"]
         else:
             errors.append("'allowUnmapped' must be a boolean")
+    if "unknownPrincipal" in doc:
+        # What a credential that is NOT in the IAM store (default test keys, the console's own signed traffic) is treated as.
+        # "root" (default) = account root, so enforcement applies to the IAM users/roles people create; "deny" = reject (AWS InvalidClientTokenId-like).
+        if doc["unknownPrincipal"] in ("root", "deny"):
+            out["unknownPrincipal"] = doc["unknownPrincipal"]
+        else:
+            errors.append("'unknownPrincipal' must be 'root' or 'deny'")
     return out, errors
 
 

@@ -11,18 +11,38 @@ from __future__ import annotations
 
 import importlib
 import json
-from xml.sax.saxutils import escape as _xe
+
+
+def _xe(text):
+    """XML text escape (& < >). Local on purpose: xml.sax.saxutils imports urllib -> socket, which the Nano (Pyodide) package must not."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
 
 from core.iam_engine import audit as _audit
 from core.iam_engine import modes as _modes
 from core.iam_engine.types import request as _request
 
 # Internal / console traffic is not cloud API traffic: never gated.
-INTERNAL_PREFIXES = ("/api/", "/mesh/", "/healthz", "/static/", "/assets/", "/ws/", "/favicon.ico", "/console", "/_")
+INTERNAL_PREFIXES = ("/api/", "/mesh/", "/healthz", "/static/", "/assets/", "/ws/", "/favicon.ico", "/console/", "/_")
+# Never gated, even when signed: the IAM API itself (so enforcement can always be turned off from the UI/CLI).
+ALWAYS_INTERNAL = ("/api/iam/", "/_wire/api/iam/", "/nano/_wire/api/iam/")
+
+
+def _signed_aws(hr: dict) -> bool:
+    h = {str(k).lower(): str(v) for k, v in ((hr or {}).get("headers") or {}).items()}
+    auth = h.get("authorization", "")
+    q = str((hr or {}).get("query") or "")
+    return auth.startswith(("AWS4-", "AWS ")) or "x-amz-target" in h or "X-Amz-Credential" in q or "AWSAccessKeyId" in q
 
 
 def is_internal(http_request: dict) -> bool:
+    """Console / health / static traffic bypasses the gate. A SigV4/SigV2-signed request is an AWS API call, never console traffic:
+    S3 buckets named `assets`, `static`, `api`, `console-x` ... must stay gated (path-style requests start with the bucket name)."""
     p = str((http_request or {}).get("path") or "")
+    if p.startswith(ALWAYS_INTERNAL):
+        return True
+    if _signed_aws(http_request):
+        return False
     return p.startswith(INTERNAL_PREFIXES)
 
 

@@ -62,17 +62,21 @@ def register(app: FastAPI, api=None):
         return JSONResponse(out, status_code=status)
 
     @app.api_route("/api/iam/{cloud}/enforcement", methods=["GET", "PUT"])
+    @app.api_route("/_wire/api/iam/{cloud}/enforcement", methods=["GET", "PUT"])
     async def _enf(request: Request, cloud: str):
         return await _go(request, cloud, "enforcement")
 
     @app.api_route("/api/iam/{cloud}/audit", methods=["GET", "DELETE"])
+    @app.api_route("/_wire/api/iam/{cloud}/audit", methods=["GET", "DELETE"])
     async def _aud(request: Request, cloud: str):
         return await _go(request, cloud, "audit")
 
     @app.post("/api/iam/{cloud}/evaluate")
+    @app.post("/_wire/api/iam/{cloud}/evaluate")
     async def _ev(request: Request, cloud: str):
         return await _go(request, cloud, "evaluate")
 
     @app.get("/api/iam/{cloud}/catalog/{service}")
+    @app.get("/_wire/api/iam/{cloud}/catalog/{service}")
     async def _cat(request: Request, cloud: str, service: str):
         return await _go(request, cloud, "catalog", service)

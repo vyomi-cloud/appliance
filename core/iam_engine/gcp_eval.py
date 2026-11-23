@@ -44,7 +44,7 @@ def load_catalog(path: str | None = None) -> dict:
     perms: set = set()
     try:
         for fn in sorted(os.listdir(path)):
-            if not fn.endswith(".json"):
+            if not fn.endswith(".json") or fn.startswith("_"):
                 continue
             with open(os.path.join(path, fn), encoding="utf-8") as fh:
                 d = json.load(fh)

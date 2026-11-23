@@ -71,8 +71,8 @@ def aws_principal(headers, query, store) -> dict:
     if key:
         u = (store.users or {}).get(key.get("user_name"))
         if u:
-            return {"arn": u["arn"], "type": "user", "account": acct, "tags": u.get("tags") or {},
-                    "boundary": u.get("permissions_boundary"), "access_key_id": akid}
+            # policies / boundary / groups come from aws_state()["principals"][arn] (documents, not ARNs): do not shadow them here
+            return {"arn": u["arn"], "type": "user", "account": acct, "tags": u.get("tags") or {}, "access_key_id": akid}
     sess = ((getattr(store, "extras", {}) or {}).get("sts_sessions") or {}).get(akid)
     if sess:
         role = (store.roles or {}).get(sess.get("role_name") or "") or {}
@@ -82,10 +82,55 @@ def aws_principal(headers, query, store) -> dict:
     return {"arn": "", "type": "unknown", "account": acct, "access_key_id": akid}
 
 
+def _policy_doc(store, arn):
+    """Default-version document of a managed policy (AWS-managed ones are materialised on first use by iam_core)."""
+    p = (store.policies or {}).get(arn)
+    if p is None:
+        try:
+            from core import iam_core
+            p = iam_core._aws_managed_policy(store, arn)
+        except Exception:
+            p = None
+    if not p:
+        return None
+    v = (p.get("versions") or {}).get(p.get("default_version_id") or "v1") or {}
+    return v.get("document") or p.get("document")
+
+
+def _entity_policies(store, ent):
+    """Identity policies of a user/group/role record: inline documents + attached managed policy documents."""
+    out = [{"id": f"inline:{n}", "document": d} for n, d in sorted((ent.get("inline_policies") or {}).items())]
+    for arn in ent.get("attached_policies") or []:
+        d = _policy_doc(store, arn)
+        if d:
+            out.append({"id": arn, "document": d})
+    return out
+
+
 def aws_state(store) -> dict:
-    return {"cloud": "aws", "account": getattr(store, "account_id", ""), "users": store.users, "groups": store.groups,
-            "roles": store.roles, "policies": store.policies, "org_policies": getattr(store, "org_policies", {}),
-            "access_keys": store.access_keys}
+    """Engine `state` (core/iam_engine/aws_eval.py): principals{arn: {policies, boundary, groups, tags}}, groups{name: {policies}},
+    scps/rcps (org policies, one level per org unit - flat here), resource_policies (fed by the host per service; empty = identity-only)."""
+    principals, groups = {}, {}
+    for name, g in (store.groups or {}).items():
+        groups[name] = {"policies": _entity_policies(store, g)}
+    for name, u in (store.users or {}).items():
+        b = _policy_doc(store, u.get("permissions_boundary")) if u.get("permissions_boundary") else None
+        principals[u["arn"]] = {"policies": _entity_policies(store, u), "boundary": [b] if b else [],
+                                "groups": [g for g in (u.get("groups") or []) if g in groups], "tags": u.get("tags") or {}}
+    for name, r in (store.roles or {}).items():
+        b = _policy_doc(store, r.get("permissions_boundary")) if r.get("permissions_boundary") else None
+        rec = {"policies": _entity_policies(store, r), "boundary": [b] if b else [], "tags": r.get("tags") or {}}
+        principals[r["arn"]] = rec
+        principals[r["arn"].replace(":role/", ":assumed-role/", 1) if ":role/" in r["arn"] else r["arn"]] = rec
+    scps = []   # an SCP restricts only once attached to a target; the store does not model attachment yet, so none are applied (open issue)
+    for o in (getattr(store, "org_policies", {}) or {}).values():
+        if isinstance(o, dict) and o.get("type") == "SERVICE_CONTROL_POLICY" and o.get("targets"):
+            try:
+                scps.append([json.loads(o.get("content") or "{}")])
+            except Exception:
+                pass
+    return {"cloud": "aws", "account": getattr(store, "account_id", ""), "principals": principals, "groups": groups,
+            "scps": scps, "rcps": [], "resource_policies": {}, "resource_tags": {}}
 
 
 # ----------------------------------------------------------------------------- GCP

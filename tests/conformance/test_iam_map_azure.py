@@ -136,7 +136,7 @@ def test_non_azure_path_unmapped():
 
 def _catalog():
     acts, dacts = set(), set()
-    for f in glob.glob(os.path.join(ROOT, "core/iam_catalog/azure/*.json")):
+    for f in [f for f in glob.glob(os.path.join(ROOT, "core/iam_catalog/azure/*.json")) if not os.path.basename(f).startswith("_")]:
         d = json.load(open(f))
         acts |= set(d["actions"])
         dacts |= set(d["dataActions"])

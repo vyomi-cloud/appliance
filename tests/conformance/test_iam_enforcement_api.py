@@ -70,8 +70,12 @@ def test_evaluate_requires_action():
     assert mk().handle("POST", "/api/iam/aws/evaluate", body={})[0] == 400
 
 
-def test_evaluate_engine_missing_501():
-    assert mk().handle("POST", "/api/iam/azure/evaluate", body={"action": "a"})[0] == 501
+def test_evaluate_uses_the_real_engine_when_present_and_501_when_not():
+    st, body = mk().handle("POST", "/api/iam/azure/evaluate", body={"action": "Microsoft.Storage/storageAccounts/read"})
+    assert st == 200 and body["allowed"] is False and body["reason"] == "implicit_deny"      # real azure_eval, empty state
+    from core.iam_engine.api import IamApi
+    api = IamApi(settings_store=modes.MemorySettingsStore(), state_fn=lambda c: {}, engines={"azure": object()})   # engine without evaluate()
+    assert api.handle("POST", "/api/iam/azure/evaluate", body={"action": "a"})[0] in (500, 501)
 
 
 def test_catalog_simulated_flag_with_inventory():
