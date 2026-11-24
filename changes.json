@@ -1,13 +1,24 @@
 {
- "at": "2026-11-24T00:18:10+00:00",
+ "at": "2026-11-24T01:18:20+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:79bc7df52250",
+   "title": "Amazon SageMaker HyperPod now supports managed observability and user management extensions for Slurm clusters",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/sagemaker-hyperpod-extensions/",
+   "detail": "Amazon SageMaker HyperPod now supports managed cluster extensions for Slurm clusters. You can install, configure, update, and remove managed features through the SageMaker AI console or API. The first two extensions cover observability and user management. Earlier, every observability or user management change for HyperPod Slurm clusters meant editing lifecycle scripts and then replacing or rerunning nodes. Now, HyperPod manages these features for you, and you keep lifecycle scripts and custom AMIs for your organization's own software. For each extension, you declare a configuration. HyperPod ",
+   "actionable": false
+  }
+ ],
  "errors": [
+  "maven/software.amazon.awssdk:s3: The read operation timed out",
+  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out",
+  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
   "maven/com.azure:azure-storage-blob: The read operation timed out",
-  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out",
-  "maven/com.azure:azure-data-appconfiguration: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out"
  ]
 }
