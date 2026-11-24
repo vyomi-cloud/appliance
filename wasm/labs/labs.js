@@ -506,7 +506,6 @@
         content.replaceChildren(el("div", { className: "vl-phead" }, el("h2", { textContent: p.t }), el("span", { className: "vl-dur", textContent: p.dur + " min" })), p.body, pager);
         if (scroll) { window.scrollTo(0, 0); }
       }
-      function gotoDeploy() { showPane(1, false); var d = content.querySelector(".vl-deploy"); d && d.scrollIntoView({ behavior: "smooth", block: "start" }); }
       var chipo = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
       var hero = el("header", { className: "vl-chero", style: "--c:" + l.color },
         el("div", { className: "vl-cicon" }, icon(l.icon, 30)),
@@ -514,8 +513,7 @@
           el("div", { className: "vl-crumbs2", textContent: course.cloud_name + "  /  Vyomi Labs  /  Chapter " + l.order + " of " + course.layers.length }),
           el("h1", { textContent: l.title }), el("p", { textContent: l.outcome }),
           el("div", { className: "vl-cchips" }, chipo(P.flag, l.level), chipo(P.clock, "~" + N + " min"), hasLab ? chipo("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", l.lab.length + " code steps") : null, l.services.slice(0, 3).map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); }))),
-        el("div", { className: "vl-cside" }, hasLab ? el("button", { type: "button", className: "vl-btn primary lg", onclick: gotoDeploy }, icon("M8 5v14l11-7z", 16), "Deploy this chapter") : null,
-          el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
+        el("div", { className: "vl-cside" }, el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
       var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody" }, nav, content));
       showPane(0, false);
       var main = article;
