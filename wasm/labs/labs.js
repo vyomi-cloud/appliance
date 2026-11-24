@@ -158,9 +158,20 @@
         sc("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, ["The simple design meets the functional need; an enterprise is also accountable for how it is met.", "Each of the 13 layers closes one specific gap and prevents one failure.", "You build one working app, a layer at a time, and every chapter is deployed and checked."].map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
           el("button", { type: "button", className: "vl-btn primary lg", onclick: function () { go(first.id); } }, "Start Chapter 1: " + first.title, icon(P.arrow, 16)))));
       var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["check", "Check your understanding"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#vl-i-" + t[0], textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
-      var pageEl = el("div", { className: "vl-page vl-intropage" }, el("button", { type: "button", className: "vl-backlink", onclick: function () { sel = null; render(); } }, icon(P.back, 14), "Course contents"),
-        el("header", { className: "vl-ihero" }, el("small", { textContent: "Start here · " + course.cloud_name }), el("h1", { textContent: "Why an enterprise agent needs 13 layers" }), el("p", { textContent: "A five-minute read before you build anything: the problem, the simplest design that solves it, what that design cannot do, and how that leads to the 13 layers." })),
-        el("div", { className: "vl-lesson", style: "--c:#1a6e66" }, main, side));
+      var chip = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
+      var back = el("button", { type: "button", className: "vl-back", onclick: function () { sel = null; render(); } }, icon(P.back, 16), "Course contents");
+      var top = el("div", { className: "vl-topbar" }, back, el("span", { className: "vl-crumb", textContent: course.cloud_name + " · Start here" }),
+        el("span", { className: "vl-topprog" }, el("span", { textContent: nDone() + " of " + course.layers.length + " complete" }), el("span", { className: "vl-bar" }, el("i", { style: "width:" + (100 * nDone() / course.layers.length) + "%" }))));
+      var hero = el("header", { className: "vl-chero", style: "--c:#1a6e66" },
+        el("div", { className: "vl-cicon" }, icon(P.book, 30)),
+        el("div", { className: "vl-ctext" },
+          el("div", { className: "vl-crumbs2", textContent: course.cloud_name + "  /  Vyomi Labs  /  Start here" }),
+          el("h1", { textContent: "Why an enterprise agent needs 13 layers" }),
+          el("p", { textContent: "The problem, the simplest design that solves it, what that design cannot do, and the 13 questions that lead to the full architecture." }),
+          el("div", { className: "vl-cchips" }, chip(P.flag, "Beginner"), chip(P.clock, "~5 min"), chip("M4 6h16M4 12h16M4 18h10", "Lesson and quiz"))),
+        el("div", { className: "vl-cside" }, el("span", { className: "vl-status", textContent: "Read first" })));
+      var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody single" }, el("div", { className: "vl-lesson", style: "--c:#1a6e66" }, main, side)));
+      var pageEl = el("div", { className: "vl-reader vl-intropage" }, top, el("div", { className: "vl-cols" }, article));
       tocSpy(pageEl); return pageEl;
     }
     /* ---------- course view ---------- */
