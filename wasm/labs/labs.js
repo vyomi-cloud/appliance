@@ -593,13 +593,10 @@
       var score = el("span", { className: "vl-score", textContent: "Pick an answer" });
       var anchor = function (id, title, body, cls) { var s = el("section", { className: "vl-lsec " + (cls || ""), id: "vl-s-" + id }, el("h3", { textContent: title }), body); return s; };
       var HANDS = [["build", L[1]], ["create", L[2]], ["connect", L[3]], ["validate", L[4]], ["clean", L[5]]];
-      var toc = [["story", "The problem"], ["simple", "The simplest design"], ["why", "Why an enterprise goes further"], ["design", "The layer design"]].concat(HANDS, [["check", "Check your understanding"], ["recap", "Recap"]]);
+      var toc = [["story", "The problem"], ["why", "Why an enterprise goes further"], ["design", "The layer design"]].concat(HANDS, [["check", "Check your understanding"], ["recap", "Recap"]]);
       var introBody = el("div", { className: "vl-lesson", style: "--c:" + l.color },
         el("div", { className: "vl-lmain" },
           anchor("story", "The problem", el("blockquote", { className: "vl-scene" }, el("p", { textContent: N2.scene })), "vl-first"),
-          anchor("simple", "The simplest design", el("div", {}, el("p", { className: "vl-simple", textContent: N2.simple }),
-            el("div", { className: "vl-gn" }, el("div", { className: "vl-got" }, el("h4", { textContent: "What it achieves" }), el("ul", {}, N2.got.map(function (t) { return el("li", { textContent: t }); }))),
-              el("div", { className: "vl-miss" }, el("h4", { textContent: "What it does not" }), el("ul", {}, N2.missing.map(function (t) { return el("li", { textContent: t }); })))))),
           anchor("why", "Why an enterprise goes further", el("p", { textContent: N2.why })),
           anchor("design", "The layer design", el("div", {}, el("p", { textContent: N2.design }),
             el("div", { className: "vl-analogy" }, el("small", { textContent: "Think of it as" }), el("b", { textContent: N2.idea[0] }), el("p", { textContent: N2.idea[1] })),
