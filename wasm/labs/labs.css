@@ -425,3 +425,6 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-ccard.has-ribbon .vl-herotxt,.vl .vl-hero.has-ribbon .vl-herotxt{padding-top:34px}
 .vl .vl-ribbon{width:100px;height:100px}.vl .vl-ribbon span{top:19px;left:-38px;width:150px;font-size:10.5px;padding:4px 0}
 .vl .vl-ccard.has-ribbon .vl-herotxt,.vl .vl-hero.has-ribbon .vl-herotxt{padding-top:46px}
+
+.vl .vl-disclaimer{display:flex;gap:10px;align-items:flex-start;margin:12px 0 0;padding:10px 14px;max-width:760px;border-radius:10px;background:#fff8e1;border:1px solid #f0d48a;color:#5c4400;font-size:13.5px;line-height:1.55}
+.vl .vl-disclaimer svg{flex:none;margin-top:2px;fill:none;stroke:#8a5a00;stroke-width:2}.vl .vl-disclaimer b{color:#4a3000}

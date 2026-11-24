@@ -75,7 +75,9 @@
           el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })),
           el("button", { type: "button", className: "vl-btn primary lg", onclick: start }, n ? "Continue course" : "Start course", icon(P.arrow, 18))));
       return el("div", { className: "vl-page" },
-        el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." })), cloudTabs),
+        el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." }),
+          (course.plan || []).length ? el("p", { className: "vl-disclaimer" }, icon("M12 8v5M12 16.500v.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", 16),
+            el("span", {}, el("b", { textContent: "Deploying needs a Mesh. " }), "Courses that deploy code run it inside a Mesh, which is included with the " + course.plan.join(" and ") + " plans. Without one you can still read every lesson, browse and edit the code, and download the project." + (cloud === "aws" ? " A few " + course.cloud_name + " chapters also deploy in the browser." : ""))) : null), cloudTabs),
         el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
     }
 
