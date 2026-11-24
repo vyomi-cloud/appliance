@@ -4,6 +4,25 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.11] — 2026-11-25
+
+Terraform import and export in the v4 consoles on Nano and the appliance, plus the faithful-IAM waves already on the trunk. Beta, Dev Simplified.
+
+### Added
+- **AWS Infrastructure Studio** (`#/tfstudio`): stack diagram in the layered template (users, gateway, services, data), availability marking (available / planned / not possible), export as Terraform with a real-AWS portability report (warnings and info shown separately), and **Import**: drop or paste `.tf`, `.tfvars` or a zip, see the plan, apply to Vyomi, destroy. Export covers 50+ resource types; import has an applier for every exported type. The export-destroy-apply-re-apply-re-export cycle is identical on the appliance and on Nano.
+- **GCP Infrastructure Manager** (`#/infra-manager`): deployments, revisions, previews and operations in the config.googleapis.com shape, Terraform export of the project, and an optional layered view on Network Topology. Applies 6 resource types; the rest are listed as planned.
+- **Azure**: ARM deployments with what-if and dependsOn ordering, azurerm Terraform export from Export template, and Import Terraform (azurerm) under Resource group > Deployments > Deploy template (28 of 55 ARM types map to azurerm; the rest use azapi). Optional layered Resource visualizer.
+- **IAM**: faithful IAM waves merged from the trunk (engines, catalogs, enforcement modes, audit).
+
+### Changed
+- The legacy `*-console.html` pages are removed; the v4 consoles are the only consoles.
+- GCP: the collapsed Vyomi Mesh tab is the same size as the expanded one on service pages.
+
+### Known limits
+- Import: no `module`, `templatefile()` or `%{if}`; existing resources are not updated; unnamed resources (KMS keys, EBS volumes, instances) are matched by attributes; AMI IDs differ per environment; a compliance-mode Backup vault lock cannot be destroyed (the simulator refuses, as AWS does).
+- GCP applies 6 types; Azure Terraform import rejects `count`, `for_each`, modules and data sources; no subscription-level custom deployment.
+- Not verified on a real Mesh Codespace.
+
 ## [4.0.10] — 2026-11-20
 
 Release-check fixes and the AWS Mesh drawer width, plus the endurance harness (AWS stages 7 and 8) and tunnel 1.3.2. Beta, Dev Simplified.
