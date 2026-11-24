@@ -4,6 +4,7 @@
  "ai_platform": "Azure OpenAI / AI Foundry",
  "title": "Build the Enterprise Facilities agent on Microsoft Azure",
  "image": "img/azure.svg",
+ "repo": "vyomi-cloud/vyomi-labs-facilities-agent",
  "image_size": [
   1800,
   1270

@@ -4,6 +4,7 @@
  "ai_platform": "Vertex AI",
  "title": "Build the Enterprise Facilities agent on Google Cloud",
  "image": "img/gcp.svg",
+ "repo": "vyomi-cloud/vyomi-labs-facilities-agent",
  "image_size": [
   1800,
   1270

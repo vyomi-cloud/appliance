@@ -339,3 +339,7 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 
 .vl .vl-ba{margin:18px 0 0}.vl .vl-batag{display:inline-block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;border-radius:999px;padding:4px 12px}.vl .vl-batag.bad{background:#fdecea;color:#a3382c}.vl .vl-batag.good{background:#e8f6f0;color:#12805c}
 .vl .vl-bacap{margin:8px 0 10px!important;color:var(--muted);font-size:15px!important}.vl .vl-archfig{display:block;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;overflow:hidden}.vl a.vl-archfig:hover{box-shadow:0 6px 18px rgba(16,24,40,.1)}
+
+.vl .vl-projcard{display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin:28px 0 8px;padding:24px 28px;border-radius:14px;color:#fff;background:linear-gradient(120deg,#16324a,#0d1b2a)}
+.vl .vl-projtxt{flex:1 1 420px}.vl .vl-projtxt small{font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.8;font-weight:700}.vl .vl-projtxt h3{margin:4px 0 8px;font-size:22px;color:#fff}.vl .vl-projtxt p{margin:0;font-size:15.5px;line-height:1.65;color:#d6e0ea}
+.vl .vl-projbtns{display:flex;gap:10px;flex-wrap:wrap}.vl .vl-projbtns .vl-btn{text-decoration:none}.vl .vl-ghlink{margin-left:auto;margin-right:10px;font-size:13px;color:var(--link,#1a73e8);text-decoration:none}.vl .vl-ghlink:hover{text-decoration:underline}
