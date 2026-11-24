@@ -612,7 +612,10 @@
         { t: L[5], dur: tm.clean, body: el("div", {}, cleanup, closing, l.order === course.layers.length ? projectCard() : null) }];
       var bodies = [buildBody, consBody, fitsBody, valBody, el("div", {}, cleanup, closing, l.order === course.layers.length ? projectCard() : null)];
       var lmain = introBody.querySelector(".vl-lmain"), checkSec = introBody.querySelector("#vl-s-recap");
-      introBody.querySelector("#vl-s-design").appendChild(el("div", { className: "vl-factrow" }, sec("By the end you will", chk(l.learn)), sec("Before you start", el("div", {}, ul(l.prereq), needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null))));
+      introBody.querySelector("#vl-s-design").appendChild(el("div", { className: "vl-factrow" }, sec("By the end you will", chk(l.learn)), sec("Before you start", ul(l.prereq)),
+        (needs.length || usedBy.length) ? sec("Connected chapters", el("div", { className: "vl-conn" },
+          needs.length ? el("div", { className: "vl-connrow" }, el("span", { className: "vl-connlbl", textContent: "Builds on" }), el("div", { className: "vl-chaps" }, needs.map(chapLink))) : null,
+          usedBy.length ? el("div", { className: "vl-connrow" }, el("span", { className: "vl-connlbl", textContent: "Used by" }), el("div", { className: "vl-chaps" }, usedBy.map(chapLink))) : null), "vl-span2") : null));
       HANDS.forEach(function (h, k) { lmain.insertBefore(anchor(h[0], h[1], bodies[k], "vl-handson"), checkSec); });
       var pager = el("div", { className: "vl-pager2" }, prev ? el("button", { type: "button", className: "vl-btn", onclick: function () { go(prev.id); } }, icon(P.back, 16), "Previous chapter: " + prev.title) : el("span"),
         nxt ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Next chapter: " + nxt.title, icon(P.arrow, 16)) : el("span", { className: "vl-muted", textContent: "That was the last chapter." }));

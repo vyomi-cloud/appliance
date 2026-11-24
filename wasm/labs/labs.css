@@ -393,3 +393,10 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-factrow{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:22px}@media (max-width:860px){.vl .vl-factrow{grid-template-columns:1fr}}
 .vl .vl-factrow .vl-isec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}.vl .vl-factrow .vl-isec h3{margin:0 0 10px;font-size:15px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .vl .vl-factrow .vl-isec:first-child{border-top:3px solid #12805c}.vl .vl-factrow .vl-isec:last-child{border-top:3px solid var(--c,#1a6e66)}
+
+.vl .vl-factrow .vl-span2{grid-column:1 / -1;border-top:3px solid #5d6b78}
+.vl .vl-conn{display:flex;flex-direction:column;gap:12px}.vl .vl-connrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.vl .vl-connlbl{flex:none;min-width:84px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--muted)}
+.vl .vl-conn .vl-chaps{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px}
+.vl .vl-connrow{flex-wrap:nowrap;align-items:baseline}.vl .vl-conn .vl-chaps{flex:1;min-width:0;column-gap:18px}
+.vl .vl-factrow .vl-isec:nth-child(2){border-top:3px solid var(--c,#1a6e66)}.vl .vl-factrow .vl-isec.vl-span2{border-top:3px solid #5d6b78}
+@media (max-width:620px){.vl .vl-connrow{flex-wrap:wrap}}
