@@ -336,3 +336,6 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-why li{display:flex;align-items:center;gap:16px;border:1px solid var(--line);border-left:5px solid var(--c);border-radius:12px;padding:12px 16px;background:var(--card);cursor:pointer}.vl .vl-why li:hover{box-shadow:0 6px 18px rgba(16,24,40,.08)}
 .vl .vl-wn{flex:none;width:34px;height:34px;border-radius:50%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
 .vl .vl-why li>div{flex:1;min-width:0}.vl .vl-why b{display:block;font-size:15px;color:var(--muted);font-weight:600}.vl .vl-wq{display:block;font-size:17px;font-weight:700;margin:1px 0 3px}.vl .vl-why small{display:block;font-size:14px;color:var(--muted);line-height:1.5}
+
+.vl .vl-ba{margin:18px 0 0}.vl .vl-batag{display:inline-block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;border-radius:999px;padding:4px 12px}.vl .vl-batag.bad{background:#fdecea;color:#a3382c}.vl .vl-batag.good{background:#e8f6f0;color:#12805c}
+.vl .vl-bacap{margin:8px 0 10px!important;color:var(--muted);font-size:15px!important}.vl .vl-archfig{display:block;border:1px solid var(--line);border-radius:12px;background:#fff;padding:14px;overflow:hidden}.vl a.vl-archfig:hover{box-shadow:0 6px 18px rgba(16,24,40,.1)}
