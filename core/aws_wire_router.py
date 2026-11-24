@@ -215,7 +215,7 @@ def _gcp_service(path):
     if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings", "/v3/folders")):
         return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
-    if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
+    if re.match(r"^/v2/policies/.+?/denypolicies(/.*)?$", path):
         return "gcp-iam"
     # STS (sts.googleapis.com): federated token exchange + introspection
     if path in ("/v1/token", "/v1/introspect"):

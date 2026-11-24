@@ -21,3 +21,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | claude (doctl columns) | v4/mcp-doctl-columns | appliance | .github/workflows/mcp-hosted-release.yml, deploy/mcp-hosted/test_spec_scripts.py | 2026-11-23 |
 | claude (smoke root paths + plugin sync) | v4/mcp-smoke-root-paths | appliance | tools/mcp-hosted-smoke.sh, .github/workflows/{claude-plugins-sync,tunnel-release}.yml, docs/architecture/v4.0/CLAUDE-PLUGINS-SYNC-RUNBOOK.md | 2026-11-23 |
 | claude (vyomi-cloud listing links) | v4/vyomi-cloud-listing-urls | appliance | integrations/claude-plugins/** (README links, versions 4.3.1) | 2026-11-23 |
+| claude (MCP regen rule + guard) | v4/mcp-caps-regen-guard | appliance | CLAUDE.md (rule 10 + enforcement line), scripts/claude-hooks/v4-guard.py, docs/architecture/v4.0/branches/mcp-caps-regen-guard.md | 2026-11-23 |

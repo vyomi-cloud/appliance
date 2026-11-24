@@ -1,0 +1,716 @@
+{
+ "$doc": "ONE mapping from wasm/service-inventory.json service ids to the IAM catalog slices that cover them (aws: IAM prefixes = core/iam_catalog/aws/<p>.json; gcp: page slugs = core/iam_catalog/gcp/<s>.json; azure: providers = core/iam_catalog/azure/<P>.json, optional \"filters\" = action prefixes narrowing a shared provider). catalog \"none\" needs a reason. \"floor\" = minimum request-map coverage percent (integer); floors only go up (raise with: python3 scripts/gen_iam_coverage.py --bump-floors). Rule 14 in V4-BRANCH-ARCHITECTURE.md. GCP entries also carry \"apis\" (id prefixes of the Discovery methods the service's clients can address; + optional \"id_prefixes\" narrowing a shared API such as compute) and \"strict_floor\" (floor of the catalog-reachability column; \"floor\" applies to the method-surface column that defines enforceable).",
+ "services": {
+  "aws": {
+   "s3": {
+    "catalog": [
+     "s3"
+    ],
+    "floor": 99
+   },
+   "dynamodb": {
+    "catalog": [
+     "dynamodb"
+    ],
+    "floor": 100
+   },
+   "ec2": {
+    "catalog": [
+     "ec2"
+    ],
+    "floor": 100
+   },
+   "ecr": {
+    "catalog": [
+     "ecr"
+    ],
+    "floor": 100
+   },
+   "imagebuilder": {
+    "catalog": [
+     "imagebuilder"
+    ],
+    "floor": 100
+   },
+   "eks": {
+    "catalog": [
+     "eks"
+    ],
+    "floor": 100
+   },
+   "lambda": {
+    "catalog": [
+     "lambda"
+    ],
+    "floor": 100
+   },
+   "rds": {
+    "catalog": [
+     "rds"
+    ],
+    "floor": 100
+   },
+   "vpc": {
+    "catalog": [
+     "ec2"
+    ],
+    "floor": 100
+   },
+   "networkmanager": {
+    "catalog": [
+     "networkmanager"
+    ],
+    "floor": 100
+   },
+   "apigateway": {
+    "catalog": [
+     "apigateway",
+     "execute-api"
+    ],
+    "floor": 100
+   },
+   "iam": {
+    "catalog": [
+     "iam",
+     "sts"
+    ],
+    "floor": 100
+   },
+   "kms": {
+    "catalog": [
+     "kms"
+    ],
+    "floor": 100
+   },
+   "secretsmanager": {
+    "catalog": [
+     "secretsmanager"
+    ],
+    "floor": 100
+   },
+   "sqs": {
+    "catalog": [
+     "sqs"
+    ],
+    "floor": 100
+   },
+   "sns": {
+    "catalog": [
+     "sns"
+    ],
+    "floor": 100
+   },
+   "eventbridge": {
+    "catalog": [
+     "events"
+    ],
+    "floor": 100
+   },
+   "cloudwatch": {
+    "catalog": [
+     "cloudwatch",
+     "logs"
+    ],
+    "floor": 100
+   },
+   "cloudformation": {
+    "catalog": [
+     "cloudformation"
+    ],
+    "floor": 100
+   },
+   "bedrock": {
+    "catalog": [
+     "bedrock",
+     "bedrock-agentcore"
+    ],
+    "floor": 100
+   },
+   "kinesis": {
+    "catalog": [
+     "kinesis"
+    ],
+    "floor": 100
+   },
+   "states": {
+    "catalog": [
+     "states"
+    ],
+    "floor": 100
+   },
+   "cost-explorer": {
+    "catalog": [
+     "ce"
+    ],
+    "floor": 100
+   },
+   "ssm": {
+    "catalog": [
+     "ssm"
+    ],
+    "floor": 100
+   },
+   "securityhub": {
+    "catalog": [
+     "securityhub"
+    ],
+    "floor": 100
+   },
+   "backup": {
+    "catalog": [
+     "backup"
+    ],
+    "floor": 100
+   }
+  },
+  "gcp": {
+   "storage": {
+    "catalog": [
+     "storage"
+    ],
+    "apis": [
+     "storage"
+    ],
+    "floor": 98,
+    "strict_floor": 46
+   },
+   "compute": {
+    "catalog": [
+     "compute"
+    ],
+    "apis": [
+     "compute"
+    ],
+    "floor": 97,
+    "strict_floor": 40
+   },
+   "kubernetes": {
+    "catalog": [
+     "container"
+    ],
+    "apis": [
+     "container"
+    ],
+    "floor": 91,
+    "strict_floor": 29
+   },
+   "sql": {
+    "catalog": [
+     "cloudsql"
+    ],
+    "apis": [
+     "sql"
+    ],
+    "floor": 97,
+    "strict_floor": 43
+   },
+   "firestore": {
+    "catalog": [
+     "firestore"
+    ],
+    "apis": [
+     "firestore"
+    ],
+    "floor": 81,
+    "strict_floor": 54
+   },
+   "datastore": {
+    "catalog": [
+     "firestore"
+    ],
+    "apis": [
+     "firestore"
+    ],
+    "floor": 81,
+    "strict_floor": 54
+   },
+   "marketplace": {
+    "catalog": [
+     "consumerprocurement",
+     "commerceoffercatalog"
+    ],
+    "apis": [
+     "marketplace"
+    ],
+    "floor": 100,
+    "strict_floor": 10
+   },
+   "cloud-hub": {
+    "catalog": [
+     "servicehealth",
+     "apphub"
+    ],
+    "apis": [
+     "hub",
+     "apphub"
+    ],
+    "floor": 97,
+    "strict_floor": 65
+   },
+   "memorystore": {
+    "catalog": [
+     "redis"
+    ],
+    "apis": [
+     "redis"
+    ],
+    "floor": 100,
+    "strict_floor": 78
+   },
+   "networking": {
+    "catalog": [
+     "compute",
+     "dns",
+     "servicenetworking",
+     "vpcaccess"
+    ],
+    "apis": [
+     "dns",
+     "servicenetworking",
+     "vpcaccess",
+     "compute"
+    ],
+    "id_prefixes": [
+     "dns.",
+     "servicenetworking.",
+     "vpcaccess.",
+     "compute.networks.",
+     "compute.subnetworks.",
+     "compute.firewalls.",
+     "compute.routes.",
+     "compute.routers.",
+     "compute.addresses.",
+     "compute.globalAddresses.",
+     "compute.forwardingRules.",
+     "compute.globalForwardingRules.",
+     "compute.vpnGateways.",
+     "compute.vpnTunnels.",
+     "compute.targetVpnGateways.",
+     "compute.externalVpnGateways.",
+     "compute.firewallPolicies.",
+     "compute.networkFirewallPolicies.",
+     "compute.regionNetworkFirewallPolicies.",
+     "compute.regionFirewallPolicies.",
+     "compute.interconnects.",
+     "compute.interconnectAttachments.",
+     "compute.networkEndpointGroups.",
+     "compute.globalNetworkEndpointGroups.",
+     "compute.packetMirrorings."
+    ],
+    "floor": 98,
+    "strict_floor": 46
+   },
+   "run": {
+    "catalog": [
+     "run"
+    ],
+    "apis": [
+     "run"
+    ],
+    "floor": 83,
+    "strict_floor": 61
+   },
+   "functions": {
+    "catalog": [
+     "cloudfunctions"
+    ],
+    "apis": [
+     "cloudfunctions"
+    ],
+    "floor": 95,
+    "strict_floor": 63
+   },
+   "pubsub": {
+    "catalog": [
+     "pubsub"
+    ],
+    "apis": [
+     "pubsub"
+    ],
+    "floor": 100,
+    "strict_floor": 62
+   },
+   "cloudscheduler": {
+    "catalog": [
+     "cloudscheduler"
+    ],
+    "apis": [
+     "cloudscheduler"
+    ],
+    "floor": 81,
+    "strict_floor": 51
+   },
+   "eventarc": {
+    "catalog": [
+     "eventarc"
+    ],
+    "apis": [
+     "eventarc"
+    ],
+    "floor": 100,
+    "strict_floor": 65
+   },
+   "apigateway": {
+    "catalog": [
+     "apigateway"
+    ],
+    "apis": [
+     "apigateway"
+    ],
+    "floor": 100,
+    "strict_floor": 57
+   },
+   "security/secret-manager": {
+    "catalog": [
+     "secretmanager"
+    ],
+    "apis": [
+     "secretmanager"
+    ],
+    "floor": 100,
+    "strict_floor": 60
+   },
+   "security/kms": {
+    "catalog": [
+     "cloudkms"
+    ],
+    "apis": [
+     "cloudkms"
+    ],
+    "floor": 97,
+    "strict_floor": 70
+   },
+   "iam-admin": {
+    "catalog": [
+     "iam"
+    ],
+    "apis": [
+     "iam",
+     "iamcredentials"
+    ],
+    "floor": 88,
+    "strict_floor": 19
+   },
+   "resource-manager": {
+    "catalog": [
+     "resourcemanager",
+     "orgpolicy"
+    ],
+    "apis": [
+     "cloudresourcemanager",
+     "orgpolicy"
+    ],
+    "floor": 92,
+    "strict_floor": 7
+   },
+   "artifacts": {
+    "catalog": [
+     "artifactregistry"
+    ],
+    "apis": [
+     "artifactregistry"
+    ],
+    "floor": 94,
+    "strict_floor": 80
+   },
+   "clouddeploy": {
+    "catalog": [
+     "clouddeploy"
+    ],
+    "apis": [
+     "clouddeploy"
+    ],
+    "floor": 100,
+    "strict_floor": 83
+   },
+   "backupdr": {
+    "catalog": [
+     "backupdr"
+    ],
+    "apis": [
+     "backupdr"
+    ],
+    "floor": 70,
+    "strict_floor": 37
+   },
+   "cloudbuild": {
+    "catalog": [
+     "cloudbuild"
+    ],
+    "apis": [
+     "cloudbuild"
+    ],
+    "floor": 93,
+    "strict_floor": 60
+   },
+   "security/binauthz": {
+    "catalog": [
+     "binaryauthorization"
+    ],
+    "apis": [
+     "binaryauthorization"
+    ],
+    "floor": 100,
+    "strict_floor": 55
+   },
+   "security/scc": {
+    "catalog": [
+     "securitycenter"
+    ],
+    "apis": [
+     "securitycenter"
+    ],
+    "floor": 83,
+    "strict_floor": 15
+   },
+   "vertex-ai": {
+    "catalog": [
+     "aiplatform"
+    ],
+    "apis": [
+     "aiplatform"
+    ],
+    "floor": 87,
+    "strict_floor": 50
+   },
+   "monitoring": {
+    "catalog": [
+     "monitoring"
+    ],
+    "apis": [
+     "monitoring"
+    ],
+    "floor": 100,
+    "strict_floor": 59
+   },
+   "logs": {
+    "catalog": [
+     "logging"
+    ],
+    "apis": [
+     "logging"
+    ],
+    "floor": 96,
+    "strict_floor": 70
+   }
+  },
+  "azure": {
+   "recoveryservices": {
+    "catalog": [
+     "Microsoft.RecoveryServices"
+    ],
+    "floor": 98
+   },
+   "storage": {
+    "catalog": [
+     "Microsoft.Storage"
+    ],
+    "floor": 89
+   },
+   "vms": {
+    "catalog": [
+     "Microsoft.Compute"
+    ],
+    "floor": 92,
+    "filters": [
+     "Microsoft.Compute/virtualMachines"
+    ]
+   },
+   "sql": {
+    "catalog": [
+     "Microsoft.Sql"
+    ],
+    "floor": 97
+   },
+   "cosmos": {
+    "catalog": [
+     "Microsoft.DocumentDB"
+    ],
+    "floor": 98
+   },
+   "keyvaults": {
+    "catalog": [
+     "Microsoft.KeyVault"
+    ],
+    "floor": 88
+   },
+   "servicebus": {
+    "catalog": [
+     "Microsoft.ServiceBus"
+    ],
+    "floor": 93
+   },
+   "functionapp": {
+    "catalog": [
+     "Microsoft.Web"
+    ],
+    "floor": 97,
+    "filters": [
+     "Microsoft.Web/sites"
+    ]
+   },
+   "appservices": {
+    "catalog": [
+     "Microsoft.Web"
+    ],
+    "floor": 97,
+    "filters": [
+     "Microsoft.Web/sites"
+    ]
+   },
+   "vnets": {
+    "catalog": [
+     "Microsoft.Network"
+    ],
+    "floor": 93,
+    "filters": [
+     "Microsoft.Network/virtualNetworks"
+    ]
+   },
+   "nsgs": {
+    "catalog": [
+     "Microsoft.Network"
+    ],
+    "floor": 72,
+    "filters": [
+     "Microsoft.Network/networkSecurityGroups"
+    ]
+   },
+   "frontdoor": {
+    "catalog": [
+     "Microsoft.Cdn"
+    ],
+    "floor": 94
+   },
+   "networkmanagers": {
+    "catalog": [
+     "Microsoft.Network"
+    ],
+    "floor": 100,
+    "filters": [
+     "Microsoft.Network/networkManagers"
+    ]
+   },
+   "dns": {
+    "catalog": [
+     "Microsoft.Network"
+    ],
+    "floor": 93,
+    "filters": [
+     "Microsoft.Network/dnszones"
+    ]
+   },
+   "resourcegroups": {
+    "catalog": [
+     "Microsoft.Resources"
+    ],
+    "floor": 100,
+    "filters": [
+     "Microsoft.Resources/subscriptions/resourceGroups",
+     "Microsoft.Resources/deployments"
+    ]
+   },
+   "acr": {
+    "catalog": [
+     "Microsoft.ContainerRegistry"
+    ],
+    "floor": 96
+   },
+   "aks": {
+    "catalog": [
+     "Microsoft.ContainerService"
+    ],
+    "floor": 97
+   },
+   "apim": {
+    "catalog": [
+     "Microsoft.ApiManagement"
+    ],
+    "floor": 99
+   },
+   "eventgrid": {
+    "catalog": [
+     "Microsoft.EventGrid"
+    ],
+    "floor": 87
+   },
+   "monitor": {
+    "catalog": [
+     "Microsoft.Insights"
+    ],
+    "floor": 98
+   },
+   "loganalytics": {
+    "catalog": [
+     "Microsoft.OperationalInsights"
+    ],
+    "floor": 99
+   },
+   "defender": {
+    "catalog": [
+     "Microsoft.Security"
+    ],
+    "floor": 100
+   },
+   "entra": {
+    "catalog": "none",
+    "reason": "Microsoft Entra ID (users, groups, apps) is authorised by Microsoft Graph app roles/Entra roles, not Azure RBAC resource-provider actions; no Azure RBAC permission page covers it",
+    "floor": 0
+   },
+   "subscriptions": {
+    "catalog": [
+     "Microsoft.Resources",
+     "Microsoft.Management"
+    ],
+    "floor": 95,
+    "filters": [
+     "Microsoft.Resources/subscriptions",
+     "Microsoft.Management"
+    ]
+   },
+   "cost": {
+    "catalog": [
+     "Microsoft.CostManagement"
+    ],
+    "floor": 98
+   },
+   "cognitiveservices": {
+    "catalog": [
+     "Microsoft.CognitiveServices"
+    ],
+    "floor": 97
+   },
+   "aisearch": {
+    "catalog": [
+     "Microsoft.Search"
+    ],
+    "floor": 98
+   },
+   "foundry": {
+    "catalog": [
+     "Microsoft.MachineLearningServices",
+     "Microsoft.CognitiveServices"
+    ],
+    "floor": 98
+   },
+   "appconfiguration": {
+    "catalog": [
+     "Microsoft.AppConfiguration"
+    ],
+    "floor": 91
+   },
+   "streamanalytics": {
+    "catalog": [
+     "Microsoft.StreamAnalytics"
+    ],
+    "floor": 92
+   },
+   "containerapps": {
+    "catalog": [
+     "Microsoft.App"
+    ],
+    "floor": 100
+   }
+  }
+ }
+}

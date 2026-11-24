@@ -8,6 +8,7 @@ name: v4 release checklist
 # Checks (see the script docstring): known-issues has no open S1; wasm/core is in sync with core/; Nano loaders import-closed;
 # pyodide-source consistent; no stray *.bak; suites.json valid + per-cloud suites and a bi-directional suite registered;
 # per-cloud v4 console bundle; docker-publish succeeded for the release sha; tunnel package/formula version sync;
+# faithful IAM (rule 14): per-cloud engine/map/real-server e2e tests + global gate/Nano/resource-policy/onboarding tests, coverage file + vendored copies current;
 # suite results when the run_suites.py outputs are attached (SKIPPED, never PASS, when they are not).
 # Installing: this file lives in ci/v4/ because the integrator token cannot push under .github/workflows; the owner moves it.
 

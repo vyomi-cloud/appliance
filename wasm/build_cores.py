@@ -342,6 +342,92 @@ def check_nano_backends():
     print(f"nano-backends.json lists all {len(want)} Nano backends \u2713")
 
 
+# Faithful IAM (docs/architecture/v4.0/IAM-ENGINE-CONTRACT.md). core/iam_engine/*.py and core/iam_catalog/<cloud>/*.json are vendored BYTE-FOR-BYTE
+# but are NOT in CORES / CORE_PKGS: nano-boot and the relay never fetch them at boot. wasm/nano-iam-hook.js loads the engine on the first request
+# of a space whose enforcement is not `off`, and each service catalog on first use (manifest.json is the list; no hand-kept JS list to drift).
+IAM_ENGINE_SRC = os.path.join(SRC, "iam_engine")
+IAM_CATALOG_SRC = os.path.join(SRC, "iam_catalog")
+IAM_MANIFEST = os.path.join(OUT, "iam_engine", "manifest.json")
+# Host adapters outside the package (state + principal from the stores); vendored when present, mounted by the hook at /core/<name>.
+IAM_CORE_EXTRAS = [n + ".py" for n in ("iam_state_adapters", "iam_state_nano", "iam_resource_policies")]      # (built, not literal names: test_nano_core_manifest scans this file for the CORES list)
+
+
+def iam_files():
+    """(engine .py names, {cloud: [service stems]}) as found in core/."""
+    engine = sorted(f for f in os.listdir(IAM_ENGINE_SRC) if f.endswith(".py")) if os.path.isdir(IAM_ENGINE_SRC) else []
+    cats = {}
+    if os.path.isdir(IAM_CATALOG_SRC):
+        for cloud in sorted(os.listdir(IAM_CATALOG_SRC)):
+            d = os.path.join(IAM_CATALOG_SRC, cloud)
+            if os.path.isdir(d):
+                cats[cloud] = sorted(f[:-5] for f in os.listdir(d) if f.endswith(".json"))
+    return engine, cats
+
+
+def iam_extras():
+    return [f for f in IAM_CORE_EXTRAS if os.path.exists(os.path.join(SRC, f))]
+
+
+def iam_manifest(engine, cats):
+    """`digest` (sha256 over every catalog's bytes) is the IndexedDB cache key of the Nano hook: a changed catalog invalidates its copy."""
+    import hashlib
+    h = hashlib.sha256()
+    for cloud, svcs in cats.items():
+        for s in svcs:
+            h.update(f"{cloud}/{s}\0".encode())
+            h.update(open(os.path.join(IAM_CATALOG_SRC, cloud, s + ".json"), "rb").read())
+    return json.dumps({"engine": engine, "catalogs": cats, "core": iam_extras(), "digest": h.hexdigest()[:16]}, indent=1, sort_keys=True) + "\n"
+
+
+def vendor_iam():
+    import shutil
+    engine, cats = iam_files()
+    shutil.rmtree(os.path.join(OUT, "iam_engine"), ignore_errors=True)
+    shutil.rmtree(os.path.join(OUT, "iam_catalog"), ignore_errors=True)
+    os.makedirs(os.path.join(OUT, "iam_engine"), exist_ok=True)
+    for f in engine:
+        shutil.copyfile(os.path.join(IAM_ENGINE_SRC, f), os.path.join(OUT, "iam_engine", f))
+    os.makedirs(os.path.join(OUT, "iam_engine"), exist_ok=True)
+    for f in IAM_CORE_EXTRAS:                 # clear stale copies, then copy the ones that exist
+        if os.path.exists(os.path.join(OUT, f)) and not os.path.exists(os.path.join(SRC, f)):
+            os.remove(os.path.join(OUT, f))
+    for f in iam_extras():
+        shutil.copyfile(os.path.join(SRC, f), os.path.join(OUT, f))
+    n = 0
+    for cloud, svcs in cats.items():
+        os.makedirs(os.path.join(OUT, "iam_catalog", cloud), exist_ok=True)
+        for s in svcs:
+            shutil.copyfile(os.path.join(IAM_CATALOG_SRC, cloud, s + ".json"), os.path.join(OUT, "iam_catalog", cloud, s + ".json"))
+            n += 1
+    with open(IAM_MANIFEST, "w") as f:
+        f.write(iam_manifest(engine, cats))
+    print(f"iam: {len(engine)} engine modules + {n} catalogs -> wasm/core/iam_engine, wasm/core/iam_catalog (lazy, not fetched at boot)")
+
+
+def check_iam():
+    """CI: the vendored IAM copies equal core/ byte for byte (nothing written)."""
+    engine, cats = iam_files()
+    bad = []
+    for f in engine:
+        p = os.path.join(OUT, "iam_engine", f)
+        if not os.path.exists(p) or open(p, "rb").read() != open(os.path.join(IAM_ENGINE_SRC, f), "rb").read():
+            bad.append(f"iam_engine/{f}")
+    for cloud, svcs in cats.items():
+        for s in svcs:
+            p = os.path.join(OUT, "iam_catalog", cloud, s + ".json")
+            if not os.path.exists(p) or open(p, "rb").read() != open(os.path.join(IAM_CATALOG_SRC, cloud, s + ".json"), "rb").read():
+                bad.append(f"iam_catalog/{cloud}/{s}.json")
+    for f in iam_extras():
+        p = os.path.join(OUT, f)
+        if not os.path.exists(p) or open(p, "rb").read() != open(os.path.join(SRC, f), "rb").read():
+            bad.append(f)
+    if not os.path.exists(IAM_MANIFEST) or open(IAM_MANIFEST).read() != iam_manifest(engine, cats):
+        bad.append("iam_engine/manifest.json")
+    if bad:
+        sys.exit("IAM vendored copies are stale (run python3 wasm/build_cores.py): " + ", ".join(bad[:8]) + (" ..." if len(bad) > 8 else ""))
+    print(f"iam: vendored engine + catalogs are current ({len(engine)} modules, {sum(map(len, cats.values()))} catalogs) \u2713")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     verbatim = _expansion_cores()
@@ -362,6 +448,7 @@ def main():
         with open(os.path.join(OUT, name), "w") as f:
             f.write(HEADER + src)
         print(f"core/{name:22} -> wasm/core/{name} ({len(src)} bytes)")
+    vendor_iam()
     check_relay_cores()   # fail loudly if a relay loader lags the cores
     check_core_pkgs()
     write_nano_backends()
@@ -372,5 +459,6 @@ if __name__ == "__main__":
         check_relay_cores()
         check_core_pkgs()
         check_nano_backends()
+        check_iam()
     else:
         main()

@@ -20,7 +20,13 @@ The full rule is `docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md` (owner-appro
    commit); keep branches under 3 days and rebase daily.
 9. **Test in the right substrate:** Nano on the localhost portal (:8099) with the service worker; headless on the real Docker stack.
    A dev server is not a substitute for container-backed features.
+10. **Regenerate the MCP knowledge in the same commit as its inputs.** Any change to `core/capabilities/**`, `wasm/docs/**`,
+   `wasm/nano-docs.js`, `services/registry.json`, `providers/{capabilities,aws,gcp,azure}.py`, `core/pack_catalog.py`,
+   `docker-compose.appliance.yml`, `.env.example`, `scripts/mcp_wiring.json` or `VERSION` → run `python3 scripts/gen_mcp_matrix.py` and
+   commit `cmd/vyomi/mcp_matrix.json`, `mcp_caps.json.gz`, `mcp_docs.json.gz` with it. CI (`Tunnel + MCP checks`) fails on stale outputs,
+   and so does every branch that merges yours. Capability text describes what the code on *that* branch does: never land it on the
+   trunk ahead of the feature code it documents.
 
 Enforcement in this repo: `.claude/settings.json` runs `scripts/claude-hooks/v4-guard.py` (blocks add -A, bare stash, force-push,
-push to main/trunk, tags). Humans: run `scripts/v4-install-hooks.sh` once (committed `pre-push`: topic branches are never blocked,
+push to main/trunk, tags, and commits that change MCP inputs while `gen_mcp_matrix.py --check` fails or the regenerated outputs are unstaged). Humans: run `scripts/v4-install-hooks.sh` once (committed `pre-push`: topic branches are never blocked,
 only warned when stale). Only GitHub branch protection cannot be bypassed — owner to enable.

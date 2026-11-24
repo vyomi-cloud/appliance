@@ -25,6 +25,7 @@ import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import * as api from "./api.js";
 import InventoryReports from "./InventoryReports.jsx";
+import { EnforcementPanel } from "../iam-admin/Enforcement.jsx";
 
 const TABS = [
   ["objects", "Objects"], ["configuration", "Configuration"], ["permissions", "Permissions"], ["protection", "Protection"],
@@ -484,6 +485,7 @@ function Permissions({ bucket, policy, reload }) {
   };
   return (
     <Stack spacing={2}>
+      <EnforcementPanel service="storage" resource={`//storage.googleapis.com/projects/_/buckets/${bucket.name}`} />
       <Section title={<Stack direction="row" spacing={1} alignItems="center"><span>Public access</span><CapabilityBadge id="gcp.storage.permissions" /></Stack>} actions={
         <Button variant="outlined" disabled={busy} onClick={() => patchIam({ publicAccessPrevention: pap ? "inherited" : "enforced" }, pap ? "Removed public access prevention" : "Public access prevention enforced")}>
           {pap ? "Remove public access prevention" : "Prevent public access"}

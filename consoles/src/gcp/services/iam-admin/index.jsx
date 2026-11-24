@@ -37,6 +37,8 @@ import OrgPolicies from "./OrgPolicies.jsx";
 import Pam from "./Pam.jsx";
 import EssentialContacts from "./EssentialContacts.jsx";
 import PolicyTroubleshooter from "./PolicyTroubleshooter.jsx";
+import Enforcement from "./Enforcement.jsx";
+import EffectiveAccess from "./EffectiveAccess.jsx";
 import PolicyAnalyzer from "./PolicyAnalyzer.jsx";
 import WorkloadIdentity from "./WorkloadIdentity.jsx";
 import QuotasSystemLimits from "./QuotasSystemLimits.jsx";
@@ -87,6 +89,8 @@ export default {
         { text: "Security Insights", href: "#/iam-admin/security-insights", icon: InsightsIcon },
         { text: "Policy Analyzer", href: "#/iam-admin/analyzer", icon: QueryStatsIcon },
         { text: "Policy Troubleshooter", href: "#/iam-admin/troubleshooter", icon: TroubleshootIcon },
+        { text: "Effective access", href: "#/iam-admin/effective-access", icon: QueryStatsIcon },
+        { text: "Enforcement", href: "#/iam-admin/enforcement", icon: ShieldIcon },
       ],
     },
     {
@@ -121,6 +125,8 @@ export default {
     { pattern: "/iam-admin/pam", component: Pam },
     { pattern: "/iam-admin/essential-contacts", component: EssentialContacts },
     { pattern: "/iam-admin/troubleshooter", component: PolicyTroubleshooter },
+    { pattern: "/iam-admin/effective-access", component: EffectiveAccess },
+    { pattern: "/iam-admin/enforcement", component: Enforcement },
     { pattern: "/iam-admin/analyzer", component: PolicyAnalyzer },
     { pattern: "/iam-admin/workload-identity-pools", component: WorkloadIdentity },
     { pattern: "/iam-admin/groups", component: Groups },
