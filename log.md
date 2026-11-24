@@ -1,3 +1,16 @@
+### Upstream watch — 2026-11-24T21:18:52+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**5 change(s), 0 actionable.**
+- · `announcement` AWS CloudFormation makes resource coverage comprehensive with 206 new types ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/cloudformation-coverage-expansion/))
+- · `announcement` Amazon RDS for SQL Server now supports up to 500 databases per instance ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-sqlserver-supports-500-databases-per-instance))
+- · `spec-commit` Azure compute: [compute-bulkaction] Update client.tsp (#48464) ([link](https://github.com/Azure/azure-rest-api-specs/commit/1a1ebec4dc1680f62d70a05dc1ed6b04e2f3f968))
+- · `release` pypi:boto3: 1.44.10 → 1.44.11
+- · `release` pypi:botocore: 1.44.10 → 1.44.11
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T20:18:48+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3011,3 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `announcement` Amazon RDS for SQL Server now supports M8id and R8id instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-sqlserver-supports-m8id-r8id-instances))
 
 Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-12T21:09:50+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**24 change(s), 19 actionable.**
-- 🔧 `operation-added` AWS cloudwatch: new operation DeleteMetricDataQueryDefinition
-- 🔧 `operation-added` AWS cloudwatch: new operation GetMetricDataQueryDefinition
