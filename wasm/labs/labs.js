@@ -151,13 +151,9 @@
         sc("arch", "The resulting architecture", el("div", {}, el("p", { textContent: "Answer all thirteen questions and this is the architecture you end up with. It is not a bigger version of the simple design: every part exists because one of those questions needed an answer." }), archFigure("after"),
           el("p", { className: "vl-bacap", textContent: "Select the diagram to open it full size." }))),
         sc("how", "How this course works", el("ol", { className: "vl-tl" }, [["You build the same app all the way through", "One facilities agent, one layer at a time. Chapter 1 gives it a brain; chapter 13 makes it auditable."], ["Every chapter gives you the code and runs it", "Press Deploy and the code goes into your simulator as it is, then a check confirms it works."], ["Nothing is left half-built", "Each chapter ends with a working app, so you can stop anywhere and still have something real."], ["The same story on every cloud", "AWS, Google Cloud and Azure follow the same 13 layers with each cloud's own services."]].map(function (w, i) { return el("li", {}, el("span", { className: "vl-tn", textContent: i + 1 }), el("div", {}, el("b", { textContent: w[0] }), el("p", { textContent: w[1] }))); }))),
-        sc("check", "Check your understanding", quizBlock([
-          ["The simple design answers every question correctly. Why is it still not enough for an enterprise?", ["The model is too small", "Correct answers say nothing about control, cost, privacy or proof", "Demos are always wrong"], 1, "Production readiness is about everything around the answer: who may ask, what it may do, what it costs, what it remembers and what you can prove."],
-          ["Why is each concern a separate layer instead of one big feature?", ["Tidier diagrams", "Each fails differently and needs its own owner, tests and controls", "To sell more"], 1, "Separate layers can be built, tested, secured and replaced one at a time. A tangle fails all at once."],
-          ["You can stop after chapter 5. What do you have?", ["Nothing usable", "A working agent that answers from your documents", "Only slides"], 1, "Every chapter ends with a working app, so progress is never wasted."]])),
         sc("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, ["The simple design meets the functional need; an enterprise is also accountable for how it is met.", "Each of the 13 layers closes one specific gap and prevents one failure.", "You build one working app, a layer at a time, and every chapter is deployed and checked."].map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
           el("button", { type: "button", className: "vl-btn primary lg", onclick: function () { go(first.id); } }, "Start Chapter 1: " + first.title, icon(P.arrow, 16)))));
-      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["check", "Check your understanding"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#vl-i-" + t[0], textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
+      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#vl-i-" + t[0], textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
       var chip = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
       var back = el("button", { type: "button", className: "vl-back", onclick: function () { sel = null; render(); } }, icon(P.back, 16), "Course contents");
       var top = el("div", { className: "vl-topbar" }, back, el("span", { className: "vl-crumb", textContent: course.cloud_name + " · Start here" }),
@@ -465,7 +461,7 @@
       head.onclick = function () { var o = li.classList.toggle("open"); head.setAttribute("aria-expanded", String(o)); };
       var pre = el("pre", { className: "vl-pre" }); pre.append(hl(bk.code));
       li.append(head, el("div", { className: "vl-bbody" },
-        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("button", { type: "button", className: "vl-ghlink", textContent: "Open in editor", onclick: function () { openEditor(projFile(bk.file)); } }), copyBtn(bk.code)), pre,
+        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), projFile(bk.file)), el("button", { type: "button", className: "vl-ghlink", textContent: "Open in editor", onclick: function () { openEditor(projFile(bk.file)); } }), copyBtn(bk.code)), pre,
         bk.run ? el("div", { className: "vl-runrow" }, el("span", { className: "vl-runlbl", textContent: "Run" }), el("code", { textContent: bk.run }), copyBtn(bk.run)) : el("div", { className: "vl-runrow muted" }, el("span", { className: "vl-runlbl", textContent: "Nothing to run yet; the next step uses this file." })),
         bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null));
       return li;
@@ -593,7 +589,7 @@
       var score = el("span", { className: "vl-score", textContent: "Pick an answer" });
       var anchor = function (id, title, body, cls) { var s = el("section", { className: "vl-lsec " + (cls || ""), id: "vl-s-" + id }, el("h3", { textContent: title }), body); return s; };
       var HANDS = [["build", L[1]], ["create", L[2]], ["connect", L[3]], ["validate", L[4]], ["clean", L[5]]];
-      var toc = [["story", "The problem"], ["why", "Why an enterprise goes further"], ["design", "The layer design"]].concat(HANDS, [["check", "Check your understanding"], ["recap", "Recap"]]);
+      var toc = [["story", "The problem"], ["why", "Why an enterprise goes further"], ["design", "The layer design"]].concat(HANDS, [["recap", "Recap"]]);
       var introBody = el("div", { className: "vl-lesson", style: "--c:" + l.color },
         el("div", { className: "vl-lmain" },
           anchor("story", "The problem", el("blockquote", { className: "vl-scene" }, el("p", { textContent: N2.scene })), "vl-first"),
@@ -602,14 +598,11 @@
             el("div", { className: "vl-analogy" }, el("small", { textContent: "Think of it as" }), el("b", { textContent: N2.idea[0] }), el("p", { textContent: N2.idea[1] })),
             el("h4", { className: "vl-sub", textContent: "How it works" }),
             el("ol", { className: "vl-tl" }, N2.walk.map(function (w, i) { return el("li", {}, el("span", { className: "vl-tn", textContent: i + 1 }), el("div", {}, el("b", { textContent: w[0] }), el("p", { textContent: w[1] }))); })))),
-          anchor("check", "Check your understanding", el("div", {}, N2.quiz.map(quizCard), el("div", { className: "vl-scorebar" }, score))),
           anchor("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, N2.recap.map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
             usedBy.length ? el("p", { className: "vl-nextup" }, el("b", { textContent: "Next, in the story: " }), "this feeds ", chapLink(usedBy[0]), ".") : null,
             el("details", { className: "vl-terms" }, el("summary", { textContent: "Key terms" }), el("dl", {}, X.concepts.map(function (c) { return el("div", {}, el("dt", { textContent: c[0] }), el("dd", { textContent: c[1] })); })))))),
         el("aside", { className: "vl-lside" },
-          el("nav", { className: "vl-toc", "aria-label": "On this page" }, el("h4", { textContent: "On this page" }), toc.map(function (t) { var a2 = el("a", { href: "#vl-s-" + t[0], textContent: t[1] }); a2.onclick = function (e) { e.preventDefault(); var x = introBody.querySelector("#vl-s-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a2; })),
-          sec("By the end you will", chk(l.learn)),
-          sec("Before you start", el("div", {}, ul(l.prereq), needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null))));
+          el("nav", { className: "vl-toc", "aria-label": "On this page" }, el("h4", { textContent: "On this page" }), toc.map(function (t) { var a2 = el("a", { href: "#vl-s-" + t[0], textContent: t[1] }); a2.onclick = function (e) { e.preventDefault(); var x = introBody.querySelector("#vl-s-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a2; }))));
       var PANES = [
         { t: L[0], dur: 2, body: introBody },
         { t: L[1], dur: tm.build, body: buildBody, badge: hasLab ? String(l.lab.length) : "" },
@@ -618,7 +611,8 @@
         { t: L[4], dur: tm.val, body: valBody },
         { t: L[5], dur: tm.clean, body: el("div", {}, cleanup, closing, l.order === course.layers.length ? projectCard() : null) }];
       var bodies = [buildBody, consBody, fitsBody, valBody, el("div", {}, cleanup, closing, l.order === course.layers.length ? projectCard() : null)];
-      var lmain = introBody.querySelector(".vl-lmain"), checkSec = introBody.querySelector("#vl-s-check");
+      var lmain = introBody.querySelector(".vl-lmain"), checkSec = introBody.querySelector("#vl-s-recap");
+      introBody.querySelector("#vl-s-design").appendChild(el("div", { className: "vl-factrow" }, sec("By the end you will", chk(l.learn)), sec("Before you start", el("div", {}, ul(l.prereq), needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null))));
       HANDS.forEach(function (h, k) { lmain.insertBefore(anchor(h[0], h[1], bodies[k], "vl-handson"), checkSec); });
       var pager = el("div", { className: "vl-pager2" }, prev ? el("button", { type: "button", className: "vl-btn", onclick: function () { go(prev.id); } }, icon(P.back, 16), "Previous chapter: " + prev.title) : el("span"),
         nxt ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Next chapter: " + nxt.title, icon(P.arrow, 16)) : el("span", { className: "vl-muted", textContent: "That was the last chapter." }));
