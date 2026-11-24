@@ -1,8 +1,8 @@
 {
-  "name": "Vyomi Labs: Facilities agent (AWS)",
+  "name": "Vyomi Labs: Facilities agent (Google Cloud)",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "postCreateCommand": "pip install -r requirements.txt",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/aws",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/courses/vyomi-labs-facilities-agent/gcp",
   "customizations": {
     "vscode": {
       "extensions": [

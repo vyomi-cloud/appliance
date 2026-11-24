@@ -2,7 +2,7 @@
   "name": "Vyomi Labs: Facilities agent (Microsoft Azure)",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "postCreateCommand": "pip install -r requirements.txt",
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/azure",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/courses/vyomi-labs-facilities-agent/azure",
   "customizations": {
     "vscode": {
       "extensions": [

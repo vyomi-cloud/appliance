@@ -1,4 +1,4 @@
-"""Generate the real GitHub project behind Vyomi Labs: projects/vyomi-labs-facilities-agent/<cloud>/.
+"""Generate the real GitHub project behind Vyomi Labs: courses/vyomi-labs-facilities-agent/<cloud>/.
 The files in app/ are the lab code blocks BYTE FOR BYTE (read from wasm/labs/data/<cloud>.json, which build_courses.py makes from the same source),
 so what the course shows, what Deploy runs and what is on GitHub are one and the same. `python -m vyomilabs.content.build_project` regenerates it;
 tests compare the files to the blocks."""
@@ -6,8 +6,10 @@ import json, re, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = ROOT / "projects" / "vyomi-labs-facilities-agent"
-REPO = "vyomi-cloud/vyomi-labs-facilities-agent"
+COURSE = "vyomi-labs-facilities-agent"
+OUT = ROOT / "courses" / COURSE          # GUIDELINE: every course and its python project lives under <appliance>/courses/<course-slug>/<cloud>/
+REPO = "vyomi-cloud/appliance"
+PATH = "courses/" + COURSE
 PKGS = {"aws": ["boto3"], "gcp": ["google-cloud-firestore", "google-cloud-storage", "google-auth", "requests", "functions-framework", "langgraph", "pyyaml", "cryptography"],
         "azure": ["azure-identity", "azure-mgmt-cognitiveservices", "azure-storage-blob", "azure-data-tables", "azure-servicebus", "azure-search-documents", "openai", "requests", "fastapi", "uvicorn", "langgraph", "pyjwt", "cryptography", "opentelemetry-sdk"]}
 
@@ -43,7 +45,7 @@ def build(cloud):
     (base / "run_all.sh").write_text("#!/usr/bin/env bash\n# Runs every chapter's commands in course order against your simulator.\nset -euo pipefail\ncd \"$(dirname \"$0\")/app\"\n" + "".join(f"echo '== Chapter {o}: {t}'\n{r}\n" for o, t, r in runs))
     (base / "run_all.sh").chmod(0o755)
     (base / ".devcontainer" / "devcontainer.json").write_text(json.dumps({"name": f"Vyomi Labs: Facilities agent ({d['cloud_name']})", "image": "mcr.microsoft.com/devcontainers/python:3.12",
-        "postCreateCommand": "pip install -r requirements.txt", "workspaceFolder": f"/workspaces/${{localWorkspaceFolderBasename}}/{cloud}",
+        "postCreateCommand": "pip install -r requirements.txt", "workspaceFolder": f"/workspaces/${{localWorkspaceFolderBasename}}/{PATH}/{cloud}",
         "customizations": {"vscode": {"extensions": ["ms-python.python"], "settings": {"python.defaultInterpreterPath": "/usr/local/bin/python"}}}}, indent=2) + "\n")
     rd = [f"# Facilities agent on {d['cloud_name']}", "", f"The finished project from the Vyomi Labs course **{d['title']}**: an enterprise agentic AI application, built in 13 layers and run against the Vyomi {d['cloud_name']} simulator at no cloud cost.", "",
           "Every file in [`app/`](app) is the exact code the course shows and deploys, in the same order.", "", "## Run it", "", "1. Start your Vyomi simulator (Nano with the tunnel, a Mesh, or the appliance) and copy its endpoint settings into `.env` (see `.env.example`).",

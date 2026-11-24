@@ -151,13 +151,14 @@
     /* ---------- course view ---------- */
     /* The finished code is a real GitHub project (projects/vyomi-labs-facilities-agent/<cloud>); every block here is a file in it. */
     function ghUrl(path) { return "https://github.com/" + course.repo + (path || ""); }
+    function ghBase() { return course.repo_path + "/" + cloud; }
     function projectCard() {
       var b = function (href, txt, primary, ic) { return el("a", { className: "vl-btn" + (primary ? " primary" : ""), href: href, target: "_blank", rel: "noopener" }, icon(ic, 16), txt); };
       return el("section", { className: "vl-projcard" },
         el("div", { className: "vl-projtxt" }, el("small", { textContent: "The finished project" }), el("h3", { textContent: "Take the full code with you" }),
-          el("p", { textContent: "Everything you build here is a real project on GitHub: " + course.repo + ", folder " + cloud + ". Every file is the exact code from the chapters, in order, with a README per chapter and a script that runs them all. Open it in an editor with the code checked out and run it against your simulator." })),
-        el("div", { className: "vl-projbtns" }, b("https://github.dev/" + course.repo + "/blob/main/" + cloud, "Open in editor", true, "M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"),
-          b("https://codespaces.new/" + course.repo + "?devcontainer_path=.devcontainer%2F" + cloud + "%2Fdevcontainer.json", "Open in Codespaces", false, "M4 5h16v11H4zM8 20h8M12 16v4"), b(ghUrl("/tree/main/" + cloud), "View on GitHub", false, "M9 19c-4 1-4-2-6-2m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.800 5.400 3.100 5.400 3.100a4.200 4.200 0 0 0-.1 3.200A4.600 4.600 0 0 0 4 9.500c0 4.600 2.700 5.700 5.500 6-.6.600-.6 1.200-.5 2V21")));
+          el("p", { textContent: "Everything you build here is a real project on GitHub: " + course.repo + ", folder " + ghBase() + ". Every file is the exact code from the chapters, in order, with a README per chapter and a script that runs them all. Open it in an editor with the code checked out and run it against your simulator." })),
+        el("div", { className: "vl-projbtns" }, b("https://github.dev/" + course.repo + "/blob/" + course.repo_ref + "/" + ghBase(), "Open in editor", true, "M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"),
+          b("https://codespaces.new/" + course.repo + "?ref=" + course.repo_ref + "&devcontainer_path=" + encodeURIComponent(ghBase() + "/.devcontainer/devcontainer.json"), "Open in Codespaces", false, "M4 5h16v11H4zM8 20h8M12 16v4"), b(ghUrl("/tree/" + course.repo_ref + "/" + ghBase()), "View on GitHub", false, "M9 19c-4 1-4-2-6-2m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.800 5.400 3.100 5.400 3.100a4.200 4.200 0 0 0-.1 3.200A4.600 4.600 0 0 0 4 9.500c0 4.600 2.700 5.700 5.500 6-.6.600-.6 1.200-.5 2V21")));
     }
     function archLink() {   // the full architecture this course teaches you to build, opened full size in its own tab
       return el("a", { className: "vl-archlink", href: base + course.image, target: "_blank", rel: "noopener" }, icon("M4 5h16v14H4zM4 10h16M10 10v9", 15), "View the full reference architecture you will build", icon("M7 17L17 7M9 7h8v8", 14));
@@ -353,7 +354,7 @@
       head.onclick = function () { var o = li.classList.toggle("open"); head.setAttribute("aria-expanded", String(o)); };
       var pre = el("pre", { className: "vl-pre" }); pre.append(hl(bk.code));
       li.append(head, el("div", { className: "vl-bbody" },
-        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("a", { className: "vl-ghlink", href: ghUrl("/blob/main/" + cloud + "/app/" + bk.file), target: "_blank", rel: "noopener", textContent: "View on GitHub" }), copyBtn(bk.code)), pre,
+        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("a", { className: "vl-ghlink", href: ghUrl("/blob/" + course.repo_ref + "/" + ghBase() + "/app/" + bk.file), target: "_blank", rel: "noopener", textContent: "View on GitHub" }), copyBtn(bk.code)), pre,
         bk.run ? el("div", { className: "vl-runrow" }, el("span", { className: "vl-runlbl", textContent: "Run" }), el("code", { textContent: bk.run }), copyBtn(bk.run)) : el("div", { className: "vl-runrow muted" }, el("span", { className: "vl-runlbl", textContent: "Nothing to run yet; the next step uses this file." })),
         bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null));
       return li;
