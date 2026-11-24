@@ -246,7 +246,20 @@
      "Every layer talks to models through one small client.",
      "A tool call is a request your code fulfils; the model never runs it.",
      "Embeddings turn meaning into numbers, which makes search by meaning possible."
-    ]
+    ],
+    "simple": "Call one model directly, by name, from every piece of code that needs it.",
+    "got": [
+     "Gets a text answer on day one",
+     "Needs no extra components",
+     "Easy to demo"
+    ],
+    "missing": [
+     "Changing the model without touching the code",
+     "Knowing which models the platform actually hosts",
+     "One standard way to call tools and to embed text"
+    ],
+    "why": "Models change every few months, and each has its own limits, cost and privacy terms. Twelve other layers depend on this one, so a hard-wired model name becomes a risk spread across the whole system.",
+    "design": "One small client with three standard calls (chat, chat with tools, embed) and a lookup of what the platform hosts. Every other layer plugs into it, so the model can change in one place."
    },
    "docs": [
     {
@@ -552,7 +565,20 @@
      "A supervisor plans and delegates; specialists each do one job.",
      "The harness (budgets, timeouts, a kill switch) is what makes an agent safe to run.",
      "Every session is isolated from every other."
-    ]
+    ],
+    "simple": "One agent holding every tool, looping until it decides it is finished.",
+    "got": [
+     "Answers multi-step questions",
+     "Quick to write",
+     "Fine for one user at a time"
+    ],
+    "missing": [
+     "A limit on steps, time and spend",
+     "Separation between two users' sessions",
+     "Small specialists you can test and restrict one by one"
+    ],
+    "why": "An unbounded loop spends real money, and shared state is how one user's data reaches another. An enterprise has to be able to say what the agent may do, for how long, for whom.",
+    "design": "A supervisor that plans and delegates to specialists, inside a harness with budgets, timeouts and a kill switch, and with every session isolated."
    },
    "docs": [
     {
@@ -893,7 +919,20 @@
      "A tool is a narrow, validated function, not a door.",
      "Read tools run freely; write tools are gated.",
      "Test every tool by hand before an agent uses it."
-    ]
+    ],
+    "simple": "Hand the model your helper functions and let it call whichever it likes.",
+    "got": [
+     "Lookups return real data",
+     "Writes happen when asked",
+     "Little code to maintain"
+    ],
+    "missing": [
+     "Checking what the model sends in",
+     "A difference between reading and changing things",
+     "Giving each tool only the access it needs"
+    ],
+    "why": "The arguments come from a model that can be manipulated, and a write tool changes the real world. A function without a contract is an open door.",
+    "design": "Narrow functions with typed inputs and outputs. Read tools run freely; write tools only request approval and can never complete the change themselves."
    },
    "docs": [
     {
@@ -1260,7 +1299,20 @@
      "Chunk, embed, store: documents become searchable by meaning.",
      "Upload events keep the index current without people.",
      "Keep the source with every chunk."
-    ]
+    ],
+    "simple": "Paste a few documents straight into the prompt.",
+    "got": [
+     "Answers from those documents",
+     "No infrastructure",
+     "Works for a short demo"
+    ],
+    "missing": [
+     "Handling thousands of pages",
+     "Staying current when files change",
+     "Remembering where each passage came from"
+    ],
+    "why": "Manuals run to thousands of pages and change every week. Knowledge that quietly goes stale is worse than none, because it still sounds right.",
+    "design": "An upload event starts ingestion automatically: documents are split, embedded and stored with their source, so new knowledge is searchable within a minute."
    },
    "docs": [
     {
@@ -1599,7 +1651,20 @@
      "The right passages, in the right order, make the answer.",
      "Hybrid retrieval plus reranking beats either alone.",
      "Test retrieval with questions whose right answer you know."
-    ]
+    ],
+    "simple": "Keyword search, then give the model the top hit.",
+    "got": [
+     "Finds exact words",
+     "Simple to build",
+     "Fast"
+    ],
+    "missing": [
+     "Matching by meaning, not spelling",
+     "Putting the best passage first",
+     "Holding back passages a user may not see"
+    ],
+    "why": "The wrong passage produces a confident wrong answer, and at 2 a.m. nobody double-checks. Answer quality is decided here, before the model writes a word.",
+    "design": "Hybrid retrieval (meaning plus keywords), a rerank pass, and ranked passages passed on with their sources."
    },
    "docs": [
     {
@@ -1899,7 +1964,20 @@
      "Answer only from retrieved text, and cite it.",
      "Filter the output; your own documents can leak.",
      "\"The documents do not say\" is a valid, safe answer."
-    ]
+    ],
+    "simple": "Return whatever the model writes.",
+    "got": [
+     "Fluent, readable answers",
+     "Zero extra work",
+     "Looks impressive"
+    ],
+    "missing": [
+     "A source for every claim",
+     "Saying the documents do not cover it",
+     "Masking private data before it is shown"
+    ],
+    "why": "Unsupported claims and leaked data are the two failures that end AI projects. People act on what the assistant says.",
+    "design": "Answer only from retrieved passages, cite them, run the output through a filter, and check the result."
    },
    "docs": [
     {
@@ -2178,7 +2256,20 @@
      "Short-term is the session; long-term outlives it.",
      "Memory is scoped per user and tenant.",
      "What is stored is untrusted data, never permission."
-    ]
+    ],
+    "simple": "Keep the chat history in a list inside the running process.",
+    "got": [
+     "Follow-up questions work",
+     "No storage to manage",
+     "Quick"
+    ],
+    "missing": [
+     "Surviving a restart",
+     "Keeping each user's memory separate",
+     "Remembering facts across conversations"
+    ],
+    "why": "Memory is personal data. One tenant seeing another's is a breach, and a planted \"fact\" can be believed forever.",
+    "design": "Short-term events for the session and a scoped long-term store, both treated as untrusted data and never as permission."
    },
    "docs": [
     {
@@ -2481,7 +2572,20 @@
      "One governed door in front of every tool.",
      "Policy uses who is calling, not just what is called.",
      "Every call is logged with the user."
-    ]
+    ],
+    "simple": "Each tool decides for itself who may call it.",
+    "got": [
+     "Works for one tool",
+     "No new component",
+     "Easy to explain"
+    ],
+    "missing": [
+     "One place that holds the rules",
+     "Decisions based on who is calling and their role",
+     "A single log of every call"
+    ],
+    "why": "Eight tools means eight copies of the rules and no way to answer an auditor. Security asks who may call what, and the answer has to live in one place.",
+    "design": "One governed entry point in front of every tool: a registry, policy by identity and role, and a log of every call."
    },
    "docs": [
     {
@@ -2796,7 +2900,20 @@
      "A model proposes, a person approves, then code acts.",
      "The wait is durable and the write is idempotent.",
      "The ledger records every decision, including no."
-    ]
+    ],
+    "simple": "The agent performs the write as soon as it decides to.",
+    "got": [
+     "Fast",
+     "No waiting",
+     "Impressive in a demo"
+    ],
+    "missing": [
+     "A person deciding on real changes",
+     "A wait that survives a restart",
+     "Protection from double writes"
+    ],
+    "why": "A model should never hold the power to change the real world on its own. Approvals also have to be provable later.",
+    "design": "A durable workflow parks the request, notifies the approver, records the decision in a ledger and performs the write once, with an idempotency key."
    },
    "docs": [
     {
@@ -3127,7 +3244,20 @@
      "Authenticate at the edge, before the agent.",
      "Carry the user's identity through every layer.",
      "Rate limits protect cost as well as uptime."
-    ]
+    ],
+    "simple": "An open endpoint that anyone can call.",
+    "got": [
+     "It is reachable",
+     "No sign-in to build",
+     "Simple"
+    ],
+    "missing": [
+     "Knowing who is calling",
+     "Limiting a noisy client",
+     "Rejecting bad calls before they cost anything"
+    ],
+    "why": "Every call spends model budget, and every policy needs an identity to decide on. Anonymous access makes both impossible.",
+    "design": "Sign-in with a signed token checked at the edge, and a firewall with a rate-based rule in front of the agent."
    },
    "docs": [
     {
@@ -3391,7 +3521,20 @@
      "Everything that arrives is untrusted.",
      "Guardrails are one layer, never the only one.",
      "People must be told when their decision is needed."
-    ]
+    ],
+    "simple": "Pass whatever the user typed straight to the agent.",
+    "got": [
+     "Any text works",
+     "No filtering to maintain",
+     "Simple"
+    ],
+    "missing": [
+     "Blocking prompt attacks",
+     "The same protection on every channel",
+     "Telling a human when a decision is needed"
+    ],
+    "why": "All input is untrusted, and instructions can hide in documents the agent reads. One clever sentence can rewrite its rules.",
+    "design": "Guardrail filters in front of the agent and an approver inbox that tells people when something is waiting."
    },
    "docs": [
     {
@@ -3697,7 +3840,20 @@
      "Trace, measure and log, with one shared id.",
      "Spans show which step was slow.",
      "Treat telemetry as sensitive data."
-    ]
+    ],
+    "simple": "Print an error to the console when something breaks.",
+    "got": [
+     "You see crashes",
+     "No tooling",
+     "Cheap"
+    ],
+    "missing": [
+     "Which step was slow",
+     "What happened across many requests",
+     "Tying logs, metrics and traces to one request"
+    ],
+    "why": "You cannot run what you cannot see, and a multi-step agent hides failures inside the chain.",
+    "design": "Traces with a span per step, metrics over time and logs, all sharing one request id."
    },
    "docs": [
     {
@@ -4022,7 +4178,20 @@
      "Encrypt sensitive records with a context.",
      "Rotate keys.",
      "An audit trail only counts if it cannot be edited by those it watches."
-    ]
+    ],
+    "simple": "Store the approval records as plain data.",
+    "got": [
+     "The system works",
+     "Nothing extra to manage",
+     "Easy to read"
+    ],
+    "missing": [
+     "Encryption tied to its purpose",
+     "Key rotation",
+     "A trail the people it records cannot edit"
+    ],
+    "why": "Auditors ask who approved what, and whether the record could have been changed. Without evidence the honest answer is \"we think so\".",
+    "design": "Managed keys with an encryption context, an encrypted store and an audit log of the approval events."
    },
    "docs": [
     {
