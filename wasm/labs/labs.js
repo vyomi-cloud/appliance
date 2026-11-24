@@ -285,14 +285,14 @@
       var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : cloud === "aws" ? "in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model" : "inside a Mesh (started for you if it is not running)";
       var supported = true;
       var rows = l.lab.map(function (bk) { return { bk: bk, chip: el("span", { className: "vl-dchip", textContent: bk.run ? "waiting" : "saved on run" }), log: el("pre", { className: "vl-dlog" }) }; });
-      var btn = el("button", { type: "button", className: "vl-btn primary lg" }, icon("M8 5v14l11-7z", 16), "Deploy this chapter");
+      var btn = el("button", { type: "button", className: "vl-btn primary sm vl-deploybtn" }, icon("M8 5v14l11-7z", 14), "Deploy this chapter");
       var out = el("div", { className: "vl-dout" });
       var allFiles = function () {   // every earlier chapter's files exist too (this chapter may import them); nothing is run for those
         var f = {}; for (var i = 0; i < course.layers.length; i++) { var c = course.layers[i]; (c.lab || []).forEach(function (b) { f[b.file] = b.code; }); if (c.id === l.id) break; } return f; };
       function finish(failed, blocked, needModel, endpointNote) {
         btn.disabled = false; btn.textContent = "Deploy again";
         var links = (l.setup || []).filter(function (s) { return s.route; });
-        if (!failed && !blocked) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); }
+        if (!failed && !blocked) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); var st = root.querySelector(".vl-chero .vl-status"); if (st) { st.textContent = store[l.id] === "verified" ? "Verified" : "Deployed"; st.classList.add("done"); } }
         out.replaceChildren(el("div", { className: "vl-dres " + (failed ? "bad" : blocked ? "warn" : "ok") },
           el("b", { textContent: failed ? failed + " step(s) failed. Open the step log below, fix the cause and deploy again." : blocked ? "Deployed, except steps that need a runtime (appliance or Mesh)." : "Deployed." + (endpointNote || "") }),
           (!failed && links.length) ? el("div", { className: "vl-dlinks" }, el("span", { textContent: "See it running in the space: " }), links.map(function (s) { return el("a", { className: "vl-btn", href: consoleUrl(s.route), target: "_blank", rel: "noopener", textContent: s.service || s.title }); })) : null));
@@ -347,18 +347,19 @@
           btn.disabled = false; btn.textContent = failed ? "Deploy again" : "Deploy again";
           var links = (l.setup || []).filter(function (s) { return s.route; });
           var escalate = (needModel || blocked) && !failed; if (escalate) meshWanted = true;
-          if (!failed && !blocked) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); }
+          if (!failed && !blocked) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); var st = root.querySelector(".vl-chero .vl-status"); if (st) { st.textContent = store[l.id] === "verified" ? "Verified" : "Deployed"; st.classList.add("done"); } }
           out.replaceChildren(el("div", { className: "vl-dres " + (failed ? "bad" : blocked ? "warn" : "ok") },
             needModel ? el("b", { textContent: "A step needs a model, so the deploy continues inside a Mesh. Starting it now..." }) : el("b", { textContent: failed ? failed + " step(s) failed. Open the step log below, fix the cause and deploy again." : blocked ? "Deployed, except steps that need the Mesh." : "Deployed." }),
             (!failed && links.length) ? el("div", { className: "vl-dlinks" }, el("span", { textContent: "See it running in the space: " }), links.map(function (s) { return el("a", { className: "vl-btn", href: consoleUrl(s.route), target: "_blank", rel: "noopener", textContent: s.service || s.title }); })) : null));
           if (escalate) setTimeout(function () { btn.onclick(); }, 800);   // no to-do list for the learner: continue inside a Mesh
         });
       };
-      return el("div", { className: "vl-deploy" },
-        el("div", { className: "vl-dhead" }, el("div", {}, el("h3", { textContent: "Deploy this chapter" }), el("p", { className: "vl-muted", textContent: supported ? "Runs every block below in order, exactly as written, " + target + ", then shows you the resources in the console." : "Deploying " + course.cloud_name + " chapters needs the Vyomi Labs runner (the offline appliance or a Mesh); it is not available in this browser session." })), btn),
+      var panel = el("div", { className: "vl-deploy vl-deploystrip", hidden: true },
+        el("div", { className: "vl-dhead" }, el("div", {}, el("h3", { textContent: "Deployment" }), el("p", { className: "vl-muted", textContent: supported ? "Runs every block below in order, exactly as written, " + target + ", then shows you the resources in the console." : "Deploying " + course.cloud_name + " chapters needs the Vyomi Labs runner (the offline appliance or a Mesh); it is not available in this browser session." }))),
         supported ? null : el("p", { className: "vl-native", textContent: "The in-browser runner supports the AWS SDK only. " + course.cloud_name + " chapters deploy through the runner on the appliance or a Mesh." }),
         el("ol", { className: "vl-drows" }, rows.map(function (r, i) { return el("li", {}, el("div", { className: "vl-drow" }, el("span", { className: "vl-dn", textContent: i + 1 }), el("span", { className: "vl-dt", textContent: r.bk.title }), el("code", { textContent: r.bk.run || r.bk.file }), r.chip), r.log); })), out);
-      // button disabled when this cloud is not supported
+      var runIt = btn.onclick; btn.onclick = function () { panel.hidden = false; return runIt.apply(this, arguments); };
+      panel.deployBtn = btn; return panel;
     }
     function copyBtn(text) { return el("button", { type: "button", className: "vl-copy", title: "Copy", onclick: function (e) { try { navigator.clipboard.writeText(text); e.currentTarget.textContent = "Copied"; } catch (_) {} } }, "Copy"); }
     function labBlock(bk, i) {
@@ -445,7 +446,7 @@
       var next = nxt ? el("div", { className: "vl-nextcard" }, el("small", { textContent: "Next" }), el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Chapter " + nxt.order + ": " + nxt.title, icon(P.arrow, 16))) : el("p", { className: "vl-muted", textContent: "That was the last chapter. You now have the full enterprise agent." });
       var cleanup = el("div", {}, el("p", { textContent: "Vyomi is a simulator, so nothing here is billed and nothing needs deleting to avoid charges. To start this chapter again, delete the resources you created from their console pages, or reset the space from Spaces in the bottom drawer." }),
         el("p", { className: "vl-muted", textContent: "Keep the resources if you are continuing: later chapters build on them." }));
-      var buildBody = el("div", {}, hasLab ? el("div", {}, (function () { var d = deployPanel(l); return d; })(),
+      var buildBody = el("div", {}, hasLab ? el("div", {},
           el("p", { className: "vl-muted", textContent: "Complete these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
           (function () { var ol = el("ol", { className: "vl-blocks" }, l.lab.map(labBlock)), allOpen = false; var tg2 = el("button", { type: "button", className: "vl-btn sm", textContent: "Expand all" }); tg2.onclick = function () { allOpen = !allOpen; [].forEach.call(ol.children, function (x) { x.classList.toggle("open", allOpen); }); tg2.textContent = allOpen ? "Collapse all" : "Expand all"; }; return el("div", {}, el("div", { className: "vl-blocktools" }, tg2), ol); })()) :
         el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "Create the resources in the console steps below. The runnable, verified code for this chapter is still being added." }), ul(l.build)));
@@ -530,6 +531,7 @@
       var pager = el("div", { className: "vl-pager2" }, prev ? el("button", { type: "button", className: "vl-btn", onclick: function () { go(prev.id); } }, icon(P.back, 16), "Previous chapter: " + prev.title) : el("span"),
         nxt ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Next chapter: " + nxt.title, icon(P.arrow, 16)) : el("span", { className: "vl-muted", textContent: "That was the last chapter." }));
       lmain.append(pager);
+      var dep = hasLab ? deployPanel(l) : null;
       var chipo = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
       var hero = el("header", { className: "vl-chero", style: "--c:" + l.color },
         el("div", { className: "vl-cicon" }, icon(l.icon, 30)),
@@ -537,8 +539,8 @@
           el("div", { className: "vl-crumbs2", textContent: course.cloud_name + "  /  Vyomi Labs  /  Chapter " + l.order + " of " + course.layers.length }),
           el("h1", { textContent: l.title }), el("p", { textContent: l.outcome }),
           el("div", { className: "vl-cchips" }, chipo(P.flag, l.level), chipo(P.clock, "~" + N + " min"), hasLab ? chipo("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", l.lab.length + " code steps") : null, l.services.slice(0, 3).map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); }))),
-        el("div", { className: "vl-cside" }, el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
-      var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody single" }, introBody));
+        el("div", { className: "vl-cside" }, dep ? dep.deployBtn : null, el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
+      var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, dep, el("div", { className: "vl-wsbody single" }, introBody));
       tocSpy(article);
       var main = article;
 

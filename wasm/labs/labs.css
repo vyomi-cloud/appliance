@@ -370,3 +370,6 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-lside .vl-isec:first-of-type{border-top:3px solid #12805c}.vl .vl-lside .vl-isec:last-of-type{border-top:3px solid var(--c,#1a6e66)}
 
 .vl .vl-toc a.on{color:var(--c,#1a6e66);font-weight:700;border-left-color:var(--c,#1a6e66);background:color-mix(in srgb,var(--c,#1a6e66) 8%,transparent)}
+
+.vl .vl-cside{display:flex;flex-direction:column;align-items:flex-end;gap:8px}.vl .vl-deploybtn{white-space:nowrap;padding:7px 14px!important;font-size:14px!important;min-height:0!important}
+.vl .vl-deploystrip{margin:0;border-radius:0;border-left:0;border-right:0;border-top:0;padding:16px 28px;background:var(--card)}
