@@ -1,6 +1,24 @@
 {
- "at": "2026-11-24T19:18:49+00:00",
+ "at": "2026-11-24T20:18:48+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:a5376dae10",
+   "title": "Azure cognitiveservices: .net naming changes based on SDK review comments (#48470)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/a5376dae10138aa7fcfa3c6a3fd26d77dc9c3d37",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "cli:aws",
+   "kind": "release",
+   "key": "ver:cli:aws:2.42.3",
+   "title": "cli:aws: 2.42.2 \u2192 2.42.3",
+   "actionable": false
+  }
+ ],
  "errors": []
 }

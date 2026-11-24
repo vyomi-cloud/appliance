@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-24T20:18:48+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `spec-commit` Azure cognitiveservices: .net naming changes based on SDK review comments (#48470) ([link](https://github.com/Azure/azure-rest-api-specs/commit/a5376dae10138aa7fcfa3c6a3fd26d77dc9c3d37))
+- · `release` cli:aws: 2.42.2 → 2.42.3
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T19:18:49+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3008,3 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **24 change(s), 19 actionable.**
 - 🔧 `operation-added` AWS cloudwatch: new operation DeleteMetricDataQueryDefinition
 - 🔧 `operation-added` AWS cloudwatch: new operation GetMetricDataQueryDefinition
-- 🔧 `operation-added` AWS cloudwatch: new operation ListMetricDataQueryDefinitions
-- 🔧 `operation-added` AWS cloudwatch: new operation PutMetricDataQueryDefinition
-- 🔧 `operation-added` AWS ec2: new operation CreateMetricCategory
-- 🔧 `operation-added` AWS ec2: new operation DeleteMetricCategory
-- 🔧 `operation-added` AWS ec2: new operation DescribeMetricCategories
-- 🔧 `operation-added` AWS ec2: new operation ModifyMetricCategory
-- 🔧 `operation-changed` AWS ec2: operation ModifyVpcEncryptionControl changed
-- 🔧 `operation-changed` AWS ec2: operation MonitorInstances changed
