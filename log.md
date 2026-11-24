@@ -1,3 +1,17 @@
+### Upstream watch — 2026-11-24T18:18:50+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**6 change(s), 0 actionable.**
+- · `announcement` Amazon API Gateway announces API Portal ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-api-gateway-announces-api-portal/))
+- · `announcement` RDS PostgreSQL now supports PostgreSQL 19.0 in the Amazon RDS Database Preview Environment ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/postgresql-19-amazon-rds-database-preview-environment/))
+- · `announcement` [In preview] Public Preview: Cost controls for model and agent spending in Microsoft Foundry ([link](https://azure.microsoft.com/updates?id=581323))
+- · `announcement` [In preview] Public Preview: Govern MCP tools with your own gateway in Microsoft Foundry Agent Service ([link](https://azure.microsoft.com/updates?id=581498))
+- · `announcement` [Launched] Generally Available: Azure Site Recovery support for zonal disaster recovery for Ultra disks ([link](https://azure.microsoft.com/updates?id=582171))
+- · `announcement` [Launched] Generally Available: Use Azure Storage permissions in Azure AI Search and Foundry IQ ([link](https://azure.microsoft.com/updates?id=581303))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T17:19:10+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3012,3 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `release` cli:aws: 2.40.1 → 2.40.2
 - · `release` pypi:boto3: 1.44.1 → 1.44.2
 - · `release` pypi:botocore: 1.44.1 → 1.44.2
-
-Filed 19 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-12T20:09:49+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `announcement` Amazon MWAA now supports fine-grained access control with IAM Identity Center and multi-team environments ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/mwaa-fine-grained-access-control/))
-
