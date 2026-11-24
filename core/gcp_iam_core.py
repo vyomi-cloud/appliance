@@ -1373,15 +1373,19 @@ def dispatch(store: IamStore, method: str, path: str,
         return _err(400, f"Unsupported method {method} on insights", "INVALID_ARGUMENT")
 
     # ---- deny policies: policies/{attachmentPoint}/denypolicies[/{policyId}] ----
-    if len(segs) >= 3 and segs[0] == "policies" and segs[2] == "denypolicies":
-        attachment_point = segs[1]
-        if len(segs) == 3:
+    # The attachment point is ONE percent-encoded segment on the wire (cloudresourcemanager.googleapis.com%2Fprojects%2Fp), but an
+    # ASGI server hands the handler the DECODED path, so it can span several segments: split on the literal "denypolicies".
+    if len(segs) >= 3 and segs[0] == "policies" and "denypolicies" in segs[2:]:
+        k = segs.index("denypolicies", 2)
+        attachment_point = "/".join(segs[1:k])
+        rest = segs[k + 1:]
+        if not rest:
             if method == "POST":
                 return _create_deny_policy(store, attachment_point, str(query.get("policyId", "")).strip(), _body())
             if method == "GET":
                 return _list_deny_policies(store, attachment_point)
             return _err(400, f"Unsupported method {method} on denypolicies", "INVALID_ARGUMENT")
-        policy_id = segs[3]
+        policy_id = rest[0]
         if method == "GET":
             return _get_deny_policy(store, attachment_point, policy_id)
         if method == "DELETE":

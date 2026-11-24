@@ -25,6 +25,7 @@ import { ErrorAlert, KeyValue, fmtDate } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { LastAccessedTab } from "./LastAccessed.jsx";
+import { EnforcementPanel } from "./Enforcement.jsx";
 import * as api from "./api.js";
 
 function RolePermissionsTab({ roleName }) {
@@ -179,6 +180,7 @@ export default function RoleDetail({ params }) {
           { id: "trust", label: "Trust relationships", content: <TrustTab roleName={roleName} role={role} reload={r.reload} /> },
           { id: "tags", label: "Tags", content: <RoleTagsTab roleName={roleName} /> },
           { id: "last-accessed", label: "Last Accessed", content: <LastAccessedTab arn={role.Arn} /> },
+          { id: "enforcement", label: "Enforcement", content: <EnforcementPanel service="iam" resource={role.Arn} /> },
         ]} />
       </SpaceBetween>
       <DeleteModal visible={delModal} onDismiss={() => setDelModal(false)} resourceType="role" names={[roleName]}

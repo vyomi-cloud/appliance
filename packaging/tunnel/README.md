@@ -69,15 +69,52 @@ ssh -i ~/.ssh/vyomi-<instance>.pem -p 22000 ec2-user@127.0.0.1
 `GET /health` lists `"vm-tcp"` in `features` and the bridged VMs under `vms`.
 Port range: `VM_PORT_MIN` / `VM_PORT_MAX`.
 
-## Agents: the Vyomi MCP server (1.3.0+)
+## Agents: the Vyomi MCP server (1.3.0+): Claude Code, Codex, Cursor, VS Code
 
 `vyomi-tunnel mcp` runs the Vyomi MCP server on stdin/stdout for Claude Code and
 other agents. The package bundles it for macOS (arm64, x64), Linux (arm64, x64) and Windows
-(x64), so there is nothing else to install:
+(x64). Agents start it with `npx -y vyomi-tunnel mcp`, so the MCP needs Node.js 18+ and
+no install. If `vyomi-tunnel` is installed (1.3.0+), that command runs your installed copy, so
+`npx -y vyomi-tunnel mcp` and `vyomi-tunnel mcp` are always the same server. Keep it at 1.4.0+
+(`npm i -g vyomi-tunnel`): an older installed tunnel serves its older MCP, without `vyomi_agents_md`.
+From 1.4.0, `vyomi_status` tells the agent when npm has a newer tunnel.
+
+Claude Code (the Vyomi plugin adds this server plus setup skills: `claude plugin install vyomi@vyomi`):
 
 ```bash
-claude mcp add vyomi -- vyomi-tunnel mcp
+claude mcp add --scope user vyomi -- npx -y vyomi-tunnel mcp
 ```
+
+Cursor: `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project):
+
+```json
+{ "mcpServers": { "vyomi": { "command": "npx", "args": ["-y", "vyomi-tunnel", "mcp"] } } }
+```
+
+VS Code (Copilot agent mode): `.vscode/mcp.json` in the project, or `code --add-mcp '{"name":"vyomi","command":"npx","args":["-y","vyomi-tunnel","mcp"]}'`:
+
+```json
+{ "servers": { "vyomi": { "type": "stdio", "command": "npx", "args": ["-y", "vyomi-tunnel", "mcp"] } } }
+```
+
+The portable `.mcp.json` at the project root uses the Cursor shape (`mcpServers`) and works across tools that read it.
+
+OpenAI Codex (CLI, IDE extension and app share `~/.codex/config.toml`):
+
+```bash
+codex mcp add vyomi -- npx -y vyomi-tunnel mcp
+```
+
+```toml
+[mcp_servers.vyomi]
+command = "npx"
+args = ["-y", "vyomi-tunnel", "mcp"]
+```
+
+Offline, or an agent that cannot start `npx` (native Windows agents may need `cmd /c npx -y vyomi-tunnel mcp`):
+install the tunnel and register `vyomi-tunnel mcp` instead (command `vyomi-tunnel`, args `["mcp"]`); v4.0.0
+offline appliance users can register `vyomi mcp`. Every client gets the same tools and the same built-in instructions
+(including: never write `.env.vyomi` without your yes); the setup skills come with the plugin.
 
 It finds your simulator (the Nano tab through this tunnel, a local mesh, or your
 Mesh Codespace), says which one it uses, and gives SDK settings, capability levels

@@ -1,13 +1,13 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");</script>
+  <script>if(/[?&]embed=1/.test(location.search))document.documentElement.classList.add("vy-embed");if(/[?&]svc=/.test(location.search))document.documentElement.classList.add("vy-svc");</script>
   <script>if(/[?&]pick=1/.test(location.search))document.documentElement.classList.add("vy-pickview");</script>
   <script>window.__vyHash=location.hash;try{if(!/[?&]embed=1/.test(location.search)&&!location.hash&&localStorage.getItem("vyomi.defaultSpace"))document.documentElement.classList.add("vy-entering")}catch(e){}</script>
   <script src="nano-rates.js"></script>
   <script src="mesh-link.js"></script>
   <script src="nano-connect.js"></script>
-  <script src="nano-docs.js?v=icons2"></script>
+  <script src="nano-docs.js?v=ops9"></script>
   <script>
   (function(){
     var base = location.pathname.replace(/\/[^\/]*$/, "");
@@ -1253,6 +1253,20 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
     /* Modals → dark surface (readable on the dark backdrop). */
     .modal, #modal-body, .cl-box { background: #0d1228 !important; color: #e4e4e7 !important; border: 1px solid rgba(255,255,255,0.10) !important; }
 
+    /* Embedded in a Vyomi Labs chapter (?svc=<service ids>): only that chapter's generated service cards, nothing else. */
+    html.vy-svc #view-usage .u-tunnel, html.vy-svc #view-usage .u-panel > .sc-head, html.vy-svc #view-usage .u-panel > .sc-desc, html.vy-svc #view-usage .u-panel > .u-grid, html.vy-svc #view-usage .u-cloud-head, html.vy-svc #view-usage .u-info { display: none !important; }
+    html.vy-svc .container, html.vy-svc #view-usage .u-panel { max-width: none !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; margin: 0 !important; }
+    html.vy-svc #view-usage .u-grid, html.vy-svc #view-usage .nd-ugrid { grid-template-columns: 1fr !important; }
+    html.vy-svc #view-usage .u-panel { background: none !important; border: 0 !important; box-shadow: none !important; padding: 0 !important; }
+    html.vy-svc #view-api .tabs-wrap, html.vy-svc #view-api .api-search, html.vy-svc #view-api .sc-head { display: none !important; }
+    .rd-ops-only .rd-cat-h { font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #667085; margin: 26px 0 4px; padding-bottom: 6px; border-bottom: 1px solid #e4e7ec; }
+    .rd-ops-only .rd-src { display: flex; justify-content: flex-start !important; text-align: left; align-items: center; gap: 10px; margin: 16px 0 8px; color: #101828; font-size: 15px; }
+    .rd-ops-only .rd-src > span:last-child { margin-left: auto; font-size: 12px; color: #667085; }
+    .rd-ops-only .u-svc-ic { display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center; } .rd-ops-only .u-svc-ic svg { width: 26px; height: 26px; } .rd-ops-only .u-svc-ic .material-icons { font-size: 24px; color: #1a73e8; }
+    .rd-ops-only .rd-op { margin: 0 0 20px !important; display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); border: 1px solid #e4e7ec; border-radius: 10px; overflow: hidden; }
+    .rd-ops-only .rd-l { padding: 18px 22px; min-width: 0; } .rd-ops-only .rd-r { background: #0e1322; color: #cdd8e6; padding: 18px 22px; min-width: 0; }
+    @media (max-width: 900px) { .rd-ops-only .rd-op { grid-template-columns: 1fr; } }
+    html.vy-svc body, html.vy-svc #app-main { background: #fff !important; }
     /* Embedded in a console's drawer modal (?embed=1): just the view, no app chrome. */
     html.vy-embed #update-banner, html.vy-embed #vyomi-readiness-mount, html.vy-embed #nano-foot { display: none !important; }
     html.vy-embed #app-main { margin: 0 !important; border-radius: 0 !important; }
@@ -2621,7 +2635,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       }
       // Each card keeps its own tab (CLI / SDK / curl), like the console's Connect card.
       var picked = {};
-      var cloudPick = 'aws'; try{ cloudPick = localStorage.getItem('vyomi.usage.cloud') || 'aws'; }catch(_){}
+      var ONLY = (location.search.match(/[?&]only=(aws|gcp|azure)/) || [])[1] || '';   // embedded in a console's Vyomi Labs dialog: that console's cloud only
+      var cloudPick = ONLY || 'aws'; try{ if (!ONLY)  cloudPick = localStorage.getItem('vyomi.usage.cloud') || 'aws'; }catch(_){}
       var SVC_IC = { 'aws-s3':'s3', 'aws-dynamodb':'dynamodb', 'aws-kms':'kms', 'aws-secrets':'secretsmanager', 'aws-sqs':'sqs',
                      'aws-sns':'sns', 'aws-iam':'iam', 'aws-rds':'rds', 'az-blob':'storage', 'az-queue':'storage',
                      'az-cosmos':'cosmos', 'az-keyvault':'keyvaults' ,
@@ -2692,7 +2707,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if(grid){
           // One panel; its header is the cloud switch — AWS | Google Cloud | Azure tabs (the
           // choice is remembered). The setup hint for the chosen cloud sits on the right.
-          var clouds = CLOUDS.filter(function(c){ return SERVICES.some(function(s){ return s.cloud===c.id; }); });
+          var clouds = CLOUDS.filter(function(c){ return (!ONLY || c.id===ONLY) && SERVICES.some(function(s){ return s.cloud===c.id; }); });
           if(!clouds.some(function(c){ return c.id===cloudPick; })) cloudPick = clouds.length ? clouds[0].id : 'aws';
           var c = clouds.filter(function(x){ return x.id===cloudPick; })[0] || clouds[0];
           var svcs = SERVICES.filter(function(s){ return s.cloud===c.id; });
@@ -2931,6 +2946,8 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
         if (window.NanoDocs){   // generated reference (wasm/docs) — works offline in Nano, no /openapi-*.json needed
           curCloud = cloud;
           document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.classList.toggle('active', t.dataset.c === cloud); });
+          var wantOps = (location.search.match(/[?&]ops=([^&#]+)/) || [])[1];
+          if (wantOps) { try { NanoDocs.renderOps(document.getElementById('api-body'), cloud, apiEndpoint(), JSON.parse(decodeURIComponent(wantOps))); return; } catch (e) {} }
           NanoDocs.renderRedoc(document.getElementById('api-body'), cloud, filter, apiEndpoint());
           return;
         }
@@ -2960,7 +2977,7 @@ button:not(:disabled),input[type="checkbox"]:not(:disabled),input[type="radio"]:
       if (search) search.addEventListener('input', function(){ filter = search.value.trim(); if (window.NanoDocs){ clearTimeout(search._t); search._t = setTimeout(function(){ loadSpec(curCloud); }, 200); return; } render(); });
       document.querySelectorAll('#api-cloud-tabs .usage-tab').forEach(function(t){ t.addEventListener('click', function(){ filter = ''; if (search) search.value = ''; loadSpec(t.dataset.c); }); });
       window.__apiCloud = function(c){ filter = ''; loadSpec(c); };
-      window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec('aws'); } };
+      window.__apiShow = function(){ if (!loaded){ loaded = true; loadSpec((location.search.match(/[?&]only=(aws|gcp|azure)/) || [])[1] || 'aws'); } };
       // Booted straight into the API view (e.g. a console link → clouds.html#api)?
       // showAppView ran before this IIFE defined __apiShow, so load the spec now.
       var av = document.getElementById('view-api');
@@ -4518,5 +4535,6 @@ function nanoLogout(){
 <script src="./vyomi-cloudpick.js" data-nano data-entry defer></script>
 <script src="./nano-tunnel-tabs.js" defer></script>
 <script src="./nano-back.js"></script>
+<script>if(/[?&]svc=/.test(location.search)){var _vh=function(){try{var v=document.querySelector('#view-usage:not([hidden]),#view-api:not([hidden])');var e=(v&&(v.querySelector('.rd-ops-only')||v.querySelector('#nd-usage-host')||v.querySelector('#usage-cards')))||v||document.body;parent.postMessage({vylabs:'h',h:Math.ceil(e.getBoundingClientRect().bottom+(window.scrollY||0))+24,u:location.hash},'*')}catch(e){}};addEventListener('load',function(){try{new ResizeObserver(_vh).observe(document.body)}catch(e){setInterval(_vh,800)}_vh()})}</script>
 </body>
 </html>

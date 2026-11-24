@@ -10,6 +10,10 @@ name: Docker Publish
 #   manual run    tag=foo      → :foo only
 #   manual run    no tag input → :edge + :sha-<short>
 #
+# Base images (vyomi/instance, vyomi/postgres) carry STABLE tags that every install pulls (:latest, :ubuntu-24.04,
+# :16-alpine-pgvector), so they are pushed only by a stable release tag, or by a manual run with base_images=true.
+# A manual or pre-release run from a topic branch never overwrites them.
+#
 # Why no auto-build on main pushes:
 #   • Daily commits to main are dev iteration, not releases — we don't
 #     want every commit to ship an image. That would churn Hub tag lists,
@@ -37,13 +41,25 @@ on:
       tag:
         description: "Image tag to publish (leave blank for :edge + :sha-<short>)"
         required: false
+      base_images:
+        description: "Also publish the base images under their STABLE tags (vyomi/instance:latest + :ubuntu-24.04, vyomi/postgres:16-alpine-pgvector). Every user pulls these: only for a deliberate base-image hotfix."
+        type: boolean
+        default: false
 
 permissions:
   contents: read
   packages: write   # required to push to ghcr.io
 
 jobs:
+  # ── Guardrail suite (hard gate: red blocks every artifact below; tools/guardrails/run.sh) ──
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
+
   docker:
+    needs: guardrails
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +119,9 @@ jobs:
           echo "instance_tags=${ITAGS}"   >> "$GITHUB_OUTPUT"
           echo "postgres_tags=${PGTAGS}"  >> "$GITHUB_OUTPUT"
           echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          # Stable base-image tags: a stable release tag, or an explicit manual opt-in. Never a manual/RC run by default.
+          if [[ "${PRERELEASE}" == "no" || "${{ github.event.inputs.base_images }}" == "true" ]]; then BASE=true; else BASE=false; fi
+          echo "base_images=${BASE}"      >> "$GITHUB_OUTPUT"
           {
             echo "## Will publish"
             echo
@@ -110,6 +129,12 @@ jobs:
             echo "- **prerelease**: \`${PRERELEASE}\`"
             echo "- **tags**:"
             for t in ${TAGS//,/ }; do echo "  - \`$t\`"; done
+            if [[ "${BASE}" == "true" ]]; then
+              echo "- **base images** (stable tags):"
+              for t in ${ITAGS//,/ } ${PGTAGS//,/ }; do echo "  - \`$t\`"; done
+            else
+              echo "- **base images**: not published (only a stable release tag or base_images=true publishes them)"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Set up QEMU (cross-arch emulation)
@@ -177,7 +202,7 @@ jobs:
         # EC2/GCP/Azure compute instances (sshd + docker-in-instance + SSH-key
         # injection). Stable ubuntu-24.04 tag — it's the "AMI", independent of
         # the app version, so users can `docker pull vyomi/instance:ubuntu-24.04`.
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.meta.outputs.base_images == 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: ./packaging/instance
@@ -197,7 +222,7 @@ jobs:
         # VYOMI_POSTGRES_IMAGE for vyomi-sql-postgres in every docker-compose*.yml
         # (PG1). Previously never built here, so a clean `docker compose pull`
         # failed with "pull access denied" for this image.
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && steps.meta.outputs.base_images == 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: ./packaging/postgres

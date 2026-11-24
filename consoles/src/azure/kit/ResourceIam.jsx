@@ -10,6 +10,7 @@ import BrowseGrid from "./BrowseGrid.jsx";
 import { CapabilityContainer } from "./Capability.jsx";
 import { KV, NotSimulatedContainer } from "./common.jsx";
 import * as iam from "./iam.js";
+import { EnforcementPanel, EffectiveAccess, AuditPanel } from "./IamEnforcement.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "./IamExtras.jsx";
 
 
@@ -143,12 +144,18 @@ export default function ResourceIam({ a, capId, actions }) {
         <Tab value="roles">Roles</Tab>
         <Tab value="deny">Deny assignments</Tab>
         <Tab value="classic">Classic administrators</Tab>
+        <Tab value="enforcement">Enforcement</Tab>
+        <Tab value="effective">Effective access</Tab>
+        <Tab value="audit">Audit</Tab>
       </TabList>
       {tab === "check" && <CheckAccess a={a} actions={actions} />}
       {tab === "assignments" && <RoleAssignments a={a} />}
       {tab === "roles" && <Roles />}
       {tab === "deny" && <DenyAssignmentsPanel a={a} />}
       {tab === "classic" && <ClassicAdminsPanel />}
+      {tab === "enforcement" && <EnforcementPanel a={a} />}
+      {tab === "effective" && <EffectiveAccess a={a} />}
+      {tab === "audit" && <AuditPanel />}
     </CapabilityContainer>
   );
 }

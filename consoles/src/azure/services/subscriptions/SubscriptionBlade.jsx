@@ -18,6 +18,7 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember } from "../../kit/recent.js";
 import * as api from "./api.js";
+import { EnforcementPanel as IamEnforcementPanel, EffectiveAccess as IamEffectiveAccess, AuditPanel as IamAuditPanel } from "../../kit/IamEnforcement.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
@@ -332,7 +333,13 @@ function AccessControlIam({ id }) {
         <Tab value="roles">Roles</Tab>
         <Tab value="deny">Deny assignments</Tab>
         <Tab value="classic">Classic administrators</Tab>
+        <Tab value="enforcement">Enforcement</Tab>
+        <Tab value="effective">Effective access</Tab>
+        <Tab value="audit">Audit</Tab>
       </TabList>
+      {tab === "enforcement" && <IamEnforcementPanel a={{ id: `/subscriptions/${id}`, name: "this subscription" }} />}
+      {tab === "effective" && <IamEffectiveAccess a={{ id: `/subscriptions/${id}`, name: "this subscription" }} />}
+      {tab === "audit" && <IamAuditPanel />}
       {tab === "check" && (
         <CapabilityContainer id="azure.subscriptions.access_control_iam" title="Check access">
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

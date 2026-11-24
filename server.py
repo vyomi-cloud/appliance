@@ -318,6 +318,11 @@ for mod in [console, aws_extras, gcp_extras, tenants, config, licensing,
 # Mesh pack (headless Pro/Max appliance): /mesh/* status + pairing routes.
 from core import mesh as _mesh
 _mesh.register(app)
+try:   # Vyomi Labs: deploy a course chapter inside this Mesh (POST /mesh/labs/deploy/<cloud>/<layer>)
+    from core import mesh_labs as _mesh_labs
+    _mesh_labs.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[mesh] Labs deploy route skipped: {_e}")
 # Mesh shell routes registered here (before the wire catch-all); the resolver is defined further down.
 from core import mesh_shell as _mesh_shell
 _mesh_shell.register(app, lambda cloud, ref: _shell_container(cloud, ref))
@@ -25387,6 +25392,13 @@ try:
     _azure_openai_routes.register(app)
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-openai] routes skipped: {_e}")
+
+# Faithful IAM enforcement API (/api/iam/<cloud>/enforcement|audit|evaluate|catalog); engine is core/iam_engine (shared with Nano).
+try:
+    from routes import iam_enforcement as _iam_enf_routes
+    _iam_enf_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[iam-enforcement] routes skipped: {_e}")
 
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:

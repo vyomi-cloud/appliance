@@ -1,0 +1,3 @@
+.workspace/
+.env
+__pycache__/

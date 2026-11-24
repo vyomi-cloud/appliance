@@ -145,3 +145,29 @@ ENV (not run here): offline-ui-gcp-* Playwright suites timed out waiting for the
 ## Azure, 2026-11-20 nightly
 ENV on this runner (no Playwright module, no azure SDK, embedding model returns zero vectors, APIM backend proxy times out): offline-ui-azure-{metrics,rg-nav,resource-group-detail,apim-appinsights}, offline-sweepA-azure (APIM 502 timeout), offline-post-create-azure-openai (zero embeddings). Not product-verified; verify on the full runner stack.
 FIXED (harness): offline-sdk-python-azure-vm-runcommand assumed no guest runtime; with Docker the command really runs. Test now asserts real `uid=` output when a runtime exists, failed status otherwise.
+
+## Azure nightly 2026-11-21 (nightly/azure-2026-11-21)
+FIXED: post_create/probes/azure_openai.py was not re-runnable: Cognitive Services accounts are soft-deleted, so a second run failed `FlagMustBeSetForRestore`. The probe now purges the deleted account before and after (real Azure flow).
+DECISION: the probe asserts a 1536-d embedding, but since dbb1b47cb deployments serve the booster-mesh model (`nomic-embed-text`, backend 768-d or hash fallback 256-d). Either the Azure embeddings op reports ada-002's 1536 dims, or the probe asserts the model's real dimension. Not changed (would loosen a test).
+ENV, not product: offline-sdk-java-azure* (Maven cannot fetch com.azure:azure-sdk-bom 1.2.31, Central returns 404 from this runner); offline-sweepA-azure APIM proxy (backend outbound timeout); azure-openai chat (no vyomi-llm sibling); offline-ui-azure-{metrics,rg-nav,resource-group-detail,apim-appinsights} Playwright boot timeouts on the runner, not reproduced as product bugs.
+Tunnel check (6): NOT RUN, no Codespace leg. Checks 2-5: only the existing suites ran; crawl-azure-ui, validation-azure-ui and bidi-azure-* are still `pending` in suites.json.
+
+## AWS nightly 2026-11-22
+- FIXED (product): offline Lambda Function URL (`GET /lambda-url/<id>/`) returned 500 (`KeyError: 'function_name'` in `routes/aws_lambda.py`); now delegates to `core.lambda_core.url_invoke`. Test `test_aws_lambda_function_url_api.py` (suite `offline-api-aws-lambda-function-url`).
+- OPEN (same class as 2026-11-17, not fixed): offline-api-aws-detail-tabs Secrets/KMS/EventBridge/SQS-encryption legacy-store reads; offline-post-create-aws-event-delivery "EventBridge: Lambda target invoked once with the InputTransformer payload".
+- DECISION: nano-cores is red only for tests of modules outside the Nano vendor list (`sns_delivery`, `mesh_selfcheck`, `k3s_runtime`) and uvicorn-needing GCP/identity cores. Either vendor them (trunk-owned list) or make `nano-cores` skip tests that import non-vendored modules. Shared, not changed.
+- NOT REPRODUCED: offline-sdk-{go,java}-aws-sns email delivery (green on re-run; baseline suite ran while the 30-entry delivery log was shared).
+- ENV: offline-ui-* / nano UI suites need Playwright + fastapi (absent on this runner); the runner exports `AWS_REGION` in a form the CLI rejects (offline-cli-aws is green with `AWS_REGION=us-east-1`).
+
+## GCP nightly 2026-11-23 (nightly/gcp-2026-11-23)
+- FIXED (product): offline `/gcf/{project}/{location}/{function}` answered 422 `query.request Field required` for every call (unresolved `request: Request` annotation under `from __future__ import annotations` in core/gcp_eventing.py), so the API Gateway data plane could never reach its function backend. Test `test_gcp_gcf_trigger_url_api.py` (suite `offline-api-gcp-gcf-trigger-url`), fails before, passes after.
+- FIXED (harness): post_create event_delivery probe read the Eventarc create LRO's `name` as the trigger name; real Eventarc returns an operation, the trigger is its `response.name`/`metadata.target`. Delivery itself was already green.
+- NOT REPRODUCED: offline-api-gcp-vault-console-secrets (green on re-run).
+- ENV: the appliance image on this runner serves no console (`/console/gcp` is 404; `static/` holds only swagger, the v4 consoles are built by `consoles/build.mjs` and are not in the image), so every offline-ui-gcp-* Playwright suite times out waiting for the rail. DECISION: build/bake the v4 console into the CI image (shared, `.github`/packaging, not touched) or point those suites at the v4 console.
+- Checks 2-5 (UI actions, validation, bidi, crawl): only existing suites ran; crawl-gcp-ui, validation-gcp-ui, bidi-gcp-* remain `pending`. Check 6 (tunnel): NOT RUN, no Codespace leg.
+
+## Azure, 2026-11-24 nightly (no runnable stack on the agent runner)
+No fix made: the relay answered 503, `localhost:9000` served an S3-style NoSuchBucket error, and the `azure` Python SDK and Playwright were not installed, so no suite could be re-run. The baseline reds are listed with the evidence that separates env from product:
+- offline-post-create-azure-openai: chat 503 because `vyomi-llm:8080` is unreachable (ENV). Embeddings return a zero vector. The probe (`tests/conformance/post_create/probes/azure_openai.py:52`) expects 1536-d for a deployment of model `nomic-embed-text`, but `core/ai_models_core.py:2486` returns the model's native 768-d. DECISION: either the probe deploys `text-embedding-ada-002` (1536) or the core pads to the deployment's advertised width.
+- offline-sweepA-azure: APIM "valid key proxies to the backend" gets 502 TimeoutError (backend not reachable from the bare stack, likely ENV).
+- offline-ui-azure-rg-nav, -resource-group-detail, -apim-appinsights, -metrics, nano-ui-azure-apim-appinsights: Playwright timeouts, the nano one on the "Application Insights" sub-nav tab (`button.sub-nav-item`, matched by the selector but not clickable). Needs a run with a live stack to tell product from harness.

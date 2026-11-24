@@ -1,0 +1,51 @@
+# The `mcp` component to add to the PORTAL's DigitalOcean App Platform spec (D-H2 = B').
+#
+# This file is not a whole app spec: it is the one service and the one ingress rule that get merged into the
+# portal's existing spec, which keeps its own components untouched. deploy/mcp-hosted/RUNBOOK.md does the merge
+# with add-component.py and applies it with `doctl apps update --spec`.
+#
+# Why a pinned image and not a source build: an MCP release must never be able to block or rebuild the portal.
+# App Platform deploys all components together, so bumping this tag also redeploys the portal's current main from
+# its own source — that is the known trade-off of B' (design §5).
+#
+# The GHCR package is private. The pull credentials are NOT in this file: add-component.py adds them from
+# GHCR_PULL_CREDENTIALS ("username:token", read:packages) and App Platform stores them encrypted (EV[...]).
+
+services:
+  - name: mcp
+    image:
+      registry_type: GHCR
+      registry: vyomi-cloud
+      repository: mcp-hosted
+      # Pinned, and bumped only by the mcp-hosted-v* release workflow (or by hand, per the runbook's rollback).
+      tag: 0.1.0
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    # The server listens on $PORT, which App Platform sets from http_port; without it, on :8080.
+    http_port: 8080
+    health_check:
+      http_path: /healthz
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 3
+    envs:
+      # Browser origins allowed in addition to vyomi.cloud and loopback. Empty: server-to-server clients send no
+      # Origin, which is the normal case for an MCP client.
+      - key: VYOMI_MCP_ALLOWED_ORIGINS
+        scope: RUN_TIME
+        value: ""
+
+ingress:
+  rules:
+    # vyomi.cloud/mcp and everything under it reach this component. preserve_path_prefix is absent, so App
+    # Platform TRIMS /mcp: the Go server sees "/" and "/healthz" (D-I6). It serves "/mcp" and "/mcp/healthz" as
+    # well, so the same URLs work locally, in Docker and here, and it never redirects between them — a 301 or 308
+    # would turn a client's POST into a GET and break every MCP client.
+    - match:
+        path:
+          prefix: /mcp
+      component:
+        name: mcp
+    # The portal's own rule must stay LAST (a prefix of "/" matches everything). add-component.py enforces that.

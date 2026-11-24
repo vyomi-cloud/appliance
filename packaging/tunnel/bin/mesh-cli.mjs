@@ -333,8 +333,13 @@ Targets are your own VMs and k3s clusters, plus 'api' (the simulator's API ports
 (simulator, llm*) are not forwarded or listed. A local port that is already in use is refused, with a free one suggested.`,
   mcp: `vyomi-tunnel mcp
 
-Runs the Vyomi MCP server (vyomi-mcp, bundled with this package) on stdin/stdout, for Claude Code and other agents:
-  claude mcp add vyomi -- vyomi-tunnel mcp
+Runs the Vyomi MCP server (vyomi-mcp, bundled with this package) on stdin/stdout, for Claude Code and other agents.
+Agents start it with npx (Node.js 18+; when vyomi-tunnel is installed, npx hands over to it, so both run one server):
+  claude mcp add --scope user vyomi -- npx -y vyomi-tunnel mcp
+  codex mcp add vyomi -- npx -y vyomi-tunnel mcp
+  code --add-mcp '{"name":"vyomi","command":"npx","args":["-y","vyomi-tunnel","mcp"]}'
+  JSON (Cursor, .mcp.json, others): {"command": "npx", "args": ["-y", "vyomi-tunnel", "mcp"]}
+Offline: register 'vyomi-tunnel mcp' itself (v4.0.0 offline appliance: 'vyomi mcp').
 It finds your simulator (the Nano tab through this tunnel, a local mesh, or your Mesh Codespace), and answers what Vyomi
 supports and how to point your SDKs at it. It needs no key; only live Mesh Codespace details need one (through 'list').
 Without a bundled binary for this platform it runs 'vyomi-mcp' or 'vyomi mcp' from your PATH.`,
@@ -365,7 +370,7 @@ export async function main(argv) {
   if (!cmd || ["help", "-h", "--help", "-help", "-?"].includes(cmd) || rest.some((a) => ["-h", "--help", "-help"].includes(a))) { const topic = cmd === "help" ? rest[0] : (["-h", "--help", "-help", "-?"].includes(cmd) ? undefined : cmd); const t = topic && DETAILS[topic];
     if (topic && !t) { console.error(`vyomi-tunnel: no help for "${topic}".`); process.stdout.write(HELP); return 2; }
     process.stdout.write((t || HELP) + (t ? "\n" : "")); return cmd ? 0 : 2; }
-  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.3.2"); return 0; }
+  if (cmd === "--version" || cmd === "-v" || cmd === "version") { console.log(process.env.VYOMI_TUNNEL_VERSION || "vyomi-tunnel 1.4.0"); return 0; }
   const WS = createRequire(import.meta.url)(process.env.WS_PKG || "ws");
   // Mesh over the user's own ssh session (`--codespace <name>` or VYOMI_MESH_CODESPACE): no relay, no token (mesh-ssh.mjs).
   const ci = rest.indexOf("--codespace");
@@ -447,7 +452,7 @@ export async function main(argv) {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(code)) { console.error("usage: vyomi-tunnel reset <code>   (get a code in the Vyomi console: Setup Tunnel > Get install command; see `vyomi-tunnel help reset`)"); return 2; }
     const { createCredsSync } = await import("./creds-sync.mjs");
     try {
-      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.3.2" });
+      const cs = createCredsSync({ version: process.env.VYOMI_TUNNEL_VERSION_NUM || "1.4.0" });
       const st = await cs.reset(code, os.hostname());
       console.log(st.state === "ok" ? `Done. The tunnel now uses access key ${st.key_id}.` : `The new key was saved (${st.key_id}) but the portal answered: ${st.error || st.state}.`);
       try { await fetch(`http://127.0.0.1:${process.env.RELAY_PORT || 8090}/reload`, { method: "POST", signal: AbortSignal.timeout(3000) }); console.log("The running tunnel reloaded it."); }

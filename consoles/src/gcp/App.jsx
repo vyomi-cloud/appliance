@@ -10,7 +10,6 @@ import MenuIcon from "@mui/icons-material/esm/Menu.js";
 import SearchIcon from "@mui/icons-material/esm/Search.js";
 import DarkModeIcon from "@mui/icons-material/esm/DarkMode.js";
 import LightModeIcon from "@mui/icons-material/esm/LightMode.js";
-import HelpOutlineIcon from "@mui/icons-material/esm/HelpOutline.js";
 import TerminalIcon from "@mui/icons-material/esm/Terminal.js";
 import NotificationsIcon from "@mui/icons-material/esm/NotificationsNone.js";
 import MoreVertIcon from "@mui/icons-material/esm/MoreVert.js";
@@ -30,7 +29,7 @@ import ScopeSection from "../common/ScopeSection.jsx";
 import { scopeFor } from "../common/scopeHelp.js";
 import { useNotify } from "../common/notify.jsx";
 import { makeTheme } from "./theme.js";
-import { PRODUCTS, classicHref, productFor } from "./services/registry.js";
+import { PRODUCTS, productFor } from "./services/registry.js";
 import { useK8sLock, K8sLocked } from "../common/k8sTier.jsx";
 import { useProject } from "./project.js";
 import { NotSimulated } from "./kit/common.jsx";
@@ -95,7 +94,7 @@ export default function App() {
     content = (
       <Box>
         <Typography variant="h1" component="h1" sx={{ mb: 2 }}>{prod.title}</Typography>
-        <NotSimulated feature={`The v4 ${prod.title} console`} note={<a href={classicHref(prod.classic)}>Open {prod.title} in the classic Vyomi console</a>} />
+        <NotSimulated feature={`The v4 ${prod.title} console`} />
       </Box>
     );
   } else if (prod.id === "kubernetes" && !k8sLock.ready) content = <Box sx={{ textAlign: "center", py: 8 }}><CircularProgress /></Box>;
@@ -212,7 +211,6 @@ function TopBarActions({ mode, onMode, infoOpen, onInfo }) {
       <Menu anchorEl={more} open={!!more} onClose={() => setMore(null)}>
         <MenuItem onClick={() => { onMode(); setMore(null); }}>{mode === "dark" ? <LightModeIcon fontSize="small" sx={{ mr: 1.5 }} /> : <DarkModeIcon fontSize="small" sx={{ mr: 1.5 }} />}{mode === "dark" ? "Use light theme" : "Use dark theme"}</MenuItem>
         <MenuItem component="a" href="#/notices" data-testid="more-notices-link" onClick={() => setMore(null)}><InfoOutlinedIcon fontSize="small" sx={{ mr: 1.5 }} />Notices and licences</MenuItem>
-        <MenuItem component="a" href={classicHref("")}><HelpOutlineIcon fontSize="small" sx={{ mr: 1.5 }} />Classic Vyomi console</MenuItem>
       </Menu>
     </>
   );

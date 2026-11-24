@@ -4,7 +4,6 @@ import AppsIcon from "@mui/icons-material/esm/AppsOutlined.js";
 import TroubleshootIcon from "@mui/icons-material/esm/TroubleshootOutlined.js";
 import NotificationsActiveIcon from "@mui/icons-material/esm/NotificationsActiveOutlined.js";
 import TuneIcon from "@mui/icons-material/esm/TuneOutlined.js";
-import OpenInNewIcon from "@mui/icons-material/esm/OpenInNewOutlined.js";
 import Overview from "./Overview.jsx";
 import Dashboards from "./Dashboards.jsx";
 import CreateDashboard from "./CreateDashboard.jsx";
@@ -25,9 +24,6 @@ import MetricsManagement from "./MetricsManagement.jsx";
 import Integrations from "./Integrations.jsx";
 import ErrorReporting from "./ErrorReporting.jsx";
 import { CostExplorer, ApplicationMonitoring, TraceExplorer } from "./SimplePages.jsx";
-import { classicHref } from "../registry.js";
-
-const ext = (text) => ({ text, href: classicHref("monitoring"), icon: OpenInNewIcon });
 
 export default {
   nav: [
@@ -36,8 +32,6 @@ export default {
     { text: "Application monitoring", href: "#/monitoring/application-monitoring", icon: AppsIcon },
     { section: "Explore", items: [
       { text: "Metrics explorer", href: "#/monitoring/metrics-explorer", icon: TroubleshootIcon },
-      ext("Logs explorer"),
-      ext("Observability analytics"),
       { text: "Trace explorer", href: "#/monitoring/trace-explorer" },
       { text: "Cost explorer", href: "#/monitoring/cost-explorer" },
     ] },
@@ -50,16 +44,11 @@ export default {
     ] },
     { section: "Configure", items: [
       { text: "Integrations", href: "#/monitoring/integrations", icon: TuneIcon },
-      ext("Log-based metrics"),
-      ext("Log router"),
-      ext("Logs storage"),
       { text: "Metrics management", href: "#/monitoring/metrics-management" },
       { text: "Groups", href: "#/monitoring/groups" },
       { text: "Settings", href: "#/monitoring/settings" },
       { text: "Permissions", href: "#/monitoring/permissions" },
     ] },
-    ext("Observability Scopes"),
-    ext("Release Notes"),
   ],
   routes: [
     { pattern: "/monitoring", component: Overview },

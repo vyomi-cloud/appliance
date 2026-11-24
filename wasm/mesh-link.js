@@ -806,6 +806,16 @@
     setKeepAlive: setKeepAlive, tunnel: tunnel, checkTunnel: checkTunnel, tunnelMessage: tunnelBlockMessage, meshActive: meshActive,
     session: function () { return sess; }, sessionMesh: function () { return vboost && Object.assign({}, vboost, { token: undefined }); }, loadSession: loadSession, isComputeCall: isComputeCall, aiChip: aiChip,
     shellTarget: shellTarget, openShell: openShell, sessionLive: sessionLive,
+    // wireRouting(): how the console routes native-wire calls right now, for same-origin tools that make their own calls (Vyomi Labs' browser runner).
+    // null = everything stays in the browser. Otherwise {all, base, headers, scope, path}: `all` = a Mesh-homed space (every call goes to the Mesh), else only
+    // compute/AI calls (scope/path are the classifier regexes, case-insensitive). Carries the Mesh token: callers must be same-origin trusted pages.
+    wireRouting: function () {
+      var h = activeHome(), id = h ? h.mesh_id : (vboost ? SESSION_ID : null); if (!id) return null;
+      var b = get(id) || (id === SESSION_ID ? vboost : null); if (!b) return null;
+      var st = state[b.id] || {}, base = st.base || b.base || candidates(b)[0]; if (!base) return null;
+      var headers = {}; if (b.session) headers["x-vyomi-session-token"] = b.token || ""; else headers["x-vyomi-mesh-token"] = b.token || "";
+      return { all: !!h, name: b.name || "Mesh", base: base, headers: headers, scope: "(?i)" + COMPUTE_SCOPE.source, path: "(?i)" + COMPUTE_PATH.source };
+    },
     // apiFetch(path, init): call the mesh's own API (e.g. /api/mesh/models, /v1/chat/completions) with its token. Rejects when no mesh is reachable.
     apiFetch: function (path, init) {
       var b = vboost || load().filter(function (x) { return (state[x.id] || {}).base; })[0];

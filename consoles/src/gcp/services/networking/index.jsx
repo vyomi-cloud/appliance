@@ -9,6 +9,7 @@ import HubIcon from "@mui/icons-material/esm/HubOutlined.js";
 import ShareIcon from "@mui/icons-material/esm/ShareOutlined.js";
 import CloudQueueIcon from "@mui/icons-material/esm/CloudQueueOutlined.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopyOutlined.js";
+import NetworkTopology from "./NetworkTopology.jsx";
 import ArticleIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import VpcNetworks from "./VpcNetworks.jsx";
 import CreateVpcNetwork from "./CreateVpcNetwork.jsx";
@@ -63,6 +64,7 @@ export default {
     { text: "Serverless VPC access", href: "#/networking/serverless-vpc-access", icon: CloudQueueIcon },
     { text: "Packet mirroring", href: "#/networking/packet-mirroring", icon: ArticleIcon },
     { text: "VPC Flow Logs", href: "#/networking/vpc-flow-logs", icon: SettingsEthernetIcon },
+    { text: "Network Topology", href: "#/networking/topology", icon: HubIcon },
     { text: "Connectivity Tests", href: "#/networking/connectivity-tests/list", icon: NetworkCheckIcon, match: ["#/networking/connectivity-tests/add", "#/networking/connectivity-tests/details"] },
   ],
   routes: [
@@ -81,6 +83,7 @@ export default {
     { pattern: "/networking/serverless-vpc-access", component: ServerlessVpcAccess },
     { pattern: "/networking/packet-mirroring", component: PacketMirroring },
     { pattern: "/networking/vpc-flow-logs", component: VpcFlowLogs },
+    { pattern: "/networking/topology", component: NetworkTopology },
     { pattern: "/networking/connectivity-tests/list", component: ConnectivityTests },
     { pattern: "/networking/connectivity-tests/add", component: CreateConnectivityTest },
     { pattern: "/networking/connectivity-tests/details/:name", component: ConnectivityTestDetail },

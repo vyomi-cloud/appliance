@@ -1,0 +1,14 @@
+azure-identity
+azure-mgmt-cognitiveservices
+azure-storage-blob
+azure-data-tables
+azure-servicebus
+azure-search-documents
+openai
+requests
+fastapi
+uvicorn
+langgraph
+pyjwt
+cryptography
+opentelemetry-sdk

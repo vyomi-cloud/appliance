@@ -19,6 +19,10 @@
 # vyomi-cloud/claude-plugins (scripts/sync_claude_plugins.py; CLAUDE_PLUGINS_TOKEN). It runs here, after npm + Homebrew,
 # because the plugin runs `vyomi-tunnel mcp`: users must be able to get the tunnel it needs first. Unchanged plugin
 # content is a no-op; changed content needs a version bump (Claude Code only updates on a new version).
+# MCP Registry: a final release then publishes packaging/tunnel/server.json as io.github.vyomi-cloud/vyomi
+# (mcp-publisher login github-oidc, same id-token as npm; no secret). It runs after npm because the registry checks that
+# the npm tarball for that version carries the matching "mcpName". Dry runs and RCs only run `mcp-publisher validate`.
+# scripts/check_server_json.py keeps server.json's version and name in step with package.json.
 name: Tunnel release
 
 on:
@@ -58,6 +62,8 @@ jobs:
           cache-dependency-path: cmd/vyomi/go.mod
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
+      - name: server.json (MCP Registry) matches package.json
+        run: python3 scripts/check_server_json.py
       - name: Version (from the tag) and npm channel
         id: v
         run: |
@@ -111,6 +117,12 @@ jobs:
   # ---- gates: every one runs on the tarball built above ----
   checks:
     uses: ./.github/workflows/tunnel-mcp-checks.yml
+
+  guardrails:
+    uses: ./.github/workflows/guardrails.yml
+    permissions:
+      contents: read
+      issues: write
 
   linux:
     needs: build
@@ -183,16 +195,19 @@ jobs:
 
   # ---- publish: only the tested tarball, only when every gate is green ----
   publish:
-    needs: [build, checks, linux, macos, windows]
+    needs: [build, checks, guardrails, linux, macos, windows]
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 50          # the Homebrew sha step can wait 35 min for npm's CDN; the registry publish retries ~5 min
     permissions:
       contents: read
-      id-token: write      # npm trusted publishing
+      id-token: write      # npm trusted publishing + MCP Registry (mcp-publisher login github-oidc)
     env:
       TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       VER: ${{ needs.build.outputs.version }}
       CH: ${{ needs.build.outputs.channel }}
+      # Pinned mcp-publisher (github.com/modelcontextprotocol/registry releases); bump both together.
+      MCP_PUBLISHER_VERSION: 1.8.12
+      MCP_PUBLISHER_SHA256: ed3446e4caf067764cc13d35208b73ed68869958e32bc3842d0a863102912dcb   # mcp-publisher_linux_amd64.tar.gz
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -250,12 +265,43 @@ jobs:
           if git diff --quiet; then echo "tap already at $VER"; exit 0; fi
           git config user.email "bot@vyomi.cloud"; git config user.name "Vyomi Release Bot"
           git add Formula/vyomi-tunnel.rb && git commit -m "vyomi-tunnel ${VER}" && git push
+      - name: Install mcp-publisher ${{ env.MCP_PUBLISHER_VERSION }} (sha256 pinned)
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o mcp-publisher.tar.gz \
+            "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+          echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum -c -
+          mkdir -p mcp-publisher-bin && tar xzf mcp-publisher.tar.gz -C mcp-publisher-bin mcp-publisher
+          echo "$RUNNER_TEMP/mcp-publisher-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/mcp-publisher-bin/mcp-publisher" --version
+      - name: MCP Registry (final releases publish io.github.vyomi-cloud/vyomi; dry runs and RCs validate)
+        id: registry
+        # After npm: the registry rejects the entry unless vyomi-tunnel@$VER on npm carries the same mcpName.
+        run: |
+          set -euo pipefail
+          SJ=packaging/tunnel/server.json
+          if [ "$CH" != "latest" ] || [ "$DRY" = "true" ]; then mcp-publisher validate "$SJ"; exit 0; fi
+          NAME=$(node -p "require('./$SJ').name")
+          test "$(node -p "require('./$SJ').version")" = "$VER"
+          if curl -fsS -o /dev/null "https://registry.modelcontextprotocol.io/v0/servers/${NAME/\//%2F}/versions/$VER"; then
+            echo "$NAME $VER is already in the MCP Registry; nothing to publish"; exit 0
+          fi
+          # Retries cover npm serving the new version late to the registry's mcpName check, and transient errors.
+          # Login each attempt: the registry token from the OIDC exchange is short-lived.
+          for i in 1 2 3 4 5; do
+            if mcp-publisher login github-oidc && mcp-publisher publish "$SJ"; then exit 0; fi
+            echo "publish attempt $i failed; retrying in 60 s"; sleep 60
+          done
+          echo "::error::mcp-publisher publish failed for $NAME $VER"; exit 1
       - name: Summary
         if: always()
         run: |
           {
             echo "## vyomi-tunnel $VER"
             echo "- npm dist-tag: \`$CH\`  (dry run: $DRY)"
+            if [ "$CH" = "latest" ] && [ "$DRY" != "true" ]; then echo "- MCP Registry: io.github.vyomi-cloud/vyomi $VER (${{ steps.registry.outcome || 'not run' }})"
+            else echo "- MCP Registry: validate only (${{ steps.registry.outcome || 'not run' }})"; fi
             echo "- gates: checks, linux (+homes), macos (+brew), windows: all passed (publish only runs when they do)"
             if [ "$CH" = "next" ]; then echo "- testers: \`npm i -g vyomi-tunnel@next\` (Homebrew and \`latest\` unchanged)"; fi
           } >> "$GITHUB_STEP_SUMMARY"
@@ -264,6 +310,10 @@ jobs:
   plugin-sync:
     needs: [build, publish]
     if: needs.build.outputs.channel == 'latest'
+    # Shared with claude-plugins-sync.yml: only one workflow pushes to the mirror at a time.
+    concurrency:
+      group: claude-plugins-mirror
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -279,7 +329,11 @@ jobs:
         id: sync
         run: |
           git clone -q https://github.com/vyomi-cloud/claude-plugins.git marketplace
-          python3 scripts/sync_claude_plugins.py marketplace --apply
+          # The plugin runs `npx -y vyomi-tunnel@<pin> mcp`: pin this release's version, and refuse a pin npm does not
+          # serve yet. npm publish ran in the publish job this one needs, so on a release the check passes; a dry run
+          # published nothing (and pushes nothing below), so it skips the npm check.
+          extra=""; [ "$DRY" = "true" ] && extra="--allow-unpublished"
+          python3 scripts/sync_claude_plugins.py marketplace --apply --tunnel-version "$VER" $extra
       - name: The mirrored marketplace validates
         if: steps.sync.outputs.changed == 'true'
         run: npx -y @anthropic-ai/claude-code plugin validate marketplace

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vyomi": {
+      "type": "http",
+      "url": "https://vyomi.cloud/mcp"
+    }
+  }
+}

@@ -13,12 +13,12 @@ the tunnel, through the **cloud relay URL** shown in the Nano footer.
 ## Workflow
 
 1. **Tunnel installed?** Run `vyomi-tunnel --version`. The minimum is
-   **1.3.0**: it is also what runs this plugin's MCP server (`vyomi-tunnel mcp`).
+   **1.3.0**. (This plugin's MCP server runs through `npx` and does not need
+   it; reaching Nano does.)
    - Missing: suggest `brew install vyomi-cloud/tap/vyomi-tunnel` (or
      `npm i -g vyomi-tunnel`) and wait for the user.
    - Older than 1.3.0: suggest `brew upgrade vyomi-tunnel` (or
-     `npm i -g vyomi-tunnel@latest`), then a Claude Code restart so the
-     `vyomi` MCP server starts.
+     `npm i -g vyomi-tunnel@latest`).
 2. **Access key.** The tunnel needs the user's Vyomi access key (a Free key is
    enough) saved as `~/.vyomi/credentials`. **Ask the user** whether they have
    saved it; never open, read or print that file. If not: they download it from

@@ -81,6 +81,7 @@ const MODULES = [
   // its Pyodide adapter. console_next_manifest imports `from core import
   // console_conformance` (vendored under /core, see CORES), NO FastAPI.
   "console_next_manifest.py", "providers/console_next_adapter.py",
+  "providers/tf_adapter.py",   // Infrastructure Studio: the Terraform exporter over the in-process native-wire router
   "providers/wire_adapter.py",   // v4 /_wire/* native-wire prefix → AwsWireRouter on the shared registry
 ];
 // The PROVEN conformance cores (vendored into wasm/core/ by build_cores.py).
@@ -107,6 +108,7 @@ const CORES = [
   "azure_webapp_core.py",   // Azure App Service engine (Microsoft.Web: web apps + function apps, plans) — loaded before azure_arm_core which delegates to it
   "azure_eventgrid_core.py",   // Azure Event Grid event subscriptions (Microsoft.EventGrid, topic-scoped) — loaded before azure_arm_core which delegates to it
   "azure_health_core.py",      // Resource health + Advisor (derived from the stored ARM resources)
+  "azure_deploy_core.py", "azure_tf_hcl.py", "azure_tf_core.py",   // ARM template deployment engine + azurerm Terraform export/import (lazily imported)
   "azure_templates_core.py",   // Export template engine (ARM→Bicep/Terraform) — lazily imported by azure_arm_core
   "azure_support_core.py",  // Microsoft.Support support requests (imported by azure_arm_core)
   "azure_alerts_core.py",  // Microsoft.AlertsManagement alert evaluation + processing rules (imported by azure_arm_core; needs monitor + operationalinsights first)
@@ -140,7 +142,7 @@ const CORES = [
   // lock-step with the relay + build_cores (usable now via the Nano relay;
   // dedicated console UI pages are a follow-up). Deps (messaging_store, sql_store,
   // iam_store, lambda_core) are already listed above.
-  "gcp_compute_core.py",   // main-side Nano cores (merged)
+  "gcp_compute_core.py", "gcp_inframanager_core.py",   // main-side Nano cores (merged)
   "azure_graph_ext_core.py", "azure_graph_core.py",
   "azure_cdn_edge_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
   "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
@@ -161,7 +163,7 @@ const CORES = [
 ];
 // core sub-packages (core/netsim: the shared network engine the VPC / Compute / ARM cores import
 // lazily for reachability analysis) — vendored by wasm/build_cores.py CORE_PKGS
-const CORE_PKGS = ["netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
+const CORE_PKGS = ["tf_export/__init__.py", "tf_export/core.py", "tf_export/hcl.py", "tf_export/graph.py", "tf_export/wire_clients.py", "tf_export/hcl_parse.py", "tf_export/apply.py", "tf_export/aws_apply.py", "tf_export/aws_apply2.py", "tf_export/aws_apigw.py", "tf_export/aws_compute.py", "tf_export/aws_data.py", "tf_export/aws_dynamodb.py", "tf_export/aws_iam.py", "tf_export/aws_kms.py", "tf_export/aws_lambda.py", "tf_export/aws_messaging.py", "tf_export/aws_network.py", "tf_export/aws_ops.py", "tf_export/aws_storage.py", "netsim/__init__.py", "netsim/model.py", "netsim/evaluate.py", "netsim/from_aws.py", "netsim/from_gcp.py", "netsim/from_azure.py", "netsim/flowlogs.py", "netsim/mirror.py", "netsim/enforce.py"];
 
 
 // Boot screen (wasm/nano-kernel.js): the page paints it first thing in <body>;
@@ -205,6 +207,9 @@ async function bootBackend() {
   // Knowledge Bases parse PDFs with pure-Python pypdf (BSD-3), which is NOT in the Pyodide 0.26 package set: unpack the vendored wheel
   // (wasm/pylib/, ~0.4 MB, same-origin, no PyPI call). Without it a .pdf fails ingestion with an explicit reason (DOCX/XLSX/PPTX need nothing).
   try { py.unpackArchive(await (await fetch(BASE + "/pylib/pypdf-7.1.0-py3-none-any.whl")).arrayBuffer(), "wheel"); } catch (e) { console.warn("[nano] pypdf unavailable (PDF knowledge-base documents will fail):", e); }
+  // Infrastructure Studio's Terraform exporter reads AWS state through botocore's serializers/parsers (pure Python, trimmed to 8 service models, wasm/build_botocore_lite.py) + jmespath.
+  try { await py.loadPackage(["python-dateutil", "urllib3"]); for (const w of ["botocore-lite.whl", "jmespath-1.0.1-py3-none-any.whl"]) py.unpackArchive(await (await fetch(BASE + "/pylib/" + w)).arrayBuffer(), "wheel"); }
+  catch (e) { console.warn("[nano] Terraform exporter unavailable:", e); }
   // Cedar policy engine (AgentCore gateway ENFORCE policies): the OSS Cedar core as WebAssembly, vendored in wasm/cedar/ (4.4 MB).
   try { const { installCedar } = await import(BASE + "/cedar/cedar-eval.mjs"); await installCedar(new URL(BASE + "/cedar/", location.origin).href); }
   catch (e) { console.warn("[nano] Cedar evaluator unavailable (ENFORCE gateways fail closed):", e); }
@@ -285,6 +290,9 @@ def _disp0(d):
     if prov == "_wire":   # v4 consoles: native wire via the relay's AwsWireRouter (same stores)
         from wasm.providers import wire_adapter as _W
         return json.dumps(_W.handle(d.get("params") or {}))
+    if d.get("service") == "_tf":     # Infrastructure Studio: Terraform export graph/bundle/classify + import plan/apply/destroy
+        from wasm.providers import tf_adapter as _T
+        return json.dumps(_T.handle(d["op"], d.get("params") or {}))
     return json.dumps(P.dispatch(_B, prov, d["service"], d["op"],
                                  params=d.get("params") or {}))
 async def _adisp(payload_json):
@@ -442,8 +450,20 @@ builtins._embed_bridge_set = _embed_bridge_set
       `_disp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
   // `_wire` (v4 native-wire consoles) runs on the async router so awaiting engines
   // (PGlite snapshots, the Parquet writer for RDS exports) work from the console too.
-  const adispatch0 = async (prov, svc, op, params) => prov !== "_wire" ? dispatch(prov, svc, op, params)
-    : JSON.parse(await py.runPythonAsync(
+  // Faithful IAM (off by default; zero Python calls while the space's enforcement document is off): see nano-iam-hook.js.
+  let _iam = null;
+  import("./nano-iam-hook.js").then((m) => { _iam = { hook: m.createIamHook({ py, base: BASE }), guardWire: m.guardWire }; globalThis.NanoIamHook = _iam.hook; }).catch(() => {});
+  const armGuarded = async (method, params) => {
+    const { headers, body_b64, ...rest } = params;
+    const d = _iam && await _iam.guardWire(_iam.hook, { method, path: rest.path, query: rest.query, headers, body_b64 });
+    if (d) { let b = null; try { b = JSON.parse(atob(d.body_b64)); } catch (_) {} return { __http: { status: d.status, headers: d.headers, body: b } }; }
+    return dispatch("azure", "_arm", method, rest);
+  };
+  const adispatch0 = async (prov, svc, op, params) => prov === "_iam"        // /api/iam/* (sw.js): the faithful-IAM API, same routes as Mesh
+    ? (_iam ? _iam.hook.api(op, params.path, params.query, params.body) : { status: 503, body: { error: "IAM hook not ready" } })
+    : prov === "azure" && svc === "_arm" && params && params.headers ? await armGuarded(op, params)      // ARM via /_wire/subscriptions: credentials ride along, so the IAM gate can run
+    : prov !== "_wire" ? dispatch(prov, svc, op, params)
+    : (_iam && await _iam.guardWire(_iam.hook, params || {})) || JSON.parse(await py.runPythonAsync(
       `await _adisp(${JSON.stringify(JSON.stringify({ provider: prov, service: svc, op, params: params || {} }))})`));
   // VM-backed data planes (Container Apps replicas, job executions, SSM targets): the Python engine asks for scripts to run
   // in the in-browser VM (it cannot await the VM mid-request), the page runs them and replays the SAME request; scripts the

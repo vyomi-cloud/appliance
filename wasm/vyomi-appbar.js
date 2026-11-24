@@ -18,8 +18,11 @@
     ['usage', 'SDK & CLI usage', 'M4 17l6-6-6-6M12 19h8'],
     ['api', 'API reference', 'M16 18l6-6-6-6M8 6l-6 6 6 6']
   ];
+  // Vyomi Labs: the guided 13-layer enterprise-agent build for THIS console's cloud (Nano bundle only: pages live at <bundle>/labs/).
+  if (CL !== '/clouds') ITEMS = ITEMS.filter(function (i) { return i[0] !== 'usage' && i[0] !== 'api'; });   // Nano: SDK & CLI usage + API reference are tabs inside Vyomi Labs
+  if (CL !== '/clouds') ITEMS.splice(3, 0, ['labs', 'Vyomi Labs', 'M9 3h6M10 3v6.5L4.6 18.6A2 2 0 0 0 6.3 21.5h11.4a2 2 0 0 0 1.7-2.9L14 9.5V3M7.5 15h9']);
   var css = '' +
-    '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:70;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
+    '#vy-appbar{position:fixed;left:0;right:0;bottom:0;height:0;z-index:1600;display:flex;justify-content:center;pointer-events:none;font-family:Inter,system-ui,sans-serif}' +
     'body:has(#nano-foot) #vy-appbar{bottom:34px}' +   /* Nano: sit above its relay-tunnel footer bar */
     '#vy-appbar::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;background:#0f121c}' +   /* the line along the bottom edge */
     '#vy-appbar .vy-notch{width:auto !important;max-width:none !important;overflow:visible !important;pointer-events:auto;position:absolute;bottom:0;height:44px;padding:0 44px;display:flex;align-items:center;gap:2px;isolation:isolate}' +
@@ -54,6 +57,13 @@
     '#vy-hd-tabs button.on{background:#000;color:#fff}' +
     '#vy-modal.sm .box{width:min(560px,94vw);height:min(660px,92vh);background:transparent;box-shadow:none}#vy-modal.sm .hd{display:none}' +
     '#vy-modal iframe{flex:1;border:0;width:100%}' +
+    '#vy-modal.labs .box{width:min(1500px,97vw);height:min(94vh,1000px)}' +
+    '#vy-modal.labs #vy-hd-tabs{display:none !important}' +
+    '#vy-hd-lab{display:none;margin-left:auto;align-self:stretch;gap:2px}#vy-modal.labs #vy-hd-lab{display:inline-flex}#vy-modal.labs .hd>button{margin-left:8px}' +
+    '#vy-hd-lab{align-items:center;align-self:center;gap:6px}#vy-hd-lab button{border:0;background:none;padding:7px 16px;border-radius:8px;font:600 13px Inter,system-ui,sans-serif;color:#475467;cursor:pointer;margin:0}' +
+    '#vy-hd-lab button:hover{color:#101828;background:#f2f4f7}#vy-hd-lab button.on,#vy-hd-lab button.on:hover{background:#101828;color:#fff}' +
+    'body:has(#vy-modal.open) #vy-beta{display:none!important}' +
+    '#vy-modal.labs #vy-modal-t{display:none}' +
     '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
     '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
     '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
@@ -125,12 +135,12 @@
     // The drawer is fixed over the bottom 44px: reserve that strip so nothing is hidden or unclickable under it
     // (a 1280x720 window put e.g. the APIM "Metrics" sub-tab right under the drawer).
     var RES = { aws: '.page{min-height:calc(100vh - 40px - 36px - 44px) !important}' +
-                     // Cloudscape's side panels are sticky to the window bottom (z-index 830): they ran under the dock and hid its left end.
-                     // End them where the dock starts (44px dock, plus the 34px Nano relay footer when present).
-                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px - 44px) !important}' +
-                     'body:has(#nano-foot) [class*="awsui_navigation-container_"],body:has(#nano-foot) [class*="awsui_tools-container_"]{height:calc(100vh - 40px - 78px) !important}',
-                gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}',
-                azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:44px !important;height:auto !important}' };
+                     // Cloudscape's side panels are sticky to the window bottom (z-index 830): full height, running BEHIND the dock (the dock is
+                     // z-index 1600, above these panels and the services flyouts), so nothing is cut short above it.
+                     '[class*="awsui_navigation-container_"],[class*="awsui_tools-container_"]{height:calc(100vh - 40px) !important}',
+                // collapsed service nav (64px rail): the service icon and the "Expand navigation" button shared one 48px row and overlapped (then the button was half cut off); stack them: icon above, button below
+                gcp: '.body{min-height:calc(100vh - 56px - 44px) !important}nav.MuiBox-root>div:has(>button[aria-label="Expand navigation"]){flex-direction:column !important;align-items:center !important;justify-content:center !important;gap:6px !important;height:auto !important;min-height:0 !important;padding:10px 0 6px !important}',
+                azure: '.body{height:calc(100vh - 48px - 44px) !important}#blade{bottom:0 !important;height:auto !important}' };
     var st = document.createElement('style'); st.textContent = css + (RES[cloud] || ''); document.head.appendChild(st);
     if (cloud !== 'azure' && !document.getElementById('vy-spacer')) { var spc = document.createElement('div'); spc.id = 'vy-spacer'; spc.style.cssText = 'height:44px;flex:none'; document.body.appendChild(spc); }
     var bar = document.createElement('div'); bar.id = 'vy-appbar';
@@ -176,7 +186,7 @@
       if (j && (j.sandbox || j.restricted)) { closeCap(); expBtn.remove(); cap.remove(); window.__vySandbox = true; }
     }).catch(function () {});
     var m = document.createElement('div'); m.id = 'vy-modal';
-    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
+    m.innerHTML = '<div class="box" role="dialog" aria-modal="true" aria-labelledby="vy-modal-t"><div class="hd"><span id="vy-modal-t"></span><div id="vy-hd-lab" role="tablist"><button type="button" class="on" data-t="labs">Course</button><button type="button" data-t="api">API reference</button></div><div id="vy-hd-tabs" role="tablist"><button type="button" class="on" data-c="aws">AWS</button><button type="button" data-c="gcp">Google Cloud</button><button type="button" data-c="azure">Azure</button></div><button type="button" aria-label="Close">\u2715</button></div><iframe title="Appliance"></iframe></div>';
     document.body.appendChild(m);
     var fr = m.querySelector('iframe');
     function close() { m.classList.remove('open'); fr.removeAttribute('src'); }
@@ -186,11 +196,22 @@
       m.querySelectorAll('#vy-hd-tabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
       try { fr.contentWindow.__apiCloud(b.dataset.c); } catch (e) {} }); });
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    function labTab(t) {   // Vyomi Labs dialog: Course | API reference
+      m.querySelectorAll('#vy-hd-lab button').forEach(function (x) { x.classList.toggle('on', x.dataset.t === t); });
+      m.classList.toggle('api', t === 'api');
+      m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
+      fr.src = t === 'labs' ? CL.replace(/clouds\.html$/, '') + 'labs/index.html?embed=1&cloud=' + cloud : CL + '?embed=1&only=' + cloud + '#' + t;   // this console's cloud only
+    }
+    m.querySelectorAll('#vy-hd-lab button').forEach(function (b) { b.addEventListener('click', function () { labTab(b.dataset.t); }); });
     function openView(view, title, small) {
+      if (CL !== '/clouds' && (view === 'usage' || view === 'api')) { m.querySelector('#vy-modal-t').textContent = 'Vyomi Labs'; m.classList.remove('sm'); m.classList.add('labs'); labTab(view); m.classList.add('open'); return; }
+      m.querySelector('#vy-hd-lab') && m.querySelectorAll('#vy-hd-lab button').forEach(function (x) { x.classList.toggle('on', x.dataset.t === 'labs'); });
       m.querySelector('#vy-modal-t').textContent = title;
       m.classList.toggle('sm', !!small); m.classList.toggle('api', view === 'api');
       m.querySelectorAll('#vy-hd-tabs button').forEach(function (x, i) { x.classList.toggle('on', i === 0); });
-      fr.src = CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
+      m.classList.toggle('labs', view === 'labs');
+      fr.src = view === 'labs' ? CL.replace(/clouds\.html$/, '') + 'labs/index.html?embed=1&cloud=' + cloud
+        : CL + '?embed=1' + (view === 'acct' ? '&acct=1' : '') + '#' + (view === 'acct' ? 'spaces' : view);
       m.classList.add('open');
     }
     // Arrived from the enterprise dashboard (cloudpick.js): open the requested drawer view's modal straight away.
@@ -208,7 +229,7 @@
     var nav = bar.querySelector('.vy-notch'), NANO = CL !== '/clouds', st = { tier: 'free', trial: null }, authed = false, who = '', prof = { email: '', name: '', avatar: '', via: '', edition: '', role: '' };
     // Nano: pulse the SDK & CLI usage item until the local vyomi-tunnel has been seen running on this machine.
     if (NANO) {
-      var tl = nav.querySelector('a[data-v="usage"]');
+      var tl = nav.querySelector('a[data-v="usage"]') || nav.querySelector('a[data-v="labs"]');
       var seen = function () { try { return localStorage.getItem('vyomi.tunnel.seen') === '1'; } catch (_) { return false; } };
       var probe = function () {
         if (seen()) { tl && tl.classList.remove('vy-tun'); return; }

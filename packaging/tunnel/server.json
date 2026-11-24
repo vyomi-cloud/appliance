@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vyomi-cloud/vyomi",
+  "title": "Vyomi",
+  "description": "Local AWS, GCP and Azure simulator for coding agents: service coverage, SDK env vars and status",
+  "websiteUrl": "https://vyomi.cloud",
+  "repository": {
+    "url": "https://github.com/vyomi-cloud/appliance",
+    "source": "github",
+    "id": "1242790637",
+    "subfolder": "packaging/tunnel"
+  },
+  "version": "1.4.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "vyomi-tunnel",
+      "version": "1.4.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

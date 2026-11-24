@@ -24,6 +24,13 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 sys.path.insert(0, ROOT)
 from core import mesh_llm as M  # noqa: E402
 from core import mesh_session as bs  # noqa: E402
+from tests import mesh_testkey as testkey  # noqa: E402
+
+# Node tokens are Ed25519 v2, signed with the public test vector and trusted in this process only (v1 HMAC retired, F2).
+# The relay container trusts it through the --import hook (wasm/relay/test-fixtures/trust-test-key.mjs, mounted at /opt/relay).
+testkey.trust(bs)
+SIGN = {"private_key": testkey.TEST_SEED, "kid": testkey.TEST_KID}
+RELAY_NODE = ["--import", "/opt/relay/test-fixtures/trust-test-key.mjs", "/opt/test/mesh-relay.mjs"]
 
 KEY = "mesh-test-key-0123456789abcdef"
 PASS = FAIL = 0
@@ -39,7 +46,7 @@ def check(name, ok, detail=""):
 # ---------------------------------------------------------------- part 1: pure python
 nodes = [{"id": "mesh", "role": "mesh"}] + [{"id": f"r{i}", "role": "runner"} for i in range(1, 4)]
 END = time.time() + 3600
-cfg = M.mint_mesh_session("sess-1", nodes, account="acct-1", relay_url="wss://relay.example", session_end=END, key=KEY)
+cfg = M.mint_mesh_session("sess-1", nodes, account="acct-1", relay_url="wss://relay.example", session_end=END, key=KEY, **SIGN)
 check("address plan: mesh .0.2, runners .1.1-.1.3, hub .0.1 never handed out",
       cfg["mesh"]["address"] == "100.96.0.2" and [cfg[f"r{i}"]["address"] for i in (1, 2, 3)] == ["100.96.1.1", "100.96.1.2", "100.96.1.3"]
       and M.HUB_ADDR not in {c["address"] for c in cfg.values()})
@@ -49,7 +56,7 @@ c1 = M.verify_node_token(cfg["r1"]["env"]["VYOMI_MESH_TOKEN"], key=KEY)
 check("token claims: role mesh-node, node id, address, session id, expiry", c1["role"] == "mesh-node" and c1["node"] == "r1" and c1["mesh_addr"] == "100.96.1.1"
       and c1["session_id"] == "sess-1" and c1["session_end"] == int(END))
 check("mask list carries the token (entrypoint ::add-mask::)", cfg["r1"]["mask"] == [cfg["r1"]["env"]["VYOMI_MESH_TOKEN"]])
-rot = M.remint_for_rotation("sess-1", "r2", "runner", 2, account="acct-1", relay_url="wss://relay.example", session_end=END + 600, key=KEY)
+rot = M.remint_for_rotation("sess-1", "r2", "runner", 2, account="acct-1", relay_url="wss://relay.example", session_end=END + 600, key=KEY, **SIGN)
 check("rotation: successor keeps the same address (slot) with a fresh token", rot["address"] == "100.96.1.2" and rot["env"]["VYOMI_MESH_TOKEN"] != cfg["r2"]["env"]["VYOMI_MESH_TOKEN"])
 
 
@@ -60,12 +67,15 @@ def rejects(fn):
         return True
 
 
-check("verify rejects: bad signature, wrong key", rejects(lambda: M.verify_node_token(cfg["r1"]["env"]["VYOMI_MESH_TOKEN"], key="other-key")))
+check("verify rejects: bad signature, wrong key", rejects(lambda: M.verify_node_token(M.mint_node_token("acct-1", "sess-1", "r1", "runner", "100.96.1.1", END,
+      private_key=testkey.WRONG_SEED, kid=testkey.TEST_KID))))
+check("verify rejects: a v1 (HMAC) node token, even with the right key (F2)", rejects(lambda: M.verify_node_token(M.mint_node_token("acct-1", "sess-1", "r1", "runner",
+      "100.96.1.1", END, key=KEY), key=KEY)))
 check("verify rejects: expired", rejects(lambda: M.verify_node_token(cfg["r1"]["env"]["VYOMI_MESH_TOKEN"], key=KEY, now=END + 5)))
-llm_tok = bs.mint("acct-1", "pro", END, session_id="sess-1", key=KEY, role="llm-runner", model="fast")
+llm_tok = testkey.mint("acct-1", "pro", END, session_id="sess-1", role="llm-runner", model="fast")
 check("verify rejects: a runner-LLM-role token cannot pose as a mesh node", rejects(lambda: M.verify_node_token(llm_tok, key=KEY)))
-check("verify rejects: the hub address is not claimable", rejects(lambda: M.verify_node_token(M.mint_node_token("a", "s", "x", "runner", M.HUB_ADDR, END, key=KEY), key=KEY)))
-check("verify rejects: an address outside 100.96.0.0/16", rejects(lambda: M.verify_node_token(M.mint_node_token("a", "s", "x", "runner", "10.0.0.5", END, key=KEY), key=KEY)))
+check("verify rejects: the hub address is not claimable", rejects(lambda: M.verify_node_token(M.mint_node_token("a", "s", "x", "runner", M.HUB_ADDR, END, key=KEY, **SIGN), key=KEY)))
+check("verify rejects: an address outside 100.96.0.0/16", rejects(lambda: M.verify_node_token(M.mint_node_token("a", "s", "x", "runner", "10.0.0.5", END, key=KEY, **SIGN), key=KEY)))
 for bad, why in (([{"id": "a", "role": "runner"}] * 2, "dup id"), ([{"id": f"r{i}", "role": "runner"} for i in range(11)], "11 runners"),
                  ([{"id": "b1", "role": "mesh"}, {"id": "b2", "role": "mesh"}], "2 meshes")):
     try:
@@ -113,8 +123,8 @@ def main_docker():
     token = {}
 
     def mint(nid, role, slot=0):
-        return M.mint_mesh_session("sess-d", [{"id": nid, "role": role, "slot": slot}], account="acct-1", relay_url="ws://" + relay + ":8787", session_end=session_end, key=KEY)[nid]
-    cfgs = M.mint_mesh_session("sess-d", nodes, account="acct-1", relay_url="ws://" + relay + ":8787", session_end=session_end, key=KEY)
+        return M.mint_mesh_session("sess-d", [{"id": nid, "role": role, "slot": slot}], account="acct-1", relay_url="ws://" + relay + ":8787", session_end=session_end, key=KEY, **SIGN)[nid]
+    cfgs = M.mint_mesh_session("sess-d", nodes, account="acct-1", relay_url="ws://" + relay + ":8787", session_end=session_end, key=KEY, **SIGN)
 
     def cleanup():
         sh("docker", "rm", "-f", relay, *names)
@@ -126,7 +136,7 @@ def main_docker():
             sh("docker", "network", "create", n, check_rc=True)
         mounts = ["-v", f"{ROOT}/wasm/relay:/opt/relay:ro", "-v", f"{ROOT}/docker/mesh-runner-llm:/opt/rl:ro", "-v", f"{ROOT}/docker/mesh-llm-test:/opt/test:ro"]
         sh("docker", "run", "-d", "--name", relay, "--network", nets[0], "--cap-add", "NET_ADMIN", "--sysctl", "net.ipv4.ip_forward=1", "--cpus", "1", "--memory", "512m",
-           "-e", f"VYOMI_MESH_SESSION_KEY={KEY}", "-e", "WS_PKG=/opt/runner/node_modules/ws", *mounts, "--entrypoint", "node", IMG, "/opt/test/mesh-relay.mjs", check_rc=True)
+           "-e", f"VYOMI_MESH_SESSION_KEY={KEY}", "-e", "WS_PKG=/opt/runner/node_modules/ws", *mounts, "--entrypoint", "node", IMG, *RELAY_NODE, check_rc=True)
         for n in nets[1:]:
             sh("docker", "network", "connect", n, relay, check_rc=True)
         for nm, net, nid in zip(names, nets, ids):
@@ -187,16 +197,16 @@ def main_docker():
         r = dx(names[3], probe)
         check("WS upgrade without a token -> HTTP 401 (no join)", "HTTP 401" in r.stdout, r.stdout)
         sh("true")
-        expired = M.mint_node_token("acct-1", "sess-d", "r9", "runner", "100.96.1.9", time.time() - 100, key=KEY, now=time.time() - 400)
+        expired = M.mint_node_token("acct-1", "sess-d", "r9", "runner", "100.96.1.9", time.time() - 100, key=KEY, **SIGN, now=time.time() - 400)
         r = dx(names[3], f"export T='{expired}'; " + probe)
         check("expired token -> HTTP 410", "HTTP 410" in r.stdout, r.stdout)
-        wrongrole = bs.mint("acct-1", "pro", session_end, session_id="sess-d", key=KEY, role="llm-runner", model="fast")
+        wrongrole = testkey.mint("acct-1", "pro", session_end, session_id="sess-d", role="llm-runner", model="fast")
         r = dx(names[3], f"export T='{wrongrole}'; " + probe)
         check("an llm-runner token cannot join the mesh -> HTTP 403", "HTTP 403" in r.stdout, r.stdout)
         forged = cfgs["r1"]["env"]["VYOMI_MESH_TOKEN"][:-3] + "AAA"
         r = dx(names[3], f"export T='{forged}'; " + probe)
         check("forged token -> HTTP 401", "HTTP 401" in r.stdout, r.stdout)
-        other_sess = M.mint_node_token("acct-1", "sess-OTHER", "r8", "runner", "100.96.1.8", session_end, key=KEY)
+        other_sess = M.mint_node_token("acct-1", "sess-OTHER", "r8", "runner", "100.96.1.8", session_end, key=KEY, **SIGN)
         r = dx(names[3], f"export T='{other_sess}'; " + probe)
         check("a token for another session is refused by a hub already serving this one -> HTTP 409", "HTTP 409" in r.stdout, r.stdout)
 
@@ -279,7 +289,7 @@ def direct_phase():
     """Optional direct-UDP attempt: hub advertises a direct endpoint; reachable -> path direct-udp, black hole -> falls back to the WS bridge."""
     net, rl, nd = "vyomi-mesh-netD", "vyomi-mesh-relayD", "vyomi-mesh-nodeD"
     end = int(time.time()) + 3600
-    c = M.mint_mesh_session("sess-x", [{"id": "d1", "role": "runner"}], relay_url=f"ws://{rl}:8787", session_end=end, key=KEY)["d1"]
+    c = M.mint_mesh_session("sess-x", [{"id": "d1", "role": "runner"}], relay_url=f"ws://{rl}:8787", session_end=end, key=KEY, **SIGN)["d1"]
     mounts = ["-v", f"{ROOT}/wasm/relay:/opt/relay:ro", "-v", f"{ROOT}/docker/mesh-runner-llm:/opt/rl:ro", "-v", f"{ROOT}/docker/mesh-llm-test:/opt/test:ro"]
 
     def clean():
@@ -293,7 +303,7 @@ def direct_phase():
         for label, direct, want in (("reachable UDP endpoint", "172.29.77.50:51820", "direct-udp"), ("black-holed UDP endpoint", "172.29.77.99:51820", "ws-bridge")):
             sh("docker", "rm", "-f", rl)
             sh("docker", "run", "-d", "--name", rl, "--network", net, "--ip", "172.29.77.50", "--cap-add", "NET_ADMIN", "--sysctl", "net.ipv4.ip_forward=1", *mounts,
-               "-e", f"VYOMI_MESH_SESSION_KEY={KEY}", "-e", f"VYOMI_MESH_DIRECT={direct}", "-e", "WS_PKG=/opt/runner/node_modules/ws", "--entrypoint", "node", IMG, "/opt/test/mesh-relay.mjs", check_rc=True)
+               "-e", f"VYOMI_MESH_SESSION_KEY={KEY}", "-e", f"VYOMI_MESH_DIRECT={direct}", "-e", "WS_PKG=/opt/runner/node_modules/ws", "--entrypoint", "node", IMG, *RELAY_NODE, check_rc=True)
             time.sleep(1.5)
             dx(nd, "bash /opt/rl/mesh-up.sh down")
             r = dx(nd, f"VYOMI_RELAY_URL={c['relay_url']} VYOMI_MESH_TOKEN='{c['env']['VYOMI_MESH_TOKEN']}' bash /opt/rl/mesh-up.sh up", timeout=60)

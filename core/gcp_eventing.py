@@ -19,9 +19,6 @@ import time
 import urllib.request
 import uuid
 
-from fastapi import Request
-from fastapi.responses import Response
-
 from core.app_context import gcp_functions_state
 
 STORAGE_FINALIZED = "google.cloud.storage.object.v1.finalized"
@@ -64,6 +61,9 @@ def invoke_http(fn: dict, method: str, path: str, query: str, headers: dict, bod
 
 
 def register(app) -> None:
+    from fastapi import Request   # lazy: the Eventarc engine imports this module without FastAPI (headless / test envs)
+    from fastapi.responses import Response
+
     async def _gcf(project: str, location: str, function: str, request: Request, rest: str = ""):
         fn = _find_function(function)
         if not fn:
@@ -89,6 +89,10 @@ def register(app) -> None:
         ct = next((v for k, v in hdrs.items() if k.lower() == "content-type"), None)
         hdrs = {k: v for k, v in hdrs.items() if k.lower() != "content-type"}
         return Response(content=out.get("body", b""), status_code=int(out.get("status", 200)), headers=hdrs, media_type=ct)
+
+    # `from __future__ import annotations` leaves `request: Request` a string that FastAPI resolves against module globals, where
+    # Request is only a local import: it then read `request` as a required query parameter (every /gcf call answered 422).
+    _gcf.__annotations__["request"] = Request
 
     methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
     app.add_api_route("/gcf/{project}/{location}/{function}", _gcf, methods=methods, include_in_schema=False)
@@ -148,6 +152,25 @@ def _deliver(trigger: dict, ce: dict) -> None:
     except Exception:
         pass   # a failed delivery never fails the upload / publish that produced the event
     trigger["lastDelivery"] = {"id": ce["id"], "type": ce["type"], "time": _now_rfc3339()}
+
+
+def deliver_to_function(fn_ref: str, ce: dict) -> tuple:
+    """Deliver one CloudEvent to a Cloud Function (used by the Eventarc API engine). Returns (ok, error)."""
+    from core.app_context import REQUEST_PROVIDER
+    REQUEST_PROVIDER.set("gcp")
+    fn = _find_function(fn_ref.rsplit("/", 1)[-1])
+    if fn is None:
+        return False, "function %s not found" % fn_ref
+    if _is_cloud_event_fn(fn):
+        from core import gcp_function_runtime as rt
+        code, entry, runtime, timeout, env = _fn_params(fn)
+        out = rt.execute_cloud_event(code, entry, runtime, dict(ce), timeout=timeout, env=env)
+        _record(fn, "eventarc", {"type": ce.get("type"), "subject": ce.get("subject")}, out)
+        return bool(out.get("ok")), str(out.get("error") or "")
+    hdrs = {"ce-id": str(ce.get("id", "")), "ce-source": str(ce.get("source", "")), "ce-specversion": "1.0", "ce-type": str(ce.get("type", "")),
+            "content-type": "application/json"}
+    out = invoke_http(fn, "POST", "/", "", hdrs, json.dumps(ce.get("data") or {}).encode())
+    return bool(out.get("ok")), str(out.get("error") or "")
 
 
 def fire(project: str, event_type: str, source: str, subject: str, data: dict, attrs: dict, topic: str = "") -> int:

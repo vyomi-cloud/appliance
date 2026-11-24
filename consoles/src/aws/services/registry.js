@@ -3,8 +3,6 @@
  * Services without a v4 module yet stay reachable through the classic (v3) console.
  * `icon` names Vyomi's own original tile (common/icons/aws.js) — no AWS Architecture Icons. */
 
-import { classicUrl } from "../../common/classic.js";
-
 export const CATEGORIES = ["Compute", "Storage", "Database", "Networking & Content Delivery", "Security, Identity, & Compliance", "Application Integration", "Machine Learning", "Management & Governance"];
 
 export const SERVICES = [
@@ -31,6 +29,7 @@ export const SERVICES = [
   { id: "kinesis", icon: "kinesis", title: "Kinesis", description: "Collect, process, and analyze real-time data streams", category: "Application Integration", load: () => import("./kinesis/index.jsx") },
   { id: "states", icon: "states", title: "Step Functions", description: "Coordinate distributed applications with visual workflows", category: "Application Integration", load: () => import("./states/index.jsx") },
   { id: "cost-explorer", icon: "costexplorer", title: "Cost Explorer", description: "Explore what your resources would cost, and what Vyomi saved", category: "Management & Governance", load: () => import("./cost-explorer/index.jsx") },
+  { id: "tfstudio", icon: "cloudformation", title: "Infrastructure Studio", description: "Diagram your stack and export or import it as Terraform", category: "Management & Governance", load: () => import("./tfstudio/index.jsx") },
   { id: "ssm", icon: "ssm", title: "Systems Manager", description: "Visibility and control of your infrastructure", category: "Management & Governance", load: () => import("./ssm/index.jsx") },
   { id: "securityhub", icon: "iam", title: "Security Hub & GuardDuty", description: "Security findings, controls and threat detection", category: "Security, Identity, & Compliance", load: () => import("./securityhub/index.jsx") },
   { id: "backup", icon: "ssm", title: "AWS Backup", description: "Centralized backup across AWS services", category: "Storage", load: () => import("./backup/index.jsx") },
@@ -39,4 +38,3 @@ export const SERVICES = [
 export const byId = Object.fromEntries(SERVICES.map((s) => [s.id, s]));
 
 /** Classic (v3) console deep link, used until a service has its v4 module. */
-export const classicHref = (svc) => classicUrl("aws", svc);

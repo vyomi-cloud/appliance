@@ -74,6 +74,7 @@ class IamCredentialsStore:
 
     def __init__(self):
         self.issued: dict = {}     # credential id -> issue record (no secret material)
+        self.tokens: dict = {}     # sha256(opaque access token) -> {"email","exp"}: who a `ya29.` bearer token acts as (hash only, never the token)
 
 
 _SHARED: IamCredentialsStore | None = None
@@ -226,6 +227,36 @@ def _record(store, kind, email, delegates, detail, lifetime, now):
     return cid
 
 
+MAX_TOKENS = 5000
+
+
+def _token_key(token):
+    return hashlib.sha256(str(token).encode()).hexdigest()
+
+
+def remember_token(store, token, email, expires_at):
+    """Record which service account an issued opaque access token acts as (so the IAM gate can authorize a request that carries only
+    `Authorization: Bearer ya29...`). Expired entries and the oldest beyond MAX_TOKENS are dropped."""
+    toks = getattr(store, "tokens", None)
+    if toks is None:
+        toks = {}
+        store.tokens = toks
+    toks[_token_key(token)] = {"email": email, "exp": int(expires_at)}
+    now = int(_now().timestamp())
+    for k in [k for k, v in toks.items() if v.get("exp", 0) < now]:
+        del toks[k]
+    for k in list(toks)[: max(0, len(toks) - MAX_TOKENS)]:
+        del toks[k]
+
+
+def principal_for_token(store, token, now=None):
+    """`serviceAccount:<email>` the token was issued to, or None (unknown / expired)."""
+    rec = (getattr(store, "tokens", None) or {}).get(_token_key(token))
+    if not rec or rec.get("exp", 0) < int(now if now is not None else _now().timestamp()):
+        return None
+    return "serviceAccount:" + rec["email"]
+
+
 def generate_access_token(store, ident, body, resolver=None):
     email = _resolve(ident, resolver)
     delegates = _check_delegates(body.get("delegates"), resolver)
@@ -235,7 +266,9 @@ def generate_access_token(store, ident, body, resolver=None):
     life = _lifetime(body.get("lifetime"))
     now = _now()
     _record(store, "generateAccessToken", email, delegates, " ".join(scope), life, now)
-    return {"accessToken": "ya29.c." + secrets.token_urlsafe(96), "expireTime": _ts(now + timedelta(seconds=life))}
+    token = "ya29.c." + secrets.token_urlsafe(96)
+    remember_token(store, token, email, int(now.timestamp()) + life)
+    return {"accessToken": token, "expireTime": _ts(now + timedelta(seconds=life))}
 
 
 def generate_id_token(store, ident, body, resolver=None):

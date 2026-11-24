@@ -476,6 +476,16 @@ def register_function_urls(app: FastAPI) -> None:
     @app.api_route("/lambda-url/{url_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
     @app.api_route("/lambda-url/{url_id}/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
     async def lambda_url_invoke(url_id: str, request: Request, rest: str = ""):
+        if _srv()._lambda_unified() is not None:
+            # Shared Lambda engine (v4): its records are keyed `name`, not `function_name`, and it owns
+            # the Function URL -> event -> response mapping (same code as the wire router and Nano).
+            from core import lambda_core as _lc
+            from core.appliance_stores import lambda_store
+            r = _lc.url_invoke(lambda_store(), url_id, request.method, rest, dict(request.query_params),
+                               dict(request.headers), await request.body())
+            hdrs = {k: v for k, v in (r.headers or {}).items() if k.lower() != "content-type"}
+            return Response(content=r.body or b"", status_code=r.status, headers=hdrs,
+                            media_type=r.media_type if r.media_type else None)
         fn = next((f for f in _lambda_state().setdefault("functions", {}).values()
                    if isinstance(f, dict) and (f.get("function_url") or {}).get("url_id") == url_id), None)
         if not fn:

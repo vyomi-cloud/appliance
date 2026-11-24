@@ -126,7 +126,21 @@ def _validate(store, run_store, project, location, tid, payload, pubsub_store, g
     if k in ("workflow", "gke"):
         raise _E(400, "FAILED_PRECONDITION", "Destination %s is not simulated by Vyomi (no Workflows / GKE delivery backend); use cloudRun or cloudRunJob." % k)
     if k == "cloudFunction":
-        raise _E(400, "FAILED_PRECONDITION", "Cloud Functions 1st-gen destinations are not simulated; deploy the function as a Cloud Run service.")
+        # Offline appliance: Cloud Functions are served by core.gcp_eventing (the function runtime lives there). Nano has no function
+        # runtime, so there the destination stays refused.
+        fref = dest[k] if isinstance(dest[k], str) else str((dest[k] or {}).get("function") or "")
+        if sys.platform == "emscripten":
+            raise _E(400, "FAILED_PRECONDITION", "Cloud Functions 1st-gen destinations are not simulated; deploy the function as a Cloud Run service.")
+        try:
+            from core import gcp_eventing as _ge
+        except Exception:   # noqa: BLE001
+            raise _E(400, "FAILED_PRECONDITION", "Cloud Functions 1st-gen destinations are not simulated; deploy the function as a Cloud Run service.")
+        if not fref:
+            raise _E(400, "INVALID_ARGUMENT", "destination.cloudFunction is required.")
+        if _ge._find_function(fref.rsplit("/", 1)[-1]) is None:
+            raise _E(400, "FAILED_PRECONDITION", "Destination Cloud Function '%s' does not exist." % fref)
+        _retry_policy(payload)
+        return {"etype": etype, "filters": filters, "topic": _topic(etype, payload, project, location, tid, pubsub_store), "dest_kind": k, "dest_name": fref}
     target = dest[k]
     if k == "httpEndpoint":
         if not str(target.get("uri") or "").startswith(("http://", "https://")):
@@ -240,6 +254,9 @@ def _target_of(t: dict, project: str, location: str) -> dict:
         return {"kind": "service", "project": project, "location": location, "name": d["cloudRun"]["service"]}
     if "cloudRunJob" in d:
         return {"kind": "job", "project": project, "location": location, "name": d["cloudRunJob"]["job"]}
+    if "cloudFunction" in d:
+        f = d["cloudFunction"]
+        return {"kind": "function", "name": f if isinstance(f, str) else str((f or {}).get("function") or "")}
     return {"kind": "http", "url": d["httpEndpoint"]["uri"]}
 
 
@@ -273,6 +290,9 @@ def _make_deliver(holder: dict):
             if kind == "http":
                 out = ebus.http_deliver(target, ce, ctx)
                 ok, err = 200 <= int(out.get("status") or 0) < 300, out.get("error", "")
+            elif kind == "function":
+                from core import gcp_eventing as _ge
+                ok, err = _ge.deliver_to_function(target["name"], ce)
             elif kind == "service":
                 out = run.invoke_service(c["run_store"], target["project"], target["location"], target["name"], ce, internal=True)
                 ok = out["status"] < 500

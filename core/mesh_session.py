@@ -10,11 +10,18 @@ The mesh verifies it OFFLINE with a shared key (env VYOMI_MESH_SESSION_KEY) and:
   * fails closed: in the mesh role, no key / no token / bad signature = nothing is served (except /healthz while valid,
     so the boot script's readiness probe works once a token is configured).
 
-Token wire format (also verified by wasm/relay/mesh-session.mjs, same HMAC):
+Token wire format v1 (also verified by wasm/relay/mesh-session.mjs, which handles v2 the same way):
     v1.<b64url(payload-json)>.<b64url(HMAC-SHA256(key, "v1." + b64url(payload-json)))>
 
-This is a shared-key HMAC (portal and mesh both hold the key). An asymmetric signature (Ed25519 public key on the
-mesh) would be stronger because a compromised Codespace could then not mint tokens - noted as a follow-up.
+v1 is a shared-key HMAC: the portal hands the Codespace the (per-session) key, so the Codespace owner can mint their
+own tokens - any tier, any session_end - for their own Mesh (MCP-GUARDRAILS-INCIDENT-DESIGN.md, finding F2).
+
+v2 fixes that with Ed25519: the portal signs with a private key the Mesh never sees, and the Mesh verifies with a public
+key PINNED IN THIS FILE (TRUSTED_KEYS), never one read from the environment or a file, which the Codespace owner controls:
+    v2.<b64url(payload-json, incl. "kid")>.<b64url(Ed25519 signature over "v2." + b64url(payload-json))>
+Rollout (docs/architecture/v4.0/MESH-SESSION-ED25519.md): the portal has minted v2 since 2026-11-22 12:02 IST, every live
+session is v2, so V1_ACCEPTED = False here and in wasm/relay/mesh-session.mjs: v1 tokens are refused (MeshSessionV1Retired)
+and F2 is closed. The v1 code stays until phase 4 removes it. Tests sign v2 with the public test vector: tests/mesh_testkey.py.
 """
 from __future__ import annotations
 
@@ -29,6 +36,18 @@ from typing import Any, Optional
 
 AUD = "vyomi-mesh-session"
 VERSION = "v1"
+VERSION_V2 = "v2"
+
+# Ed25519 public keys of the portal's session signer: key id -> base64url raw 32-byte public key. PINNED IN CODE on
+# purpose (see the module docstring). Add a key with `python3 scripts/mesh-session-keygen.py`; keep the old one until no
+# live session uses it. wasm/relay/mesh-session.mjs carries the same set (tests/test_mesh_session_v2.py checks they match).
+TRUSTED_KEYS: dict[str, str] = {
+    "portal-2026-11": "gFxVrZy9w3W4r-qhGzAW-nkN0vUrUF6tnzSeAqCovrM",   # generated 2026-11-21 (owner); private seed only in the portal secret store
+}
+
+# HMAC (v1) tokens: retired 2026-11-22 (the portal mints v2 for every session). A code constant, not an env switch: an env
+# switch is under the Codespace owner's control and would reopen F2. Tests that exercise the v1 code opt in explicitly.
+V1_ACCEPTED = False
 HEADER = "x-vyomi-session-token"
 CLOCK_SKEW_S = 30
 _EXEMPT_PATHS = ("/healthz",)
@@ -74,26 +93,82 @@ def mint(account: str, tier: str, session_end: float, *, primary_cloud: str = ""
     return f"{VERSION}.{body}.{_b64(sig)}"
 
 
-def verify(token: str, *, key: Optional[str] = None, now: Optional[float] = None) -> dict:
-    """Return the claims or raise SessionError. Expired (now >= session_end) is SessionExpired (410)."""
+def mint_v2(account: str, tier: str, session_end: float, *, private_key: bytes, kid: str, primary_cloud: str = "",
+            session_id: str = "", now: Optional[float] = None, role: str = "", model: str = "") -> str:
+    """Ed25519 (v2) minting: the portal's reference (docs/architecture/v4.0/MESH-SESSION-ED25519.md) and tests.
+    `private_key` is the raw 32-byte Ed25519 seed. The Mesh never holds it."""
     now = time.time() if now is None else now
+    payload = {"aud": AUD, "kid": kid, "sub": account, "tier": tier, "primary_cloud": primary_cloud, "session_id": session_id,
+               "iat": int(now), "session_end": int(session_end)}
+    if role:
+        payload["role"] = role
+    if model:
+        payload["model"] = model
+    return sign_v2(payload, private_key=private_key, kid=kid)
+
+
+def sign_v2(payload: dict, *, private_key: bytes, kid: str) -> str:
+    """Ed25519-sign an arbitrary claims dict (adds "kid"). Used by mint_v2 and by core/mesh_llm.py node tokens."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    body = _b64(json.dumps({**payload, "kid": kid}, separators=(",", ":"), sort_keys=True).encode())
+    sig = Ed25519PrivateKey.from_private_bytes(private_key).sign(f"{VERSION_V2}.{body}".encode())
+    return f"{VERSION_V2}.{body}.{_b64(sig)}"
+
+
+def _payload(body: str) -> dict:
     try:
-        ver, body, sig = (token or "").strip().split(".")
-    except ValueError:
-        raise SessionError("MeshSessionMalformed", "malformed session token")
-    if ver != VERSION:
-        raise SessionError("MeshSessionMalformed", "unsupported token version")
-    want = hmac.new(_key(key), f"{ver}.{body}".encode(), hashlib.sha256).digest()
+        claims = json.loads(_unb64(body))
+    except Exception:
+        raise SessionError("MeshSessionMalformed", "unreadable payload")
+    if not isinstance(claims, dict):
+        raise SessionError("MeshSessionMalformed", "unreadable payload")
+    return claims
+
+
+def _verify_v1(body: str, sig: str, key: Optional[str]) -> dict:
+    if not V1_ACCEPTED:
+        raise SessionError("MeshSessionV1Retired", "HMAC (v1) session tokens are no longer accepted; the portal must issue a v2 token")
+    want = hmac.new(_key(key), f"{VERSION}.{body}".encode(), hashlib.sha256).digest()
     try:
         got = _unb64(sig)
     except Exception:
         raise SessionError("MeshSessionBadSignature", "bad signature")
     if not hmac.compare_digest(want, got):
         raise SessionError("MeshSessionBadSignature", "bad signature")
-    try:
-        claims = json.loads(_unb64(body))
+    return _payload(body)
+
+
+def _verify_v2(body: str, sig: str) -> dict:
+    claims = _payload(body)                      # read first only to pick the key; nothing is trusted before the check
+    pub = TRUSTED_KEYS.get(str(claims.get("kid") or ""))
+    if not pub:
+        raise SessionError("MeshSessionUnknownKey", "token signed with a key this mesh does not trust")
+    try:   # imported here: the Ed25519 path needs `cryptography`, and nothing else in this module does
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
     except Exception:
-        raise SessionError("MeshSessionMalformed", "unreadable payload")
+        raise SessionError("MeshSessionUnsupported", "Ed25519 verification is not available on this mesh", 503)
+    try:
+        Ed25519PublicKey.from_public_bytes(_unb64(pub)).verify(_unb64(sig), f"{VERSION_V2}.{body}".encode())
+    except (InvalidSignature, ValueError, TypeError):
+        raise SessionError("MeshSessionBadSignature", "bad signature")
+    return claims
+
+
+def verify(token: str, *, key: Optional[str] = None, now: Optional[float] = None) -> dict:
+    """Return the claims or raise SessionError. Expired (now >= session_end) is SessionExpired (410).
+    v2 (Ed25519, pinned keys) needs no key; v1 (HMAC) uses `key` or VYOMI_MESH_SESSION_KEY while V1_ACCEPTED."""
+    now = time.time() if now is None else now
+    try:
+        ver, body, sig = (token or "").strip().split(".")
+    except ValueError:
+        raise SessionError("MeshSessionMalformed", "malformed session token")
+    if ver == VERSION_V2:
+        claims = _verify_v2(body, sig)
+    elif ver == VERSION:
+        claims = _verify_v1(body, sig, key)
+    else:
+        raise SessionError("MeshSessionMalformed", "unsupported token version")
     if claims.get("aud") != AUD:
         raise SessionError("MeshSessionBadAudience", "token is not for a mesh session")
     try:

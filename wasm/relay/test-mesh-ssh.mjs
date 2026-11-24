@@ -11,7 +11,7 @@ import { PassThrough } from "node:stream";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mint } from "./mesh-session.mjs";
+import { testToken, TEST_HOOK } from "./test-fixtures/mesh-testkey.mjs";   // v2, public test key (v1 retired, F2)
 import { dial } from "./mesh-dial.mjs";
 
 const require = createRequire(import.meta.url);
@@ -23,7 +23,7 @@ let bad = 0;
 const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 140) : ""}`); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const nowS = () => Math.floor(Date.now() / 1000);
-const tok = (o = {}) => mint(o.key ?? KEY, { sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "mesh-1", session_end: nowS() + 3600, ...o });
+const tok = (o = {}) => testToken({ sub: "acct-1", tier: "pro", primary_cloud: "aws", session_id: "mesh-1", session_end: nowS() + 3600, ...o }, { forged: o.key !== undefined && o.key !== KEY });
 
 process.env.VYOMI_HOME = fs.mkdtempSync(path.join(os.tmpdir(), "vyomi-home-"));
 const cli = await import("./mesh-cli.mjs");
@@ -33,7 +33,7 @@ const vm = net.createServer((s) => s.pipe(s));
 await new Promise((r) => vm.listen(0, "127.0.0.1", r));
 const vmPort = vm.address().port;
 
-const child = spawn(process.execPath, [path.join(here, "local-relay.mjs")], {
+const child = spawn(process.execPath, [...TEST_HOOK, path.join(here, "local-relay.mjs")], {
   env: { ...process.env, RELAY_PORT: String(PORT), RELAY_HOST: "127.0.0.1", VYOMI_MESH_SESSION_KEY: KEY, VYOMI_RELAY_ALLOW_LOOPBACK: "1", VYOMI_MAX_STREAMS: "3", NODE_PATH: process.env.NODE_PATH || "" },
   stdio: ["ignore", "pipe", "pipe"] });
 let up = false; child.stdout.on("data", (d) => { if (String(d).includes("listening") || String(d).includes(String(PORT))) up = true; });

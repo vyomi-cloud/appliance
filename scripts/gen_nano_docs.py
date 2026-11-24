@@ -252,7 +252,9 @@ def gen_aws():
             "id": sname, "title": m.metadata.get("serviceFullName", sid), "signing": sign, "style": wire_style, "protocol": protocol,
             "version": m.metadata.get("apiVersion", ""), "target": m.metadata.get("targetPrefix", ""),
             "json": m.metadata.get("jsonVersion", ""),
-            "cli": sid.lower().replace(" ", "-"), "py_client": sname,
+            # The AWS CLI command is botocore's service name (secretsmanager, logs, elbv2, events, stepfunctions), not the
+            # serviceId (Secrets Manager -> secrets-manager); low-level S3 is `s3api` (`aws s3` is the high-level command set).
+            "cli": "s3api" if sname == "s3" else sname, "py_client": sname,
             "js_pkg": "@aws-sdk/client-" + sid.lower().replace(" ", "-"), "js_client": sid_clean + "Client",
             "ops": ops, "total": len(m.operation_names), "wired": len(ops),
             "unwired": sorted(unwired),

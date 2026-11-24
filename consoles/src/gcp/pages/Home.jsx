@@ -23,7 +23,7 @@ import { sdkEndpoint } from "../../common/connect.js";
 import { restJson, WIRE_BASE, probeWithRetry } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import { useProject } from "../project.js";
-import { PRODUCTS, classicHref } from "../services/registry.js";
+import { PRODUCTS } from "../services/registry.js";
 import { RecommendationsTable } from "../services/compute/Ext.jsx";
 
 const store = {
@@ -182,7 +182,7 @@ export default function Home() {
 
   const cards = {
     project: (
-      <Card icon={HexagonIcon} title="Project info" onHide={() => hide("project")} footer={{ label: "Go to project settings", href: classicHref("iam") }}>
+      <Card icon={HexagonIcon} title="Project info" onHide={() => hide("project")}>
         <Stack spacing={1.25}>
           <Box><Typography variant="body2" color="text.secondary">Project name</Typography><Typography variant="body2">{project}</Typography></Box>
           <Box><Typography variant="body2" color="text.secondary">Project ID</Typography><Typography variant="body2">{project}</Typography></Box>
@@ -227,11 +227,8 @@ export default function Home() {
       </Card>
     ),
     monitoring: (
-      <Card icon={InsightsIcon} title="Monitoring" onHide={() => hide("monitoring")} footer={{ label: "Go to Monitoring", href: classicHref("monitoring") }}>
+      <Card icon={InsightsIcon} title="Monitoring" onHide={() => hide("monitoring")}>
         <Stack spacing={1}>
-          <Link href={classicHref("monitoring")} underline="hover" variant="body2">Create my dashboard</Link>
-          <Link href={classicHref("monitoring")} underline="hover" variant="body2">Set up alerting policies</Link>
-          <Link href={classicHref("monitoring")} underline="hover" variant="body2">Create uptime checks</Link>
         </Stack>
       </Card>
     ),

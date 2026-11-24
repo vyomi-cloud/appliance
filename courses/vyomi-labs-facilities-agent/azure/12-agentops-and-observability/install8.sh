@@ -1,0 +1,1 @@
+pip install azure-core azure-mgmt-loganalytics azure-mgmt-applicationinsights azure-mgmt-monitor azure-monitor-opentelemetry-exporter azure-monitor-query opentelemetry-sdk requests langgraph fastapi openai

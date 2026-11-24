@@ -35,6 +35,8 @@ Usage:
   vyomi redis       Redis operations (flush)
   vyomi mesh status [--json]   Mesh (headless Pro/Max) health, tier, trial, 70% cap usage
   vyomi mesh pair              Print a pairing code to attach the Nano UI at vyomi.cloud
+  vyomi iam enforce <aws|gcp|azure> [--service S] [--resource R] <off|audit|enforce>   IAM enforcement mode
+  vyomi iam status | vyomi iam audit [aws|gcp|azure] [--limit N]
   vyomi doctor      Print diagnostics
   vyomi mcp         MCP server (stdio) for AI agents: claude mcp add vyomi -- vyomi mcp
   vyomi help        This help

@@ -173,7 +173,9 @@ def gcp():
         s4, t = http("POST", f"/v1/projects/{GP}/locations/{GL}/triggers?triggerId={trig}", {
             "eventFilters": [{"attribute": "type", "value": STORAGE}, {"attribute": "bucket", "value": bucket}],
             "destination": {"cloudFunction": efn_name}})
-        check(s4 < 300 and str(t.get("name", "")).endswith("/triggers/" + trig), "Eventarc: triggerId is honoured on create", t)
+        # real Eventarc create is a long-running operation: the trigger is the operation's target / response, not its name
+        tname = str((t.get("response") or {}).get("name") or (t.get("metadata") or {}).get("target") or t.get("name", ""))
+        check(s4 < 300 and tname.endswith("/triggers/" + trig), "Eventarc: triggerId is honoured on create (LRO target/response)", t)
         http("POST", f"/upload/storage/v1/b/{bucket}/o?uploadType=media&name=dir%2Fhello.txt", b"hi there", {"content-type": "text/plain"})
         got = until(lambda: seen(STORAGE), 20)
         check(isinstance(got, dict) and got.get("type") == STORAGE and got.get("bucket") == bucket and got.get("name") == "dir/hello.txt",

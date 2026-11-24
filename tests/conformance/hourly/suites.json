@@ -697,6 +697,22 @@
       "timeout": 120
     },
     {
+      "id": "offline-api-gcp-eventarc-function-dest",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_eventarc_function_dest.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-gcp-gcf-trigger-url",
+      "target": "offline",
+      "cloud": "gcp",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_gcp_gcf_trigger_url_api.py",
+      "timeout": 120
+    },
+    {
       "id": "offline-api-gcp-vault-console-secrets",
       "target": "offline",
       "cloud": "gcp",
@@ -718,6 +734,14 @@
       "cloud": "aws",
       "kind": "api",
       "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_sdk_info_extras_config_api.py",
+      "timeout": 120
+    },
+    {
+      "id": "offline-api-aws-lambda-function-url",
+      "target": "offline",
+      "cloud": "aws",
+      "kind": "api",
+      "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/test_aws_lambda_function_url_api.py",
       "timeout": 120
     },
     {
