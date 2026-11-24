@@ -543,7 +543,7 @@
         el("p", { className: "vl-muted", textContent: "Keep the resources if you are continuing: later chapters build on them." }));
       var buildBody = el("div", {}, hasLab ? el("div", {},
           el("p", { className: "vl-muted", textContent: "Complete these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
-          (function () { var ol = el("ol", { className: "vl-blocks" }, l.lab.map(labBlock)), allOpen = false; var tg2 = el("button", { type: "button", className: "vl-btn sm", textContent: "Expand all" }); tg2.onclick = function () { allOpen = !allOpen; [].forEach.call(ol.children, function (x) { x.classList.toggle("open", allOpen); }); tg2.textContent = allOpen ? "Collapse all" : "Expand all"; }; return el("div", {}, el("div", { className: "vl-blocktools" }, tg2), ol); })()) :
+          (function () { var ol = el("ol", { className: "vl-blocks" }, l.lab.map(labBlock)), allOpen = false; var tg2 = el("button", { type: "button", className: "vl-btn sm", textContent: "Expand all" }); tg2.onclick = function () { allOpen = !allOpen; [].forEach.call(ol.children, function (x) { x.classList.toggle("open", allOpen); }); tg2.textContent = allOpen ? "Collapse all" : "Expand all"; }; return el("div", {}, el("div", { className: "vl-blocktools" }, tg2), ol, chapterCode(l)); })()) :
         el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "Create the resources in the console steps below. The runnable, verified code for this chapter is still being added." }), ul(l.build)));
       var consBody = el("div", {}, el("p", { className: "vl-muted", textContent: "Open each service in the " + course.cloud_name + " console, enter the values shown and compare with the screenshot." }),
         el("ol", { className: "vl-steps2" }, (l.setup || []).map(setupStep)));
@@ -563,7 +563,7 @@
       var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "These are the exact operations this chapter uses, straight from the live API reference. Press Try it on any operation to make the call from this browser against your simulator: no tunnel needed." }),
         docsBlock(), consoleVals.length ? el("ol", { className: "vl-vals" }, consoleVals) : null,
         el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), canCheck ? el("div", { className: "vl-actions" }, check, statusEl) : null, out);
-      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, statusEl), chapterCode(l));
+      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, statusEl));
       /* ---- the chapter workspace: a hero, then ONE section at a time (compact), in each cloud's own tutorial structure ---- */
       var chk = function (arr) { return el("ul", { className: "vl-checks" }, arr.map(function (t) { return el("li", {}, icon(P.check, 15), t); })); };
       var card = function (title, body, cls) { return el("section", { className: "vl-card " + (cls || "") }, el("h3", { textContent: title }), body); };
