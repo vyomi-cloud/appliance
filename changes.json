@@ -1,20 +1,6 @@
 {
- "at": "2026-11-24T06:18:29+00:00",
+ "at": "2026-11-24T07:18:29+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "azure",
-   "service": "network",
-   "kind": "spec-commit",
-   "key": "azure:network:965a33b4c6",
-   "title": "Azure network: Preserve Java Network SDK model compatibility (#48457)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/965a33b4c632fb1aaf5f2ea02e6d603e1c81baa6",
-   "actionable": false
-  }
- ],
- "errors": [
-  "maven/software.amazon.awssdk:s3: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
- ]
+ "changes": [],
+ "errors": []
 }
