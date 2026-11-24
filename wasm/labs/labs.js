@@ -166,12 +166,12 @@
     /* ---------- course view ---------- */
     /* The finished code is a real GitHub project (projects/vyomi-labs-facilities-agent/<cloud>); every block here is a file in it. */
     function ghUrl(path) { return "https://github.com/" + course.repo + (path || ""); }
-    function ghBase() { return course.repo_path + "/" + cloud; }
+    function ghBase() { return (course.repo_path ? course.repo_path + "/" : "") + cloud; }
     function projectCard() {
       var b = function (href, txt, primary, ic) { return el("a", { className: "vl-btn" + (primary ? " primary" : ""), href: href, target: "_blank", rel: "noopener" }, icon(ic, 16), txt); };
       return el("section", { className: "vl-projcard" },
         el("div", { className: "vl-projtxt" }, el("small", { textContent: "The finished project" }), el("h3", { textContent: "Take the full code with you" }),
-          el("p", { textContent: "Everything you build here is a real project on GitHub: " + course.repo + ", folder " + ghBase() + ". Every file is the exact code from the chapters, in order, with a README per chapter and a script that runs them all. Open it in an editor with the code checked out and run it against your simulator." })),
+          el("p", { textContent: "Everything you build here is a real project on GitHub, in its own repository for this course: " + course.repo + ", folder " + ghBase() + ". Every file is the exact code from the chapters, in order, with a README per chapter and a script that runs them all. Open it in an editor with the code checked out and run it against your simulator." })),
         el("div", { className: "vl-projbtns" }, b("https://github.dev/" + course.repo + "/blob/" + course.repo_ref + "/" + ghBase(), "Open in editor", true, "M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"),
           b("https://codespaces.new/" + course.repo + "?ref=" + course.repo_ref + "&devcontainer_path=" + encodeURIComponent(ghBase() + "/.devcontainer/devcontainer.json"), "Open in Codespaces", false, "M4 5h16v11H4zM8 20h8M12 16v4"), b(ghUrl("/tree/" + course.repo_ref + "/" + ghBase()), "View on GitHub", false, "M9 19c-4 1-4-2-6-2m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.800 5.400 3.100 5.400 3.100a4.200 4.200 0 0 0-.1 3.200A4.600 4.600 0 0 0 4 9.500c0 4.600 2.700 5.700 5.500 6-.6.600-.6 1.200-.5 2V21")));
     }

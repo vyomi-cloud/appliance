@@ -21,3 +21,9 @@ courses/
 3. A change to a lab block means regenerating the project in the same commit.
 4. Each project must run on its own when checked out (README, requirements, devcontainer).
 5. The course UI links to these folders: "Open in editor", "Open in Codespaces" and "View on GitHub".
+
+## Standalone mirror
+
+The learner's "Open in editor", "Open in Codespaces" and "View on GitHub" buttons must open only the course project, never the whole appliance.
+Each course is therefore also published as its own repository, `vyomi-cloud/<course-slug>`, a mirror of `courses/<course-slug>/` (cloud folders at the root).
+Publish it with `scripts/sync_course_repo.sh <course-slug> --push` (owner go required). The appliance copy stays the source of truth.

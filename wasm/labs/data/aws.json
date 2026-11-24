@@ -4,8 +4,8 @@
  "ai_platform": "Amazon Bedrock",
  "title": "Build the Enterprise Facilities agent on AWS",
  "image": "img/aws.svg",
- "repo": "vyomi-cloud/appliance",
- "repo_path": "courses/vyomi-labs-facilities-agent",
+ "repo": "vyomi-cloud/vyomi-labs-facilities-agent",
+ "repo_path": "",
  "repo_ref": "main",
  "image_size": [
   1800,
