@@ -307,3 +307,21 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-example2{border-radius:12px;padding:16px 20px;background:color-mix(in srgb,var(--c) 8%,#fff);border:1px solid color-mix(in srgb,var(--c) 25%,#fff)}.vl .vl-example2 b{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--c);margin-bottom:6px}.vl .vl-example2 p{margin:0;font-size:15px;line-height:1.65}
 .vl .vl-side{position:sticky;top:12px;align-self:start}
 @media (prefers-reduced-motion:reduce){.vl .vl-pipe li::after{animation:none}}
+
+/* story-first lesson (Khan Academy / Grokking pattern) */
+.vl .vl-lesson{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:44px;align-items:start}@media (max-width:980px){.vl .vl-lesson{grid-template-columns:1fr}}
+.vl .vl-lmain{display:flex;flex-direction:column;gap:34px;min-width:0}.vl .vl-lsec h3{font-size:20px;margin:0 0 12px;scroll-margin-top:14px}
+.vl .vl-lsec p{font-size:16px;line-height:1.75;margin:0}
+.vl .vl-scene{margin:0;padding:22px 26px;border-radius:14px;background:linear-gradient(120deg,var(--c),color-mix(in srgb,var(--c) 55%,#0b1220));color:#fff;box-shadow:0 8px 24px color-mix(in srgb,var(--c) 28%,transparent)}.vl .vl-scene p{font-size:18px;line-height:1.7;color:#fff;font-weight:500}
+.vl .vl-first h3{display:none}
+.vl .vl-analogy{border:2px solid color-mix(in srgb,var(--c) 40%,#fff);background:color-mix(in srgb,var(--c) 7%,#fff);border-radius:14px;padding:18px 22px}.vl .vl-analogy small{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--c);font-weight:700}.vl .vl-analogy b{display:block;font-size:20px;margin:2px 0 8px}
+.vl .vl-tl{list-style:none;margin:0;padding:0;position:relative}.vl .vl-tl li{display:flex;gap:16px;padding:0 0 22px;position:relative}.vl .vl-tl li:not(:last-child)::before{content:"";position:absolute;left:15px;top:32px;bottom:0;width:2px;background:color-mix(in srgb,var(--c) 30%,#fff)}
+.vl .vl-tn{flex:none;width:32px;height:32px;border-radius:50%;background:var(--c);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;z-index:1}.vl .vl-tl b{font-size:16px;display:block;margin:4px 0 4px}.vl .vl-tl p{font-size:15.5px;color:var(--muted)}
+.vl .vl-q{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:0 0 14px;background:var(--card);display:flex;flex-direction:column;gap:8px}.vl .vl-qt{font-weight:600!important;font-size:16px!important}.vl .vl-qn{display:inline-block;background:var(--c);color:#fff;border-radius:6px;padding:1px 8px;font-size:12.5px;margin-right:8px}
+.vl .vl-qo{text-align:left;border:1.5px solid var(--line);background:#fff;border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer;color:var(--ink)}.vl .vl-qo:hover:not(:disabled){border-color:var(--c);background:color-mix(in srgb,var(--c) 6%,#fff)}
+.vl .vl-qo.right{border-color:#12805c;background:#e8f6f0}.vl .vl-qo.wrong{border-color:#c0392b;background:#fdecea}
+.vl .vl-qfb{border-radius:10px;padding:10px 14px;font-size:14.5px;line-height:1.6}.vl .vl-qfb.ok{background:#e8f6f0}.vl .vl-qfb.no{background:#fdf3e3}
+.vl .vl-scorebar{font-weight:600;color:var(--c)}
+.vl .vl-recap{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px}.vl .vl-recap li{display:flex;gap:10px;align-items:flex-start;font-size:16px;line-height:1.55}.vl .vl-recap svg{flex:none;margin-top:3px;color:#12805c}
+.vl .vl-nextup{padding:12px 16px;background:var(--soft);border-radius:10px}.vl .vl-terms{margin-top:12px}.vl .vl-terms summary{cursor:pointer;font-weight:600}.vl .vl-terms dt{font-weight:600;margin-top:8px}.vl .vl-terms dd{margin:0;color:var(--muted);font-size:14.5px}
+.vl .vl-lside{position:sticky;top:12px;display:flex;flex-direction:column;gap:22px}.vl .vl-toc{display:flex;flex-direction:column;gap:2px;border-left:2px solid var(--line)}.vl .vl-toc h4{margin:0 0 8px 14px}.vl .vl-toc a{padding:6px 14px;font-size:14px;color:var(--muted);text-decoration:none;border-left:2px solid transparent;margin-left:-2px}.vl .vl-toc a:hover{color:var(--c);border-left-color:var(--c)}

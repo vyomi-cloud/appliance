@@ -377,19 +377,39 @@
       var needs = (l.contract && l.contract.needs || []).map(byId).filter(Boolean), usedBy = course.layers.filter(function (o) { return (o.contract && o.contract.needs || []).indexOf(l.id) >= 0; });
       var chapLink = function (o) { var a = el("button", { type: "button", className: "vl-chaplink", textContent: "Chapter " + o.order + ": " + o.title }); a.onclick = function () { go(o.id); }; return a; };
       var sec = function (title, body, cls) { return el("section", { className: "vl-isec " + (cls || "") }, el("h3", { textContent: title }), body); };
-      var introBody = el("div", { className: "vl-intro3", style: "--c:" + l.color },
-        el("div", { className: "vl-main" },
-          el("div", { className: "vl-banner" }, el("span", { className: "vl-bicon" }, icon(l.icon, 30)), el("div", {}, el("small", { textContent: "In this module" }), el("p", { textContent: l.objective }))),
-          sec("About this module", el("div", { className: "vl-prose" }, X.lead.map(function (t) { return el("p", { textContent: t }); }))),
-          X.flow.length ? sec("How it works", el("ol", { className: "vl-pipe" }, X.flow.map(function (f, i) { return el("li", {}, el("span", { className: "vl-pn2", textContent: i + 1 }), el("b", { textContent: f[0] }), el("p", { textContent: f[1] })); }))) : null,
-          X.concepts.length ? sec("Key ideas", el("div", { className: "vl-ideas2" }, X.concepts.map(function (c, i) { return el("div", { className: "vl-idea" }, el("span", { className: "vl-iconum", textContent: String.fromCharCode(65 + i) }), el("b", { textContent: c[0] }), el("p", { textContent: c[1] })); }))) : null,
-          X.example ? el("aside", { className: "vl-example2" }, el("b", { textContent: "In the Facilities agent" }), el("p", { textContent: X.example })) : null),
-        el("aside", { className: "vl-side" },
+      var N2 = l.narr;
+      var quizState = []; 
+      function quizCard(q, qi) {
+        var box = el("div", { className: "vl-q" }, el("p", { className: "vl-qt" }, el("span", { className: "vl-qn", textContent: "Q" + (qi + 1) }), q[0])), fb = el("div", { className: "vl-qfb", hidden: true }), answered = false;
+        q[1].forEach(function (opt, oi) {
+          var bt = el("button", { type: "button", className: "vl-qo", textContent: opt });
+          bt.onclick = function () {
+            if (answered) return; answered = true; var ok = oi === q[2]; quizState[qi] = ok;
+            box.querySelectorAll(".vl-qo").forEach(function (x, k) { x.disabled = true; if (k === q[2]) x.classList.add("right"); else if (k === oi) x.classList.add("wrong"); });
+            fb.hidden = false; fb.className = "vl-qfb " + (ok ? "ok" : "no"); fb.replaceChildren(el("b", { textContent: ok ? "Correct. " : "Not quite. " }), q[3]);
+            var done = quizState.filter(function (x) { return x !== undefined; }).length; score.textContent = quizState.filter(Boolean).length + " of " + N2.quiz.length + " correct" + (done < N2.quiz.length ? " so far" : "");
+          };
+          box.append(bt);
+        });
+        box.append(fb); return box;
+      }
+      var score = el("span", { className: "vl-score", textContent: "Pick an answer" });
+      var anchor = function (id, title, body, cls) { var s = el("section", { className: "vl-lsec " + (cls || ""), id: "vl-s-" + id }, el("h3", { textContent: title }), body); return s; };
+      var toc = [["story", "The story"], ["problem", "Why the obvious way breaks"], ["idea", "The idea"], ["watch", "Watch it work"], ["check", "Check your understanding"], ["recap", "Recap"]];
+      var introBody = el("div", { className: "vl-lesson", style: "--c:" + l.color },
+        el("div", { className: "vl-lmain" },
+          anchor("story", "The story", el("blockquote", { className: "vl-scene" }, el("p", { textContent: N2.scene })), "vl-first"),
+          anchor("problem", "Why the obvious way breaks", el("p", { textContent: N2.problem })),
+          anchor("idea", "The idea", el("div", { className: "vl-analogy" }, el("small", { textContent: "Think of it as" }), el("b", { textContent: N2.idea[0] }), el("p", { textContent: N2.idea[1] }))),
+          anchor("watch", "Watch it work", el("ol", { className: "vl-tl" }, N2.walk.map(function (w, i) { return el("li", {}, el("span", { className: "vl-tn", textContent: i + 1 }), el("div", {}, el("b", { textContent: w[0] }), el("p", { textContent: w[1] }))); }))),
+          anchor("check", "Check your understanding", el("div", {}, N2.quiz.map(quizCard), el("div", { className: "vl-scorebar" }, score))),
+          anchor("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, N2.recap.map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
+            usedBy.length ? el("p", { className: "vl-nextup" }, el("b", { textContent: "Next, in the story: " }), "this feeds ", chapLink(usedBy[0]), ".") : null,
+            el("details", { className: "vl-terms" }, el("summary", { textContent: "Key terms" }), el("dl", {}, X.concepts.map(function (c) { return el("div", {}, el("dt", { textContent: c[0] }), el("dd", { textContent: c[1] })); })))))),
+        el("aside", { className: "vl-lside" },
+          el("nav", { className: "vl-toc", "aria-label": "On this page" }, el("h4", { textContent: "On this page" }), toc.map(function (t) { var a2 = el("a", { href: "#vl-s-" + t[0], textContent: t[1] }); a2.onclick = function (e) { e.preventDefault(); var x = introBody.querySelector("#vl-s-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a2; })),
           sec("By the end you will", chk(l.learn)),
-          sec("It works when", chk(l.checks)),
-          sec("Before you start", el("div", {}, ul(l.prereq),
-            needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null,
-            usedBy.length ? el("h4", { textContent: "Used by" }) : null, usedBy.length ? el("div", { className: "vl-chaps" }, usedBy.map(chapLink)) : null))));
+          sec("Before you start", el("div", {}, ul(l.prereq), needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null))));
       var L = { aws: ["Overview", "Task 1: Build the code", "Task 2: Create the resources", "Task 3: Connect to other layers", "Task 4: Validate your work", "Task 5: Clean up resources"],
         gcp: ["Before you begin", "Build the code", "Create the resources", "Connect the layers", "Validate", "Clean up"],
         azure: ["Prerequisites", "Build the code", "Create the resources", "Connect to other layers", "Validate", "Clean up and next steps"] }[cloud];
