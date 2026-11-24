@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-24T23:18:54+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T22:18:52+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,11 +3006,3 @@ Sources that failed this run (2): maven/com.google.cloud:google-cloud-firestore:
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-12T23:09:53+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**3 change(s), 0 actionable.**
-- · `announcement` Amazon Aurora and RDS now support Graviton5-based R9g database instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-aurora-rds-postgresql-mysql-mariadb-r9g-instances/))
-- · `announcement` Amazon SNS now supports push notifications in four additional AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sns-push-four-regions/))
-- · `announcement` Google Kubernetes Engine: Change (November 12, 2026) ([link](https://docs.cloud.google.com/release-notes#November_12_2026))
-
