@@ -56,7 +56,7 @@
 
     /* ---------- landing: every hands-on course as a card ---------- */
     /* Plan tag: which plans include this course (course.plan comes from the course data). */
-    function planTag() { var p = course.plan || []; return p.length ? el("span", { className: "vl-plan", title: "This course needs a " + p.join(" or ") + " plan" }, icon("M12 2l3 7h7l-5.500 4.500L18 21l-6-4-6 4 1.500-7.500L2 9h7z", 12), p.join(" · ")) : null; }
+    function planTag() { var p = course.plan || []; return p.length ? el("span", { className: "vl-ribbon", title: "This course needs a " + p.join(" or ") + " plan", "aria-label": "Plan: " + p.join(" or ") }, el("span", { textContent: p.join(" · ") })) : null; }
     function catalogView() {
       var nx = nextId(), n = nDone(), tot = course.layers.length, pct = Math.round(100 * n / tot);
       var labN = course.layers.reduce(function (a, l) { return a + (l.lab ? l.lab.length : 0); }, 0);
@@ -64,9 +64,9 @@
         var b = el("button", { type: "button", textContent: c[1] }); b.setAttribute("aria-current", c[0] === cloud); b.onclick = function () { if (c[0] !== cloud) load(c[0]); }; return b; })) : null;
       var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
       var start = function () { inCourse = true; render(); window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); };
-      var card = el("article", { className: "vl-ccard" },
+      var card = el("article", { className: "vl-ccard" + ((course.plan || []).length ? " has-ribbon" : "") }, planTag(),
         el("div", { className: "vl-herotxt" },
-          el("div", { className: "vl-eyebrow" }, "Hands-on course · " + course.cloud_name + " · " + course.ai_platform, planTag()),
+          el("div", { className: "vl-eyebrow" }, "Hands-on course · " + course.cloud_name + " · " + course.ai_platform),
           el("h2", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
           el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", "13 layers")), archLink()),
@@ -270,10 +270,10 @@
         nx ? (n ? "Continue: " : "Start: ") + byId(nx).title : "Review the course", icon(P.arrow, 18));
       var labN = course.layers.reduce(function (a, l) { return a + (l.lab ? l.lab.length : 0); }, 0);
       var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
-      var hero = el("header", { className: "vl-hero" },
+      var hero = el("header", { className: "vl-hero" + ((course.plan || []).length ? " has-ribbon" : "") }, planTag(),
         el("div", { className: "vl-herotxt" },
           el("button", { type: "button", className: "vl-backlink", onclick: function () { inCourse = false; render(); } }, icon(P.back, 14), "All courses"),
-          el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform, planTag()),
+          el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform),
           el("h1", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
           el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", "13 layers")), archLink(), cloudTabs),
