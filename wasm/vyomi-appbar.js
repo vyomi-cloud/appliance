@@ -63,6 +63,7 @@
     '#vy-hd-lab{align-items:center;align-self:center;gap:6px}#vy-hd-lab button{border:0;background:none;padding:7px 16px;border-radius:8px;font:600 13px Inter,system-ui,sans-serif;color:#475467;cursor:pointer;margin:0}' +
     '#vy-hd-lab button:hover{color:#101828;background:#f2f4f7}#vy-hd-lab button.on,#vy-hd-lab button.on:hover{background:#101828;color:#fff}' +
     'body:has(#vy-modal.open) #vy-beta{display:none!important}' +
+    '#vy-modal.labs #vy-modal-t{display:none}' +
     '#vy-acct-btn{flex:none;width:30px;height:30px;overflow:hidden;margin-left:8px;padding:0;border:0;border-radius:50%;background:#4d8cf3;color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(255,255,255,.25)}' +
     '#vy-acct-btn:hover,#vy-acct-btn[aria-expanded=true]{background:#2f6fdc}' +
     '#vy-acct-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}' +
