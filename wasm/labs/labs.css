@@ -358,3 +358,9 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-wwho{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--c)}
 .vl .vl-wans{display:block;margin-top:6px;font-size:14px;color:var(--muted)}.vl .vl-wans b{color:var(--c)}
 .vl .vl-why .vl-wans b{display:inline;font-size:14px;margin-left:4px}
+
+/* one scrolling lesson, same structure on every cloud and on Start here */
+.vl .vl-ws .vl-wsbody.single{display:block;grid-template-columns:1fr!important;padding:28px;border-radius:0 0 12px 12px}
+.vl .vl-ws.gcp .vl-wsbody.single,.vl .vl-ws.azure .vl-wsbody.single{display:block}
+.vl .vl-handson>h3{font-size:22px;padding-top:6px;border-top:1px solid var(--line);padding-top:26px}
+.vl .vl-lmain .vl-pager2{display:flex;justify-content:space-between;gap:12px;margin-top:8px;padding-top:20px;border-top:1px solid var(--line)}

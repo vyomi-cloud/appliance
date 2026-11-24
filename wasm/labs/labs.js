@@ -461,6 +461,9 @@
       var needs = (l.contract && l.contract.needs || []).map(byId).filter(Boolean), usedBy = course.layers.filter(function (o) { return (o.contract && o.contract.needs || []).indexOf(l.id) >= 0; });
       var chapLink = function (o) { var a = el("button", { type: "button", className: "vl-chaplink", textContent: "Chapter " + o.order + ": " + o.title }); a.onclick = function () { go(o.id); }; return a; };
       var sec = function (title, body, cls) { return el("section", { className: "vl-isec " + (cls || "") }, el("h3", { textContent: title }), body); };
+      var L = { aws: ["Overview", "Task 1: Build the code", "Task 2: Create the resources", "Task 3: Connect to other layers", "Task 4: Validate your work", "Task 5: Clean up resources"],
+        gcp: ["Before you begin", "Build the code", "Create the resources", "Connect the layers", "Validate", "Clean up"],
+        azure: ["Prerequisites", "Build the code", "Create the resources", "Connect to other layers", "Validate", "Clean up and next steps"] }[cloud];
       var N2 = l.narr;
       var quizState = []; 
       function quizCard(q, qi) {
@@ -479,7 +482,8 @@
       }
       var score = el("span", { className: "vl-score", textContent: "Pick an answer" });
       var anchor = function (id, title, body, cls) { var s = el("section", { className: "vl-lsec " + (cls || ""), id: "vl-s-" + id }, el("h3", { textContent: title }), body); return s; };
-      var toc = [["story", "The problem"], ["simple", "The simplest design"], ["why", "Why an enterprise goes further"], ["design", "The layer design"], ["check", "Check your understanding"], ["recap", "Recap"]];
+      var HANDS = [["build", L[1]], ["create", L[2]], ["connect", L[3]], ["validate", L[4]], ["clean", L[5]]];
+      var toc = [["story", "The problem"], ["simple", "The simplest design"], ["why", "Why an enterprise goes further"], ["design", "The layer design"]].concat(HANDS, [["check", "Check your understanding"], ["recap", "Recap"]]);
       var introBody = el("div", { className: "vl-lesson", style: "--c:" + l.color },
         el("div", { className: "vl-lmain" },
           anchor("story", "The problem", el("blockquote", { className: "vl-scene" }, el("p", { textContent: N2.scene })), "vl-first"),
@@ -499,9 +503,6 @@
           el("nav", { className: "vl-toc", "aria-label": "On this page" }, el("h4", { textContent: "On this page" }), toc.map(function (t) { var a2 = el("a", { href: "#vl-s-" + t[0], textContent: t[1] }); a2.onclick = function (e) { e.preventDefault(); var x = introBody.querySelector("#vl-s-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a2; })),
           sec("By the end you will", chk(l.learn)),
           sec("Before you start", el("div", {}, ul(l.prereq), needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null))));
-      var L = { aws: ["Overview", "Task 1: Build the code", "Task 2: Create the resources", "Task 3: Connect to other layers", "Task 4: Validate your work", "Task 5: Clean up resources"],
-        gcp: ["Before you begin", "Build the code", "Create the resources", "Connect the layers", "Validate", "Clean up"],
-        azure: ["Prerequisites", "Build the code", "Create the resources", "Connect to other layers", "Validate", "Clean up and next steps"] }[cloud];
       var PANES = [
         { t: L[0], dur: 2, body: introBody },
         { t: L[1], dur: tm.build, body: buildBody, badge: hasLab ? String(l.lab.length) : "" },
@@ -509,20 +510,12 @@
         { t: L[3], dur: 5, body: fitsBody },
         { t: L[4], dur: tm.val, body: valBody },
         { t: L[5], dur: tm.clean, body: el("div", {}, cleanup, closing, l.order === course.layers.length ? projectCard() : null) }];
-      var curPane = 0, content = el("div", { className: "vl-pane" }), nav = el("nav", { className: "vl-pnav", "aria-label": cloud === "azure" ? "In this article" : cloud === "gcp" ? "Codelab steps" : "Tasks" });
-      nav.append(el("h4", { textContent: cloud === "azure" ? "In this article" : cloud === "gcp" ? "Steps" : "Tasks" }));
-      var pbtn = PANES.map(function (p, i) {
-        var b = el("button", { type: "button", className: "vl-pb" }, el("span", { className: "vl-pn", textContent: i + 1 }), el("span", { className: "vl-pt", textContent: p.t }), p.badge ? el("em", { className: "vl-pbadge", textContent: p.badge }) : null, el("small", { className: "vl-pd", textContent: p.dur + " min" }));
-        b.onclick = function () { showPane(i, true); }; nav.append(b); return b;
-      });
-      function showPane(i, scroll) {
-        curPane = i; pbtn.forEach(function (b, k) { b.classList.toggle("cur", k === i); b.classList.toggle("past", k < i); if (k === i) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
-        var p = PANES[i];
-        var pager = el("div", { className: "vl-pager2" }, i ? el("button", { type: "button", className: "vl-btn", onclick: function () { showPane(i - 1, true); } }, icon(P.back, 16), PANES[i - 1].t) : el("span"),
-          i < PANES.length - 1 ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { showPane(i + 1, true); } }, PANES[i + 1].t, icon(P.arrow, 16)) : (nxt ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Next chapter: " + nxt.title, icon(P.arrow, 16)) : el("span", { className: "vl-muted", textContent: "That was the last chapter." })));
-        content.replaceChildren(el("div", { className: "vl-phead" }, el("h2", { textContent: p.t }), el("span", { className: "vl-dur", textContent: p.dur + " min" })), p.body, pager);
-        if (scroll) { window.scrollTo(0, 0); }
-      }
+      var bodies = [buildBody, consBody, fitsBody, valBody, el("div", {}, cleanup, closing, l.order === course.layers.length ? projectCard() : null)];
+      var lmain = introBody.querySelector(".vl-lmain"), checkSec = introBody.querySelector("#vl-s-check");
+      HANDS.forEach(function (h, k) { lmain.insertBefore(anchor(h[0], h[1], bodies[k], "vl-handson"), checkSec); });
+      var pager = el("div", { className: "vl-pager2" }, prev ? el("button", { type: "button", className: "vl-btn", onclick: function () { go(prev.id); } }, icon(P.back, 16), "Previous chapter: " + prev.title) : el("span"),
+        nxt ? el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Next chapter: " + nxt.title, icon(P.arrow, 16)) : el("span", { className: "vl-muted", textContent: "That was the last chapter." }));
+      lmain.append(pager);
       var chipo = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
       var hero = el("header", { className: "vl-chero", style: "--c:" + l.color },
         el("div", { className: "vl-cicon" }, icon(l.icon, 30)),
@@ -531,8 +524,7 @@
           el("h1", { textContent: l.title }), el("p", { textContent: l.outcome }),
           el("div", { className: "vl-cchips" }, chipo(P.flag, l.level), chipo(P.clock, "~" + N + " min"), hasLab ? chipo("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", l.lab.length + " code steps") : null, l.services.slice(0, 3).map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); }))),
         el("div", { className: "vl-cside" }, el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
-      var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody" }, nav, content));
-      showPane(0, false);
+      var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody single" }, introBody));
       var main = article;
 
       var cols = el("div", { className: "vl-cols" + (collapsed ? " oc" : "") }, side, main);
