@@ -354,3 +354,7 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-reasons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}@media (max-width:760px){.vl .vl-reasons{grid-template-columns:1fr}}
 .vl .vl-reason{border:1px solid var(--line);border-top:4px solid #1a6e66;border-radius:12px;padding:14px 18px;background:var(--card)}.vl .vl-reason b{display:block;font-size:16px;margin-bottom:4px}.vl .vl-reason p{margin:0!important;font-size:15px!important;color:var(--muted)}
 .vl .vl-lsec .vl-archfig{margin:14px 0}
+
+.vl .vl-wwho{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--c)}
+.vl .vl-wans{display:block;margin-top:6px;font-size:14px;color:var(--muted)}.vl .vl-wans b{color:var(--c)}
+.vl .vl-why .vl-wans b{display:inline;font-size:14px;margin-left:4px}

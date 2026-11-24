@@ -78,19 +78,19 @@
     }
 
     /* ---------- Start here: the premise (why 13 layers) ---------- */
-    var WHY = { 10: ["Which model, and what if it changes?", "Every part hard-wires a model; one change breaks them all."],
-      3: ["Who plans, and what stops a runaway?", "One giant agent that loops, leaks between users and cannot be tested."],
-      7: ["What may the agent actually do?", "Functions with no contract: the model can call anything with any argument."],
-      12: ["How does company knowledge get in, and stay current?", "Documents go stale the first busy week; nobody re-imports them."],
-      6: ["How does it find the right passage?", "Confident answers built on the wrong page."],
-      11: ["Can every sentence be trusted?", "Invented answers with no source, and private data repeated back."],
-      9: ["What does it remember, and for whom?", "Every chat starts from zero, or one user's details reach another."],
-      4: ["Who may call which tool?", "Permissions scattered across eight codebases; nobody can answer an auditor."],
-      5: ["Who approves a real-world change?", "The agent writes first and apologises later; a restart loses the request."],
-      1: ["Who is this, and who is flooding us?", "Anonymous callers and one noisy client burning the whole model budget."],
-      2: ["What if the message is an attack?", "A single clever sentence rewrites the agent's rules."],
-      8: ["Why was it slow, or wrong, last night?", "A chain of calls and a log line that just says error."],
-      13: ["Can we prove what happened?", "Plain-text records and a trail nobody can trust."] };
+    var WHY = { 10: ["Platform lead", "Can we change the model without rewriting the app?", "Every part hard-wires a model; one change breaks them all."],
+      3: ["Engineering manager", "What stops it running away, or mixing up two users?", "One giant agent that loops, leaks between users and cannot be tested."],
+      7: ["Security", "What exactly is the agent allowed to do?", "Functions with no contract: the model can call anything with any argument."],
+      12: ["Knowledge owner", "How does our latest documentation get in, and stay current?", "Documents go stale the first busy week; nobody re-imports them."],
+      6: ["Domain expert", "Does it find the right passage before it answers?", "Confident answers built on the wrong page."],
+      11: ["Legal and risk", "Can every statement be traced to a source, with private data kept out?", "Invented answers with no source, and private data repeated back."],
+      9: ["Privacy officer", "What does it remember, and can one user's data reach another?", "Every chat starts from zero, or one user's details reach another."],
+      4: ["CISO", "Who may call which tool, and where is that decided?", "Permissions scattered across eight codebases; nobody can answer an auditor."],
+      5: ["Business owner", "Who signs off before something real changes?", "The agent writes first and apologises later; a restart loses the request."],
+      1: ["IT operations", "Who is calling, and who is flooding us?", "Anonymous callers and one noisy client burning the whole model budget."],
+      2: ["Security", "What if the message itself is an attack?", "A single clever sentence rewrites the agent's rules."],
+      8: ["Operations", "Why was it slow or wrong last night?", "A chain of calls and a log line that just says error."],
+      13: ["Auditor", "Can we prove what happened, and that nobody altered it?", "Plain-text records and a trail nobody can trust."] };
     function quizBlock(qs) {
       var res = []; var score = el("span", { className: "vl-score", textContent: "Pick an answer" });
       var cards = qs.map(function (q, qi) {
@@ -129,14 +129,14 @@
         sc("simple", "The simplest architecture", el("div", {}, el("p", { textContent: "The quickest way to build it is four boxes and about forty lines of code: a chat box, a model, one function, and some data." }), archFigure("before"),
           el("div", { className: "vl-gn" }, el("div", { className: "vl-got" }, el("h4", { textContent: "What it achieves" }), el("ul", {}, ["Answers questions in plain language", "Looks up an asset and returns its status", "Opens a work order when asked", "Runs in an afternoon"].map(function (t) { return el("li", { textContent: t }); }))),
             el("div", { className: "vl-miss" }, el("h4", { textContent: "What it does not" }), el("ul", {}, ["Who is asking, and how many people may ask", "Limits on what the agent is allowed to do", "Answers grounded in the company's documents, with sources", "A human decision before anything changes", "A way to see what happened, or to prove it later"].map(function (t) { return el("li", { textContent: t }); })))))),
-        sc("beyond", "Why an enterprise goes beyond the functional scope", el("div", {}, el("p", { textContent: "The simple version meets the functional requirement: it does the task. An enterprise is also accountable for how the task is done, and that is where the real work starts." }),
+        sc("beyond", "Why an enterprise goes beyond the functional scope", el("div", {}, el("p", { textContent: "The simple version meets the functional requirement: it does the task. An enterprise is also accountable for how the task is done, and each of those concerns arrives as a question from someone who has to sign off." }),
           el("div", { className: "vl-reasons" }, [["Risk", "An agent acts, it does not only answer. One bad action can cost more than the system saves."], ["Scale", "Thousands of users share one model budget and must never see each other's data."], ["Accountability", "Auditors and regulators ask who did what, when and why, and expect proof."], ["Change", "Models, documents and people change every week. The system has to absorb it without breaking."]].map(function (r) { return el("div", { className: "vl-reason" }, el("b", { textContent: r[0] }), el("p", { textContent: r[1] })); })))),
-        sc("arch", "The enterprise architecture", el("div", {}, el("p", { textContent: "Closing those gaps one by one produces this architecture. It is not a bigger version of the simple one: each part exists to answer a specific gap." }), archFigure("after"),
-          el("p", { className: "vl-bacap", textContent: "Select the diagram to open it full size." }))),
-        sc("layers", "Why each of the 13 layers exists", el("div", {}, el("p", { textContent: "Every layer answers one question the simple version cannot, and each is what fails if you leave it out. Select a layer to open its chapter." }),
-          el("ol", { className: "vl-why" }, L.map(function (l) { var w = WHY[l.id] || ["", ""];
-            var li = el("li", { style: "--c:" + l.color }, el("span", { className: "vl-wn", textContent: l.order }), el("div", {}, el("b", { textContent: l.title }), el("span", { className: "vl-wq", textContent: w[0] }), el("small", { textContent: "Without it: " + w[1] })), icon(P.arrow, 14));
+        sc("questions", "Thirteen questions an enterprise asks before going live", el("div", {}, el("p", { textContent: "Before an enterprise lets an agent near real work, thirteen different people ask thirteen different questions. The simple design answers none of them. Each question below is answered by exactly one layer, which is why the architecture has thirteen of them. Select a question to open its chapter." }),
+          el("ol", { className: "vl-why" }, L.map(function (l) { var w = WHY[l.id] || ["", "", ""];
+            var li = el("li", { style: "--c:" + l.color }, el("span", { className: "vl-wn", textContent: l.order }), el("div", {}, el("span", { className: "vl-wwho", textContent: w[0] + " asks" }), el("span", { className: "vl-wq", textContent: w[1] }), el("small", { textContent: "Without an answer: " + w[2] }), el("span", { className: "vl-wans" }, "Answered by ", el("b", { textContent: "Layer " + l.order + ": " + l.title }))), icon(P.arrow, 14));
             li.onclick = function () { go(l.id); }; return li; })))),
+        sc("arch", "The resulting architecture", el("div", {}, el("p", { textContent: "Answer all thirteen questions and this is the architecture you end up with. It is not a bigger version of the simple design: every part exists because one of those questions needed an answer." }), archFigure("after"),
+          el("p", { className: "vl-bacap", textContent: "Select the diagram to open it full size." }))),
         sc("how", "How this course works", el("ol", { className: "vl-tl" }, [["You build the same app all the way through", "One facilities agent, one layer at a time. Chapter 1 gives it a brain; chapter 13 makes it auditable."], ["Every chapter gives you the code and runs it", "Press Deploy and the code goes into your simulator as it is, then a check confirms it works."], ["Nothing is left half-built", "Each chapter ends with a working app, so you can stop anywhere and still have something real."], ["The same story on every cloud", "AWS, Google Cloud and Azure follow the same 13 layers with each cloud's own services."]].map(function (w, i) { return el("li", {}, el("span", { className: "vl-tn", textContent: i + 1 }), el("div", {}, el("b", { textContent: w[0] }), el("p", { textContent: w[1] }))); }))),
         sc("check", "Check your understanding", quizBlock([
           ["The simple design answers every question correctly. Why is it still not enough for an enterprise?", ["The model is too small", "Correct answers say nothing about control, cost, privacy or proof", "Demos are always wrong"], 1, "Production readiness is about everything around the answer: who may ask, what it may do, what it costs, what it remembers and what you can prove."],
@@ -144,7 +144,7 @@
           ["You can stop after chapter 5. What do you have?", ["Nothing usable", "A working agent that answers from your documents", "Only slides"], 1, "Every chapter ends with a working app, so progress is never wasted."]])),
         sc("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, ["The simple design meets the functional need; an enterprise is also accountable for how it is met.", "Each of the 13 layers closes one specific gap and prevents one failure.", "You build one working app, a layer at a time, and every chapter is deployed and checked."].map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
           el("button", { type: "button", className: "vl-btn primary lg", onclick: function () { go(first.id); } }, "Start Chapter 1: " + first.title, icon(P.arrow, 16)))));
-      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["arch", "The enterprise architecture"], ["layers", "Why each layer exists"], ["how", "How this course works"], ["check", "Check your understanding"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#", textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
+      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["check", "Check your understanding"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#", textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
       return el("div", { className: "vl-page vl-intropage" }, el("button", { type: "button", className: "vl-backlink", onclick: function () { sel = null; render(); } }, icon(P.back, 14), "Course contents"),
         el("header", { className: "vl-ihero" }, el("small", { textContent: "Start here · " + course.cloud_name }), el("h1", { textContent: "Why an enterprise agent needs 13 layers" }), el("p", { textContent: "A five-minute read before you build anything: the problem, the simplest design that solves it, what that design cannot do, and how that leads to the 13 layers." })),
         el("div", { className: "vl-lesson", style: "--c:#1a6e66" }, main, side));
