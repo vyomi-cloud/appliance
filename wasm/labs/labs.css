@@ -287,3 +287,23 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-isec .vl-hchip{background:var(--soft);color:var(--ink);border:1px solid var(--line);padding:4px 10px;border-radius:99px;font-size:12.5px}
 .vl .vl-isec .vl-hchip.svc{background:var(--soft)!important;color:var(--ink)!important;border:1px solid var(--line)!important}
 .vl .vl-steps{list-style:decimal outside;padding-left:24px}.vl .vl-steps li{display:list-item;list-style:decimal outside;border:0;background:none;padding:0 0 0 4px;margin:0 0 8px}.vl .vl-steps li::before{content:none}
+
+/* module overview v4: layer identity colour, banner, animated pipeline, idea cards */
+.vl .vl-banner{display:flex;align-items:center;gap:18px;padding:20px 24px;border-radius:14px;color:#fff;background:linear-gradient(120deg,var(--c) 0%,color-mix(in srgb,var(--c) 55%,#0b1220) 100%);box-shadow:0 8px 24px color-mix(in srgb,var(--c) 28%,transparent)}
+.vl .vl-bicon{display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.18);flex:none}
+.vl .vl-banner small{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;opacity:.85;margin-bottom:4px}.vl .vl-banner p{margin:0;font-size:17px;line-height:1.5;font-weight:600}
+.vl .vl-pipe{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:26px;position:relative}
+@media (max-width:1100px){.vl .vl-pipe{grid-template-columns:repeat(2,minmax(0,1fr))}}@media (max-width:620px){.vl .vl-pipe{grid-template-columns:1fr}}
+.vl .vl-pipe li{position:relative;background:var(--card);border:1px solid var(--line);border-top:4px solid var(--c);border-radius:12px;padding:16px 16px 14px;display:block;list-style:none}
+.vl .vl-pipe li:not(:last-child)::after{content:"";position:absolute;top:34px;right:-27px;width:26px;height:2px;background:repeating-linear-gradient(90deg,var(--c) 0 5px,transparent 5px 9px);background-size:18px 2px;animation:vlflow 1s linear infinite}
+@media (max-width:1100px){.vl .vl-pipe li:not(:last-child)::after{display:none}}
+@keyframes vlflow{to{background-position:18px 0}}
+.vl .vl-pn2{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:var(--c);color:#fff;font-weight:700;font-size:13px;margin-bottom:10px}
+.vl .vl-pipe b{display:block;font-size:15px;margin-bottom:4px}.vl .vl-pipe p{margin:0;font-size:14px;line-height:1.55;color:var(--muted)}
+.vl .vl-ideas2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}@media (max-width:760px){.vl .vl-ideas2{grid-template-columns:1fr}}
+.vl .vl-idea{position:relative;border:1px solid var(--line);border-radius:12px;padding:14px 16px 14px 56px;background:var(--card);transition:box-shadow .15s,transform .15s}.vl .vl-idea:hover{box-shadow:0 6px 18px rgba(16,24,40,.08);transform:translateY(-1px)}
+.vl .vl-iconum{position:absolute;left:14px;top:14px;width:30px;height:30px;border-radius:9px;background:color-mix(in srgb,var(--c) 14%,#fff);color:var(--c);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+.vl .vl-idea b{display:block;font-size:15px;margin-bottom:3px}.vl .vl-idea p{margin:0;font-size:14px;line-height:1.55;color:var(--muted)}
+.vl .vl-example2{border-radius:12px;padding:16px 20px;background:color-mix(in srgb,var(--c) 8%,#fff);border:1px solid color-mix(in srgb,var(--c) 25%,#fff)}.vl .vl-example2 b{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--c);margin-bottom:6px}.vl .vl-example2 p{margin:0;font-size:15px;line-height:1.65}
+.vl .vl-side{position:sticky;top:12px;align-self:start}
+@media (prefers-reduced-motion:reduce){.vl .vl-pipe li::after{animation:none}}

@@ -377,13 +377,13 @@
       var needs = (l.contract && l.contract.needs || []).map(byId).filter(Boolean), usedBy = course.layers.filter(function (o) { return (o.contract && o.contract.needs || []).indexOf(l.id) >= 0; });
       var chapLink = function (o) { var a = el("button", { type: "button", className: "vl-chaplink", textContent: "Chapter " + o.order + ": " + o.title }); a.onclick = function () { go(o.id); }; return a; };
       var sec = function (title, body, cls) { return el("section", { className: "vl-isec " + (cls || "") }, el("h3", { textContent: title }), body); };
-      var introBody = el("div", { className: "vl-intro3" },
+      var introBody = el("div", { className: "vl-intro3", style: "--c:" + l.color },
         el("div", { className: "vl-main" },
-          el("p", { className: "vl-oneline", textContent: l.objective }),
+          el("div", { className: "vl-banner" }, el("span", { className: "vl-bicon" }, icon(l.icon, 30)), el("div", {}, el("small", { textContent: "In this module" }), el("p", { textContent: l.objective }))),
           sec("About this module", el("div", { className: "vl-prose" }, X.lead.map(function (t) { return el("p", { textContent: t }); }))),
-          X.flow.length ? sec("What you will do", el("ol", { className: "vl-steps" }, X.flow.map(function (f) { return el("li", {}, el("b", { textContent: f[0] + ". " }), f[1]); }))) : null,
-          X.concepts.length ? sec("Key ideas", el("dl", { className: "vl-ideas" }, X.concepts.map(function (c) { return el("div", {}, el("dt", { textContent: c[0] }), el("dd", { textContent: c[1] })); }))) : null,
-          X.example ? sec("Example", el("p", { className: "vl-exp", textContent: X.example })) : null),
+          X.flow.length ? sec("How it works", el("ol", { className: "vl-pipe" }, X.flow.map(function (f, i) { return el("li", {}, el("span", { className: "vl-pn2", textContent: i + 1 }), el("b", { textContent: f[0] }), el("p", { textContent: f[1] })); }))) : null,
+          X.concepts.length ? sec("Key ideas", el("div", { className: "vl-ideas2" }, X.concepts.map(function (c, i) { return el("div", { className: "vl-idea" }, el("span", { className: "vl-iconum", textContent: String.fromCharCode(65 + i) }), el("b", { textContent: c[0] }), el("p", { textContent: c[1] })); }))) : null,
+          X.example ? el("aside", { className: "vl-example2" }, el("b", { textContent: "In the Facilities agent" }), el("p", { textContent: X.example })) : null),
         el("aside", { className: "vl-side" },
           sec("By the end you will", chk(l.learn)),
           sec("It works when", chk(l.checks)),
