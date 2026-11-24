@@ -175,6 +175,15 @@
         el("div", { className: "vl-projbtns" }, b("https://github.dev/" + course.repo + "/blob/" + course.repo_ref + "/" + ghBase(), "Open in editor", true, "M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"),
           b("https://codespaces.new/" + course.repo + "?ref=" + course.repo_ref + "&devcontainer_path=" + encodeURIComponent(ghBase() + "/.devcontainer/devcontainer.json"), "Open in Codespaces", false, "M4 5h16v11H4zM8 20h8M12 16v4"), b(ghUrl("/tree/" + course.repo_ref + "/" + ghBase()), "View on GitHub", false, "M9 19c-4 1-4-2-6-2m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.800 5.400 3.100 5.400 3.100a4.200 4.200 0 0 0-.1 3.200A4.600 4.600 0 0 0 4 9.500c0 4.600 2.700 5.700 5.500 6-.6.600-.6 1.200-.5 2V21")));
     }
+    /* The chapter's code lives in the GitHub project; link to it and open it in an editor (no file paths shown to the learner). */
+    function chapterCode(l) {
+      var slug = String(l.order).padStart(2, "0") + "-" + l.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), dir = ghBase();
+      var a = function (href, txt, primary) { return el("a", { className: "vl-btn" + (primary ? " primary" : ""), href: href, target: "_blank", rel: "noopener", textContent: txt }); };
+      return el("div", { className: "vl-codelinks" }, el("b", { textContent: "The full code for this chapter" }),
+        el("span", { className: "vl-muted", textContent: "It is part of the project on GitHub." }),
+        el("div", { className: "vl-projbtns" }, a("https://github.dev/" + course.repo + "/blob/" + course.repo_ref + "/" + dir + "/chapters/" + slug + ".md", "Open in editor", true),
+          a(ghUrl("/blob/" + course.repo_ref + "/" + dir + "/chapters/" + slug + ".md"), "View on GitHub")));
+    }
     function archLink() {   // the full architecture this course teaches you to build, opened full size in its own tab
       return el("a", { className: "vl-archlink", href: base + course.image, target: "_blank", rel: "noopener" }, icon("M4 5h16v14H4zM4 10h16M10 10v9", 15), "View the full reference architecture you will build", icon("M7 17L17 7M9 7h8v8", 14));
     }
@@ -468,7 +477,7 @@
       var valBody = el("div", {}, el("p", { className: "vl-muted", textContent: "These are the exact operations this chapter uses, straight from the live API reference. Press Try it on any operation to make the call from this browser against your simulator: no tunnel needed." }),
         docsBlock(), consoleVals.length ? el("ol", { className: "vl-vals" }, consoleVals) : null,
         el("h3", { className: "vl-h3", textContent: "What the full check covers" }), ul(l.checks), canCheck ? el("div", { className: "vl-actions" }, check, statusEl) : null, out);
-      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, statusEl), el("p", { className: "vl-muted" }, "Reference solution (peek only after you have tried): ", el("code", { textContent: l.reference })));
+      var closing = el("div", { className: "vl-finish" }, el("div", { className: "vl-actions" }, mark, statusEl), chapterCode(l));
       /* ---- the chapter workspace: a hero, then ONE section at a time (compact), in each cloud's own tutorial structure ---- */
       var chk = function (arr) { return el("ul", { className: "vl-checks" }, arr.map(function (t) { return el("li", {}, icon(P.check, 15), t); })); };
       var card = function (title, body, cls) { return el("section", { className: "vl-card " + (cls || "") }, el("h3", { textContent: title }), body); };
