@@ -278,9 +278,8 @@
 
       var tiles = el("section", { className: "vl-contents", "aria-label": "Course contents" },
         el("div", { className: "vl-sechead" }, el("h2", { textContent: "Course contents" }), el("p", { className: "vl-muted", textContent: "Recommended order. You can start anywhere." })),
-        el("div", { className: "vl-tiles" }, course.layers.map(function (l) { return tile(l, nx); })));
-      var startHere = el("button", { type: "button", className: "vl-starthere", onclick: function () { go("intro"); } }, el("span", { className: "vl-shi" }, icon(P.book, 22)), el("span", {}, el("small", { textContent: "Start here · 5 min read" }), el("b", { textContent: "Why an enterprise agent needs 13 layers" }), el("em", { textContent: "The premise behind the course: what separates a demo from something an enterprise can run." })), icon(P.arrow, 18));
-      return el("div", { className: "vl-page" }, hero, startHere, tiles, map, projectCard());
+        el("div", { className: "vl-tiles" }, introTile(), course.layers.map(function (l) { return tile(l, nx); })));
+      return el("div", { className: "vl-page" }, hero, tiles, map, projectCard());
     }
 
     function diagram(highlight, clickable) {
@@ -298,6 +297,16 @@
       return wrap;
     }
 
+    function introTile() {   // "Start here": the premise lesson, the first tile of the course
+      var m = function (ic, t) { return el("span", {}, icon(ic, 13), t); };
+      var t = el("button", { type: "button", className: "vl-tile intro", style: "--c:#1a6e66" },
+        el("span", { className: "vl-thead" }, el("span", { className: "vl-ticon" }, icon(P.book, 20)), el("span", { className: "vl-chno", textContent: "Start here" }), el("span", { className: "vl-state next", textContent: "5 min read" })),
+        el("span", { className: "vl-ttitle", textContent: "Why an enterprise agent needs 13 layers" }),
+        el("span", { className: "vl-outcome", textContent: "The problem, the simplest design that solves it, what it cannot do, and the 13 questions that lead to the full architecture." }),
+        el("span", { className: "vl-tmeta" }, m(P.clock, "~5 min"), m("M4 6h16M4 12h16M4 18h10", "Lesson and quiz")),
+        el("span", { className: "vl-tfoot" }, el("span", { className: "vl-cta" }, "Read", icon(P.arrow, 14))));
+      t.onclick = function () { go("intro"); }; return t;
+    }
     function tile(l, nx) {
       var st = done(l.id) ? "done" : l.id === nx ? "next" : "todo";
       var stText = st === "done" ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : st === "next" ? "Up next" : "Not started";
