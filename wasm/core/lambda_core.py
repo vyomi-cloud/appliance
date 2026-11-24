@@ -239,6 +239,26 @@ def _extract_source(code: dict, handler: str = "") -> str:
     return ""
 
 
+def _zip_b64(code: dict) -> str:
+    """The original deployment package (base64) when Code.ZipFile is a real .zip, so GetFunction can serve it back
+    (what the real service does through a presigned Code.Location) and `terraform` export can rebuild the function."""
+    zf = (code or {}).get("ZipFile") if isinstance(code, dict) else None
+    if not zf:
+        return ""
+    try:
+        raw = base64.b64decode(zf)
+    except Exception:
+        raw = zf if isinstance(zf, (bytes, bytearray)) else str(zf).encode()
+    return base64.b64encode(bytes(raw)).decode() if bytes(raw[:2]) == b"PK" else ""
+
+
+def _code_location(fn: dict) -> str:
+    import os
+    if fn.get("code_zip"):
+        return f"{os.environ.get('VYOMI_PUBLIC_URL', 'http://localhost:9000').rstrip('/')}/__vyomi/lambda-code/{fn['name']}"
+    return f"https://vyomi-lambda.example/{fn['name']}"
+
+
 _NAME_OK = __import__("re").compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
@@ -387,7 +407,7 @@ def _create_function(store, body):
     source = _extract_source(code, str(body.get("Handler", "index.handler")))
     fn = {
         "name": name, "arn": _fn_arn(name), "runtime": str(body.get("Runtime", "python3.12")),
-        "handler": str(body.get("Handler", "index.handler")), "source": source,
+        "handler": str(body.get("Handler", "index.handler")), "source": source, "code_zip": _zip_b64(code),
         "code_sha256": base64.b64encode(hashlib.sha256(source.encode()).digest()).decode(),
         "env": dict((body.get("Environment") or {}).get("Variables") or {}),
         "memory_size": int(body.get("MemorySize") or 128), "timeout": int(body.get("Timeout") or 3),
@@ -439,6 +459,7 @@ def _update_function_code(store, name, body):
     source = _extract_source(body, fn.get("handler", ""))
     if source:
         fn["source"] = source
+        fn["code_zip"] = _zip_b64(body)
         fn["code_sha256"] = base64.b64encode(hashlib.sha256(source.encode()).digest()).decode()
     if body.get("Architectures"):
         fn["architectures"] = list(body["Architectures"])
@@ -509,7 +530,7 @@ def _get_function(store, name, qualifier=None):
     else:
         cfg = _fn_view(fn)
     out = {"Configuration": cfg, "Tags": fn.get("tags", {}),
-           "Code": {"RepositoryType": "S3", "Location": f"https://vyomi-lambda.example/{name}", "Source": fn.get("source", "")}}
+           "Code": {"RepositoryType": "S3", "Location": _code_location(fn), "Source": fn.get("source", "")}}
     if fn.get("reserved_concurrency") is not None:
         out["Concurrency"] = {"ReservedConcurrentExecutions": fn["reserved_concurrency"]}
     return _json(200, out)

@@ -140,6 +140,11 @@
   "category": "gcp"
  },
  {
+  "name": "gcp_im",
+  "label": "InfraManagerStore",
+  "category": "gcp"
+ },
+ {
   "name": "gcp_msg",
   "label": "InMemoryMessagingStore",
   "category": "gcp"

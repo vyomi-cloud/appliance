@@ -68,6 +68,8 @@ function useSaver(capId, reload) {
   return { saving, error, save, reset: () => setError(null) };
 }
 
+import { EnforcementPanel } from "../iam/Enforcement.jsx";
+
 export default function Permissions({ bucket }) {
   const pab = useAsync(() => api.getPublicAccessBlock(bucket), [bucket]);
   const pol = useAsync(() => api.getPolicy(bucket), [bucket]);
@@ -82,6 +84,7 @@ export default function Permissions({ bucket }) {
       <Ownership bucket={bucket} state={own} />
       <Acl bucket={bucket} state={acl} />
       <Cors bucket={bucket} state={cors} />
+      <EnforcementPanel service="s3" resource={`arn:aws:s3:::${bucket}`} title="IAM enforcement" />
     </SpaceBetween>
   );
 }

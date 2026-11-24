@@ -25393,6 +25393,13 @@ try:
 except Exception as _e:   # never let this break appliance boot
     print(f"[azure-openai] routes skipped: {_e}")
 
+# Faithful IAM enforcement API (/api/iam/<cloud>/enforcement|audit|evaluate|catalog); engine is core/iam_engine (shared with Nano).
+try:
+    from routes import iam_enforcement as _iam_enf_routes
+    _iam_enf_routes.register(app)
+except Exception as _e:   # never let this break appliance boot
+    print(f"[iam-enforcement] routes skipped: {_e}")
+
 # Azure DNS resolution (/azure-data/dns/query); the ARM control plane (dnsZones) is in azure_services.
 try:
     from providers import azure_dns_routes as _azure_dns_routes

@@ -70,6 +70,7 @@ from core import gcp_pubsub_core as gcp_ps
 from core import gcp_iam_core as gcp_iam
 from core import gcp_cloudsql_core as gcp_sql
 from core import gcp_cloudscheduler_core as gcp_sched
+from core import gcp_inframanager_core as gcp_im   # Infrastructure Manager (config.googleapis.com v1)
 from core import gcp_container_core as gcp_gke
 from core import gcp_iamcredentials_core as gcp_iamc
 from core import gcp_monitoring_core as gcp_mon
@@ -106,6 +107,8 @@ _SCHED_RUN_JOB_RE = re.compile(r"/v2/projects/([^/]+)/locations/([^/]+)/jobs/([^
 def _gcp_service(path):
     """Route a GCP request by URL path (GCP carries no SigV4; each google-cloud-*
     client is pointed at the relay and the path is the service discriminator)."""
+    if gcp_im.handles(path):
+        return "gcp-inframanager"   # Infrastructure Manager API v1: deployments / revisions / previews / operations (core/gcp_inframanager_core)
     if gcp_enrich.PATH_RE.match(path.split("?", 1)[0]):
         return "gcp-enrich"   # Storage object-enrichment rules (core/gcp_enrich_core; hooked on upload below)
     if gcp_compsim.PATH_RE.match(path.split("?", 1)[0]):
@@ -212,7 +215,7 @@ def _gcp_service(path):
     if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings", "/v3/folders")):
         return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
-    if re.match(r"^/v2/policies/[^/]+/denypolicies(/.*)?$", path):
+    if re.match(r"^/v2/policies/.+?/denypolicies(/.*)?$", path):
         return "gcp-iam"
     # STS (sts.googleapis.com): federated token exchange + introspection
     if path in ("/v1/token", "/v1/introspect"):
@@ -796,6 +799,7 @@ class AwsWireRouter:
         self.gcp_iam = s.get("gcp_iam") or InMemoryIamStore()
         self.gcp_sql = s.get("gcp_sql") or InMemorySqlStore()
         self.gcp_sched = s.get("gcp_sched") or gcp_sched.CloudSchedulerStore()   # Cloud Scheduler jobs
+        self.gcp_im = s.get("gcp_im") or gcp_im.InfraManagerStore()   # Infrastructure Manager deployments / revisions / previews
         self.gcp_gke = s.get("gcp_gke") or gcp_gke.ContainerStore()   # Kubernetes Engine clusters
         self.gcp_vertex = s.get("gcp_vertex") or gcp_vertex.VertexStore()   # Vertex AI resources
         self.gcp_redis = s.get("gcp_redis") or gcp_redis.RedisStore()   # Memorystore for Redis instances
@@ -1003,6 +1007,24 @@ class AwsWireRouter:
         except Exception:
             pass
         return None
+
+    def _im_call(self, method, path, body=None, raw=False):
+        """Infrastructure Manager's hands: one native-wire request back through this router. -> (status, json | text)."""
+        p, _, qs = path.partition("?")
+        query = dict(x.split("=", 1) for x in qs.split("&") if "=" in x)
+        data = b"" if body is None else json.dumps(body).encode()
+        res = self.handle(method, p, query, {"content-type": "application/json", "x-vyomi-internal": "infra-manager"}, data)
+        raw_body = res.get("body") or b""
+        if raw:
+            return res["status"], (raw_body.decode("utf-8", "replace") if res["status"] < 300 else self._im_json(raw_body))
+        return res["status"], self._im_json(raw_body)
+
+    @staticmethod
+    def _im_json(b):
+        try:
+            return json.loads(b.decode("utf-8")) if b else {}
+        except Exception:
+            return {}
 
     def _sched_invoke(self, kind, d):
         """Cloud Scheduler firing a job: deliver a pubsub target via the Pub/Sub core, or —
@@ -2558,7 +2580,7 @@ class AwsWireRouter:
                 "gcp-gcs": (gcs, self.gcs), "gcp-firestore": (gcp_fs, self.gcp_fs), "gcp-datastore": (gcp_ds, self.gcp_fs), "gcp-eventarc": (gcp_eventarc, self.gcp_mon), "gcp-apigateway": (gcp_apigw, self.gcp_mon), "gcp-identityplatform": (gcp_idp, self.gcp_mon), "gcp-hub": (gcp_hub, self.gcp_mon),
                 "gcp-kms": (gcp_kms, self.gcp_kms), "gcp-secretmanager": (gcp_sec, self.gcp_sec),
                 "gcp-pubsub": (gcp_ps, self.gcp_msg), "gcp-iam": (gcp_iam, self.gcp_iam),
-                "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched),
+                "gcp-cloudsql": (gcp_sql, self.gcp_sql), "gcp-cloudscheduler": (gcp_sched, self.gcp_sched), "gcp-inframanager": (gcp_im, self.gcp_im),
                 "gcp-container": (gcp_gke, self.gcp_gke), "gcp-iamcredentials": (gcp_iamc, self.gcp_iamc),
                 "gcp-monitoring": (gcp_mon, self.gcp_mon),
                 "gcp-trace": (gcp_trace, self.gcp_mon),
@@ -2591,6 +2613,8 @@ class AwsWireRouter:
                     "base": ((headers or {}).get("x-forwarded-proto") or "http") + "://" + str((headers or {}).get("host") or "")})
             elif svc == "gcp-iamcredentials":   # service accounts live in the IAM core's store
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), resolver=self._iamc_resolve)
+            elif svc == "gcp-inframanager":   # apply/preview create resources through the SAME native routes every SDK uses
+                r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), call=self._im_call)
             elif svc == "gcp-cloudscheduler":   # a pubsub target publishes into the Pub/Sub core
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), invoker=self._sched_invoke)
             elif svc == "gcp-secretmanager":   # version lifecycle -> real Pub/Sub publish + Cloud Logging entry

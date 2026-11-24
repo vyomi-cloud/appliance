@@ -68,7 +68,7 @@
     /* Azure: every page except the home dashboard is a service page: the drawer runs edge to edge with the page's own 20px gutters */
     "#vy-md.c-azure.nav .md-body{max-width:none;padding-left:20px;padding-right:20px}" +
     "#vy-md.c-gcp.nav:not(.open) .md-tabrow{height:0}" +
-    "#vy-md.c-gcp.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:24px;border-radius:0 0 12px 12px;z-index:5}" +
+    "#vy-md.c-gcp.nav:not(.open) .md-tab{position:absolute;top:0;left:50%;transform:translateX(-50%);height:var(--md-bh);border-radius:0 0 var(--md-br) var(--md-br);z-index:5}" +
     "@media(max-width:687px){#vy-md.c-aws{--md-px:20px}}" +
     "@media(min-width:600px) and (max-width:899px){#vy-md.c-gcp{--md-px:40px}}" +
     "@media(max-width:599px){#vy-md.c-gcp{--md-px:24px}}" +

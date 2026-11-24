@@ -1,0 +1,32 @@
+{
+"cloud":"azure",
+"service":"Microsoft.Management",
+"actions":{
+"Microsoft.Management/checkNameAvailability/action":"Checks if the specified management group name is valid and unique.",
+"Microsoft.Management/getEntities/action":"List all entities (Management Groups, Subscriptions, etc.) for the authenticated user.",
+"Microsoft.Management/managementGroups/delete":"Delete management group.",
+"Microsoft.Management/managementGroups/descendants/read":"Gets all the descendants (Management Groups, Subscriptions) of a Management Group.",
+"Microsoft.Management/managementGroups/read":"List management groups for the authenticated user.",
+"Microsoft.Management/managementGroups/settings/delete":"Deletes management group hierarchy settings.",
+"Microsoft.Management/managementGroups/settings/read":"Lists existing management group hierarchy settings.",
+"Microsoft.Management/managementGroups/settings/write":"Creates or updates management group hierarchy settings.",
+"Microsoft.Management/managementGroups/subscriptions/delete":"De-associates subscription from the management group.",
+"Microsoft.Management/managementGroups/subscriptions/read":"Lists subscription under the given management group.",
+"Microsoft.Management/managementGroups/subscriptions/write":"Associates existing subscription with the management group.",
+"Microsoft.Management/managementGroups/write":"Create or update a management group.",
+"Microsoft.Management/operationResults/asyncOperation/managementGroups/read":"Get the results of a Management Group Async operation.",
+"Microsoft.Management/operationResults/asyncOperation/serviceGroups/read":"Get the results of a Service Group Async operation.",
+"Microsoft.Management/operationResults/managementGroups/read":"Get the results of a Management Group operation.",
+"Microsoft.Management/operationResults/serviceGroups/read":"Get the results of a Service Group operation.",
+"Microsoft.Management/operations/read":"Get the available operations of Management.",
+"Microsoft.Management/register/action":"Register the specified subscription with Microsoft.Management",
+"Microsoft.Management/serviceGroups/delete":"Delete a Service Group",
+"Microsoft.Management/serviceGroups/listAncestors/read":"For a given service group in the URI, retrieves all the service group ancestors",
+"Microsoft.Management/serviceGroups/read":"Read a Service Group",
+"Microsoft.Management/serviceGroups/write":"Create or Update a Service Group",
+"Microsoft.Management/starttenantbackfill/action":"Start Tenant Backfill",
+"Microsoft.Management/tenantbackfillstatus/action":"Check the status of a Tenant Backfill operation.",
+"Microsoft.Management/tenants/register/action":""
+},
+"dataActions":{}
+}

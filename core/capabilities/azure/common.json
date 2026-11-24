@@ -8,8 +8,9 @@
   },
   "limitations": [
    "The ARM template is built from the properties Vyomi stores for the resource (system/read-only properties such as provisioningState are dropped by a fixed list, not each resource provider's real schema), so it may omit or include properties real Azure would treat differently.",
-   "Bicep is a deterministic decompilation of that template (symbolic names, parameters, resource declarations); nested child resources are exported flat and no dependsOn is inferred.",
-   "Terraform output uses the generic azapi_resource form (Azure/azapi provider), not hand-mapped azurerm_* resources."
+   "Bicep is a deterministic decompilation of that template (symbolic names, parameters, resource declarations, symbolic references and dependsOn); nested child resources are emitted as flat resources named 'parent/child', not with the Bicep 'parent:' property.",
+   "Terraform output maps about 40 ARM types (virtual network, subnet, NSG, public IP, storage, Key Vault, Azure SQL, Cosmos DB, Service Bus, App Service plan/web/function apps, ACR, AKS, DNS zone + records, Log Analytics, App Insights, managed identity, role assignment, VM/NIC/disk, Redis, App Configuration, ...) to azurerm_* resources with real cross-references and secrets as sensitive variables; every other ARM type falls back to azapi_resource (and is listed in a trailing comment). The azurerm attribute coverage is a hand-picked subset (the commonly set arguments), not each provider schema in full.",
+   "Import: ARM JSON templates (Bicep must be compiled to JSON first) deploy for real through the ARM core with parameters, copy loops, conditions, dependsOn ordering, outputs, what-if (create/modify/no-change/delete) and validate; linked templates, user-defined functions and list*() functions are not supported. 'Import Terraform (azurerm)' converts the same mapped types back to ARM and lists every unsupported block (count/for_each, locals, modules, data sources, unmapped types) instead of guessing."
   ],
   "tests": [
    "tests/conformance/test_azure_templates_core.py"

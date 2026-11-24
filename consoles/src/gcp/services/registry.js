@@ -23,7 +23,6 @@ import ChartIcon from "@mui/icons-material/esm/BarChartOutlined.js";
 import LogIcon from "@mui/icons-material/esm/ArticleOutlined.js";
 import MemorystoreIcon from "@mui/icons-material/esm/CachedOutlined.js";
 import AiIcon from "@mui/icons-material/esm/AutoAwesomeOutlined.js";
-import { classicUrl } from "../../common/classic.js";
 
 export const CATEGORIES = ["Compute", "Storage", "Databases", "Networking", "Serverless", "Integration Services", "Security", "Management", "CI/CD", "Observability", "AI and Machine Learning"];
 
@@ -48,6 +47,7 @@ export const PRODUCTS = [
   { id: "security/kms", title: "Cloud KMS", description: "Manage encryption keys", category: "Security", icon: KeyIcon, load: () => import("./security/kms/index.jsx") },
   { id: "iam-admin", title: "IAM & Admin", description: "Resource access control", category: "Management", icon: IamIcon, load: () => import("./iam-admin/index.jsx") },
   { id: "resource-manager", title: "Manage resources", description: "Create, organize and administer projects", category: "Management", icon: ResourceManagerIcon, load: () => import("./resource-manager/index.jsx") },
+  { id: "infra-manager", title: "Infrastructure Manager", description: "Deploy and export Terraform configurations", category: "Management", icon: ResourceManagerIcon, load: () => import("./infra-manager/index.jsx") },
   { id: "artifacts", title: "Artifact Registry", description: "Store, manage and secure container images and packages", category: "CI/CD", icon: ArtifactIcon, load: () => import("./artifacts/index.jsx") },
   { id: "clouddeploy", title: "Cloud Deploy", description: "Continuous delivery pipelines, releases and rollouts", category: "CI/CD", icon: ArtifactIcon, load: () => import("./clouddeploy/index.jsx") },
   { id: "backupdr", title: "Backup and DR", description: "Backup vaults, plans and restore for Compute Engine", category: "Storage", icon: BucketIcon, load: () => import("./backupdr/index.jsx") },
@@ -67,4 +67,3 @@ export function productFor(parts) {
 }
 
 /** Classic (v3) console deep link, used until a product has its v4 module. */
-export const classicHref = (svc) => classicUrl("gcp", svc);

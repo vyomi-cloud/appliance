@@ -12,10 +12,10 @@ import CloseIcon from "@mui/icons-material/esm/Close.js";
 import CloudQueueIcon from "@mui/icons-material/esm/CloudQueue.js";
 import ContentCopyIcon from "@mui/icons-material/esm/ContentCopy.js";
 import { useProject } from "../project.js";
-import { byId, classicHref } from "../services/registry.js";
 import { ConnectTabs } from "./Home.jsx";
+import { byId } from "../services/registry.js";
 
-const href = (id) => { const p = byId[id]; return p.load ? `#/${id}` : classicHref(p.classic); };
+const href = (id) => `#/${id}`;
 
 // Quick actions: each lands on the page that actually creates the thing.
 const ACTIONS = [
