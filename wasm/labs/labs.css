@@ -271,21 +271,19 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-detail .vl-fig{margin:0}.vl .vl-detail figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;text-align:center}.vl .vl-cropwrap{margin:0}
 .vl .vl-dcol h4{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}.vl .vl-dcol h4:not(:first-child){margin-top:20px}.vl .vl-dsv{display:flex;gap:6px;flex-wrap:wrap}
 
-/* module overview: article-style reading layout */
-.vl .vl-intro2{max-width:1040px;display:flex;flex-direction:column;gap:30px}
-.vl .vl-lead p{font-size:17.5px;line-height:1.7;margin:0 0 12px;color:var(--ink)}.vl .vl-lead p:first-child{font-size:19px;line-height:1.65}
-.vl .vl-two{display:grid;grid-template-columns:1fr 1fr;gap:34px}@media (max-width:860px){.vl .vl-two{grid-template-columns:1fr}}
-.vl .vl-isec h3{font-size:19px;margin:0 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
-.vl .vl-isec h4{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}.vl .vl-prep h4:not(:first-child){margin-top:16px}
-.vl .vl-isec ul{margin:0;padding-left:20px;line-height:1.65}.vl .vl-isec li{margin:0 0 6px}
-.vl .vl-outc{font-size:16px;font-weight:600;margin:0 0 8px}
-.vl .vl-concepts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:0}@media (max-width:860px){.vl .vl-concepts{grid-template-columns:1fr}}
-.vl .vl-concept{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--card)}.vl .vl-concept dt{font-weight:700;font-size:15px;margin:0 0 4px}.vl .vl-concept dd{margin:0;color:var(--muted);line-height:1.6;font-size:14.5px}
-.vl .vl-flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;counter-reset:f}@media (max-width:980px){.vl .vl-flow{grid-template-columns:1fr 1fr}}@media (max-width:560px){.vl .vl-flow{grid-template-columns:1fr}}
-.vl .vl-flow li{position:relative;border-top:3px solid var(--accent);padding:12px 4px 0 0}.vl .vl-fn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12.5px;font-weight:700;margin-right:8px}
-.vl .vl-flow b{font-size:15px}.vl .vl-flow p{margin:6px 0 0;color:var(--muted);font-size:14px;line-height:1.55}
-.vl .vl-example{border-left:4px solid var(--accent);background:var(--soft);border-radius:0 10px 10px 0;padding:14px 18px}.vl .vl-example b{display:block;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}.vl .vl-example p{margin:0;line-height:1.65;font-size:15.5px}
-.vl .vl-chaps{display:flex;flex-direction:column;gap:6px;align-items:flex-start}.vl .vl-chaplink{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:14px;cursor:pointer;text-align:left}.vl .vl-chaplink:hover{text-decoration:underline}
-.vl .vl-prep{display:grid;grid-template-columns:1fr 1fr;gap:34px}@media (max-width:860px){.vl .vl-prep{grid-template-columns:1fr}}
+/* module overview: one type scale (15px body, 18px section heads), equal 28px padding on all four sides */
+.vl .vl-pane{padding:28px}
+.vl .vl-intro3{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:40px;align-items:start}@media (max-width:980px){.vl .vl-intro3{grid-template-columns:1fr}}
+.vl .vl-main,.vl .vl-side{display:flex;flex-direction:column;gap:28px;min-width:0}
+.vl .vl-oneline{margin:0;padding:14px 18px;border-left:4px solid var(--accent);background:var(--soft);border-radius:0 8px 8px 0;font-size:15px;line-height:1.6;font-weight:600}
+.vl .vl-isec h3{font-size:18px;margin:0 0 10px}.vl .vl-isec h4{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px}
+.vl .vl-intro3 p,.vl .vl-intro3 li,.vl .vl-intro3 dd,.vl .vl-intro3 dt{font-size:15px;line-height:1.65}
+.vl .vl-prose p{margin:0 0 10px}.vl .vl-isec ul{margin:0;padding-left:20px}.vl .vl-isec li{margin:0 0 6px}
+.vl .vl-steps{margin:0;padding-left:22px}.vl .vl-steps li{margin:0 0 8px;padding-left:4px}
+.vl .vl-ideas{margin:0;display:flex;flex-direction:column;gap:10px}.vl .vl-ideas dt{font-weight:600}.vl .vl-ideas dd{margin:0;color:var(--muted)}
+.vl .vl-exp{margin:0;padding:12px 16px;background:var(--soft);border-radius:8px}
+.vl .vl-side{padding-left:28px;border-left:1px solid var(--line)}@media (max-width:980px){.vl .vl-side{padding-left:0;border-left:0}}
+.vl .vl-chaps{display:flex;flex-direction:column;gap:6px;align-items:flex-start}.vl .vl-chaplink{border:0;background:none;padding:0;color:var(--accent);font-weight:600;font-size:15px;cursor:pointer;text-align:left}.vl .vl-chaplink:hover{text-decoration:underline}
 .vl .vl-isec .vl-hchip{background:var(--soft);color:var(--ink);border:1px solid var(--line);padding:4px 10px;border-radius:99px;font-size:12.5px}
 .vl .vl-isec .vl-hchip.svc{background:var(--soft)!important;color:var(--ink)!important;border:1px solid var(--line)!important}
+.vl .vl-steps{list-style:decimal outside;padding-left:24px}.vl .vl-steps li{display:list-item;list-style:decimal outside;border:0;background:none;padding:0 0 0 4px;margin:0 0 8px}.vl .vl-steps li::before{content:none}
