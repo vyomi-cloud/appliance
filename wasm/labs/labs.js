@@ -125,15 +125,6 @@
       return wrap;
     }
 
-    function layerCrop(l) {   // just this layer's region of the architecture, enlarged (not the whole diagram)
-      var W = course.image_size[0], H = course.image_size[1], pad = 14, h = l.hotspot;
-      var x1 = Math.max(0, h[0] - pad), y1 = Math.max(0, h[1] - pad), x2 = Math.min(W, h[2] + pad), y2 = Math.min(H, h[3] + pad), w = x2 - x1, hh = y2 - y1;
-      var view = el("div", { className: "vl-crop" }), img = el("img", { src: base + course.image, alt: l.title + " layer", draggable: "false" });
-      view.style.cssText = "padding-bottom:" + (100 * hh / w).toFixed(2) + "%";
-      img.style.cssText = "width:" + (100 * W / w).toFixed(3) + "%;left:" + (-100 * x1 / w).toFixed(3) + "%;top:" + (-100 * y1 / hh).toFixed(3) + "%";
-      view.append(img); var cw = el("div", { className: "vl-cropwrap" }, view); cw.style.maxWidth = "360px"; return cw;
-    }
-
     function tile(l, nx) {
       var st = done(l.id) ? "done" : l.id === nx ? "next" : "todo";
       var stText = st === "done" ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : st === "next" ? "Up next" : "Not started";
@@ -318,9 +309,6 @@
       /* ---- the chapter as a native tutorial: AWS hands-on, Google codelab or Microsoft Learn layout ---- */
       var N = l.minutes, tm = { build: Math.max(5, Math.round(N * 0.5)), cons: Math.max(5, Math.round(N * 0.25)), val: Math.max(5, Math.round(N * 0.2)), clean: 5 };
       var hasLab = l.lab && l.lab.length;
-      var archFig = el("div", { className: "vl-detail" }, el("figure", { className: "vl-fig" }, layerCrop(l), el("figcaption", { textContent: "Layer " + l.order + ": " + l.title + " in the " + course.cloud_name + " architecture." })),
-        el("div", { className: "vl-dcol" }, el("h4", { textContent: "Services in this layer" }), el("div", { className: "vl-dsv" }, l.services.map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); })),
-          el("h4", { textContent: "What you build" }), ul(l.build), el("h4", { textContent: "It is working when" }), ul(l.checks)));
       var facts = function (rows) { return el("table", { className: "vl-facts" }, el("tbody", {}, rows.map(function (r) { return el("tr", {}, el("th", { textContent: r[0] }), el("td", {}, r[1])); }))); };
       var svcList = el("span", { className: "vl-svclist" }, l.services.map(function (x) { return el("span", {}, x); }));
       var next = nxt ? el("div", { className: "vl-nextcard" }, el("small", { textContent: "Next" }), el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Chapter " + nxt.order + ": " + nxt.title, icon(P.arrow, 16))) : el("p", { className: "vl-muted", textContent: "That was the last chapter. You now have the full enterprise agent." });
@@ -352,11 +340,26 @@
       /* ---- the chapter workspace: a hero, then ONE section at a time (compact), in each cloud's own tutorial structure ---- */
       var chk = function (arr) { return el("ul", { className: "vl-checks" }, arr.map(function (t) { return el("li", {}, icon(P.check, 15), t); })); };
       var card = function (title, body, cls) { return el("section", { className: "vl-card " + (cls || "") }, el("h3", { textContent: title }), body); };
-      var introBody = el("div", { className: "vl-intro" },
-        el("div", { className: "vl-grid2" }, card(cloud === "aws" ? "What you will accomplish" : "What you'll learn", chk(l.learn)), card("Why it matters in the enterprise", el("div", {}, el("p", { textContent: l.about }), ul(l.why)))),
-        el("div", { className: "vl-grid2" }, card("Prerequisites", ul(l.prereq)),
-          card(cloud === "aws" ? "Tutorial details" : "At a glance", facts([[cloud === "aws" ? "AWS experience" : "Level", l.level], ["Time", "~" + N + " minutes (estimate)"], ["Cost", "Free: runs on your Vyomi simulator"], ["Services", svcList], ["Updated", course.updated]]))),
-        card("This layer in detail", archFig, "vl-wide"));
+      var X = l.explain || { lead: [l.about], concepts: [], flow: [], example: "", pitfalls: [] };
+      var needs = (l.contract && l.contract.needs || []).map(byId).filter(Boolean), usedBy = course.layers.filter(function (o) { return (o.contract && o.contract.needs || []).indexOf(l.id) >= 0; });
+      var chapLink = function (o) { var a = el("button", { type: "button", className: "vl-chaplink", textContent: "Chapter " + o.order + ": " + o.title }); a.onclick = function () { go(o.id); }; return a; };
+      var sec = function (title, body, cls) { return el("section", { className: "vl-isec " + (cls || "") }, el("h3", { textContent: title }), body); };
+      var introBody = el("div", { className: "vl-intro2" },
+        el("div", { className: "vl-lead" }, X.lead.map(function (t) { return el("p", { textContent: t }); })),
+        el("div", { className: "vl-two" },
+          sec(cloud === "aws" ? "What you will accomplish" : "What you will learn", chk(l.learn)),
+          sec("What you will have at the end", el("div", {}, el("p", { className: "vl-outc", textContent: l.outcome + "." }), el("p", { className: "vl-muted", textContent: "You will know it works when:" }), chk(l.checks)))),
+        X.concepts.length ? sec("Key concepts", el("dl", { className: "vl-concepts" }, X.concepts.map(function (c) { return el("div", { className: "vl-concept" }, el("dt", { textContent: c[0] }), el("dd", { textContent: c[1] })); }))) : null,
+        X.flow.length ? sec("How it works", el("ol", { className: "vl-flow" }, X.flow.map(function (f, i) { return el("li", {}, el("span", { className: "vl-fn", textContent: i + 1 }), el("b", { textContent: f[0] }), el("p", { textContent: f[1] })); }))) : null,
+        X.example ? el("aside", { className: "vl-example" }, el("b", { textContent: "In the Facilities agent" }), el("p", { textContent: X.example })) : null,
+        el("div", { className: "vl-two" },
+          sec("Why it matters in the enterprise", ul(l.why)),
+          sec("Common mistakes", ul(X.pitfalls))),
+        sec("Before you start", el("div", { className: "vl-prep" },
+          el("div", {}, el("h4", { textContent: "Prerequisites" }), ul(l.prereq)),
+          el("div", {}, el("h4", { textContent: "Services in this layer" }), el("div", { className: "vl-dsv" }, l.services.map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); })),
+            needs.length ? el("h4", { textContent: "Builds on" }) : null, needs.length ? el("div", { className: "vl-chaps" }, needs.map(chapLink)) : null,
+            usedBy.length ? el("h4", { textContent: "Used by" }) : null, usedBy.length ? el("div", { className: "vl-chaps" }, usedBy.map(chapLink)) : null))));
       var L = { aws: ["Overview", "Task 1: Build the code", "Task 2: Create the resources", "Task 3: Connect to other layers", "Task 4: Validate your work", "Task 5: Clean up resources"],
         gcp: ["Before you begin", "Build the code", "Create the resources", "Connect the layers", "Validate", "Clean up"],
         azure: ["Prerequisites", "Build the code", "Create the resources", "Connect to other layers", "Validate", "Clean up and next steps"] }[cloud];

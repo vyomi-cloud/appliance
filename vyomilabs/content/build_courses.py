@@ -5,6 +5,7 @@ import datetime
 import json
 import os
 
+from .explain import EXPLAIN
 from .build_diagrams import COL, ICON, LAYER_COLOR, hotspots
 from .setup_steps import STEPS
 import importlib
@@ -94,7 +95,7 @@ INTRO = {
  13: ("Governance protects and audits the whole application: encryption of sensitive records and an audit trail of who did what.",
       ["Regulated data needs encryption with managed keys", "Audit trails answer who approved what, and when", "Controls apply across every layer, not one at a time"]),
 }
-PRE = ["The simulator is running: you are in its console.", "Your tools point at it: open SDK & CLI usage in the bottom drawer for the exact endpoint settings for this cloud.",
+PRE = ["The simulator is running: you are in its console.", "Your tools point at it: open the API reference tab at the top of this dialog: each operation shows the exact endpoint and the CLI and SDK settings for this cloud.",
        "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."]
 
 # Quick validation, per cloud and layer: (kind, what to check, how, what you should see). kind = CLI | SDK | Console
@@ -351,7 +352,7 @@ def build():
                                reference="examples/enterprise-facilities-agent/facilities/" + ("" if cloud == "aws" else "") + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
                                code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
                                level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
-                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), docs=_docs(cloud, C[cloud][lid]["services"]), ops=_ops(cloud, _docs(cloud, C[cloud][lid]["services"]), _lab(cloud, lid)), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
+                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), explain=EXPLAIN[lid], docs=_docs(cloud, C[cloud][lid]["services"]), ops=_ops(cloud, _docs(cloud, C[cloud][lid]["services"]), _lab(cloud, lid)), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
                    image=f"img/{cloud}.svg", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:
