@@ -52,6 +52,9 @@ def build(cloud):
           "2. `pip install -r requirements.txt`", "3. `./run_all.sh` for every chapter, or follow one chapter at a time:", "", "| Chapter | Layer | Steps |", "|---|---|---|"]
     rd += [f"| {o} | [{t}](chapters/{n}.md) | {k} |" for o, t, n, k in toc]
     (base / "README.md").write_text("\n".join(rd) + "\n")
+    files = {str(f.relative_to(base)): f.read_text() for f in sorted(base.rglob("*")) if f.is_file() and "__pycache__" not in f.parts}
+    out = ROOT / "wasm" / "labs" / "project"; out.mkdir(exist_ok=True)       # the same files, for the in-course editor (works with no GitHub)
+    (out / f"{cloud}.json").write_text(json.dumps({"name": f"{COURSE}-{cloud}", "files": files}, separators=(",", ":")))
     return len(list((base / "app").iterdir()))
 
 

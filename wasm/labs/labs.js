@@ -164,25 +164,88 @@
       tocSpy(pageEl); return pageEl;
     }
     /* ---------- course view ---------- */
+    /* ---------- In-course code editor: the project's files in a Monaco editor (plain textarea if the CDN is unreachable); edits stay in this browser ---------- */
+    var PROJ = null, monacoP = null;
+    function loadProject() { return PROJ ? Promise.resolve(PROJ) : fetch(base + "project/" + cloud + ".json", { cache: "no-cache" }).then(function (r) { return r.json(); }).then(function (j) { PROJ = j; return j; }); }
+    function loadMonaco() {
+      if (monacoP) return monacoP;
+      var CDN = "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min";
+      monacoP = new Promise(function (ok, bad) {
+        var sc = document.createElement("script"); sc.src = CDN + "/vs/loader.js"; sc.onerror = function () { bad(new Error("offline")); };
+        sc.onload = function () {
+          window.MonacoEnvironment = { getWorkerUrl: function () { return "data:text/javascript;charset=utf-8," + encodeURIComponent("self.MonacoEnvironment={baseUrl:'" + CDN + "/'};importScripts('" + CDN + "/vs/base/worker/workerMain.js');"); } };
+          window.require.config({ paths: { vs: CDN + "/vs" } }); window.require(["vs/editor/editor.main"], function () { ok(window.monaco); }, bad);
+        };
+        document.head.appendChild(sc); setTimeout(function () { bad(new Error("timeout")); }, 15000);
+      });
+      return monacoP;
+    }
+    function crc32(u8) { var t = crc32.t || (crc32.t = (function () { var a = [], c, n, k; for (n = 0; n < 256; n++) { c = n; for (k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; a[n] = c >>> 0; } return a; })()), c2 = 0xFFFFFFFF; for (var i = 0; i < u8.length; i++) c2 = t[(c2 ^ u8[i]) & 255] ^ (c2 >>> 8); return (c2 ^ 0xFFFFFFFF) >>> 0; }
+    function zipOf(files) {   // store-only zip, no library
+      var enc = new TextEncoder(), parts = [], cen = [], off = 0, n = 0;
+      function u16(v) { return [v & 255, (v >> 8) & 255]; } function u32(v) { return [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255]; }
+      Object.keys(files).forEach(function (path) {
+        var nm = enc.encode(path), d = enc.encode(files[path]), crc = crc32(d);
+        var lh = new Uint8Array([].concat(u32(0x04034b50), u16(20), u16(0x800), u16(0), u16(0), u16(0x21), u32(crc), u32(d.length), u32(d.length), u16(nm.length), u16(0)));
+        parts.push(lh, nm, d);
+        cen.push(new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0x800), u16(0), u16(0), u16(0x21), u32(crc), u32(d.length), u32(d.length), u16(nm.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(off))), nm);
+        off += lh.length + nm.length + d.length; n++;
+      });
+      var cl = cen.reduce(function (a, x) { return a + x.length; }, 0);
+      return new Blob(parts.concat(cen, [new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(n), u16(n), u32(cl), u32(off), u16(0)))]), { type: "application/zip" });
+    }
+    function openEditor(startPath) {
+      var ov = el("div", { className: "vl-ed", role: "dialog", "aria-label": "Code editor" }, el("div", { className: "vl-edload", textContent: "Opening the project..." }));
+      root.appendChild(ov); var closeEd = function () { try { ed && ed.dispose(); } catch (_) {} ov.remove(); document.removeEventListener("keydown", onKey); }, ed = null;
+      var onKey = function (e) { if (e.key === "Escape") closeEd(); }; document.addEventListener("keydown", onKey);
+      Promise.all([loadProject(), loadMonaco().catch(function () { return null; })]).then(function (r) {
+        var proj = r[0], mon = r[1], KEYE = "vyomi.labs.edit." + cloud, edits = {}; try { edits = JSON.parse(localStorage.getItem(KEYE) || "{}"); } catch (_) {}
+        var paths = Object.keys(proj.files), models = {}, cur = null, treeEl = el("div", { className: "vl-edtree" }), tabsEl = el("div", { className: "vl-edtabs" }), host = el("div", { className: "vl-edhost" }), ta = null, open = [];
+        var text = function (p) { return edits[p] !== undefined ? edits[p] : proj.files[p]; };
+        var persist = function () { try { localStorage.setItem(KEYE, JSON.stringify(edits)); } catch (_) {} };
+        var lang = function (p) { return /\.py$/.test(p) ? "python" : /\.md$/.test(p) ? "markdown" : /\.json$/.test(p) ? "json" : /\.sh$/.test(p) ? "shell" : "plaintext"; };
+        if (mon) ed = mon.editor.create(host, { value: "", language: "python", theme: "vs", automaticLayout: true, minimap: { enabled: false }, fontSize: 13, scrollBeyondLastLine: false });
+        else { ta = el("textarea", { className: "vl-edta", spellcheck: false }); host.append(ta); }
+        function setVal(p) {
+          if (mon) { if (!models[p]) { models[p] = mon.editor.createModel(text(p), lang(p)); models[p].onDidChangeContent(function () { var v = models[p].getValue(); if (v === proj.files[p]) delete edits[p]; else edits[p] = v; persist(); paint(); }); } ed.setModel(models[p]); }
+          else { ta.value = text(p); ta.oninput = function () { if (ta.value === proj.files[p]) delete edits[p]; else edits[p] = ta.value; persist(); paint(); }; }
+        }
+        function show(p) { cur = p; if (open.indexOf(p) < 0) open.push(p); setVal(p); paint(); }
+        function paint() {
+          tabsEl.replaceChildren.apply(tabsEl, open.map(function (p) { var t = el("button", { type: "button", className: "vl-edtab" + (p === cur ? " on" : "") }, p.split("/").pop(), edits[p] !== undefined ? el("i", { className: "vl-eddot", title: "Edited" }) : null,
+            el("span", { className: "vl-edx", textContent: "×", onclick: function (e) { e.stopPropagation(); open.splice(open.indexOf(p), 1); if (cur === p) { if (open.length) show(open[open.length - 1]); else { cur = null; if (mon) ed.setModel(null); else ta.value = ""; paint(); } } else paint(); } })); t.onclick = function () { show(p); }; return t; }));
+          [].forEach.call(treeEl.querySelectorAll(".vl-edf"), function (b) { b.classList.toggle("on", b.getAttribute("data-p") === cur); });
+          reset.hidden = !(cur && edits[cur] !== undefined);
+        }
+        var groups = {}; paths.forEach(function (p) { var d = p.indexOf("/") < 0 ? "" : p.slice(0, p.lastIndexOf("/")); (groups[d] = groups[d] || []).push(p); });
+        Object.keys(groups).sort(function (a, b) { var r = function (d) { return d === "" ? 0 : d === "app" ? 1 : d === "chapters" ? 2 : 3; }; return r(a) - r(b) || (a < b ? -1 : 1); }).forEach(function (d) {
+          if (d) treeEl.append(el("div", { className: "vl-edd", textContent: d + "/" }));
+          groups[d].forEach(function (p) { var b = el("button", { type: "button", className: "vl-edf", "data-p": p, textContent: p.split("/").pop() }); b.onclick = function () { show(p); }; treeEl.append(b); });
+        });
+        var reset = el("button", { type: "button", className: "vl-btn sm", textContent: "Reset file", hidden: true, onclick: function () { if (!cur) return; delete edits[cur]; persist(); if (mon) models[cur].setValue(proj.files[cur]); else ta.value = proj.files[cur]; paint(); } });
+        var dl = el("button", { type: "button", className: "vl-btn sm primary", textContent: "Download project (zip)", onclick: function () { var all = {}; paths.forEach(function (p) { all[proj.name + "/" + p] = text(p); }); var a = el("a", { href: URL.createObjectURL(zipOf(all)), download: proj.name + ".zip" }); document.body.append(a); a.click(); a.remove(); } });
+        ov.replaceChildren(el("div", { className: "vl-edbar" }, el("b", { textContent: proj.name }), el("span", { className: "vl-muted", textContent: mon ? "Your edits are kept in this browser." : "Basic editor (the full editor could not be loaded). Your edits are kept in this browser." }), el("span", { className: "vl-edsp" }), reset, dl, el("button", { type: "button", className: "vl-btn sm", textContent: "Close", onclick: closeEd })),
+          el("div", { className: "vl-edmain" }, treeEl, el("div", { className: "vl-edright" }, tabsEl, host)));
+        show(startPath && proj.files[startPath] !== undefined ? startPath : (paths.indexOf("README.md") >= 0 ? "README.md" : paths[0]));
+      }).catch(function (e) { ov.replaceChildren(el("div", { className: "vl-edload", textContent: "Could not open the project: " + e.message }), el("button", { type: "button", className: "vl-btn", textContent: "Close", onclick: function () { ov.remove(); } })); });
+    }
     /* The finished code is a real GitHub project (projects/vyomi-labs-facilities-agent/<cloud>); every block here is a file in it. */
     function ghUrl(path) { return "https://github.com/" + course.repo + (path || ""); }
     function ghBase() { return (course.repo_path ? course.repo_path + "/" : "") + cloud; }
+    function downloadProject() { loadProject().then(function (p) { var all = {}; Object.keys(p.files).forEach(function (f) { all[p.name + "/" + f] = p.files[f]; }); var a = el("a", { href: URL.createObjectURL(zipOf(all)), download: p.name + ".zip" }); document.body.append(a); a.click(); a.remove(); }); }
     function projectCard() {
-      var b = function (href, txt, primary, ic) { return el("a", { className: "vl-btn" + (primary ? " primary" : ""), href: href, target: "_blank", rel: "noopener" }, icon(ic, 16), txt); };
+      var btn = function (txt, primary, fn) { return el("button", { type: "button", className: "vl-btn" + (primary ? " primary" : ""), onclick: fn, textContent: txt }); };
       return el("section", { className: "vl-projcard" },
         el("div", { className: "vl-projtxt" }, el("small", { textContent: "The finished project" }), el("h3", { textContent: "Take the full code with you" }),
-          el("p", { textContent: "Everything you build here is a real project on GitHub, in its own repository for this course: " + course.repo + ", folder " + ghBase() + ". Every file is the exact code from the chapters, in order, with a README per chapter and a script that runs them all. Open it in an editor with the code checked out and run it against your simulator." })),
-        el("div", { className: "vl-projbtns" }, b("https://github.dev/" + course.repo + "/blob/" + course.repo_ref + "/" + ghBase(), "Open in editor", true, "M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"),
-          b("https://codespaces.new/" + course.repo + "?ref=" + course.repo_ref + "&devcontainer_path=" + encodeURIComponent(ghBase() + "/.devcontainer/devcontainer.json"), "Open in Codespaces", false, "M4 5h16v11H4zM8 20h8M12 16v4"), b(ghUrl("/tree/" + course.repo_ref + "/" + ghBase()), "View on GitHub", false, "M9 19c-4 1-4-2-6-2m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.800 5.400 3.100 5.400 3.100a4.200 4.200 0 0 0-.1 3.200A4.600 4.600 0 0 0 4 9.500c0 4.600 2.700 5.700 5.500 6-.6.600-.6 1.200-.5 2V21")));
+          el("p", { textContent: "Everything you build here is one runnable " + course.cloud_name + " project: every file is the exact code from the chapters, in order, with a README per chapter and a script that runs them all. Open it in the editor right here, or download it." })),
+        el("div", { className: "vl-projbtns" }, btn("Open in editor", true, function () { openEditor("README.md"); }), btn("Download project (zip)", false, downloadProject)));
     }
-    /* The chapter's code lives in the GitHub project; link to it and open it in an editor (no file paths shown to the learner). */
+    /* The chapter's code is part of the project: open it in the editor right here. */
     function chapterCode(l) {
-      var slug = String(l.order).padStart(2, "0") + "-" + l.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""), dir = ghBase();
-      var a = function (href, txt, primary) { return el("a", { className: "vl-btn" + (primary ? " primary" : ""), href: href, target: "_blank", rel: "noopener", textContent: txt }); };
-      return el("div", { className: "vl-codelinks" }, el("b", { textContent: "The full code for this chapter" }),
-        el("span", { className: "vl-muted", textContent: "It is part of the project on GitHub." }),
-        el("div", { className: "vl-projbtns" }, a("https://github.dev/" + course.repo + "/blob/" + course.repo_ref + "/" + dir + "/chapters/" + slug + ".md", "Open in editor", true),
-          a(ghUrl("/blob/" + course.repo_ref + "/" + dir + "/chapters/" + slug + ".md"), "View on GitHub")));
+      var first = (l.lab || [])[0], slug = String(l.order).padStart(2, "0") + "-" + l.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      return el("div", { className: "vl-codelinks" }, el("b", { textContent: "The full code for this chapter" }), el("span", { className: "vl-muted", textContent: "It is part of the project; open it in the editor." }),
+        el("div", { className: "vl-projbtns" }, el("button", { type: "button", className: "vl-btn primary", textContent: "Open in editor", onclick: function () { openEditor(first ? "app/" + first.file : "chapters/" + slug + ".md"); } }),
+          el("button", { type: "button", className: "vl-btn", textContent: "Chapter guide", onclick: function () { openEditor("chapters/" + slug + ".md"); } })));
     }
     function archLink() {   // the full architecture this course teaches you to build, opened full size in its own tab
       return el("a", { className: "vl-archlink", href: base + course.image, target: "_blank", rel: "noopener" }, icon("M4 5h16v14H4zM4 10h16M10 10v9", 15), "View the full reference architecture you will build", icon("M7 17L17 7M9 7h8v8", 14));
@@ -379,7 +442,7 @@
       head.onclick = function () { var o = li.classList.toggle("open"); head.setAttribute("aria-expanded", String(o)); };
       var pre = el("pre", { className: "vl-pre" }); pre.append(hl(bk.code));
       li.append(head, el("div", { className: "vl-bbody" },
-        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("a", { className: "vl-ghlink", href: ghUrl("/blob/" + course.repo_ref + "/" + ghBase() + "/app/" + bk.file), target: "_blank", rel: "noopener", textContent: "View on GitHub" }), copyBtn(bk.code)), pre,
+        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("button", { type: "button", className: "vl-ghlink", textContent: "Open in editor", onclick: function () { openEditor("app/" + bk.file); } }), copyBtn(bk.code)), pre,
         bk.run ? el("div", { className: "vl-runrow" }, el("span", { className: "vl-runlbl", textContent: "Run" }), el("code", { textContent: bk.run }), copyBtn(bk.run)) : el("div", { className: "vl-runrow muted" }, el("span", { className: "vl-runlbl", textContent: "Nothing to run yet; the next step uses this file." })),
         bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null));
       return li;
