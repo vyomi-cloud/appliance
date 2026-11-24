@@ -1,67 +1,6 @@
 {
- "at": "2026-11-24T18:18:50+00:00",
+ "at": "2026-11-24T19:18:49+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "API Gateway",
-   "kind": "announcement",
-   "key": "feed:aws:d5bebb46a92f",
-   "title": "Amazon API Gateway announces API Portal",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-api-gateway-announces-api-portal/",
-   "detail": "Today, Amazon API Gateway announces API Portal , a new feature that discovers, governs, and documents the APIs and AI endpoints behind Amazon API Gateway, Application Load Balancer, and Amazon CloudFront across your AWS organization. Many organizations can't see which APIs are running, which were never registered, which are no longer maintained, and which lack protection. API Portal builds a continuously updated inventory using AWS-side traffic logs and service configuration records, with nothing to install, no logs to forward, and no traffic to reroute, for a single account or your entire AWS",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:bafbbda09f03",
-   "title": "RDS PostgreSQL now supports PostgreSQL 19.0 in the Amazon RDS Database Preview Environment",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/postgresql-19-amazon-rds-database-preview-environment/",
-   "detail": "Starting today, Amazon RDS for PostgreSQL 19.0 is available in the Amazon RDS Database Preview Environment , allowing you to evaluate PostgreSQL 19.0 on Amazon RDS PostgreSQL. PostgreSQL 19.0 introduces the REPACK command with a CONCURRENTLY option, which removes table and index bloat with minimal locking. You can now enable parallel autovacuum for faster index vacuuming, and logical replication to synchronize sequence values to the subscriber. Two new extensions, pg_plan_advice and pg_stash_advice, let you guide query planner decisions. Refer to the PostgreSQL community announcement for more ",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Virtual Machines",
-   "kind": "announcement",
-   "key": "feed:azure:42dcb2ecd465",
-   "title": "[Launched] Generally Available: Azure Site Recovery support for zonal disaster recovery for Ultra disks",
-   "link": "https://azure.microsoft.com/updates?id=582171",
-   "detail": "Azure Site Recovery now supports Zone-to-Zone Disaster Recovery (Zonal DR) for Azure Ultra disks. Customers can protect performance-intensive virtual machines across Availability Zones against zonal disruptions by replication and recovering them to anothe",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "API Management",
-   "kind": "announcement",
-   "key": "feed:azure:77e2d5ece665",
-   "title": "[In preview] Public Preview: Govern MCP tools with your own gateway in Microsoft Foundry Agent Service",
-   "link": "https://azure.microsoft.com/updates?id=581498",
-   "detail": "In public preview, Microsoft Foundry Agent Service lets you route MCP tool traffic through existing AI Gateway or Azure API Management endpoints that your organization manages. Configure the MCP route in the gateway first, then enter the gateway-routed en",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Azure Storage",
-   "kind": "announcement",
-   "key": "feed:azure:e542e8b00169",
-   "title": "[Launched] Generally Available: Use Azure Storage permissions in Azure AI Search and Foundry IQ",
-   "link": "https://azure.microsoft.com/updates?id=581303",
-   "detail": "Azure AI Search and Foundry IQ in Microsoft Foundry can use supported Azure Storage permissions to control access to search results.Once configured, search applications and AI agents return content based on each user's access. This reduces the need to cre",
-   "actionable": false
-  },
-  {
-   "cloud": "azure",
-   "service": "Event Grid",
-   "kind": "announcement",
-   "key": "feed:azure:5da515fc44de",
-   "title": "[In preview] Public Preview: Cost controls for model and agent spending in Microsoft Foundry",
-   "link": "https://azure.microsoft.com/updates?id=581323",
-   "detail": "Within Microsoft Foundry, cost controls set a spending or token budget for a Foundry resource or project. When usage reaches a threshold that you set, a cost control sends an alert through Azure Event Grid or blocks new requests.You can apply a budget to",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }

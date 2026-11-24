@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-24T19:18:49+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T18:18:50+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,17 +3006,3 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - 🔧 `operation-added` AWS ec2: new operation ModifyMetricCategory
 - 🔧 `operation-changed` AWS ec2: operation ModifyVpcEncryptionControl changed
 - 🔧 `operation-changed` AWS ec2: operation MonitorInstances changed
-- 🔧 `operation-changed` AWS ec2: operation UnmonitorInstances changed
-- 🔧 `operation-added` AWS secretsmanager: new operation AssociateCrossAccountReplica
-- 🔧 `operation-added` AWS secretsmanager: new operation DisassociateCrossAccountReplica
-- 🔧 `operation-added` AWS secretsmanager: new operation ListResourcePolicies
-- 🔧 `operation-changed` AWS secretsmanager: operation CreateSecret changed
-- 🔧 `operation-changed` AWS secretsmanager: operation DeleteResourcePolicy changed
-- 🔧 `operation-changed` AWS secretsmanager: operation DescribeSecret changed
-- 🔧 `operation-changed` AWS secretsmanager: operation GetResourcePolicy changed
-- 🔧 `operation-changed` AWS secretsmanager: operation PutResourcePolicy changed
-- · `operation-changed` AWS ec2: operation ModifyAccountVpcEncryptionControl changed
-- · `announcement` Amazon MWAA Serverless supports DuckDB operators ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-mwaa-serverless-duckdb-operators/))
-- · `release` cli:aws: 2.40.1 → 2.40.2
-- · `release` pypi:boto3: 1.44.1 → 1.44.2
-- · `release` pypi:botocore: 1.44.1 → 1.44.2
