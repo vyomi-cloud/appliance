@@ -91,6 +91,19 @@
       2: ["Security", "What if the message itself is an attack?", "A single clever sentence rewrites the agent's rules."],
       8: ["Operations", "Why was it slow or wrong last night?", "A chain of calls and a log line that just says error."],
       13: ["Auditor", "Can we prove what happened, and that nobody altered it?", "Plain-text records and a trail nobody can trust."] };
+    /* Scroll spy: highlight the "On this page" link of the section being read. */
+    function tocSpy(rootEl) {
+      var links = [].slice.call(rootEl.querySelectorAll(".vl-toc a")), secs = links.map(function (a) { return rootEl.querySelector("#" + (a.getAttribute("href") || "").slice(1)); }), vis = {};
+      if (!links.length || !window.IntersectionObserver) return;
+      function paint() {
+        var cur = -1; for (var i = 0; i < secs.length; i++) if (vis[i]) { cur = i; break; }
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 6) cur = secs.length - 1;
+        if (cur < 0) { for (var k = secs.length - 1; k >= 0; k--) if (secs[k] && secs[k].getBoundingClientRect().top < window.innerHeight * 0.3) { cur = k; break; } }
+        links.forEach(function (a, i) { a.classList.toggle("on", i === cur); if (i === cur) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current"); });
+      }
+      var io = new IntersectionObserver(function (es) { es.forEach(function (e) { vis[secs.indexOf(e.target)] = e.isIntersecting; }); paint(); }, { rootMargin: "-12% 0px -72% 0px", threshold: 0 });
+      secs.forEach(function (x) { x && io.observe(x); }); window.addEventListener("scroll", paint, { passive: true }); setTimeout(paint, 60);
+    }
     function quizBlock(qs) {
       var res = []; var score = el("span", { className: "vl-score", textContent: "Pick an answer" });
       var cards = qs.map(function (q, qi) {
@@ -144,10 +157,11 @@
           ["You can stop after chapter 5. What do you have?", ["Nothing usable", "A working agent that answers from your documents", "Only slides"], 1, "Every chapter ends with a working app, so progress is never wasted."]])),
         sc("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, ["The simple design meets the functional need; an enterprise is also accountable for how it is met.", "Each of the 13 layers closes one specific gap and prevents one failure.", "You build one working app, a layer at a time, and every chapter is deployed and checked."].map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
           el("button", { type: "button", className: "vl-btn primary lg", onclick: function () { go(first.id); } }, "Start Chapter 1: " + first.title, icon(P.arrow, 16)))));
-      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["check", "Check your understanding"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#", textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
-      return el("div", { className: "vl-page vl-intropage" }, el("button", { type: "button", className: "vl-backlink", onclick: function () { sel = null; render(); } }, icon(P.back, 14), "Course contents"),
+      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["check", "Check your understanding"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#vl-i-" + t[0], textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
+      var pageEl = el("div", { className: "vl-page vl-intropage" }, el("button", { type: "button", className: "vl-backlink", onclick: function () { sel = null; render(); } }, icon(P.back, 14), "Course contents"),
         el("header", { className: "vl-ihero" }, el("small", { textContent: "Start here · " + course.cloud_name }), el("h1", { textContent: "Why an enterprise agent needs 13 layers" }), el("p", { textContent: "A five-minute read before you build anything: the problem, the simplest design that solves it, what that design cannot do, and how that leads to the 13 layers." })),
         el("div", { className: "vl-lesson", style: "--c:#1a6e66" }, main, side));
+      tocSpy(pageEl); return pageEl;
     }
     /* ---------- course view ---------- */
     /* The finished code is a real GitHub project (projects/vyomi-labs-facilities-agent/<cloud>); every block here is a file in it. */
@@ -525,6 +539,7 @@
           el("div", { className: "vl-cchips" }, chipo(P.flag, l.level), chipo(P.clock, "~" + N + " min"), hasLab ? chipo("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", l.lab.length + " code steps") : null, l.services.slice(0, 3).map(function (x) { return el("span", { className: "vl-hchip svc", textContent: x }); }))),
         el("div", { className: "vl-cside" }, el("span", { className: "vl-status" + (done(l.id) ? " done" : ""), textContent: done(l.id) ? (done(l.id) === "verified" ? "Verified" : done(l.id) === "deployed" ? "Deployed" : "Complete") : "Not started" })));
       var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody single" }, introBody));
+      tocSpy(article);
       var main = article;
 
       var cols = el("div", { className: "vl-cols" + (collapsed ? " oc" : "") }, side, main);
