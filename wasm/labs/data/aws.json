@@ -7,6 +7,10 @@
  "repo": "vyomi-cloud/vyomi-labs-facilities-agent",
  "repo_path": "",
  "repo_ref": "main",
+ "plan": [
+  "Pro",
+  "Max"
+ ],
  "image_size": [
   1800,
   1270

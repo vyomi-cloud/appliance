@@ -355,7 +355,7 @@ def build():
                                level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
                                about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), explain=EXPLAIN[lid], narr=NARR[lid], docs=_docs(cloud, C[cloud][lid]["services"]), ops=_ops(cloud, _docs(cloud, C[cloud][lid]["services"]), _lab(cloud, lid)), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
         doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
-                   image=f"img/{cloud}.svg", repo="vyomi-cloud/vyomi-labs-facilities-agent", repo_path="", repo_ref="main", image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
+                   image=f"img/{cloud}.svg", repo="vyomi-cloud/vyomi-labs-facilities-agent", repo_path="", repo_ref="main", plan=["Pro", "Max"], image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
         with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:
             json.dump(doc, f, indent=1, ensure_ascii=False)
         print(cloud, len(layers), "layers")
