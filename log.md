@@ -1,3 +1,23 @@
+### Upstream watch — 2026-11-24T11:18:36+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**12 change(s), 1 actionable.**
+- 🔧 `lifecycle` Google Kubernetes Engine: No channel (deprecated) (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Change (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Change (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Change (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Change (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Change (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Change (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Extended channel (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Rapid channel (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Regular channel (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Security (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+- · `announcement` Google Kubernetes Engine: Stable channel (November 23, 2026) ([link](https://docs.cloud.google.com/release-notes#November_23_2026))
+
+Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T10:18:27+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,12 +3017,4 @@ Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **0 change(s), 0 actionable.**
 
 Sources that failed this run (15): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-12T13:16:39+00:00
-
-Tracking 4257 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
 
