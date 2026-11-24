@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-24T22:18:52+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-24T21:18:52+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,16 +3006,3 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `announcement` Amazon SNS now supports push notifications in four additional AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sns-push-four-regions/))
 - · `announcement` Google Kubernetes Engine: Change (November 12, 2026) ([link](https://docs.cloud.google.com/release-notes#November_12_2026))
 
-Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-12T22:09:50+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 0 actionable.**
-- · `announcement` Amazon Managed Service for Apache Flink introduces enhanced snapshots ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/managed-flink-enhanced-snapshots/))
-- · `announcement` Amazon RDS for SQL Server now supports M8id and R8id instances ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/rds-sqlserver-supports-m8id-r8id-instances))
-
-Sources that failed this run (1): maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out

@@ -1,52 +1,6 @@
 {
- "at": "2026-11-24T21:18:52+00:00",
+ "at": "2026-11-24T22:18:52+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "azure",
-   "service": "compute",
-   "kind": "spec-commit",
-   "key": "azure:compute:1a1ebec4dc",
-   "title": "Azure compute: [compute-bulkaction] Update client.tsp (#48464)",
-   "link": "https://github.com/Azure/azure-rest-api-specs/commit/1a1ebec4dc1680f62d70a05dc1ed6b04e2f3f968",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.44.11",
-   "title": "pypi:boto3: 1.44.10 \u2192 1.44.11",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.44.11",
-   "title": "pypi:botocore: 1.44.10 \u2192 1.44.11",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:af954b96d232",
-   "title": "AWS CloudFormation makes resource coverage comprehensive with 206 new types",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/cloudformation-coverage-expansion/",
-   "detail": "AWS CloudFormation now supports 206 additional resource types across 88 services, including Amazon SageMaker Hub, Amazon Bedrock AgentCore PolicyEngine, and Amazon EC2 Snapshot. This closes key gaps in CloudFormation coverage and helps customers to standardize on safe and scalable infrastructure management workflows. The launch utilized a new AI-driven internal framework to collapse the costs of onboarding resource types to CloudFormation, setting up CloudFormation for continued coverage expansion. AWS Cloud Control API supports all new resource types that CloudFormation supports. Additionally",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon RDS",
-   "kind": "announcement",
-   "key": "feed:aws:bcb309bcf9f6",
-   "title": "Amazon RDS for SQL Server now supports up to 500 databases per instance",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/rds-sqlserver-supports-500-databases-per-instance",
-   "detail": "Amazon Relational Database Service (Amazon RDS) for SQL Server now supports up to 500 databases per DB instance, up from the previous limit of 100. This higher density helps software as a service (SaaS) providers, multi-tenant applications, and other customers who run many databases on a DB instance. Previously, these customers had to spread their databases across several DB instances. You can use this feature to consolidate databases on fewer DB instances. This simplifies management, reduces the number of DB instances to monitor and patch, and lowers license and infrastructure costs. The 500-",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": []
 }
