@@ -156,9 +156,36 @@
     }
     function wireEndpoint() { return location.origin + location.pathname.split("/labs/")[0] + "/_wire"; }
     function meshRoute() { try { return window.parent !== window && window.parent.VyomiMesh && window.parent.VyomiMesh.wireRouting ? window.parent.VyomiMesh.wireRouting() : null; } catch (_) { return null; } }
+    /* Deploy must never hand the user a to-do list: when a chapter needs the Mesh (real functions, a model, or a cloud SDK the browser cannot run), start it and join it from here. */
+    function ensureMesh(say) {
+      var M = null; try { M = window.parent !== window ? window.parent.VyomiMesh : null; } catch (_) {}
+      if (meshRoute()) return Promise.resolve();
+      if (!M || !M.sessionStart) return Promise.reject(new Error("The Mesh is not available in this console. Sign in, then deploy again."));
+      var live = M.session && M.session() && M.session().session;
+      var started = live ? Promise.resolve({ ok: true }) : (say("Starting your Mesh. This takes a few minutes the first time..."), M.sessionStart(cloud));
+      return started.then(function (r) {
+        if (r && r.cancelled) throw new Error("Starting the Mesh was cancelled.");
+        if (r && r.ok === false) throw new Error((r.j && r.j.message) || "The Mesh could not be started.");
+        var t0 = Date.now(), asked = 0;
+        return new Promise(function (ok, bad) {
+          (function poll() {
+            if (meshRoute()) return ok();
+            if (Date.now() - t0 > 15 * 60 * 1000) return bad(new Error("The Mesh did not become ready in 15 minutes."));
+            var s = M.session && M.session(), ss = s && s.session, c = M.checks && M.checks();
+            if (!ss) say("Starting your Mesh...");
+            else if (ss.state !== "running") say("Your Mesh is booting (" + Math.round((Date.now() - t0) / 1000) + " s)...");
+            else if (!c || c.sid !== ss.id || c.state === "idle") { say("Running the Mesh health checks..."); if (!asked++ || asked % 8 === 0) M.runChecks(); }
+            else if (c.state === "running") say("Running the Mesh health checks...");
+            else if (c.state === "failed") return bad(new Error("A Mesh health check failed: " + (c.items.filter(function (i) { return i.ok === false; }).map(function (i) { return i.label; }).join(", ") || "see the Mesh card") + "."));
+            else if (c.state === "passed") { say("Joining the Mesh..."); if (c.joined || M.joinMesh()) return setTimeout(poll, 500); }
+            setTimeout(poll, 4000);
+          })();
+        });
+      });
+    }
     function deployPanel(l) {
-      var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : "in this browser (Nano)";
-      var supported = cloud === "aws" || hasApi || !!route;
+      var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : cloud === "aws" ? "in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model" : "inside a Mesh (started for you if it is not running)";
+      var supported = true;
       var rows = l.lab.map(function (bk) { return { bk: bk, chip: el("span", { className: "vl-dchip", textContent: bk.run ? "waiting" : "saved on run" }), log: el("pre", { className: "vl-dlog" }) }; });
       var btn = el("button", { type: "button", className: "vl-btn primary lg" }, icon("M8 5v14l11-7z", 16), "Deploy this chapter");
       var out = el("div", { className: "vl-dout" });
@@ -195,7 +222,11 @@
           return pump();
         }).catch(function (e) { out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: "Could not run the deploy: " + e.message }))); btn.disabled = false; btn.textContent = "Deploy again"; });
       }
+      var needsMesh = function () { return !meshRoute() && !hasApi && (cloud !== "aws" || l.lab.some(function (b) { return b.needs_runtime; }) || meshWanted); };
+      var meshWanted = false;
       btn.onclick = function () {
+        if (needsMesh()) { btn.disabled = true; var say = function (t) { out.replaceChildren(el("div", { className: "vl-dstatus", textContent: t })); }; return ensureMesh(say).then(function () { btn.disabled = false; btn.onclick(); }, function (e) { btn.disabled = false; out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: e.message }))); }); }
+        var route = meshRoute();
         if (route && window.parent.VyomiMesh.apiFetch) return deployVia(function () { return window.parent.VyomiMesh.apiFetch("/mesh/labs/deploy/" + cloud + "/" + l.id, { method: "POST" }); });   // a Mesh is on: deploy INSIDE the Mesh
         if (hasApi) return deployVia(function () { return fetch("/api/deploy/" + cloud + "/" + l.id, { method: "POST" }); });
         btn.disabled = true; btn.textContent = "Deploying..."; out.replaceChildren(); var failed = 0, blocked = 0, needModel = false;
@@ -204,7 +235,7 @@
         rows.forEach(function (r) {
           chain = chain.then(function () {
             if (!r.bk.run) { r.chip.textContent = "saved"; r.chip.className = "vl-dchip ok"; return runInBrowser(files, "", env, route, function () {}); }
-            if (r.bk.needs_runtime && !route) { blocked++; r.chip.textContent = "needs the Mesh"; r.chip.className = "vl-dchip warn"; r.log.textContent = "This step runs real function code, which the in-browser simulator does not execute. Turn on a Mesh and deploy again."; return; }
+            if (r.bk.needs_runtime && !route) { blocked++; r.chip.textContent = "needs the Mesh"; r.chip.className = "vl-dchip warn"; r.log.textContent = "This step runs real function code, which the in-browser simulator does not execute, so it runs inside a Mesh."; return; }
             r.chip.textContent = "running"; r.chip.className = "vl-dchip run"; var text = "";
             return runInBrowser(files, r.bk.run, env, route, function (t) { text += t + "\n"; r.log.textContent = text; }).then(function (ok) {
               var pass = ok && (!r.bk.expect || text.indexOf(r.bk.expect) >= 0);
@@ -217,10 +248,12 @@
         chain.then(function () {
           btn.disabled = false; btn.textContent = failed ? "Deploy again" : "Deploy again";
           var links = (l.setup || []).filter(function (s) { return s.route; });
+          var escalate = (needModel || blocked) && !failed; if (escalate) meshWanted = true;
           if (!failed && !blocked) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); }
           out.replaceChildren(el("div", { className: "vl-dres " + (failed ? "bad" : blocked ? "warn" : "ok") },
-            needModel ? el("b", { textContent: "A step needs a model. Load one (Amazon Bedrock, Overview, Local model: choose a small model and Load in-browser model) or turn on a Mesh, then deploy again." }) : el("b", { textContent: failed ? failed + " step(s) failed. Open the step log below, fix the cause and deploy again." : blocked ? "Deployed, except steps that need the Mesh." : "Deployed." }),
+            needModel ? el("b", { textContent: "A step needs a model, so the deploy continues inside a Mesh. Starting it now..." }) : el("b", { textContent: failed ? failed + " step(s) failed. Open the step log below, fix the cause and deploy again." : blocked ? "Deployed, except steps that need the Mesh." : "Deployed." }),
             (!failed && links.length) ? el("div", { className: "vl-dlinks" }, el("span", { textContent: "See it running in the space: " }), links.map(function (s) { return el("a", { className: "vl-btn", href: consoleUrl(s.route), target: "_blank", rel: "noopener", textContent: s.service || s.title }); })) : null));
+          if (escalate) setTimeout(function () { btn.onclick(); }, 800);   // no to-do list for the learner: continue inside a Mesh
         });
       };
       return el("div", { className: "vl-deploy" },
@@ -314,7 +347,7 @@
       var next = nxt ? el("div", { className: "vl-nextcard" }, el("small", { textContent: "Next" }), el("button", { type: "button", className: "vl-btn primary", onclick: function () { go(nxt.id); } }, "Chapter " + nxt.order + ": " + nxt.title, icon(P.arrow, 16))) : el("p", { className: "vl-muted", textContent: "That was the last chapter. You now have the full enterprise agent." });
       var cleanup = el("div", {}, el("p", { textContent: "Vyomi is a simulator, so nothing here is billed and nothing needs deleting to avoid charges. To start this chapter again, delete the resources you created from their console pages, or reset the space from Spaces in the bottom drawer." }),
         el("p", { className: "vl-muted", textContent: "Keep the resources if you are continuing: later chapters build on them." }));
-      var buildBody = el("div", {}, hasLab ? el("div", {}, (function () { var d = deployPanel(l); if (cloud !== "aws" && !hasApi && !meshRoute()) d.querySelector("button").disabled = true; return d; })(),
+      var buildBody = el("div", {}, hasLab ? el("div", {}, (function () { var d = deployPanel(l); return d; })(),
           el("p", { className: "vl-muted", textContent: "Complete these in order. Save each file with the name shown, run the command under it and check the output matches. Point your SDK at the simulator first (open SDK & CLI usage in the bottom drawer for the exact settings)." }),
           (function () { var ol = el("ol", { className: "vl-blocks" }, l.lab.map(labBlock)), allOpen = false; var tg2 = el("button", { type: "button", className: "vl-btn sm", textContent: "Expand all" }); tg2.onclick = function () { allOpen = !allOpen; [].forEach.call(ol.children, function (x) { x.classList.toggle("open", allOpen); }); tg2.textContent = allOpen ? "Collapse all" : "Expand all"; }; return el("div", {}, el("div", { className: "vl-blocktools" }, tg2), ol); })()) :
         el("div", { className: "vl-note" }, el("b", { textContent: "Code for this chapter is not written yet" }), el("p", { textContent: "Create the resources in the console steps below. The runnable, verified code for this chapter is still being added." }), ul(l.build)));
