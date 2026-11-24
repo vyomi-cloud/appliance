@@ -218,7 +218,7 @@
           reset.hidden = !(cur && edits[cur] !== undefined);
         }
         var groups = {}; paths.forEach(function (p) { var d = p.indexOf("/") < 0 ? "" : p.slice(0, p.lastIndexOf("/")); (groups[d] = groups[d] || []).push(p); });
-        Object.keys(groups).sort(function (a, b) { var r = function (d) { return d === "" ? 0 : d === "app" ? 1 : d === "chapters" ? 2 : 3; }; return r(a) - r(b) || (a < b ? -1 : 1); }).forEach(function (d) {
+        Object.keys(groups).sort(function (a, b) { var r = function (d) { return d === "" ? 0 : /^\d\d-/.test(d) ? 1 : 2; }; return r(a) - r(b) || (a < b ? -1 : 1); }).forEach(function (d) {
           if (d) treeEl.append(el("div", { className: "vl-edd", textContent: d + "/" }));
           groups[d].forEach(function (p) { var b = el("button", { type: "button", className: "vl-edf", "data-p": p, textContent: p.split("/").pop() }); b.onclick = function () { show(p); }; treeEl.append(b); });
         });
@@ -232,6 +232,9 @@
     /* The finished code is a real GitHub project (projects/vyomi-labs-facilities-agent/<cloud>); every block here is a file in it. */
     function ghUrl(path) { return "https://github.com/" + course.repo + (path || ""); }
     function ghBase() { return (course.repo_path ? course.repo_path + "/" : "") + cloud; }
+    var slugOf = function (t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); };
+    function layerDir(l) { return String(l.order).padStart(2, "0") + "-" + slugOf(l.title); }
+    function projFile(file) { for (var i = 0; i < course.layers.length; i++) { var c = course.layers[i]; if ((c.lab || []).some(function (b) { return b.file === file; })) return layerDir(c) + "/" + file; } return file; }
     function downloadProject() { loadProject().then(function (p) { var all = {}; Object.keys(p.files).forEach(function (f) { all[p.name + "/" + f] = p.files[f]; }); var a = el("a", { href: URL.createObjectURL(zipOf(all)), download: p.name + ".zip" }); document.body.append(a); a.click(); a.remove(); }); }
     function projectCard() {
       var btn = function (txt, primary, fn) { return el("button", { type: "button", className: "vl-btn" + (primary ? " primary" : ""), onclick: fn, textContent: txt }); };
@@ -242,10 +245,10 @@
     }
     /* The chapter's code is part of the project: open it in the editor right here. */
     function chapterCode(l) {
-      var first = (l.lab || [])[0], slug = String(l.order).padStart(2, "0") + "-" + l.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      var first = (l.lab || [])[0], dir = layerDir(l);
       return el("div", { className: "vl-codelinks" }, el("b", { textContent: "The full code for this chapter" }), el("span", { className: "vl-muted", textContent: "It is part of the project; open it in the editor." }),
-        el("div", { className: "vl-projbtns" }, el("button", { type: "button", className: "vl-btn primary", textContent: "Open in editor", onclick: function () { openEditor(first ? "app/" + first.file : "chapters/" + slug + ".md"); } }),
-          el("button", { type: "button", className: "vl-btn", textContent: "Chapter guide", onclick: function () { openEditor("chapters/" + slug + ".md"); } })));
+        el("div", { className: "vl-projbtns" }, el("button", { type: "button", className: "vl-btn primary", textContent: "Open in editor", onclick: function () { openEditor(first ? dir + "/" + first.file : dir + "/README.md"); } }),
+          el("button", { type: "button", className: "vl-btn", textContent: "Layer guide", onclick: function () { openEditor(dir + "/README.md"); } })));
     }
     function archLink() {   // the full architecture this course teaches you to build, opened full size in its own tab
       return el("a", { className: "vl-archlink", href: base + course.image, target: "_blank", rel: "noopener" }, icon("M4 5h16v14H4zM4 10h16M10 10v9", 15), "View the full reference architecture you will build", icon("M7 17L17 7M9 7h8v8", 14));
@@ -442,7 +445,7 @@
       head.onclick = function () { var o = li.classList.toggle("open"); head.setAttribute("aria-expanded", String(o)); };
       var pre = el("pre", { className: "vl-pre" }); pre.append(hl(bk.code));
       li.append(head, el("div", { className: "vl-bbody" },
-        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("button", { type: "button", className: "vl-ghlink", textContent: "Open in editor", onclick: function () { openEditor("app/" + bk.file); } }), copyBtn(bk.code)), pre,
+        el("div", { className: "vl-file" }, el("span", { className: "vl-fname" }, icon("M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5", 14), "app/" + bk.file), el("button", { type: "button", className: "vl-ghlink", textContent: "Open in editor", onclick: function () { openEditor(projFile(bk.file)); } }), copyBtn(bk.code)), pre,
         bk.run ? el("div", { className: "vl-runrow" }, el("span", { className: "vl-runlbl", textContent: "Run" }), el("code", { textContent: bk.run }), copyBtn(bk.run)) : el("div", { className: "vl-runrow muted" }, el("span", { className: "vl-runlbl", textContent: "Nothing to run yet; the next step uses this file." })),
         bk.expect ? el("div", { className: "vl-expect" }, el("span", { textContent: "You should see" }), el("code", { textContent: bk.expect })) : null));
       return li;

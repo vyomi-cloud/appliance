@@ -2,26 +2,26 @@
 
 The finished project from the Vyomi Labs course **Build the Enterprise Facilities agent on Microsoft Azure**: an enterprise agentic AI application, built in 13 layers and run against the Vyomi Microsoft Azure simulator at no cloud cost.
 
-Every file in [`app/`](app) is the exact code the course shows and deploys, in the same order.
+Each layer has its own folder with the exact code the course shows and deploys, and a README that explains it.
 
 ## Run it
 
 1. Start your Vyomi simulator (Nano with the tunnel, a Mesh, or the appliance) and copy its endpoint settings into `.env` (see `.env.example`).
 2. `pip install -r requirements.txt`
-3. `./run_all.sh` for every chapter, or follow one chapter at a time:
+3. `./run_all.sh` for every layer, or `./run_all.sh 7` for one layer.
 
-| Chapter | Layer | Steps |
+| Layer | Folder | Steps |
 |---|---|---|
-| 1 | [Models](chapters/01-models.md) | 6 |
-| 2 | [Agent Runtime](chapters/02-agent-runtime.md) | 7 |
-| 3 | [Tools](chapters/03-tools.md) | 10 |
-| 4 | [Knowledge Pipeline](chapters/04-knowledge-pipeline.md) | 12 |
-| 5 | [Knowledge Search (RAG)](chapters/05-knowledge-search-rag.md) | 5 |
-| 6 | [Response Generation](chapters/06-response-generation.md) | 6 |
-| 7 | [Agent Memory](chapters/07-agent-memory.md) | 5 |
-| 8 | [Agent Gateway](chapters/08-agent-gateway.md) | 6 |
-| 9 | [Actions and Approval](chapters/09-actions-and-approval.md) | 6 |
-| 10 | [Access and Perimeter](chapters/10-access-and-perimeter.md) | 5 |
-| 11 | [Channels and Input Guardrails](chapters/11-channels-and-input-guardrails.md) | 4 |
-| 12 | [AgentOps and Observability](chapters/12-agentops-and-observability.md) | 8 |
-| 13 | [Governance and Security](chapters/13-governance-and-security.md) | 5 |
+| 1. Models | [01-models/](01-models) | 6 |
+| 2. Agent Runtime | [02-agent-runtime/](02-agent-runtime) | 7 |
+| 3. Tools | [03-tools/](03-tools) | 10 |
+| 4. Knowledge Pipeline | [04-knowledge-pipeline/](04-knowledge-pipeline) | 12 |
+| 5. Knowledge Search (RAG) | [05-knowledge-search-rag/](05-knowledge-search-rag) | 5 |
+| 6. Response Generation | [06-response-generation/](06-response-generation) | 6 |
+| 7. Agent Memory | [07-agent-memory/](07-agent-memory) | 5 |
+| 8. Agent Gateway | [08-agent-gateway/](08-agent-gateway) | 6 |
+| 9. Actions and Approval | [09-actions-and-approval/](09-actions-and-approval) | 6 |
+| 10. Access and Perimeter | [10-access-and-perimeter/](10-access-and-perimeter) | 5 |
+| 11. Channels and Input Guardrails | [11-channels-and-input-guardrails/](11-channels-and-input-guardrails) | 4 |
+| 12. AgentOps and Observability | [12-agentops-and-observability/](12-agentops-and-observability) | 8 |
+| 13. Governance and Security | [13-governance-and-security/](13-governance-and-security) | 5 |
