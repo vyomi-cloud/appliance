@@ -8,4 +8,11 @@ cd "$(git rev-parse --show-toplevel)"
 "${PYTHON:-python3}" -m vyomilabs.content.build_project >/dev/null          # regenerate so the mirror matches the course data
 sha=$(git subtree split --prefix="courses/$slug")
 echo "course tree $sha for $org/$slug"
-if [ "${2:-}" = "--push" ]; then git push "https://github.com/$org/$slug.git" "$sha:refs/heads/main"; else echo "dry run: add --push to publish (owner go required)"; fi
+if [ "${2:-}" = "--push" ]; then
+  # first publish of a course creates its repository, so every future course gets a valid, standalone repo automatically
+  if ! gh repo view "$org/$slug" >/dev/null 2>&1; then
+    desc=$(head -3 "courses/$slug/README.md" | tail -1 | cut -c1-200)
+    gh repo create "$org/$slug" --public --description "${desc:-Vyomi Labs course project}"
+  fi
+  git push --force "https://github.com/$org/$slug.git" "$sha:refs/heads/main"   # mirror: the appliance copy is the source of truth
+else echo "dry run: add --push to publish"; fi
