@@ -4,6 +4,11 @@ const PORT=process.env.PORT||8957, DATA=process.env.DATA||"aws-nano.json"; const
 const only=(process.env.CH||"").split(",").filter(Boolean).map(Number);
 fs.writeFileSync(out,"");
 const ctx=await launch(prof); const p=await ctx.newPage();
+if(process.env.CLEAR){ // reuse one profile for the model cache, but start every run from an empty Nano store (IndexedDB, OPFS, localStorage); Cache Storage (webllm/*) is kept
+  await p.goto(`http://localhost:${PORT}/nano/labs/`);
+  console.log("cleared",JSON.stringify(await p.evaluate(async()=>{ const r={idb:[],opfs:0}; for(const d of (await indexedDB.databases())){ await new Promise(res=>{const q=indexedDB.deleteDatabase(d.name); q.onsuccess=q.onerror=q.onblocked=()=>res();}); r.idb.push(d.name);} try{ const root=await navigator.storage.getDirectory(); for await (const [n] of root.entries()){ await root.removeEntry(n,{recursive:true}); r.opfs++; } }catch(e){} try{localStorage.clear();sessionStorage.clear();}catch(e){} r.caches=await caches.keys(); return r; })));
+  const regs=await p.evaluate(async()=>{ const rs=await navigator.serviceWorker.getRegistrations(); for(const x of rs) await x.unregister(); return rs.length; }); console.log("sw unregistered",regs);
+}
 const A=p; A.on("console",m=>{const t=m.text(); if(/error|fail/i.test(t)&&!/Failed to load resource/.test(t)) fs.appendFileSync(out+".console",t.slice(0,300)+"\n");});
 await A.goto(`http://localhost:${PORT}/nano/v4/aws/`); await A.waitForFunction(()=>typeof globalThis.vyomiLlmStatus==="function",null,{timeout:120000}); await A.waitForTimeout(3000);
 console.log("kernel up, llm:",JSON.stringify(await A.evaluate(()=>globalThis.vyomiLlmStatus())));

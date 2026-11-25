@@ -27,6 +27,7 @@ paths (prompting, tool loops, streaming, token accounting), not for quality.
 from __future__ import annotations
 
 import hashlib
+import ast
 import json
 import math
 import os
@@ -490,6 +491,16 @@ def extract_json(text):
                     return json.loads(re.sub(r",\s*$", "", c[st:].rstrip()) + ('"' if instr else "") + "".join(reversed(stack))), True
                 except ValueError:
                     pass
+    for c in cands:      # a Python-style literal ({'a': 'b'}, single quotes): small models echo the repr of the object they mean
+        for st in [i for i, ch in enumerate(c) if ch in "{["][:4]:
+            en = c.rfind("}" if c[st] == "{" else "]")
+            if en > st:
+                try:
+                    v = ast.literal_eval(c[st:en + 1])
+                except (ValueError, SyntaxError, MemoryError, RecursionError):
+                    continue
+                if isinstance(v, (dict, list)):
+                    return v, True
     return None, False
 
 
@@ -625,6 +636,9 @@ def _calls_from_value(v, tools):
     names = {t["name"]: t for t in tools}
     if isinstance(v, dict) and isinstance(v.get("content"), str) and "tool_calls" not in v and "name" not in v:
         return [], v["content"], None
+    if isinstance(v, dict) and v and len(tools) == 1 and not ({"tool_calls", "tool_call", "function_call", "name", "function", "content"} & set(v)) \
+            and set(v) <= set((tools[0]["parameters"] or {}).get("properties") or {}) and not validate(tools[0]["parameters"], v):
+        v = {"tool_calls": [{"name": tools[0]["name"], "arguments": v}]}     # only the arguments of the one available tool: unambiguous
     raw = None
     if isinstance(v, dict):
         raw = v.get("tool_calls") or v.get("tool_call") or v.get("function_call") or ([v] if ("name" in v or "function" in v) else None)
@@ -900,7 +914,9 @@ def _backend_native_tools() -> bool:
 def _tools_prompted(msgs, o) -> dict:
     tools, choice = o["tools"], o["tool_choice"]
     flat = _flatten_for_prompt(msgs, tools, choice)
-    oo = dict(o, response_format={"type": "json_schema", "schema": _envelope_schema(tools, choice), "name": "tool_envelope"})
+    # A tool call is structured output: sampling at the chat default (0.7) makes small models flip between a clean call, prose and invalid JSON
+    # from one run to the next, so the envelope turn samples cold (a caller that asks for less still gets less).
+    oo = dict(o, temperature=min(float(o.get("temperature", 0.7)), 0.2), response_format={"type": "json_schema", "schema": _envelope_schema(tools, choice), "name": "tool_envelope"})
     acc, err, r = _zero(), "", None
     for attempt in range(MAX_RETRIES + 1):
         r = _generate(flat, oo)

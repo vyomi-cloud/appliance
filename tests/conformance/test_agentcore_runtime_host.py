@@ -94,7 +94,7 @@ except ClientError as e:
 # Nano substrate path: no subprocess, entrypoint exec'd in-process (handler functions only)
 os.environ["VYOMI_RUNTIME_BACKEND"] = "inproc"
 ip = json.loads(dp.invoke_agent_runtime(agentRuntimeArn=arn, runtimeSessionId="session-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", payload=b'{"prompt":"ip"}', qualifier="DEFAULT")["response"].read())
-check("inproc backend (Nano path) runs the same entrypoint through the same contract", ip["echo"] == "ip" and ip["pid"] == os.getpid() and ip["env"] == "v2", ip)
+check("inproc backend (Nano path) runs the same entrypoint through the same contract", ip["echo"] == "ip" and ip["pid"] != os.getpid() and ip["pid"] >= 20000 and ip["env"] == "v2", ip)   # no subprocess on Nano: the session answers with its own virtual pid
 os.environ.pop("VYOMI_RUNTIME_BACKEND")
 ctl.delete_agent_runtime(agentRuntimeId=rid)
 print("\nFAILED: %s" % FAILS if FAILS else "\nALL PASS")
