@@ -317,6 +317,12 @@ def org_policy_enforced(rm_store, project: str, constraint_id: str) -> bool:
     service-account state but must honour the same project's org policies."""
     if rm_store is None:
         return False
+    try:        # hierarchy-aware (organization > folder > project inheritance, reset, dry-run excluded): core/gcp_orgpolicy_core.py
+        from core import gcp_orgpolicy_core as _op
+        if getattr(rm_store, "projects", None) is not None and (getattr(rm_store, "folders", None) or getattr(rm_store, "org_policies", None)):
+            return _op.enforced(rm_store, "projects/" + str(project), constraint_id)
+    except Exception:
+        pass
     policies = getattr(rm_store, "org_policies", None) or {}
     pol = policies.get(f"projects/{project}/policies/constraints/{constraint_id}")
     if not pol:

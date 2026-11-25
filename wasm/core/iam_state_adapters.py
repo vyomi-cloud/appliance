@@ -562,7 +562,14 @@ def azure_state(arm_resources, rbac_store=None, graph=None) -> dict:
     out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "data_scopes": {}, "storage_accounts": {},
            "groups": azure_groups(graph), "management_groups": {}, "subscriptions": {}}
     accounts = []
-    for rec in (arm_resources or {}).values():
+    try:      # the tenant root group + the space's subscription under it, so root-scope assignments reach the subscription
+        _mgs = [r for r in (arm_resources or {}).values() if isinstance(r, dict) and str(r.get("_type") or "").lower() == "microsoft.management/managementgroups"]
+        if _mgs and all(((r.get("properties") or {}).get("details") or {}).get("parent") for r in _mgs):      # every group has a parent but no root exists yet
+            from core import azure_mgmt_groups_core as _mgc
+            _mgc.ensure(arm_resources)
+    except Exception:
+        pass
+    for rec in list((arm_resources or {}).values()):
         if not isinstance(rec, dict):
             continue
         t = str(rec.get("_type") or rec.get("type") or "").lower()

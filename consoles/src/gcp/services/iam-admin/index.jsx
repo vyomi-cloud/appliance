@@ -34,6 +34,7 @@ import Labels from "./Labels.jsx";
 import Tags from "./Tags.jsx";
 import AuditLogs from "./AuditLogs.jsx";
 import OrgPolicies from "./OrgPolicies.jsx";
+import Governance from "./Governance.jsx";
 import Pam from "./Pam.jsx";
 import EssentialContacts from "./EssentialContacts.jsx";
 import PolicyTroubleshooter from "./PolicyTroubleshooter.jsx";
@@ -76,6 +77,7 @@ export default {
     {
       section: "Resource Management",
       items: [
+        { text: "Resource hierarchy", href: "#/iam-admin/governance", icon: DomainIcon },
         { text: "Organization Policies", href: "#/iam-admin/orgpolicies", icon: PolicyIcon },
         { text: "Asset Inventory", href: "#/iam-admin/asset-inventory", icon: InventoryIcon },
         { text: "Settings", href: "#/iam-admin/settings", icon: SettingsIcon },
@@ -121,6 +123,7 @@ export default {
     { pattern: "/iam-admin/labels", component: Labels },
     { pattern: "/iam-admin/tags", component: Tags },
     { pattern: "/iam-admin/audit", component: AuditLogs },
+    { pattern: "/iam-admin/governance", component: Governance },
     { pattern: "/iam-admin/orgpolicies", component: OrgPolicies },
     { pattern: "/iam-admin/pam", component: Pam },
     { pattern: "/iam-admin/essential-contacts", component: EssentialContacts },

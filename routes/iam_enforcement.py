@@ -80,3 +80,8 @@ def register(app: FastAPI, api=None):
     @app.get("/_wire/api/iam/{cloud}/catalog/{service}")
     async def _cat(request: Request, cloud: str, service: str):
         return await _go(request, cloud, "catalog", service)
+
+    @app.api_route("/api/iam/{cloud}/governance/{what:path}", methods=["GET", "POST"])
+    @app.api_route("/_wire/api/iam/{cloud}/governance/{what:path}", methods=["GET", "POST"])
+    async def _gov(request: Request, cloud: str, what: str):
+        return await _go(request, cloud, "governance", what)

@@ -11,6 +11,7 @@ import { AccountPublicAccessBlock, DirectoryBuckets, ObjectLambdaAccessPoints } 
 import { AccessGrants, BatchOperations, MultiRegionAccessPoints } from "./BatchPages.jsx";
 import { VectorBuckets } from "./VectorPages.jsx";
 import { AccessPointsForFsx, FileSystems } from "./FileSystemPages.jsx";
+import PublicAccessOverview from "./PublicAccessOverview.jsx";
 import { S3GetStarted, S3Marketplace } from "./MarketplacePages.jsx";
 import { AccessAnalyzer, StorageLensDashboards, StorageLensGroups, TableBuckets } from "./InsightPages.jsx";
 
@@ -30,6 +31,7 @@ export default {
     { type: "link", text: "IAM Access Analyzer for S3", href: "#/s3/access-analyzer" },
     { type: "divider" },
     { type: "link", text: "Block Public Access settings for this account", href: "#/s3/settings" },
+    { type: "link", text: "Public access overview", href: "#/s3/public-access-overview" },
     { type: "section", text: "Storage Lens", items: [
       { type: "link", text: "Dashboards", href: "#/s3/lens/dashboards" },
       { type: "link", text: "Storage Lens groups", href: "#/s3/lens/groups" },
@@ -49,6 +51,7 @@ export default {
     { pattern: "/s3/directory-buckets", component: DirectoryBuckets, crumbs: () => [{ text: "Directory buckets", href: "#/s3/directory-buckets" }] },
     { pattern: "/s3/olap", component: ObjectLambdaAccessPoints, crumbs: () => [{ text: "Object Lambda Access Points", href: "#/s3/olap" }] },
     { pattern: "/s3/settings", component: AccountPublicAccessBlock, crumbs: () => [{ text: "Block Public Access settings for this account", href: "#/s3/settings" }] },
+    { pattern: "/s3/public-access-overview", component: PublicAccessOverview, crumbs: () => [{ text: "Public access overview", href: "#/s3/public-access-overview" }] },
     { pattern: "/s3/mrap", component: MultiRegionAccessPoints, crumbs: () => [{ text: "Multi-Region Access Points", href: "#/s3/mrap" }] },
     { pattern: "/s3/access-grants", component: AccessGrants, crumbs: () => [{ text: "Access Grants", href: "#/s3/access-grants" }] },
     { pattern: "/s3/batch-operations", component: BatchOperations, crumbs: () => [{ text: "Batch Operations", href: "#/s3/batch-operations" }] },

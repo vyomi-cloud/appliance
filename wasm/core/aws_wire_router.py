@@ -216,6 +216,9 @@ def _gcp_service(path):
         return "gcp-monitoring" if m.group(1) else "gcp-resourcemanager"
     if path.startswith(("/v3/tagKeys", "/v3/tagValues", "/v3/tagBindings", "/v3/folders")):
         return "gcp-resourcemanager"
+    # Organization Policy v2 (orgpolicy.googleapis.com) on every hierarchy level: constraints + policies (+ :getEffectivePolicy, :check)
+    if re.match(r"^/v2/(organizations|folders)/[^/]+/(constraints|policies)([/:?]|$)", path) or re.match(r"^/v2/projects/[^/]+/constraints([/:?]|$)", path):
+        return "gcp-resourcemanager"
     # Deny policies (IAM Deny API): /v2/policies/{attachmentPoint}/denypolicies[/…]
     if re.match(r"^/v2/policies/.+?/denypolicies(/.*)?$", path):
         return "gcp-iam"
@@ -752,7 +755,7 @@ def _is_arm_path(path):
     # tenant-level Resource Graph (`POST /providers/Microsoft.ResourceGraph/resources`, az graph / azure-mgmt-resourcegraph) has no
     # /subscriptions prefix: without this it fell through to the S3 default (405 MethodNotAllowed) - endurance F206
     return (p in ("/subscriptions", "/tenants") or p.startswith(("/subscriptions/", "/api/azure/operations/"))
-            or p.lower().startswith("/providers/microsoft.resourcegraph/"))
+            or p.lower().startswith(("/providers/microsoft.resourcegraph/", "/providers/microsoft.management/")))
 
 
 def _lower_headers(headers):
@@ -2616,6 +2619,18 @@ class AwsWireRouter:
                 "gcp-bigquery": (gcp_bigquery, self.gcs),
             }[svc]
             mod, store = _gcp_core
+            if svc in ("gcp-gcs",):         # Organization Policy request gate (core/gcp_orgpolicy_core.py): constraints with an engine hook
+                try:
+                    from core import gcp_orgpolicy_core as _orgp
+                    try:
+                        _jb = json.loads(body) if body[:1] == b"{" else {}
+                    except Exception:
+                        _jb = {}
+                    _orgp.request_gate(self.gcp_rm, method, path, query or {}, _jb)
+                except _orgp.Violation as _v:
+                    return _orgp.violation_response(_v)
+                except Exception:
+                    pass
             if svc == "gcp-identityplatform":   # the API key names the project; certs also list the service-account key ids
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ctx={
                     "default_project": gcp_proj.project_id(), "iamc_store": self.gcp_iamc,

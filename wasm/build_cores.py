@@ -67,7 +67,7 @@ CORES = [
     "instance_catalog.py",                          # real cloud instance-type catalog (GCP machine type shapes) — gcp_compute_instances_core depends on it
     "gcp_compute_ext_core.py",                      # GCP Compute extensions: resource policies/schedulers, reservations, sole-tenant, storage pools, NEGs, Recommender
     "gcp_compute_instances_core.py",                # GCP: Compute Engine REST v1 (instances, disks, images, templates, groups, health checks — control plane)
-    "gcp_resourcemanager_core.py",                 # GCP: Resource Manager (project, tags, essential contacts, org policies) — IAM & Admin
+    "gcp_orgpolicy_core.py", "gcp_resourcemanager_core.py",                 # (orgpolicy: Org Policy v2 inheritance/effective/gate, imported by resourcemanager + iam) # GCP: Resource Manager (project, tags, essential contacts, org policies) — IAM & Admin
     "gcp_pam_core.py",                             # GCP: Privileged Access Manager entitlements — IAM & Admin
     "azure_netaccess.py", "azure_diag_pipeline.py", "azure_blob_core.py",                           # Azure: Blob REST (native azure-storage-blob)
     "azure_cosmos_core.py",                         # Azure: Cosmos DB SQL/Core API (native azure-cosmos)
@@ -167,7 +167,7 @@ CORES = [
     "azure_security_core.py", "azure_attackpath_core.py", "azure_security_automations_core.py",                       # v4: Microsoft Defender for Cloud (Microsoft.Security), live over the ARM state
     "azure_keyvault_x509_core.py",          # Azure Key Vault certificates (real self-signed X.509 + RSA) — vendored VERBATIM
     "azure_arm_ext_core.py",                        # Azure ARM: locks, managed identity, resource health, NICs/public IPs, schedules, run commands, restore points — vendored VERBATIM
-    "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
+    "azure_mgmt_groups_core.py", "azure_arm_data.py", "azure_arm_core.py",       # Azure ARM control plane (native /subscriptions/* wire)
     "console_conformance.py",                       # console-next capability manifest: per-service conformance signal (pure, `os` only)
     "nano_events.py",                               # per-resource cloudsim event/activity log (recorded on every mutating dispatch; MUST precede nano_registry which imports it)
     "nano_registry.py",                             # shared in-context store registry (console adapter + relay router draw from ONE set)
@@ -349,7 +349,7 @@ IAM_ENGINE_SRC = os.path.join(SRC, "iam_engine")
 IAM_CATALOG_SRC = os.path.join(SRC, "iam_catalog")
 IAM_MANIFEST = os.path.join(OUT, "iam_engine", "manifest.json")
 # Host adapters outside the package (state + principal from the stores); vendored when present, mounted by the hook at /core/<name>.
-IAM_CORE_EXTRAS = [n + ".py" for n in ("iam_state_adapters", "iam_state_nano", "iam_resource_policies")]      # (built, not literal names: test_nano_core_manifest scans this file for the CORES list)
+IAM_CORE_EXTRAS = [n + ".py" for n in ("iam_state_adapters", "iam_state_nano", "iam_resource_policies", "iam_governance")]      # (built, not literal names: test_nano_core_manifest scans this file for the CORES list)
 
 
 def iam_files():

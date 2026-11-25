@@ -425,6 +425,52 @@ def _build_context(req, state, principal, resource, res_tags):
     return ctx
 
 
+# ---------------------------------------------------------------- S3 Block Public Access (RestrictPublicBuckets)
+_NON_PUBLIC_CONDITION_KEYS = ("aws:principalorgid", "aws:principalorgpaths", "aws:principalaccount", "aws:principalarn", "aws:sourcevpc", "aws:sourcevpce",
+                              "aws:sourceip", "aws:sourcearn", "aws:sourceaccount", "aws:sourceowner", "aws:userid", "aws:principalservicename",
+                              "s3:datalinkaccesspointaccount")
+
+
+def _stmt_public(st):
+    """AWS's notion of a public statement: Allow to Principal '*' that no condition limits to an account / org / VPC / IP / ARN."""
+    if not isinstance(st, dict) or st.get("Effect") != "Allow":
+        return False
+    pr = st.get("Principal")
+    wild = pr == "*" or (isinstance(pr, dict) and ("*" in _as_list(pr.get("AWS")) or pr.get("AWS") == "*"))
+    if not wild:
+        return False
+    for op, kv in (st.get("Condition") or {}).items():
+        for key in (kv or {}):
+            if str(key).lower() in _NON_PUBLIC_CONDITION_KEYS:
+                return False
+    return True
+
+
+def _s3_bucket(resource):
+    r = str(resource or "")
+    if not r.startswith("arn:aws:s3:::"):
+        return None
+    return r[len("arn:aws:s3:::"):].split("/", 1)[0] or None
+
+
+def _apply_restrict_public_buckets(rpol, resource, principal, cross, bpa):
+    """RestrictPublicBuckets: a bucket policy that grants public access is ignored for everyone outside the bucket owner's account (anonymous
+    callers and other accounts); service principals and the owner's own principals are unaffected.  ACL-derived grants (Sid 'vyomi-acl:*',
+    see core/iam_resource_policies.py) are governed by IgnorePublicAcls, not by this setting.  -> (policy, whether a statement was dropped)."""
+    b = _s3_bucket(resource)
+    flags = (bpa or {}).get(b) if b else None
+    if not flags or not flags.get("RestrictPublicBuckets"):
+        return rpol, False
+    if not (principal.get("type") == "anonymous" or cross):
+        return rpol, False
+    doc = rpol if isinstance(rpol, dict) else {}
+    stmts = _as_list(doc.get("Statement"))
+    keep = [st for st in stmts if not (_stmt_public(st) and not str((st or {}).get("Sid") or "").startswith("vyomi-acl:"))]
+    if len(keep) == len(stmts):
+        return rpol, False
+    return dict(doc, Statement=keep), True
+
+
 def evaluate(req, state=None):
     state = state or {}
     action = str(req.get("action", ""))
@@ -456,6 +502,9 @@ def evaluate(req, state=None):
     scps = _levels(state.get("scps"), principal["account"])
     rcps = _levels(state.get("rcps"), res_acct)
     rpol = req.get("resource_policy") or (state.get("resource_policies") or {}).get(resource)
+    bpa_hit = False
+    if rpol and state.get("s3_bpa"):
+        rpol, bpa_hit = _apply_restrict_public_buckets(rpol, resource, principal, cross, state["s3_bpa"])
     rpols = _norm_policies([rpol], "resource") if rpol else []
 
     matched = []
@@ -483,6 +532,8 @@ def evaluate(req, state=None):
 
     def out(allowed, reason, m, failed=None):
         extra = {"missingContext": sorted(set(ctx.missing))}
+        if bpa_hit and not allowed:
+            extra["blockPublicAccess"] = "RestrictPublicBuckets"
         if failed:
             extra["failedLayer"] = failed
         return decision(allowed, reason, m, **extra)

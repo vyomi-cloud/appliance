@@ -18,13 +18,14 @@ from core.iam_engine.types import request as _request
 
 class IamApi:
     def __init__(self, settings_store=None, state_fn=None, catalog_fn=None, inventory_fn=None,
-                 audit_log=None, engines=None, maps=None):
+                 audit_log=None, engines=None, maps=None, governance_fn=None):
         self.store = settings_store or _modes.MemorySettingsStore()
         self.state_fn = state_fn or (lambda cloud: {})
         self.catalog_fn = catalog_fn or (lambda cloud, service: None)
         self.inventory_fn = inventory_fn or (lambda: None)
         self.log = audit_log if audit_log is not None else _audit.default_log
         self.engines, self.maps = engines, maps
+        self.governance_fn = governance_fn            # (cloud, what, method, query, body) -> (status, json); default core/iam_governance.handle
 
     def handle(self, method, path, query=None, body=None):
         """-> (status, json-able). `path` like /api/iam/aws/enforcement."""
@@ -50,9 +51,15 @@ class IamApi:
                 return self._evaluate(cloud, body)
             elif what == "catalog" and method == "GET" and len(parts) >= 5:
                 return self._catalog(cloud, parts[4])
+            elif what == "governance" and len(parts) >= 5:
+                fn = self.governance_fn
+                if fn is None:
+                    from core import iam_governance as _gov
+                    fn = _gov.handle
+                return fn(cloud, "/".join(parts[4:]), method, query, body)
         except ValueError as exc:
             return 400, {"error": str(exc)}
-        return 405 if what in ("enforcement", "audit", "evaluate", "catalog") else 404, {"error": "method or route not supported"}
+        return 405 if what in ("enforcement", "audit", "evaluate", "catalog", "governance") else 404, {"error": "method or route not supported"}
 
     def _evaluate(self, cloud, body):
         if not isinstance(body, dict) or not body.get("action"):

@@ -314,7 +314,7 @@ def _get_role_assignment(store, name: str) -> AzureIamResponse:
     return _json(200, _assignment_view(store, a))
 
 
-def _put_role_assignment(store, name: str, body: dict) -> AzureIamResponse:
+def _put_role_assignment(store, name: str, body: dict, scope_hint: str | None = None) -> AzureIamResponse:
     props = body.get("properties") or body
     cond = props.get("condition")
     if cond:
@@ -330,7 +330,7 @@ def _put_role_assignment(store, name: str, body: dict) -> AzureIamResponse:
         "principalId": props.get("principalId", ""),
         "principalType": props.get("principalType") or "",
         "roleDefinition": props.get("roleName") or props.get("roleDefinitionId", ""),
-        "scope": props.get("scope", "/"),
+        "scope": props.get("scope") or scope_hint or "/",        # the scope in the URL (subscription / RG / management group) when the body has none
         "kind": str(props.get("kind", "allow")).lower(),   # "allow" | "deny"
         "denyActions": props.get("denyActions") or [],
         "description": props.get("description") or "",
@@ -511,7 +511,7 @@ def dispatch(store, method: str, path: str,
             if method == "GET":
                 return _get_role_assignment(store, tail[1])
             if method == "PUT":
-                return _put_role_assignment(store, tail[1], payload)
+                return _put_role_assignment(store, tail[1], payload, scope_hint="/" + "/".join(segs[:i - 1]) if i >= 2 else None)
             if method == "DELETE":
                 return _delete_role_assignment(store, tail[1])
     return _err(404, "NotFound", f"Unsupported {method} {path}")
