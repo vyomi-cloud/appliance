@@ -22,3 +22,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | claude (smoke root paths + plugin sync) | v4/mcp-smoke-root-paths | appliance | tools/mcp-hosted-smoke.sh, .github/workflows/{claude-plugins-sync,tunnel-release}.yml, docs/architecture/v4.0/CLAUDE-PLUGINS-SYNC-RUNBOOK.md | 2026-11-23 |
 | claude (vyomi-cloud listing links) | v4/vyomi-cloud-listing-urls | appliance | integrations/claude-plugins/** (README links, versions 4.3.1) | 2026-11-23 |
 | claude (MCP regen rule + guard) | v4/mcp-caps-regen-guard | appliance | CLAUDE.md (rule 10 + enforcement line), scripts/claude-hooks/v4-guard.py, docs/architecture/v4.0/branches/mcp-caps-regen-guard.md | 2026-11-23 |
+| claude (Labs: Design the RAG chapter) | v4/labs-design-rag | appliance | vyomilabs/**, wasm/labs/**, courses/vyomi-labs-facilities-agent/**, docs/architecture/v4.0/branches/{labs-design-rag,vyomi-labs}.md | 2026-11-26 |
