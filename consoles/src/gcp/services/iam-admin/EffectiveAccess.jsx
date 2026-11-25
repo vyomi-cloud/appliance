@@ -1,17 +1,25 @@
 /* Effective access (Policy Troubleshooter style): principal + permission + resource -> POST /api/iam/gcp/evaluate ->
  * granted/denied, reason, and the matching allow/deny bindings. Sits beside the Policy Troubleshooter (testIamPermissions). */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, Chip, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from "@mui/material";
 import { reasonText } from "../../../common/iamEnforce.js";
 import { useIamApi } from "../../../common/iamEnforceHooks.js";
 import { PageHeader, Section } from "../../kit/common.jsx";
 import { getProject } from "../../project.js";
+import { PermissionAutocomplete, PrincipalPicker, ResourceAutocomplete } from "./pickers.jsx";
+import { usePickerData } from "./usePickerData.js";
+import * as iamApi from "./api.js";
 
 export default function EffectiveAccess() {
   const api = useIamApi("gcp");
-  const [principal, setPrincipal] = useState("");
+  const data = usePickerData({ withPrincipals: true });
+  const [principals, setPrincipals] = useState([]);
+  const principal = principals[0] || "";
   const [perm, setPerm] = useState("");
   const [resource, setResource] = useState(`//cloudresourcemanager.googleapis.com/projects/${getProject()}`);
+  const [buckets, setBuckets] = useState([]);
+  useEffect(() => { iamApi.searchAssets("", { assetTypes: "storage.googleapis.com/Bucket" }).then((r) => setBuckets(r.map((x) => x.name).filter(Boolean)), () => {}); }, []);
+  const resourceOptions = [`//cloudresourcemanager.googleapis.com/projects/${getProject()}`, ...data.principals.filter((p) => p.member.startsWith("serviceAccount:")).map((p) => `//iam.googleapis.com/projects/${getProject()}/serviceAccounts/${p.member.slice(15)}`), ...buckets];
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -26,9 +34,9 @@ export default function EffectiveAccess() {
       <Stack spacing={2}>
         <Section title="Check a permission" description="Evaluated by the same engine that enforces requests: allow policies with inheritance, deny policies and conditions.">
           <Stack spacing={2} sx={{ maxWidth: 640 }}>
-            <TextField required label="Principal" value={principal} onChange={(e) => setPrincipal(e.target.value.trim())} helperText="e.g. user:dev@example.com or serviceAccount:sa@project.iam.gserviceaccount.com" />
-            <TextField required label="Permission" value={perm} onChange={(e) => setPerm(e.target.value)} helperText="e.g. storage.objects.get" />
-            <TextField required label="Resource" value={resource} onChange={(e) => setResource(e.target.value)} helperText="Full resource name" />
+            <PrincipalPicker label="Principal" value={principals} onChange={(v) => setPrincipals(v.slice(-1))} options={data.principals} />
+            <PermissionAutocomplete value={perm} onChange={setPerm} permissions={data.permissions} />
+            <ResourceAutocomplete value={resource} onChange={setResource} options={resourceOptions} />
             <div><Button variant="contained" disabled={!principal || !perm || busy} onClick={run}>{busy ? "Checking…" : "Check access"}</Button></div>
           </Stack>
         </Section>

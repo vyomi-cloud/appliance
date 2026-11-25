@@ -1,12 +1,15 @@
 /* IAM enforcement (Off / Audit / Enforce) + decision audit list, Material-native.
  *   <EnforcementPanel service resource />  compact panel for resource Permissions tabs and the IAM page
  *   default export                          IAM & Admin > Enforcement page (global, space, per-service, per-resource, Audit tab) */
-import { useState } from "react";
-import { Alert, Box, Button, Chip, MenuItem, Select, Stack, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
+import { useEffect, useState } from "react";
+import { Alert, Autocomplete, Box, Button, Chip, MenuItem, Select, Stack, Tab, Table, TableBody, TableCell, TableHead, TableRow, Tabs, TextField, ToggleButton, ToggleButtonGroup, Typography } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/esm/Refresh.js";
 import { MODES, MODE_LABEL, MODE_HELP, SOURCE_LABEL, SERVICES, auditLabel, filterAudit } from "../../../common/iamEnforce.js";
 import { useAudit, useEnforcement } from "../../../common/iamEnforceHooks.js";
 import { PageHeader, Section } from "../../kit/common.jsx";
+import { usePickerData } from "./usePickerData.js";
+import { searchAssets } from "./api.js";
+import { getProject } from "../../project.js";
 
 const CLOUD = "gcp";
 const COLOR = { off: "default", audit: "warning", enforce: "success" };
@@ -45,10 +48,13 @@ export function EnforcementPanel({ service, resource, title = "IAM enforcement" 
 function SettingsTab() {
   const e = useEnforcement(CLOUD);
   const [res, setRes] = useState("");
+  const data = usePickerData();
+  const [resOptions, setResOptions] = useState([`//cloudresourcemanager.googleapis.com/projects/${getProject()}`]);
+  useEffect(() => { searchAssets("", { assetTypes: "storage.googleapis.com/Bucket" }).then((r) => setResOptions((o) => [...new Set([...o, ...r.map((x) => x.name).filter(Boolean)])]), () => {}); }, []);
   if (e.loading) return <Typography variant="body2">Loading…</Typography>;
   if (e.error && !e.settings) return <Alert severity="error">Could not load enforcement settings: {e.error.message}</Alert>;
   const s = e.settings;
-  const svcs = [...new Set([...SERVICES[CLOUD], ...Object.keys(s.services)])];
+  const svcs = [...new Set([...SERVICES[CLOUD], ...Object.keys(s.services), ...data.services])];
   return (
     <Stack spacing={2}>
       {e.error && <Alert severity="error">{e.error.message}</Alert>}
@@ -66,7 +72,7 @@ function SettingsTab() {
               <TableCell><ModeToggle label={`${k} enforcement mode`} value={s.services[k] || "inherit"} inherit disabled={e.saving} onChange={(m) => e.set("service", k, m)} /></TableCell></TableRow>); })}</TableBody></Table>
       </Section>
       <Section title="Per-resource overrides" actions={<Stack direction="row" spacing={1}>
-        <TextField size="small" value={res} onChange={(ev) => setRes(ev.target.value)} placeholder="//storage.googleapis.com/projects/_/buckets/my-bucket" inputProps={{ "aria-label": "Resource name" }} sx={{ width: 380 }} />
+        <Autocomplete freeSolo size="small" sx={{ width: 380 }} options={resOptions} inputValue={res} onInputChange={(_, v) => setRes(v)} renderInput={(p) => <TextField {...p} placeholder="//storage.googleapis.com/projects/_/buckets/my-bucket" inputProps={{ ...p.inputProps, "aria-label": "Resource name" }} />} />
         <Button variant="outlined" disabled={!res} onClick={() => { e.set("resource", res, "audit"); setRes(""); }}>Add override</Button></Stack>}>
         {Object.keys(s.resources).length === 0 ? <Typography variant="body2" color="text.secondary">No resource overrides. Resources follow their service, space or global mode.</Typography> :
           <Table size="small"><TableHead><TableRow><TableCell>Resource</TableCell><TableCell>Mode</TableCell></TableRow></TableHead>

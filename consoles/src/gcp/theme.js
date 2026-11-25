@@ -71,6 +71,9 @@ export function makeTheme(mode = "light") {
       MuiFormControl: { defaultProps: { size: "small" } },
       MuiPaper: { styleOverrides: { root: { backgroundImage: "none" } } },
       MuiDialog: { styleOverrides: { paper: { borderRadius: 16 } } },
+      // Side panels (Grant access, Add condition) sit at z-index 1300/1400; menus, listboxes and popups opened from them must stack above.
+      MuiPopover: { styleOverrides: { root: { zIndex: 1500 } } },
+      MuiPopper: { styleOverrides: { root: { zIndex: 1500 } } },
       MuiTooltip: { defaultProps: { arrow: false } },
     },
   });
