@@ -43,6 +43,7 @@ RAG = re.compile(r"^/(%s)/projects/([^/]+)/locations/([^/]+)/ragCorpora(?:/([^/:
 RAG_FILES_VERB = re.compile(r"^/(%s)/projects/([^/]+)/locations/([^/]+)/ragCorpora/([^/:]+)/ragFiles(:[A-Za-z]+)$" % _V)
 UPLOAD = re.compile(r"^/upload/(%s)/projects/([^/]+)/locations/([^/]+)/ragCorpora/([^/:]+)/ragFiles:upload$" % _V)
 LOC_VERB = re.compile(r"^/(%s)/projects/([^/]+)/locations/([^/]+):(retrieveContexts|evaluateInstances)$" % _V)
+STUDIO = re.compile(r"^/_vyomi/gcp-rag/([^/]+)/([^/]+)/([^/]+)/(chunks|retrieve-trace)/?$")   # Vyomi extension: RAG Studio inspect API
 EVAL = re.compile(r"^/(%s)/projects/([^/]+)/locations/([^/]+)/evaluationRuns(?:/([^/:]+))?(:cancel)?/?$" % _V)
 CHILD = re.compile(r"^/(%s)/projects/([^/]+)/locations/([^/]+)/reasoningEngines/([^/:]+)/(memories|sessions)(?:/([^/:]+))?(?:/(events))?(:[A-Za-z]+)?/?$" % _V)
 DE = re.compile(r"^/(%s)/projects/([^/]+)/locations/([^/]+)/collections/([^/]+)/(dataStores|engines)(?:/([^/:]+))?"
@@ -57,7 +58,7 @@ class _Err(Exception):
 
 def handles(path):
     p = path.split("?", 1)[0]
-    return bool(RAG.match(p) or RAG_FILES_VERB.match(p) or UPLOAD.match(p) or LOC_VERB.match(p) or EVAL.match(p) or DE.match(p) or DE_OP.match(p))
+    return bool(RAG.match(p) or RAG_FILES_VERB.match(p) or UPLOAD.match(p) or LOC_VERB.match(p) or EVAL.match(p) or DE.match(p) or DE_OP.match(p) or STUDIO.match(p))
 
 
 def handles_child(path):
@@ -131,6 +132,8 @@ def dispatch(store, method, path, query=None, headers=None, body=b"", gcs=None):
     q = query or {}
     hd = {(k or "").lower(): v for k, v in (headers or {}).items()}
     try:
+        if STUDIO.match(path):
+            return studio_dispatch(store, method, path, q, body)
         st = _state(store)
         m = UPLOAD.match(path)
         if m and method == "POST":
@@ -382,10 +385,13 @@ def _rag(st, method, m, p, q):
                 raise _Err(400, "INVALID_ARGUMENT", "rag_corpus.display_name: must be set and at most 128 characters.")
             if any(c["displayName"] == dn for n, c in st["corpora"].items() if n.startswith(parent + "/")):
                 raise _Err(409, "ALREADY_EXISTS", f"A RagCorpus with display name `{dn}` already exists.")
+            emb_cfg = _embedding_cfg(p.get("ragEmbeddingModelConfig"))
             name = f"{parent}/ragCorpora/{_numid()[:16]}"
             now = _iso()
             c = {"name": name, "displayName": dn, "description": p.get("description", ""), "createTime": now, "updateTime": now, "corpusStatus": {"state": "ACTIVE"},
                  "vectorDbConfig": p.get("vectorDbConfig") or {"ragManagedDb": {}}, "_files": {}}
+            if emb_cfg:
+                c["ragEmbeddingModelConfig"] = emb_cfg
             st["corpora"][name] = c
             return _out(200, _lro(name, _corpus_view(c), "google.cloud.aiplatform.v1.RagCorpus"))
         if method == "GET" and not verb:
@@ -419,6 +425,24 @@ def _rag(st, method, m, p, q):
         del st["corpora"][name]
         return _out(200, _lro(name, None, "google.protobuf.Empty"))
     raise _Err(405, "METHOD_NOT_ALLOWED", "Unsupported.")
+
+
+def _embedding_cfg(cfg):
+    """ragEmbeddingModelConfig.vertexPredictionEndpoint.model (a publisher model: `text-embedding-005`, `publishers/google/models/...`, an
+    endpoint resource path) -> the config echoed back on the corpus. Vyomi has ONE local embedder, so the model must resolve to it (400 otherwise),
+    like the Bedrock knowledge base embeddingModelArn check."""
+    if not cfg:
+        return None
+    vpe = (cfg or {}).get("vertexPredictionEndpoint")
+    if not isinstance(vpe, dict) or not (vpe.get("model") or vpe.get("endpoint")):
+        raise _Err(400, "INVALID_ARGUMENT", "rag_embedding_model_config.vertex_prediction_endpoint.model (or endpoint) must be set.")
+    mid = str(vpe.get("model") or vpe.get("endpoint")).split("/")[-1].split("@")[0]
+    am = _am()
+    if am.CAT.resolve("gcp", mid) != am.CAT.DEFAULT_EMBED:
+        raise _Err(400, "INVALID_ARGUMENT", f"The embedding model `{mid}` is not supported by Vyomi; use a text embedding model such as `text-embedding-005`.")
+    out = dict(vpe)
+    out.setdefault("model", vpe.get("endpoint"))
+    return {"vertexPredictionEndpoint": out}
 
 
 def _corpus_view(c):
@@ -616,6 +640,14 @@ def _dense_scores(qtext, pool_vecs, dims_ok=True):
 
 
 def _retrieve(st, proj, loc, p):
+    ctxs, _trace = _retrieve_core(st, proj, loc, p)
+    return _out(200, {"contexts": {"contexts": ctxs}})
+
+
+def _retrieve_core(st, proj, loc, p):
+    """The retrieval engine behind :retrieveContexts and the Studio's retrieve-trace. -> (contexts, trace); the trace holds every
+    candidate chunk's per-stage scores/ranks and why it was dropped (see studio_dispatch)."""
+    t0 = time.time()
     qtext = ((p.get("query") or {}).get("text") or "").strip()
     if not qtext:
         raise _Err(400, "INVALID_ARGUMENT", "query.text must be set.")
@@ -645,28 +677,38 @@ def _retrieve(st, proj, loc, p):
         if not c:
             raise _Err(404, "NOT_FOUND", f"RagCorpus `{n}` not found.")
         corpora.append((c, set(r.get("ragFileIds") or [])))
-    pool = []
+    pool, excluded = [], []
     for c, only in corpora:
         for fid, f in c["_files"].items():
-            if only and fid not in only:
-                continue
             for i, t in enumerate(f["_chunks"]):
-                pool.append((t, f, i))
+                (excluded if only and fid not in only else pool).append((t, f, i))
+    trace = {"candidates": [], "searchType": "SEMANTIC" if alpha is None or alpha >= 1.0 else ("LEXICAL" if alpha <= 0.0 else "HYBRID"), "alpha": alpha,
+             "reranked": False, "rerankBackend": None, "latencyMs": {}, "embeddingModel": None, "dimensions": 0}
     if not pool:
-        return _out(200, {"contexts": {"contexts": []}})
+        return [], trace
+    stages = {}
     texts = [t for t, _f, _i in pool]
-    qv = llm.embed(qtext)["vectors"][0]
+    t1 = time.time()
+    emb = llm.embed(qtext)
+    qv = emb["vectors"][0]
+    stages["embed"] = (time.time() - t1) * 1000
+    trace["embeddingModel"], trace["dimensions"] = emb.get("model"), len(qv)
     for f in {id(f): f for _t, f, _i in pool}.values():       # an index built by another embedder (dimension mismatch) is re-embedded lazily
         if not f.get("_vecs") or len(f["_vecs"][0]) != len(qv):
             f["_vecs"] = llm.embed(f["_chunks"], dimensions=len(qv))["vectors"]
+    t1 = time.time()
     cos = [llm.cosine(qv, f["_vecs"][i]) for _t, f, i in pool]
+    stages["vector"] = (time.time() - t1) * 1000
+    t1 = time.time()
     lex = kc.bm25(texts, qtext)
+    stages["bm25"] = (time.time() - t1) * 1000
+    t1 = time.time()
     dense_rank = [i for i, _ in sorted(enumerate(cos), key=lambda x: -x[1])]
+    lex_rank = [i for i, _ in sorted(lex.items(), key=lambda x: -x[1])]
+    fused = {}
     if alpha is None or alpha >= 1.0:
         order = dense_rank
     else:
-        lex_rank = [i for i, _ in sorted(lex.items(), key=lambda x: -x[1])]
-        fused = {}
         for r, i in enumerate(dense_rank):
             fused[i] = fused.get(i, 0.0) + alpha / (60 + r + 1)
         for r, i in enumerate(lex_rank):
@@ -674,17 +716,32 @@ def _retrieve(st, proj, loc, p):
         order = [i for i, _ in sorted(fused.items(), key=lambda x: -x[1])]
         if alpha <= 0.0:
             order = [i for i in order if i in lex]       # alpha 0 = sparse (BM25) only
+    ranked_all = list(order)
+    why = {}
     if dthr is not None:
+        for i in order:
+            if not 1.0 - cos[i] <= float(dthr):
+                why[i] = "above vectorDistanceThreshold"
         order = [i for i in order if 1.0 - cos[i] <= float(dthr)]
     if sthr is not None:
+        for i in order:
+            if not cos[i] >= float(sthr):
+                why[i] = "below vectorSimilarityThreshold"
         order = [i for i in order if cos[i] >= float(sthr)]
+    stages["fuse"] = (time.time() - t1) * 1000
     rk = rc.get("ranking") or {}
     ranked = bool(rk.get("rankService") or rk.get("llmRanker"))
+    rr_score, rr_rank = {}, {}
+    pool_n = max(top * 3, top)
     if ranked:
-        cand = order[:max(top * 3, top)]
+        t1 = time.time()
+        cand = order[:pool_n]
         rr = kc.rerank(qtext, [texts[i] for i in cand], top)
         order = [cand[j] for j, _s in rr]
         rr_score = {cand[j]: sc for j, sc in rr}
+        rr_rank = {cand[j]: n + 1 for n, (j, _s) in enumerate(rr)}
+        trace["reranked"], trace["rerankBackend"] = True, kc.rerank_backend()
+        stages["rerank"] = (time.time() - t1) * 1000
     order = order[:top]
     ctxs = []
     for i in order:
@@ -697,7 +754,114 @@ def _retrieve(st, proj, loc, p):
         if ranked:
             ctx["vyomiRerankScore"] = round(rr_score[i], 6)
         ctxs.append(ctx)
-    return _out(200, {"contexts": {"contexts": ctxs}})
+    final = {i: n + 1 for n, i in enumerate(order)}
+    d_rank = {i: n + 1 for n, i in enumerate(dense_rank)}
+    l_rank = {i: n + 1 for n, i in enumerate(lex_rank)}
+    f_rank = {i: n + 1 for n, i in enumerate(ranked_all)}
+    src_of = lambda f: (f.get("gcsSource") or {}).get("uris", [f["name"]])[0]
+    for i, (_t, f, ci) in enumerate(pool):
+        fid = f["name"].rsplit("/", 1)[-1]
+        if i in final:
+            reason = None
+        elif i in why:
+            reason = why[i]
+        elif i not in f_rank:
+            reason = "no lexical match (alpha 0)"
+        elif ranked and i in rr_score:
+            reason = "dropped by rerank"
+        elif ranked and f_rank[i] > pool_n:
+            reason = "below the rerank candidate pool"
+        else:
+            reason = "below top-k"
+        trace["candidates"].append({"chunkId": f"{fid}-{ci}", "fileId": fid, "displayName": f["displayName"], "uri": src_of(f),
+                                    "vector_score": round(cos[i], 6), "vector_rank": d_rank[i], "bm25_score": round(lex.get(i, 0.0), 6), "bm25_rank": l_rank.get(i),
+                                    "fused_score": round(fused[i], 6) if i in fused else None, "fused_rank": f_rank.get(i),
+                                    "rerank_score": round(rr_score[i], 6) if i in rr_score else None, "rerank_rank": rr_rank.get(i),
+                                    "returned": i in final, "final_rank": final.get(i), "filtered_out_reason": reason})
+    for _t, f, ci in excluded:
+        fid = f["name"].rsplit("/", 1)[-1]
+        trace["candidates"].append({"chunkId": f"{fid}-{ci}", "fileId": fid, "displayName": f["displayName"], "uri": src_of(f), "vector_score": None, "vector_rank": None,
+                                    "bm25_score": None, "bm25_rank": None, "fused_score": None, "fused_rank": None, "rerank_score": None, "rerank_rank": None,
+                                    "returned": False, "final_rank": None, "filtered_out_reason": "excluded by ragFileIds filter"})
+    stages["total"] = (time.time() - t0) * 1000
+    trace["latencyMs"] = {k: round(v, 3) for k, v in stages.items()}
+    return ctxs, trace
+
+
+def _pii(text):
+    out = []
+    for k, rx in (("email", r"[\w.+-]+@[\w-]+\.[\w.]+"), ("phone", r"\+?\d[\d\s().-]{8,}\d"), ("ssn", r"\b\d{3}-\d{2}-\d{4}\b")):
+        if re.search(rx, text):
+            out.append(k)
+    return out
+
+
+def _project2d(rows, vecs):
+    """2-D PCA projection (power iteration, pure Python, same method as the Bedrock inspect API) so the Studio can plot clusters without numpy."""
+    n = len(vecs)
+    if n < 2:
+        for r in rows:
+            r["projection2d"] = [0.0, 0.0]
+        return
+    d = len(vecs[0])
+    mean = [sum(v[j] for v in vecs) / n for j in range(d)]
+    X = [[v[j] - mean[j] for j in range(d)] for v in vecs]
+    comps = []
+    for c in range(2):
+        w = [((j * 7919 + c * 104729) % 1000) / 1000.0 - 0.5 for j in range(d)]
+        for _ in range(25):
+            t = [sum(x[j] * w[j] for j in range(d)) for x in X]
+            nw = [sum(X[i][j] * t[i] for i in range(n)) for j in range(d)]
+            norm = sum(a * a for a in nw) ** 0.5 or 1.0
+            w = [a / norm for a in nw]
+        comps.append(w)
+        X = [[x[j] - sum(x[m] * w[m] for m in range(d)) * w[j] for j in range(d)] for x in X]
+    for i, r in enumerate(rows):
+        c = [v - m for v, m in zip(vecs[i], mean)]
+        r["projection2d"] = [round(sum(c[j] * comps[k][j] for j in range(d)), 6) for k in range(2)]
+
+
+def studio_dispatch(store, method, path, query=None, body=b""):
+    """Vyomi extension (outside the Google namespace) for the GCP RAG Studio, the counterpart of the Bedrock `/_vyomi/kb` inspect API:
+    GET  /_vyomi/gcp-rag/{proj}/{loc}/{corpusId}/chunks?vectors=true   every chunk (+ 2-D projection, PII flags, optional vector)
+    POST /_vyomi/gcp-rag/{proj}/{loc}/{corpusId}/retrieve-trace        body = a :retrieveContexts request; -> {contexts, trace}"""
+    try:
+        m = STUDIO.match(path.split("?", 1)[0])
+        if not m:
+            raise _Err(404, "NOT_FOUND", "Unsupported inspect route: " + path)
+        proj, loc, cid, op = m.groups()
+        st = _state(store)
+        name = f"projects/{proj}/locations/{loc}/ragCorpora/{cid}"
+        c = st["corpora"].get(name)
+        if not c:
+            raise _Err(404, "NOT_FOUND", f"RagCorpus `{name}` not found.")
+        if op == "chunks" and method.upper() == "GET":
+            rows, vecs = [], []
+            for fid, f in c["_files"].items():
+                if not f.get("_vecs") or len(f["_vecs"]) != len(f["_chunks"]):
+                    f["_vecs"] = llm.embed(f["_chunks"])["vectors"]
+                for i, t in enumerate(f["_chunks"]):
+                    src = (f.get("gcsSource") or {}).get("uris", [f["name"]])[0]
+                    rows.append({"id": f"{fid}-{i}", "ragFileId": fid, "documentUri": src, "text": t, "tokenCount": max(1, round(len(t.split()) * 1.33)),
+                                 "metadata": {"file": f["displayName"], "source": src, "chunk_index": i}, "section": "", "pii": _pii(t) or "ok",
+                                 "projection2d": None, "vector": None})
+                    vecs.append(f["_vecs"][i])
+            _project2d(rows, vecs)
+            if (query or {}).get("vectors", "false") == "true":
+                for r, v in zip(rows, vecs):
+                    r["vector"] = v
+            emb = ((c.get("ragEmbeddingModelConfig") or {}).get("vertexPredictionEndpoint") or {}).get("model") or ""
+            return _out(200, {"ragCorpus": name, "count": len(rows), "dimensions": len(vecs[0]) if vecs else 0, "embeddingModel": emb, "chunks": rows})
+        if op == "retrieve-trace" and method.upper() == "POST":
+            p = dict(_body(body))
+            p["vertexRagStore"] = p.get("vertexRagStore") or {"ragResources": [{"ragCorpus": name}]}
+            ctxs, trace = _retrieve_core(st, proj, loc, p)
+            return _out(200, {"contexts": {"contexts": ctxs}, "trace": trace})
+        raise _Err(405, "METHOD_NOT_ALLOWED", "Unsupported inspect operation.")
+    except _Err as e:
+        return _am()._g_err(e.status, e.st, e.msg)
+    except llm.LlmUnavailable as e:
+        return _am()._g_err(503, "UNAVAILABLE", str(e))
 
 
 # ═════════════════════════════ evaluation ═════════════════════════════
