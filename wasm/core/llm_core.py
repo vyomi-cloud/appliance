@@ -631,14 +631,24 @@ def _flatten_for_prompt(msgs, tools, choice):
     return ([{"role": "system", "content": "\n\n".join(sysparts)}] if sysparts else []) + out
 
 
+def _only_arguments(v, tools):
+    """The reply is nothing but the arguments of the ONE available tool (what a small model emits instead of the envelope) -> a tool-call value."""
+    if isinstance(v, dict) and v and len(tools) == 1 and not ({"tool_calls", "tool_call", "function_call", "name", "function", "content"} & set(v)) \
+            and set(v) <= set((tools[0]["parameters"] or {}).get("properties") or {}) and not validate(tools[0]["parameters"], v):
+        return {"tool_calls": [{"name": tools[0]["name"], "arguments": v}]}
+    return None
+
+
 def _calls_from_value(v, tools):
     """Parsed JSON -> ([calls], text|None, error|None) for the envelope or the usual near-misses small models emit."""
     names = {t["name"]: t for t in tools}
     if isinstance(v, dict) and isinstance(v.get("content"), str) and "tool_calls" not in v and "name" not in v:
-        return [], v["content"], None
-    if isinstance(v, dict) and v and len(tools) == 1 and not ({"tool_calls", "tool_call", "function_call", "name", "function", "content"} & set(v)) \
-            and set(v) <= set((tools[0]["parameters"] or {}).get("properties") or {}) and not validate(tools[0]["parameters"], v):
-        v = {"tool_calls": [{"name": tools[0]["name"], "arguments": v}]}     # only the arguments of the one available tool: unambiguous
+        inner, ok = extract_json(v["content"]) if v["content"].lstrip()[:1] in "{[" else (None, False)
+        salvaged = _only_arguments(inner, tools) if ok else None      # {"content": "{'asset_id': 'B-12'}"}: the arguments, wrapped as an answer
+        if not salvaged:
+            return [], v["content"], None
+        v = salvaged
+    v = _only_arguments(v, tools) or v
     raw = None
     if isinstance(v, dict):
         raw = v.get("tool_calls") or v.get("tool_call") or v.get("function_call") or ([v] if ("name" in v or "function" in v) else None)
