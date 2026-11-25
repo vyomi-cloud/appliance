@@ -26,6 +26,7 @@ import { scopeFor } from "../common/scopeHelp.js";
 import { BACKENDS_DATA, SUBSTRATE, registryFileFor } from "./kit/Capability.jsx";
 import Home from "./pages/Home.jsx";
 import AllServices from "./pages/AllServices.jsx";
+import PortalMenu from "./kit/PortalMenu.jsx";
 import NoticesPage from "../common/NoticesPage.jsx";
 import ServiceNotSimulated from "./pages/ServiceNotSimulated.jsx";
 import { listStorageAccounts } from "./services/storage/api.js";
@@ -134,17 +135,7 @@ export default function App() {
             </Menu>
           </header>
 
-          {menuOpen && <>
-            <div className="vy-scrim" onClick={() => setMenuOpen(false)} />
-            <nav className="vy-portal-menu" aria-label="Portal menu">
-              <a href="#/allservices"><Add20Regular /> Create a resource</a>
-              <a href="#/"><Home20Regular /> Home</a>
-              <a href="#/allservices"><Grid20Regular /> All services</a>
-              <hr />
-              <div className="vy-pm-head">FAVORITES</div>
-              {SERVICES.map((s) => <a key={s.id} href={`#/${s.id}`}><Glyph id={s.icon} size={20} /> {s.title}</a>)}
-            </nav>
-          </>}
+          {menuOpen && <PortalMenu onClose={() => setMenuOpen(false)} />}
 
           {drawer && (
             <aside className="vy-drawer" aria-label={drawer}>
@@ -200,7 +191,7 @@ export default function App() {
           </div>
 
           <main className="vy-main">
-            {svcId && svcId !== "home" && (
+            {svcId && svcId !== "home" && svcId !== "allservices" && (
               <nav className="vy-crumbs" aria-label="Breadcrumb">
                 <a href="#/">Home</a>
                 {crumbs.map((c, i) => <span key={i}><span className="sep">&gt;</span>{i === crumbs.length - 1 ? <span>{c.text}</span> : <a href={c.href}>{c.text}</a>}</span>)}
