@@ -775,14 +775,14 @@ def _retrieve_core(st, proj, loc, p):
             reason = "below the rerank candidate pool"
         else:
             reason = "below top-k"
-        trace["candidates"].append({"chunkId": f"{fid}-{ci}", "fileId": fid, "uri": src_of(f),
+        trace["candidates"].append({"chunkId": f"{fid}-{ci}", "fileId": fid, "displayName": f["displayName"], "uri": src_of(f),
                                     "vector_score": round(cos[i], 6), "vector_rank": d_rank[i], "bm25_score": round(lex.get(i, 0.0), 6), "bm25_rank": l_rank.get(i),
                                     "fused_score": round(fused[i], 6) if i in fused else None, "fused_rank": f_rank.get(i),
                                     "rerank_score": round(rr_score[i], 6) if i in rr_score else None, "rerank_rank": rr_rank.get(i),
                                     "returned": i in final, "final_rank": final.get(i), "filtered_out_reason": reason})
     for _t, f, ci in excluded:
         fid = f["name"].rsplit("/", 1)[-1]
-        trace["candidates"].append({"chunkId": f"{fid}-{ci}", "fileId": fid, "uri": src_of(f), "vector_score": None, "vector_rank": None,
+        trace["candidates"].append({"chunkId": f"{fid}-{ci}", "fileId": fid, "displayName": f["displayName"], "uri": src_of(f), "vector_score": None, "vector_rank": None,
                                     "bm25_score": None, "bm25_rank": None, "fused_score": None, "fused_rank": None, "rerank_score": None, "rerank_rank": None,
                                     "returned": False, "final_rank": None, "filtered_out_reason": "excluded by ragFileIds filter"})
     stages["total"] = (time.time() - t0) * 1000
