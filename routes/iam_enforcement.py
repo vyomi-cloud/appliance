@@ -41,8 +41,18 @@ def build_api():
         return sp if sp else ctx.STATE
 
     store = modes.HolderSettingsStore(holder, persist=ctx.persist_state)
+    def trail():     # CloudTrail LookupEvents rings of the routers that serve the AWS wire (Mesh: the appliance router and the new-services router)
+        from core import wire_ingress as wi
+        seen, out = set(), []
+        for r in (getattr(wi, "_APPLIANCE_ROUTER", None), getattr(wi, "_NEW_SERVICES_ROUTER", None)):
+            for e in (getattr(r, "trail_events", None) or []):
+                if e["EventId"] not in seen:
+                    seen.add(e["EventId"])
+                    out.append(e)
+        return out
+
     return IamApi(store, state_fn=lambda cloud: ad.state_and_principal(cloud, {}, "", holder())[0],
-                  catalog_fn=_catalog, inventory_fn=_inventory)
+                  catalog_fn=_catalog, inventory_fn=_inventory, trail_fn=trail)
 
 
 def register(app: FastAPI, api=None):
@@ -70,6 +80,24 @@ def register(app: FastAPI, api=None):
     @app.api_route("/_wire/api/iam/{cloud}/audit", methods=["GET", "DELETE"])
     async def _aud(request: Request, cloud: str):
         return await _go(request, cloud, "audit")
+
+    @app.api_route("/api/iam/{cloud}/events", methods=["GET"])
+    @app.api_route("/_wire/api/iam/{cloud}/events", methods=["GET"])
+    async def _events(request: Request, cloud: str):
+        return await _go(request, cloud, "events")
+
+    @app.api_route("/api/iam/{cloud}/events/export", methods=["GET"])
+    @app.api_route("/_wire/api/iam/{cloud}/events/export", methods=["GET"])
+    async def _events_export(request: Request, cloud: str):
+        if holder["api"] is None:
+            holder["api"] = build_api()
+        status, out = holder["api"].handle("GET", f"/api/iam/{cloud}/events/export", dict(request.query_params), None)
+        if status == 200 and "body" in out:
+            from fastapi.responses import Response
+            return Response(out["body"], media_type=out["contentType"], headers={"content-disposition": f'attachment; filename="{out["filename"]}"'})
+        if status == 200:
+            return JSONResponse(out["events"], headers={"content-disposition": f'attachment; filename="{out["filename"]}"'})
+        return JSONResponse(out, status_code=status)
 
     @app.post("/api/iam/{cloud}/evaluate")
     @app.post("/_wire/api/iam/{cloud}/evaluate")

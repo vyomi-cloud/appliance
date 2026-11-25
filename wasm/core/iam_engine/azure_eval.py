@@ -372,8 +372,24 @@ def eval_condition(text, action, context=None):
 
 
 # ------------------------------------------------------------------ evaluation
+def _ts(v):
+    import calendar
+    m = re.match(r"^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)", str(v or ""))
+    return float(calendar.timegm(tuple(int(x) for x in m.groups()) + (0, 0, 0))) if m else None
+
+
 def _active(ra):
-    return not (str(ra.get("assignment_type") or "active").lower() == "eligible" and not ra.get("activated"))
+    """An eligible-but-not-activated assignment grants nothing; a time-bound one (PIM activation, AdminAssign with an expiry) grants only
+    inside [start_date_time, end_date_time) -- so access appears at activation and disappears at expiry with no sweeper."""
+    if str(ra.get("assignment_type") or "active").lower() == "eligible" and not ra.get("activated"):
+        return False
+    if ra.get("start_date_time") or ra.get("end_date_time"):
+        import time
+        now = time.time()
+        s, e = _ts(ra.get("start_date_time")), _ts(ra.get("end_date_time"))
+        if (s is not None and s > now) or (e is not None and e <= now):
+            return False
+    return True
 
 
 def _assignable(role, scope, state):

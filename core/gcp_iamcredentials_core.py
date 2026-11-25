@@ -385,6 +385,29 @@ def issue_from_form(store, b, resolver=None):
 
 # ── dispatch ───────────────────────────────────────────────────────────────
 def dispatch(store, method, path, query=None, headers=None, body=b"", resolver=None):
+    resp = _dispatch(store, method, path, query, headers, body, resolver)
+    try:   # impersonation is an IAM Credentials data-access event: who minted a token / signed as which service account (core/iam_events_core.py)
+        verb = path.split("?", 1)[0].rsplit(":", 1)[-1] if ":" in path.rsplit("/", 1)[-1] else ""
+        if method.upper() == "POST" and verb in _VERBS:
+            try:
+                from core import iam_events_core as _ev
+            except ImportError:   # pragma: no cover
+                import iam_events_core as _ev  # type: ignore
+            sa = path.split("?", 1)[0].rsplit(":", 1)[0].rsplit("/", 1)[-1]
+            try:
+                req = json.loads(body.decode("utf-8")) if body else {}
+            except Exception:
+                req = {}
+            _ev.record_gcp_call("iamcredentials.googleapis.com", "google.iam.credentials.v1.IAMCredentials." + verb[0].upper() + verb[1:],
+                                "projects/-/serviceAccounts/" + sa, _ev.principal_from_headers("gcp", headers), resp.status, True,
+                                {k: req[k] for k in ("scope", "lifetime", "audience", "delegates") if isinstance(req, dict) and k in req},
+                                message="" if resp.status < 400 else "permission denied or invalid request")
+    except Exception:
+        pass
+    return resp
+
+
+def _dispatch(store, method, path, query=None, headers=None, body=b"", resolver=None):
     method = method.upper()
     try:
         payload = json.loads(body.decode("utf-8")) if body else {}

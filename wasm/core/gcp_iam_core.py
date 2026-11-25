@@ -1151,7 +1151,23 @@ def dispatch(store: IamStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"", rm_store=None, logger=None, iamc_store=None) -> GcpIamResponse:
     """Single routing point for the native GCP IAM REST API — what unmodified
-    google-cloud-iam / google-cloud-resource-manager clients speak."""
+    google-cloud-iam / google-cloud-resource-manager clients speak. Every IAM write is also recorded as a Cloud Audit Logs Admin Activity
+    event (core/iam_events_core.py) so the console's IAM activity page and `/api/iam/gcp/events` show real history."""
+    resp = _dispatch(store, method, path, query, headers, body, rm_store, logger, iamc_store)
+    try:
+        try:
+            from core import iam_events_core as _ev
+        except ImportError:   # pragma: no cover - Pyodide flat layout
+            import iam_events_core as _ev  # type: ignore
+        _ev.record_gcp(method, path, resp.status, headers, body)
+    except Exception:
+        pass
+    return resp
+
+
+def _dispatch(store: IamStore, method: str, path: str,
+              query: dict | None = None, headers: dict | None = None,
+              body: bytes = b"", rm_store=None, logger=None, iamc_store=None) -> GcpIamResponse:
     query = query or {}
     method = method.upper()
 

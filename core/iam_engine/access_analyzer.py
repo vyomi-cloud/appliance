@@ -312,6 +312,7 @@ def validate_policy(doc, policy_type="IDENTITY_POLICY", text=None):
             got = _wild_actions(a)
             if got is not None and not got:
                 add("ERROR", "INVALID_ACTION", f"The action {a} does not exist. Verify that the action name is correct.", base + ["Action", j] if isinstance(st.get("Action"), list) else base + ["Action"], sp)
+        _deep_checks(st, base, sp, add, policy_type)
         eff = str(st.get("Effect", "")).lower()
         res = [str(r) for r in _as_list(st.get("Resource"))]
         if eff == "allow" and policy_type == "IDENTITY_POLICY" and any(r == "*" or r.endswith("/*") and r.startswith("arn:aws:iam::") or r in ("arn:aws:iam::*:role/*",) for r in res):
@@ -322,6 +323,104 @@ def validate_policy(doc, policy_type="IDENTITY_POLICY", text=None):
             elif wild:
                 add("SECURITY_WARNING", "PASS_ROLE_WITH_STAR_IN_ACTION_AND_RESOURCE", "Using the iam:PassRole action with wildcards (*) in the action and the resource can be overly permissive because it allows iam:PassRole permissions on multiple resources. We recommend that you specify resource ARNs or add the iam:PassedToService condition key to your statement.", base + ["Resource"], sp)
     return out
+
+
+# ---- catalog-provable resource / condition-key / redundancy checks (ValidatePolicy beyond structure)
+_TPL_CACHE = {}
+
+
+def _tpl_regex(tpl):
+    parts = re.split(r"\$\{[^}]*\}", tpl)
+    rx = ""
+    for n, part in enumerate(parts):
+        rx += re.escape(part)
+        if n < len(parts) - 1:
+            rx += ".*" if n == len(parts) - 2 and not parts[-1] and part.endswith("/") else "[^:/]*"     # a trailing placeholder (object key) may contain '/'
+    return re.compile("^" + rx + "$")
+
+
+def _resource_types(cat, svc, arn):
+    """Resource-type names of the service catalog whose ARN templates match `arn` (empty when none)."""
+    key = (svc, id(cat))
+    if key not in _TPL_CACHE:
+        _TPL_CACHE[key] = [(name, _tpl_regex(t)) for name, tpls in cat.get("resources", {}).items() for t in tpls]
+    return [n for n, rx in _TPL_CACHE[key] if rx.match(arn)]
+
+
+def _canon_key(k):
+    k = re.sub(r"\$\{[^}]*\}", "<key>", k)
+    return re.sub(r"/[^/]*$", "/<key>", k).lower() if "/" in k else k.lower()
+
+
+def _catalog_key_set(cat):
+    return {_canon_key(k) for k in cat.get("conditionKeys", {})}
+
+
+def _cond_keys(cond):
+    out = []
+    for op, body in (cond or {}).items():
+        if isinstance(body, dict):
+            out.extend((op, k) for k in body)
+    return out
+
+
+def _deep_checks(st, base, sp, add, policy_type):
+    acts = [str(a) for a in _as_list(st.get("Action"))] if "Action" in st else []
+    singles = [a for a in acts if ":" in a and "*" not in a and "?" not in a]
+    res_field = "Resource"
+    res = [str(r) for r in _as_list(st.get(res_field))] if res_field in st else []
+    rpath = base + [res_field]
+    done = set()
+    for r in res:
+        if not r.startswith("arn:") or r.count(":") < 5:
+            continue
+        _, _part, rsvc, region, _acct, rest = r.split(":", 5)
+        if "$" in r:
+            continue
+        for a in singles:
+            svc, _, name = a.partition(":")
+            cat = analyze_aws.catalog(svc)
+            if cat is None or name not in cat.get("actions", {}):
+                continue
+            ainfo = cat["actions"][name]
+            if rsvc and rsvc != "*" and rsvc.lower() != svc.lower():
+                if not (svc.lower() == "s3" and rsvc.lower() == "s3-object-lambda"):
+                    add("ERROR", "UNSUPPORTED_RESOURCE_FOR_ACTION", f"The resource {r} is for service {rsvc}, but the action {a} belongs to service {svc}. Use a resource of the {svc} service.", rpath, sp)
+                continue
+            if (r, a) in done:
+                continue
+            done.add((r, a))
+            if region and region != "*" and ("region", r) not in done:
+                done.add(("region", r))
+                regionless = f"arn:{_part}:{rsvc}::{_acct}:{rest}"
+                rt = _resource_types(cat, svc, regionless)
+                if rt and not any("${Region}" in t for n in rt for t in cat["resources"][n]):
+                    add("ERROR", "INVALID_ARN_REGION", f"The resource ARN {r} specifies the Region {region}, but the resource type {'/'.join(rt)} of service {svc} has no Region. Leave the Region field of the ARN empty.", rpath, sp)
+                    continue
+            types = _resource_types(cat, svc, r)
+            sup = ainfo.get("r") or []
+            if types and sup and not (set(types) & set(sup)):
+                add("ERROR", "UNSUPPORTED_ACTION_FOR_RESOURCE", f"The action {a} does not support the resource type {'/'.join(types)} of the resource {r}. Supported resource types for this action: {', '.join(sup)}.", rpath, sp)
+    # condition keys: a service-prefixed key that the service catalog does not define
+    seen_svcs = {a.partition(":")[0].lower() for a in acts if ":" in a and not a.startswith("*")}
+    for op, key in _cond_keys(st.get("Condition")):
+        kp = key.partition(":")
+        if not kp[2] or kp[0].lower() == "aws":
+            continue
+        cat = analyze_aws.catalog(kp[0])
+        if cat is None:
+            continue
+        ks = _catalog_key_set(cat)
+        if _canon_key(key) not in ks:
+            add("ERROR", "INVALID_CONDITION_KEY", f"The condition key {key} does not exist for service {kp[0]}. Verify that the condition key name is correct.", base + ["Condition", op, key], sp)
+    # redundant actions (same statement)
+    lowered = [a.lower() for a in acts]
+    for j, a in enumerate(lowered):
+        dup = a in lowered[:j]
+        cover = next((b for b in lowered if b != a and "*" in b and fnmatch.fnmatchcase(a, b)), None)
+        if dup or cover:
+            why = "is listed more than once" if dup else f"is already covered by {cover}"
+            add("SUGGESTION", "REDUNDANT_ACTION", f"The action {acts[j]} {why} in this statement. Remove the redundant action.", base + ["Action", j] if isinstance(st.get("Action"), list) else base + ["Action"], sp)
 
 
 def _expand_statement_actions(st):

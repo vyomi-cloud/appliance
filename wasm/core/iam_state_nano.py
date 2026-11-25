@@ -205,7 +205,10 @@ def azure_state(reg) -> dict:
             out["subscriptions"][str(rec["name"])] = str(rec.get("id") or "").split("/managementGroups/")[-1].split("/")[0] or None
         if t in _A._AZ_DATA and rec.get("id") and rec.get("name"):     # data-plane names (blob account, OpenAI account, SQL server ...) inherit from the ARM resource
             out["data_scopes"][_A._AZ_DATA[t] % str(rec["name"]).lower()] = rec["id"]
-        if t == _AZ_T[0]:
+        if t in ("microsoft.authorization/roleeligibilityschedules", "microsoft.authorization/roleassignmentschedules"):
+            from core.iam_engine import azure_pim as _pim              # PIM schedules (eligible grant nothing; active ones carry their window)
+            _pim.fold_into_state(out, rec)
+        elif t == _AZ_T[0]:
             out["role_assignments"].append({"id": rec.get("id") or rec.get("name") or "", "principal_id": p.get("principalId") or "",
                                             "principal_type": p.get("principalType"), "scope": _scope_of(rec),
                                             "role_definition_id": p.get("roleDefinitionId") or p.get("roleName") or "",

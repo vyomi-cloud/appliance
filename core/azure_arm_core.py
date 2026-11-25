@@ -1321,6 +1321,15 @@ class AzureArm:
                     return _err(404, "ResourceNotFound", "The autoscale setting was not found.")
                 return _ok({"value": autoscale_engine.history(st)})
         out = self._handle_raw(method, path, query, body)
+        if m != "GET" and ("/microsoft.authorization/" in pl or "/microsoft.managedidentity/" in pl):   # IAM activity feed (core/iam_events_core.py)
+            try:
+                try:
+                    from core import iam_events_core as _iev
+                except ImportError:   # pragma: no cover - Pyodide flat layout
+                    import iam_events_core as _iev  # type: ignore
+                _iev.record_azure(m, str(path), (out or {}).get("status", 200) if isinstance(out, dict) else 200, None, json.dumps(body or {}).encode())
+            except Exception:
+                pass
         if "/managedclusters/" in pl:                  # the KEDA operator loop runs after a kubectl / cluster change
             try:
                 for c in [r for r in self.state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == "microsoft.containerservice/managedclusters"]:

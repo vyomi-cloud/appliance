@@ -342,8 +342,43 @@ def analyze_iam_policy(scope, params, state):
             results.append({"attachedResourceFullName": full_name(point), "iamBinding": binding, "accessControlLists": [acl],
                             "identityList": {"identities": [{"name": m, "analysisState": {"code": "OK"}} for m in members], "groupEdges": []},
                             "fullyExplored": True})
-    return {"mainAnalysis": {"analysisQuery": {"scope": scope, **_echo(params)}, "analysisResults": results, "fullyExplored": True, "nonCriticalErrors": []},
-            "serviceAccountImpersonationAnalysis": [], "fullyExplored": True}
+    out = {"mainAnalysis": {"analysisQuery": {"scope": scope, **_echo(params)}, "analysisResults": results, "fullyExplored": True, "nonCriticalErrors": []},
+           "serviceAccountImpersonationAnalysis": [], "fullyExplored": True}
+    if _flag(params, q + "options.includeDenyPolicies"):
+        out["vyomiDenyAnalysis"] = _deny_analysis(scope, chain, ids, principal, perms, ctx, resource, state)
+        for r in results:       # annotate each allowed permission that a matching deny rule covers
+            for acl in r["accessControlLists"]:
+                for ac in acl["accesses"]:
+                    perm = ac.get("permission")
+                    if perm:
+                        hits = [d for d in out["vyomiDenyAnalysis"]["denyRules"] if any(G._perm_pattern_match(x, perm) for x in d["deniedPermissions"])
+                                and not any(G._perm_pattern_match(x, perm) for x in d["exceptionPermissions"])]
+                        if hits:
+                            ac["vyomiDeniedBy"] = [{"policy": h["policy"], "ruleIndex": h["ruleIndex"], "state": h["state"]} for h in hits]
+    return out
+
+
+def _deny_analysis(scope, chain, ids, principal, perms, ctx, resource, state):
+    """VYOMI EXTENSION (the real analyzeIamPolicy does not evaluate deny policies): the IAM v2 deny rules that apply under `scope` / to the
+    resource, narrowed to the queried identity and permissions, each with its condition state."""
+    rules = []
+    for ap, pol, i, dr in G._deny_rules(state, chain or G.ancestry(scope, state)):
+        if chain is None and scope not in G.ancestry(ap, state):
+            continue
+        dp, ex = list(dr.get("deniedPermissions") or []), list(dr.get("exceptionPermissions") or [])
+        if perms and not any(G._perm_pattern_match(x, p) for x in dp for p in perms):
+            continue
+        if ids is not None and not G._principal_listed(dr.get("deniedPrincipals"), ids, principal, state):
+            continue
+        cond = dr.get("denialCondition")
+        st = "UNCONDITIONAL"
+        if cond and cond.get("expression"):
+            ok, _n = _eval_cond(cond["expression"], ctx, resource or full_name(ap))
+            st = "DENIES" if ok is True else ("DOES_NOT_APPLY" if ok is False else "CONDITIONAL")
+        rules.append({"attachedResourceFullName": full_name(ap), "policy": pol.get("name") or pol.get("displayName") or "", "ruleIndex": i,
+                      "deniedPrincipals": list(dr.get("deniedPrincipals") or []), "exceptionPrincipals": list(dr.get("exceptionPrincipals") or []),
+                      "deniedPermissions": dp, "exceptionPermissions": ex, "denialCondition": cond, "state": st})
+    return {"note": "Vyomi extension: Cloud Asset analyzeIamPolicy does not evaluate deny policies.", "denyRules": rules}
 
 
 def _echo(params):

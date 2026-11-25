@@ -39,6 +39,7 @@ import Pam from "./Pam.jsx";
 import EssentialContacts from "./EssentialContacts.jsx";
 import PolicyTroubleshooter from "./PolicyTroubleshooter.jsx";
 import Enforcement from "./Enforcement.jsx";
+import IamActivity from "./IamActivity.jsx";
 import EffectiveAccess from "./EffectiveAccess.jsx";
 import PolicyAnalyzer from "./PolicyAnalyzer.jsx";
 import WorkloadIdentity from "./WorkloadIdentity.jsx";
@@ -93,6 +94,7 @@ export default {
         { text: "Policy Troubleshooter", href: "#/iam-admin/troubleshooter", icon: TroubleshootIcon },
         { text: "Effective access", href: "#/iam-admin/effective-access", icon: QueryStatsIcon },
         { text: "Enforcement", href: "#/iam-admin/enforcement", icon: ShieldIcon },
+        { text: "Activity", href: "#/iam-admin/activity", icon: QueryStatsIcon },
       ],
     },
     {
@@ -130,6 +132,7 @@ export default {
     { pattern: "/iam-admin/troubleshooter", component: PolicyTroubleshooter },
     { pattern: "/iam-admin/effective-access", component: EffectiveAccess },
     { pattern: "/iam-admin/enforcement", component: Enforcement },
+    { pattern: "/iam-admin/activity", component: IamActivity },
     { pattern: "/iam-admin/analyzer", component: PolicyAnalyzer },
     { pattern: "/iam-admin/workload-identity-pools", component: WorkloadIdentity },
     { pattern: "/iam-admin/groups", component: Groups },

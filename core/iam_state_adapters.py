@@ -104,10 +104,12 @@ def aws_principal(headers, query, store) -> dict:
             # policies / boundary / groups come from aws_state()["principals"][arn] (documents, not ARNs): do not shadow them here
             return {"arn": u["arn"], "type": "user", "account": acct, "tags": u.get("tags") or {}, "access_key_id": akid}
     sess = ((getattr(store, "extras", {}) or {}).get("sts_sessions") or {}).get(akid)
-    if sess:
+    if sess and (sess.get("expires") is None or float(sess["expires"]) > __import__("time").time()):       # an expired session is no principal (ExpiredToken in AWS)
         role = (store.roles or {}).get(sess.get("role_name") or "") or {}
         arn = f"arn:aws:sts::{acct}:assumed-role/{sess.get('role_name')}/{sess.get('session_name', 'session')}"
-        return {"arn": arn, "type": "role", "account": acct, "role_arn": role.get("arn"),
+        tags = dict(role.get("tags") or {})
+        tags.update(sess.get("tags") or {})                  # session tags (AssumeRole Tags / token principal_tags) override the role's
+        return {"arn": arn, "type": "role", "account": acct, "role_arn": role.get("arn"), "tags": tags,
                 "session_policy": sess.get("session_policy"), "access_key_id": akid}
     return {"arn": "", "type": "unknown", "account": acct, "access_key_id": akid}
 
@@ -555,6 +557,9 @@ def azure_openai_account(arm_resources, path, headers) -> str:
     return names[0] if len(names) == 1 else ""
 
 
+_PIM_TYPES = ("microsoft.authorization/roleeligibilityschedules", "microsoft.authorization/roleassignmentschedules")
+
+
 def azure_state(arm_resources, rbac_store=None, graph=None) -> dict:
     """Engine `state` (core/iam_engine/azure_eval.py). `arm_resources`: the flat ARM record map of the Azure space (role assignments, custom
     role definitions and deny assignments are ARM resources there, in ARM shape: properties.principalId ... -> flattened here).
@@ -584,7 +589,10 @@ def azure_state(arm_resources, rbac_store=None, graph=None) -> dict:
             out["management_groups"][str(rec["name"])] = parent.rsplit("/", 1)[-1] or None
         elif t == "microsoft.management/managementgroups/subscriptions" and rec.get("name"):
             out["subscriptions"][str(rec["name"])] = str(rec.get("id") or "").split("/managementGroups/")[-1].split("/")[0] or None
-        if t == "microsoft.authorization/roleassignments":
+        if t in _PIM_TYPES:                    # PIM schedules (core/iam_engine/azure_pim.py): eligible grant nothing, active ones carry their window
+            from core.iam_engine import azure_pim as _pim
+            _pim.fold_into_state(out, rec)
+        elif t == "microsoft.authorization/roleassignments":
             if str((rec.get("properties") or {}).get("kind") or "allow").lower() == "deny":
                 out["deny_assignments"].append(_flat_deny_from_assignment(rec))
             else:

@@ -184,11 +184,18 @@ def _inventory_fn():
     return _inventory
 
 
+def _trail():
+    """CloudTrail ring of the AWS wire router living in THIS interpreter (the relay worker's `_ROUTER`); [] when the bridge runs elsewhere."""
+    import sys
+    r = getattr(sys.modules.get("__main__"), "_ROUTER", None)
+    return list(getattr(r, "trail_events", None) or [])
+
+
 def _api(cloud):
     if cloud not in _apis:
         from core.iam_engine import api
         _apis[cloud] = api.IamApi(settings_store=NanoSettingsStore(cloud), state_fn=lambda c: state_and_principal(c, {}, "")[0],
-                                  catalog_fn=catalog_loader.load, inventory_fn=_inventory_fn, audit_log=audit_log())
+                                  catalog_fn=catalog_loader.load, inventory_fn=_inventory_fn, audit_log=audit_log(), trail_fn=_trail)
     return _apis[cloud]
 
 
@@ -301,6 +308,10 @@ class _NanoHost:
 
     def state(self, cloud, headers, query, path):
         return state_and_principal(cloud, headers, query)
+
+    def azure_arm(self):
+        arm = _registry().get("az_arm")
+        return getattr(arm, "state", None)
 
 
 _AWS_ACTION = re.compile(r"\b([a-z][a-z0-9-]*):[A-Za-z*?]")

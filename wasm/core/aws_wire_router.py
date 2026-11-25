@@ -521,7 +521,7 @@ _SIGNING = {
     "s3vectors": "s3vectors",   # Amazon S3 Vectors (rest-json POST /<Operation>) -> core/s3_vectors_core via the S3 store
     "s3tables": "s3tables",   # Amazon S3 Tables (rest-json /buckets, /namespaces, /tables, /tag) -> core/s3_tables_core via the S3 store
     "elasticloadbalancing": "elbv2",
-    "sts": "sts",
+    "sts": "sts", "rolesanywhere": "rolesanywhere",   # IAM Roles Anywhere CreateSession (POST /sessions) -> core/iam_engine/sts_trust over the IAM store
     "cloudformation": "cloudformation",
     "ssm": "ssm", "scheduler": "scheduler", "pipes": "pipes", "ram": "ram", "organizations": "organizations", "ce": "ce",
     "route53resolver": "dnsfw",   # Route 53 Resolver DNS Firewall control plane (core/dnsfw_core)
@@ -572,7 +572,7 @@ _JSON_CT = {
 # by credential scope). Small but covers the common verbs of each service.
 _QUERY_ACTION = {
     # STS
-    "GetCallerIdentity": "sts",
+    "GetCallerIdentity": "sts", "AssumeRole": "sts", "AssumeRoleWithWebIdentity": "sts", "AssumeRoleWithSAML": "sts",
     # SNS
     "CreateTopic": "sns", "DeleteTopic": "sns", "ListTopics": "sns",
     "Subscribe": "sns", "Unsubscribe": "sns", "ListSubscriptions": "sns",
@@ -1484,11 +1484,74 @@ class AwsWireRouter:
 
     _STS_NS = "https://sts.amazonaws.com/doc/2011-06-15/"
 
-    def _sts(self, params):
+    def _rolesanywhere(self, method, path, query, lheaders, body):
+        """rolesanywhere CreateSession: POST /sessions (the call aws_signing_helper makes with the X.509 identity)."""
+        from core.iam_engine import sts_trust as _st
+        import base64 as _b64
+        hdr = {"content-type": "application/json"}
+        if not (path or "").rstrip("/").endswith("/sessions") or method != "POST":
+            return {"status": 404, "headers": hdr, "body": json.dumps({"message": f"Unsupported Roles Anywhere call {method} {path}"}).encode()}
+        try:
+            doc = json.loads(body.decode("utf-8")) if body else {}
+        except ValueError:
+            doc = {}
+        q = {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()} if isinstance(query, dict) else {}
+        g = lambda k: doc.get(k) or q.get(k)              # noqa: E731
+        try:
+            der = lheaders.get("x-amz-x509", "")
+            pem = "-----BEGIN CERTIFICATE-----\n" + der + "\n-----END CERTIFICATE-----" if der else ""
+            out = _st.roles_anywhere_session(self.iam, g("profileArn"), g("trustAnchorArn"), g("roleArn"), pem, int(g("durationSeconds") or 3600))
+            return {"status": 201, "headers": hdr, "body": json.dumps(out).encode()}
+        except _st.StsError as e:
+            return {"status": e.status, "headers": {**hdr, "x-amzn-errortype": e.code}, "body": json.dumps({"message": e.message}).encode()}
+
+    def _sts_caller(self, lheaders):
+        """The IAM principal that signed an STS request (user / assumed-role session); unsigned or unknown -> the account root."""
+        try:
+            from core import iam_state_adapters as _ad
+            p = _ad.aws_principal(lheaders or {}, "", self.iam)
+        except Exception:
+            p = {}
+        acct = self.iam.account_id
+        if not p or p.get("type") == "unknown" or not p.get("arn"):
+            return {"arn": f"arn:aws:iam::{acct}:root", "type": "root", "account": acct}
+        return p
+
+    def _sts_trust(self, action, params, lheaders):
+        """AssumeRole / AssumeRoleWithWebIdentity / AssumeRoleWithSAML over the role trust policy (core/iam_engine/sts_trust.py)."""
+        from core.iam_engine import sts_trust as _st
+        rid = iam._req_id()
+        caller = self._sts_caller(lheaders) if action == "AssumeRole" else {}
+        try:
+            if action == "AssumeRole":
+                res = _st.assume_role(self.iam, params, caller)
+            elif action == "AssumeRoleWithWebIdentity":
+                res = _st.assume_role_with_web_identity(self.iam, params)
+            else:
+                res = _st.assume_role_with_saml(self.iam, params)
+            self._sts_event(action, params, caller, res, None)
+            return {"status": 200, "headers": {"content-type": "text/xml"}, "body": _st.render(action, res, rid).encode()}
+        except _st.StsError as e:
+            self._sts_event(action, params, caller, None, e)
+            return {"status": e.status, "headers": {"content-type": "text/xml"}, "body": _st.render_error(e, rid).encode()}
+
+    def _sts_event(self, action, params, caller, res, err):
+        """CloudTrail event (with errorCode on a refusal) for the STS call, beside the router's generic one."""
+        try:
+            ev = cte.last(self.trail_events, "sts", action)
+            if ev is None:
+                return
+            cte.annotate(ev, action, params, caller, res, err)
+        except Exception:
+            pass
+
+    def _sts(self, params, lheaders=None):
         """STS GetCallerIdentity — `aws sts get-caller-identity`, the account the
         CLI and SDKs use. The account is the IAM store's, so it matches the ARNs."""
         rid = iam._req_id()   # IAM's request ids (STS sits beside IAM)
         action = params.get("Action", "")
+        if action in ("AssumeRole", "AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+            return self._sts_trust(action, params, lheaders)
         if action == "GetCallerIdentity":
             acct = self.iam.account_id
             body = ('<?xml version="1.0" encoding="UTF-8"?>'
@@ -1616,7 +1679,7 @@ class AwsWireRouter:
     # Query/JSON-protocol services carry an explicit action name (Action= param or the
     # X-Amz-Target header); REST services (S3, Lambda, API Gateway, …) don't, so only the
     # service — not the action — is attributable for them.
-    _ACTION_FROM_QUERY = {"iam", "rds", "vpc", "elbv2", "cloudformation", "sns", "sqs"}
+    _ACTION_FROM_QUERY = {"iam", "sts", "rds", "vpc", "elbv2", "cloudformation", "sns", "sqs"}
 
     def _action_name(self, svc, lheaders, query, body):
         target = lheaders.get("x-amz-target", "") or ""
@@ -1633,7 +1696,7 @@ class AwsWireRouter:
                 _k = self.iam.access_keys.get(akid_m.group(1)) if akid_m else None
                 cte.record(self.trail_events, svc, method_, path_, self._action_name(svc, lheaders, query, body), body,
                            akid_m.group(1) if akid_m else "", (_k or {}).get("user_name", ""),
-                           self._query_params(query, body) if svc in ("sns", "sqs") else None)
+                           self._query_params(query, body) if svc in ("sns", "sqs", "iam", "sts") else None)
         except Exception:
             pass
         if not akid_m:
@@ -2061,6 +2124,15 @@ class AwsWireRouter:
                 _fb = None
             if _fb is not None:
                 r = _fb
+        if method.upper() == "POST" and path.split("?", 1)[0] == "/v1/token":    # sts.googleapis.com token exchange -> Cloud Audit Logs feed
+            try:
+                try:
+                    from core import iam_events_core as _iev
+                except ImportError:     # pragma: no cover - flat module layout
+                    import iam_events_core as _iev  # type: ignore
+                _iev.record_gcp(method, path, r.get("status", 200), headers, body)
+            except Exception:
+                pass
         try:
             lh = _lower_headers(headers)
             svc = self.service_of(method, path, lh, body if isinstance(body, (bytes, bytearray)) else (body or b""), query)
@@ -2110,6 +2182,9 @@ class AwsWireRouter:
             r = s3.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
             return {"status": r.status, "headers": dict(r.headers or {}),
                     "body": r.body or b""}
+
+        if svc == "rolesanywhere":
+            return self._rolesanywhere(method, path, query, lheaders, bytes(body))
 
         if svc == "cloudtrail":
             if (lheaders.get("x-amz-target", "") or "").endswith(".LookupEvents"):
@@ -2899,7 +2974,7 @@ class AwsWireRouter:
         # Query-protocol / XML services
         params = self._query_params(query, body)
         if svc == "sts":
-            return self._sts(params)
+            return self._sts(params, lheaders)
         if svc == "iam":
             params.pop("__caller", None)   # never trust a client-supplied caller; derive it from the signing key
             akid_m = _AKID_RE.search(lheaders.get("authorization", "") or "")

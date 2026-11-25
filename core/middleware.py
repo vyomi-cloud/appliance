@@ -671,7 +671,7 @@ async def provider_api_alias_middleware(request, call_next):
     return response
 
 
-_ANALYSIS_HINT = re.compile(r"^/(?:_wire/)?(?:analyzer|finding(?:v2)?|policy/|resource/scan|v[13]/iam:troubleshoot|v1/(?:projects|folders|organizations)/[^/:]+:analyzeIamPolicy)|/providers/Microsoft\.Authorization/",
+_ANALYSIS_HINT = re.compile(r"^/(?:_wire/)?(?:analyzer|finding(?:v2)?|policy/|resource/scan|v[13]/iam:troubleshoot|v1/(?:projects|folders|organizations)/[^/:]+:analyzeIamPolicy)|/providers/Microsoft\.Authorization/|^/metadata/identity/oauth2/token|/oauth2(?:/v2\.0)?/token$",
                             re.I)
 
 
@@ -695,6 +695,11 @@ async def _iam_analysis_response(request, path: str):
 
 async def _provider_api_alias(request, call_next):
     path = _collapse_doubled_version(request)
+    try:    # the IAM activity feed names the caller of a write even in cores that never see the headers (core/iam_events_core.py)
+        from core import iam_events_core as _iev
+        _iev.CALLER.set({k: v for k, v in request.headers.items() if k.lower() in ("x-cloudlearn-principal", "authorization")})
+    except Exception:
+        pass
     _analysis = await _iam_analysis_response(request, path)
     if _analysis is not None:
         return _analysis

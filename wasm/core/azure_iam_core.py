@@ -466,6 +466,22 @@ def _check_access(store, body: dict) -> AzureIamResponse:
 def dispatch(store, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"") -> AzureIamResponse:
+    """Authorization wire (see _dispatch); every write is recorded as an Activity Log event (core/iam_events_core.py)."""
+    resp = _dispatch(store, method, path, query, headers, body)
+    try:
+        try:
+            from core import iam_events_core as _ev
+        except ImportError:   # pragma: no cover - Pyodide flat layout
+            import iam_events_core as _ev  # type: ignore
+        _ev.record_azure(method, path, resp.status, headers, body)
+    except Exception:
+        pass
+    return resp
+
+
+def _dispatch(store, method: str, path: str,
+              query: dict | None = None, headers: dict | None = None,
+              body: bytes = b"") -> AzureIamResponse:
     """Native-ish Azure Authorization wire:
         PUT  /providers/Microsoft.Authorization/roleDefinitions/{id}
         PUT  /providers/Microsoft.Authorization/roleAssignments/{id}
