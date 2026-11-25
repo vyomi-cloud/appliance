@@ -73,6 +73,10 @@ def run():
              "    try:\n        boto3.client('dynamodb').get_item(TableName='nope', Key={'a': {'S': 'x'}})\n    except ClientError as ex:\n"
              "        return {'code': ex.response['Error']['Code']}\n    return {'code': 'none'}\n")
     _check("botocore ClientError is catchable with its response", o["ok"] and o["result"]["code"] == "ResourceNotFoundException")
+    o = _out("import boto3\n\ndef handler(e, c):\n    ddb = boto3.client('dynamodb')\n    try:\n"
+             "        ddb.get_item(TableName='nope', Key={'a': {'S': 'x'}})\n    except ddb.exceptions.ResourceNotFoundException as ex:\n"
+             "        return ex.response['Error']['Code']\n")
+    _check("client.exceptions.<Code> catches the typed service error", o["ok"] and o["result"] == "ResourceNotFoundException")
 
     # Lambda -> Lambda invoke returns a readable Payload stream
     inner = _fn("def handler(e, c):\n    return {'x': e['n'] * 2}\n", name="inner")

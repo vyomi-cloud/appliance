@@ -57,10 +57,33 @@ class _Body(io.BytesIO):
             yield b
 
 
+_EXC_CLASSES = {}
+
+
+def _exc_class(code):
+    """The class `client.exceptions.<Code>` names: a ClientError subclass per error code, as botocore generates, so
+    `except ddb.exceptions.ConditionalCheckFailedException` catches exactly what the wire raised for that code."""
+    k = _EXC_CLASSES.get(code)
+    if k is None:
+        from botocore.exceptions import ClientError
+        k = _EXC_CLASSES[code] = type(str(code), (ClientError,), {})
+    return k
+
+
+class _ClientExceptions:
+    def __getattr__(self, name):
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if name == "ClientError":
+            from botocore.exceptions import ClientError
+            return ClientError
+        return _exc_class(name)
+
+
 def _client_error(wire_exc):
     try:
-        from botocore.exceptions import ClientError
-        return ClientError(wire_exc.response, wire_exc.args[0].split("when calling the ")[-1].split(" operation")[0] if wire_exc.args else "")
+        code = ((wire_exc.response or {}).get("Error") or {}).get("Code") or ""
+        return _exc_class(code or "ClientError")(wire_exc.response, wire_exc.args[0].split("when calling the ")[-1].split(" operation")[0] if wire_exc.args else "")
     except Exception:  # noqa: BLE001
         return wire_exc
 
@@ -78,6 +101,7 @@ class SdkClient:
         self._svc = service
         self._wc = WireClient(service, _TRANSPORT, region, _models_dir())
         self.meta = _Meta(region)
+        self.exceptions = _ClientExceptions()
 
     def __getattr__(self, name):
         if name.startswith("_"):
