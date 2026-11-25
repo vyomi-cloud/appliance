@@ -1,0 +1,7 @@
+/* AWS services that have a verbatim IAM service-reference catalog (core/iam_catalog/aws/<prefix>.json), as [IAM prefix, display name].
+ * Generated from the catalogs' own "service" and "name" fields. Re-generate when a catalog is added. */
+export const IAM_SERVICES = [
+[ "apigateway", "API Gateway"],[ "backup", "Backup"],[ "bedrock", "Bedrock"],[ "bedrock-agentcore", "Bedrock-Agentcore"],[ "cloudformation", "CloudFormation"],[ "cloudtrail", "CloudTrail"],[ "cloudwatch", "CloudWatch"],[ "logs", "CloudWatch Logs"],[ "cognito-idp", "Cognito User Pools"],[ "ce", "Cost Explorer Service"],[ "dynamodb", "DynamoDB"],[ "ec2", "EC2"],[ "imagebuilder", "EC2 Image Builder"],[ "eks", "EKS"],[ "ecr", "Elastic Container Registry"],[ "elasticloadbalancing", "ELB"],[ "events", "EventBridge"],[ "execute-api", "ExecuteAPI"],[ "iam", "IAM"],[ "kinesis", "Kinesis"],[ "kms", "KMS"],[ "lambda", "Lambda"],[ "networkmanager", "Network Manager"],[ "organizations", "Organizations"],[ "rds", "RDS"],[ "redshift", "Redshift"],[ "tag", "Resource Group Tagging"],[ "route53", "Route 53"],[ "s3", "S3"],[ "secretsmanager", "Secrets Manager"],[ "securityhub", "SecurityHub"],[ "sns", "SNS"],[ "sqs", "SQS"],[ "states", "Step Functions"],[ "sts", "STS"],[ "ssm", "Systems Manager"],[ "wafv2", "WAF V2"]];
+
+/* The console's "Commonly used services" group (reference: IAM > Create policy > Select a service). Only those with a catalog are listed. */
+export const COMMON_PREFIXES = ["ec2", "iam", "lambda", "rds", "s3", "sns"];

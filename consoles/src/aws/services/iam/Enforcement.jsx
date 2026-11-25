@@ -17,6 +17,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table from "@cloudscape-design/components/table";
 import Tabs from "@cloudscape-design/components/tabs";
+import { ServicePicker, ResourceArnPicker } from "../../kit/PermissionPicker.jsx";
 import { MODES, MODE_LABEL, MODE_HELP, SOURCE_LABEL, SERVICES, auditLabel, filterAudit } from "../../../common/iamEnforce.js";
 import { useAudit, useEnforcement } from "../../../common/iamEnforceHooks.js";
 
@@ -70,7 +71,7 @@ function SettingsTab() {
           <FormField label="This space"><ModeControl ariaLabel="Space enforcement mode" value={s.space} disabled={e.saving} onChange={(m) => e.set("space", null, m)} /></FormField>
         </SpaceBetween>
       </Container>
-      <Table variant="container" header={<Header variant="h2" counter={`(${svcRows.length})`}>Per-service</Header>} items={svcRows} trackBy="key"
+      <Table variant="container" header={<Header variant="h2" counter={`(${svcRows.length})`} actions={<ServicePicker value={null} ariaLabel="Add service override" placeholder="Add a service" onChange={(v) => e.set("service", v, "audit")} />}>Per-service</Header>} items={svcRows} trackBy="key"
         columnDefinitions={[
           { id: "svc", header: "Service", cell: (r) => r.key },
           { id: "eff", header: "Effective mode", cell: (r) => { const x = e.resolve(r.key); return <SpaceBetween direction="horizontal" size="xs"><ModeBadge mode={x.mode} /><Box color="text-body-secondary">{SOURCE_LABEL[x.source]}</Box></SpaceBetween>; } },
@@ -78,8 +79,8 @@ function SettingsTab() {
         ]} />
       <Table variant="container" header={<Header variant="h2" counter={`(${resRows.length})`}
         actions={<SpaceBetween direction="horizontal" size="xs">
-          <Select selectedOption={svc} onChange={({ detail }) => setSvc(detail.selectedOption)} options={SERVICES[CLOUD].map((k) => ({ value: k, label: k }))} placeholder="Service" ariaLabel="Service" />
-          <Input value={res} onChange={({ detail }) => setRes(detail.value)} placeholder="Resource ARN, e.g. arn:aws:s3:::my-bucket" ariaLabel="Resource ARN" />
+          <ServicePicker value={svc} onChange={(v) => { setSvc(v); setRes(""); }} ariaLabel="Service" />
+          <ResourceArnPicker service={svc} value={res} onChange={setRes} />
           <Button disabled={!res} onClick={() => { e.set("resource", res, "audit"); setRes(""); }}>Add override</Button>
         </SpaceBetween>}>Per-resource overrides</Header>} items={resRows} trackBy="key"
         columnDefinitions={[

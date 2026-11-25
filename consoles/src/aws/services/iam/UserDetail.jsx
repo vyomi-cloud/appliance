@@ -35,6 +35,7 @@ import DeleteModal from "../../kit/DeleteModal.jsx";
 import { LastAccessedTab, CloudTrailPolicyGenerator } from "./LastAccessed.jsx";
 import { SshKeysSection, ServiceCredentialsSection, SigningCertsSection } from "./CredentialSections.jsx";
 import * as api from "./api.js";
+import PolicyAttachTable from "../../kit/PolicyAttachTable.jsx";
 
 function PermissionsTab({ userName, reload }) {
   const notify = useNotify();
@@ -42,7 +43,7 @@ function PermissionsTab({ userName, reload }) {
   const [boundaryModal, setBoundaryModal] = useState(false);
   const [boundaryArn, setBoundaryArn] = useState("");
   const [attachModal, setAttachModal] = useState(false);
-  const [attachArn, setAttachArn] = useState("");
+  const [attachArn, setAttachArn] = useState([]);
   const [inlineModal, setInlineModal] = useState(null); // {name, doc} | {name:"", doc:"{...}"} for create
   const user = useAsync(() => api.getUser(userName), [userName]);
 
@@ -81,16 +82,12 @@ function PermissionsTab({ userName, reload }) {
       <Modal visible={attachModal} onDismiss={() => setAttachModal(false)} header="Add permissions"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setAttachModal(false)}>Cancel</Button>
-          <Button variant="primary" disabled={!attachArn} onClick={async () => {
-            try { await api.attachUserPolicy(userName, attachArn); notify.success("Policy attached."); setAttachModal(false); setAttachArn(""); p.reload(); }
+          <Button variant="primary" disabled={!attachArn.length} onClick={async () => {
+            try { for (const arn of attachArn) await api.attachUserPolicy(userName, arn); notify.success("Policy attached."); setAttachModal(false); setAttachArn([]); p.reload(); }
             catch (e) { notify.error(e); }
           }}>Attach policy</Button>
         </SpaceBetween></Box>}>
-        <FormField label="Policy">
-          <Select selectedOption={attachArn ? { value: attachArn, label: allPolicies.find((x) => x.Arn === attachArn)?.PolicyName } : null}
-            onChange={({ detail }) => setAttachArn(detail.selectedOption.value)}
-            options={allPolicies.map((pl) => ({ value: pl.Arn, label: pl.PolicyName }))} placeholder="Choose a policy" />
-        </FormField>
+        <PolicyAttachTable policies={allPolicies} value={attachArn} onChange={setAttachArn} attached={(attached || []).map((a) => a.PolicyArn)} />
       </Modal>
 
       <Modal visible={!!inlineModal} onDismiss={() => setInlineModal(null)} size="large" header="Create inline policy"

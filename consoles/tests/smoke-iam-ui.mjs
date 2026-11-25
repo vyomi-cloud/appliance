@@ -44,8 +44,14 @@ async function open(cloud, mode, viewport, hash) {
     if (u.pathname.includes("/_wire/api/iam/")) {
       iamCalls.push(u.pathname);
       const rq = r.request();
+      const cm = u.pathname.match(/\/api\/iam\/aws\/catalog\/([\w.-]+)$/);
+      if (cm) return r.fulfill({ status: 200, contentType: "application/json", body: await readFile(new URL(`../../core/iam_catalog/aws/${cm[1]}.json`, import.meta.url).pathname, "utf8") });
       const resp = await mock.fetcher(u.pathname + u.search, { method: rq.method(), body: rq.postData() });
       return r.fulfill({ status: resp.status, contentType: "application/json", body: await resp.text() });
+    }
+    if (r.request().method() === "POST" && /Action=(ListUsers|ListRoles)/.test(r.request().postData() || "")) {
+      const a = /Action=(\w+)/.exec(r.request().postData())[1];
+      return r.fulfill({ status: 200, contentType: "text/xml", body: a === "ListUsers" ? `<ListUsersResponse><ListUsersResult><Users><member><UserName>alice</UserName><Arn>arn:aws:iam::000000000000:user/alice</Arn></member></Users></ListUsersResult></ListUsersResponse>` : `<ListRolesResponse><ListRolesResult><Roles/></ListRolesResult></ListRolesResponse>` });
     }
     const SUBID = "00000000-0000-0000-0000-cloudlearn01";
     if (r.request().method() === "GET" && u.pathname.endsWith(`/subscriptions/${SUBID}`)) return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: `/subscriptions/${SUBID}`, subscriptionId: SUBID, displayName: "Vyomi subscription", state: "Enabled" }) });
@@ -79,8 +85,12 @@ for (const mode of ["mesh", "nano"]) {
   await shot(t.page, `aws-${mode}-audit`);
   check(tag("aws: audit would-deny badge"), (await t.page.getByText("Would deny", { exact: true }).count()) >= 1);
   await t.page.goto(`${BASE}${t.prefix}/v4/aws/#/iam/effective-access`);
-  await t.page.getByLabel("Principal ARN").fill("arn:aws:iam::000000000000:user/alice");
-  await t.page.getByLabel("Action", { exact: true }).fill("s3:DeleteBucket");
+  await t.page.getByRole("button", { name: /Choose a user or role/ }).click();
+  await t.page.getByRole("option", { name: /^alice/ }).click();
+  await t.page.getByRole("button", { name: /Choose a service/ }).first().click();
+  await t.page.getByRole("option", { name: /^S3/ }).first().click();
+  await t.page.getByRole("button", { name: /Choose an action/ }).click();
+  await t.page.getByRole("option", { name: /^DeleteBucket(\s|$)/ }).first().click();
   await t.page.getByRole("button", { name: "Evaluate" }).click();
   await t.page.getByTestId("iam-eval-result").waitFor();
   check(tag("aws: effective access denied + reason"), /Denied/.test(await t.page.getByTestId("iam-eval-result").innerText()));
