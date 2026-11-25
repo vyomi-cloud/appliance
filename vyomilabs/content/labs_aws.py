@@ -2,9 +2,17 @@
 vyomilabs/labrun.py executes these blocks in order against a clean simulator, so what the guide shows is what has actually run."""
 
 
-def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False):
-    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox."""
-    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime)
+BOTH = ["nano", "mesh"]
+MESH = ["mesh"]
+
+
+def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False, edition=None, nano_note=None, kind="build", needs_appliance=False):
+    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox.
+    needs_appliance: the block needs the full appliance (IAM Enforce, audit log API); labrun only runs it with --endpoint.
+    edition: which course carries the block: ["nano","mesh"] (default) or ["mesh"] for the paid Mesh course only. nano_note says why a block is not on Nano
+    (or what a Nano learner should expect). kind: build | harden | iam | failure | ship (what the block is for)."""
+    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime,
+                edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
 LAB = {}
@@ -13,7 +21,14 @@ LAB[10] = [
  b("Write the model client", "Every other layer imports these three functions, so keep the names. boto3 reads the simulator address from AWS_ENDPOINT_URL, exactly as it would on real AWS.",
    "vymodels.py", '''
 import json
+import os
+import random
+import time
+
 import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+
 
 def _pick():
     """The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask it, never hard-code a vendor id."""
@@ -24,7 +39,56 @@ def _pick():
 
 
 CHAT_MODEL, EMBED_MODEL = _pick()
-_rt = boto3.client("bedrock-runtime")
+# One attempt per boto3 call: this module owns the retry policy so the learner can see and test it.
+_rt = boto3.client("bedrock-runtime", config=Config(retries={"total_max_attempts": 1}, read_timeout=60))
+
+RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "ModelTimeoutException", "TooManyRequestsException", "InternalServerException"}
+MAX_ATTEMPTS = 4
+
+
+class ModelUnavailable(RuntimeError):
+    """The model kept failing after every retry: surface it, never loop forever."""
+
+
+class BudgetExceeded(RuntimeError):
+    """The spend limit for this layer is used up: refuse the call before it is made."""
+
+
+# Notional price per 1,000 tokens. The simulator's models are free; the numbers only make the meter and the limit tangible.
+PRICE_PER_1K = {"input": 0.003, "output": 0.015, "embed": 0.0001}
+
+
+class Budget:
+    def __init__(self, limit_usd):
+        self.limit, self.spent, self.calls, self.tokens = float(limit_usd), 0.0, 0, {"input": 0, "output": 0}
+
+    def check(self):
+        if self.spent >= self.limit:
+            raise BudgetExceeded("budget of $%.4f used up after %d calls" % (self.limit, self.calls))
+
+    def charge(self, kind, tokens_in=0, tokens_out=0):
+        self.calls += 1
+        self.tokens["input"] += tokens_in
+        self.tokens["output"] += tokens_out
+        self.spent += tokens_in / 1000 * PRICE_PER_1K["embed" if kind == "embed" else "input"] + tokens_out / 1000 * PRICE_PER_1K["output"]
+
+
+BUDGET = Budget(os.environ.get("VY_BUDGET_USD", "1.00"))
+
+
+def _call(fn):
+    """Retry throttling and transient errors with exponential backoff and jitter; anything else (validation, access denied) fails at once."""
+    BUDGET.check()
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            return fn()
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            if code not in RETRYABLE:
+                raise
+            if attempt == MAX_ATTEMPTS:
+                raise ModelUnavailable("%s after %d attempts" % (code, attempt)) from e
+            time.sleep(0.05 * 2 ** attempt + random.random() * 0.05)
 
 
 def _text(resp):
@@ -32,34 +96,54 @@ def _text(resp):
 
 
 def chat(prompt):
-    r = _rt.converse(modelId=CHAT_MODEL, messages=[{"role": "user", "content": [{"text": prompt}]}], inferenceConfig={"maxTokens": 200})
+    r = _call(lambda: _rt.converse(modelId=CHAT_MODEL, messages=[{"role": "user", "content": [{"text": prompt}]}], inferenceConfig={"maxTokens": 200}))
+    BUDGET.charge("chat", r["usage"]["inputTokens"], r["usage"]["outputTokens"])
     return _text(r)
 
 
 def chat_with_tools(prompt, tools):
-    r = _rt.converse(modelId=CHAT_MODEL, messages=[{"role": "user", "content": [{"text": prompt}]}], toolConfig={"tools": tools})
+    r = _call(lambda: _rt.converse(modelId=CHAT_MODEL, messages=[{"role": "user", "content": [{"text": prompt}]}], toolConfig={"tools": tools}))
+    BUDGET.charge("chat", r["usage"]["inputTokens"], r["usage"]["outputTokens"])
     tool = next((b["toolUse"] for b in r["output"]["message"]["content"] if "toolUse" in b), None)
     return {"stop_reason": r["stopReason"], "tool_use": tool, "text": _text(r)}
 
 
 def embed(text):
-    r = _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps({"inputText": text}))
+    r = _call(lambda: _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps({"inputText": text})))
+    BUDGET.charge("embed", len(text.split()))
     return json.loads(r["body"].read())["embedding"]
 '''),
  b("Try all three calls", "A chat call, a tool-calling call and an embedding. The tool definition is the one the agents use later.",
    "try_models.py", '''
-from vymodels import chat, chat_with_tools, embed
+import math
 
-print("chat:", chat("Reply with the single word OK."))
+from vymodels import BUDGET, chat, chat_with_tools, embed
+
+reply = chat("Reply with the single word OK.")
+assert reply.strip(), "the model returned no text"
+print("chat:", reply)
 
 TOOL = {"toolSpec": {"name": "asset_status", "description": "status of an asset by id",
                      "inputSchema": {"json": {"type": "object", "properties": {"asset_id": {"type": "string"}}, "required": ["asset_id"]}}}}
 r = chat_with_tools("What is the status of asset B-12?", [TOOL])
-print("tools: stop_reason =", r["stop_reason"])
+# The point of tool use: the model asked for the tool and named the right argument. A model that answers in prose instead has failed the lesson.
+assert r["stop_reason"] == "tool_use" and r["tool_use"], "the model did not ask for the tool (stop_reason=%s)" % r["stop_reason"]
+assert r["tool_use"]["name"] == "asset_status" and r["tool_use"]["input"].get("asset_id") == "B-12", "wrong tool call: %s" % r["tool_use"]
+print("tools: stop_reason =", r["stop_reason"], "| asked for", r["tool_use"]["name"], r["tool_use"]["input"])
+
+
+def cosine(a, b):
+    return sum(x * y for x, y in zip(a, b)) / math.sqrt(sum(x * x for x in a) * sum(y * y for y in b))
+
 
 v = embed("boiler pressure limit")
-print("embed: vector of", len(v), "numbers")
-''', run="python try_models.py", expect="embed: vector of"),
+near, far = cosine(v, embed("maximum steam pressure for the boiler")), cosine(v, embed("cafeteria lunch menu"))
+# Embeddings are only useful if related text lands closer than unrelated text.
+assert near > far, "embeddings do not separate related from unrelated text (%.2f vs %.2f)" % (near, far)
+print("embed: vector of", len(v), "numbers | related %.2f > unrelated %.2f" % (near, far))
+print("notional cost so far: $%.5f over %d calls" % (BUDGET.spent, BUDGET.calls))
+''', run="python try_models.py", expect="embed: vector of",
+   nano_note="The tool-calling assertion needs a model that follows tool schemas: Qwen2.5 1.5B or larger. The two smallest Nano models may answer in prose and fail it."),
 ]
 
 LAB[7] = [
@@ -1363,3 +1447,9 @@ print("ledger statuses:", sorted({r["status"] for r in rows}), "| executed:", [r
 print("approval is fully audited:", "StartExecution" in names and any(r["status"] == "EXECUTED" for r in rows))
 ''', run="python audit.py", expect="approval is fully audited: True", needs_runtime=True),
 ]
+
+
+# Enterprise additions (least-privilege IAM, failure labs, hardening, the ship-it capstone) live in labs_aws_ent.py and are appended here.
+from .labs_aws_ent import extend  # noqa: E402
+
+extend(LAB, b)
