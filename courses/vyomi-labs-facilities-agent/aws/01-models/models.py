@@ -28,6 +28,10 @@ def chat_with_tools(prompt, tools):
     return {"stop_reason": r["stopReason"], "tool_use": tool, "text": _text(r)}
 
 
-def embed(text):
-    r = _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps({"inputText": text}))
+def embed(text, dimensions=None):
+    """dimensions: ask for a shorter vector when the model supports it (your RAG design sets this); None keeps the model's own size."""
+    body = {"inputText": text}
+    if dimensions:
+        body["dimensions"] = dimensions
+    r = _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps(body))
     return json.loads(r["body"].read())["embedding"]

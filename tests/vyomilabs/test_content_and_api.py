@@ -21,11 +21,11 @@ def _doc(cloud):
 
 
 @pytest.mark.parametrize("cloud", CLOUDS)
-def test_thirteen_layers_same_across_clouds(cloud):
+def test_fourteen_layers_same_across_clouds(cloud):
     d = _doc(cloud)
-    assert sorted(x["id"] for x in d["layers"]) == list(range(1, 14))
+    assert sorted(x["id"] for x in d["layers"]) == list(range(1, 15))
     assert [x["id"] for x in d["layers"]] == [x["id"] for x in _doc("aws")["layers"]], "same build order on every cloud"
-    assert [x["order"] for x in d["layers"]] == list(range(1, 14))
+    assert [x["order"] for x in d["layers"]] == list(range(1, 15))
 
 
 @pytest.mark.parametrize("cloud", CLOUDS)
@@ -78,7 +78,7 @@ def test_api_course_layer_and_static_labs():
     from vyomilabs.server import create_app
     c = TestClient(create_app("http://127.0.0.1:1"))
     d = c.get("/api/course").json()
-    assert d["total"] == 13 and d["done"] == 0 and d["next"] == 10
+    assert d["total"] == 14 and d["done"] == 0 and d["next"] == 10
     assert c.get("/api/health").json()["ok"] is True
     assert c.get("/api/layers/5").json()["title"].startswith("Actions")
     assert c.get("/api/layers/99").status_code == 404

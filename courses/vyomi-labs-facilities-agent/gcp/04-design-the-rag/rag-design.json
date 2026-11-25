@@ -1,0 +1,50 @@
+{
+  "schema": "vyomi.rag-design/v1",
+  "name": "facilities-rag",
+  "cloud": "gcp",
+  "chunking": {
+    "strategy": "FIXED_SIZE",
+    "maxTokens": 200,
+    "overlapPct": 10
+  },
+  "embedding": {
+    "model": "",
+    "dimensions": null
+  },
+  "retrieve": {
+    "topK": 3,
+    "searchType": "SEMANTIC",
+    "hybridWeight": 0.5,
+    "filter": null
+  },
+  "rerank": {
+    "enabled": false,
+    "topN": 2
+  },
+  "generate": {
+    "groundingThreshold": 0
+  },
+  "sources": [
+    {
+      "bucket": "facilities-docs",
+      "prefix": "docs/"
+    }
+  ],
+  "golden": [
+    {
+      "question": "What should I do when boiler pressure exceeds 30 psi?",
+      "expectedSources": [
+        "boiler-sop"
+      ],
+      "expectedAnswer": "close the main steam valve"
+    },
+    {
+      "question": "AHU-7 supply air temperature drift chilled water valve",
+      "expectedSources": [
+        "hvac-maintenance-manual"
+      ],
+      "expectedAnswer": ""
+    }
+  ],
+  "createdAt": "2026-11-26T09:00:00Z"
+}

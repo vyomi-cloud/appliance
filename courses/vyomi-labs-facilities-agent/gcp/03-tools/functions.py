@@ -25,6 +25,9 @@ def zip_of(source_file):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("main.py", open(source_file).read())
+        for extra in ("rag_design.py", "rag-design.json"):        # the tools read your RAG design at run time
+            if os.path.exists(extra):
+                z.write(extra)
         z.writestr("requirements.txt", "google-cloud-firestore\ngoogle-cloud-aiplatform\ngoogle-cloud-storage\n")
     return buf.getvalue()
 

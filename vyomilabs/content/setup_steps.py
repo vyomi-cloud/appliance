@@ -73,6 +73,12 @@ STEPS = {
 }
 
 
+STEPS["aws"][14] = [s("Design the RAG in RAG Studio", "/bedrock/knowledge-bases/studio", ["Open Bedrock, Knowledge bases, then RAG Studio.", "Load the course documents, change one setting at a time (chunk size, search type, top K, rerank) and run the golden set after each change.", "Keep the design that scores best, then Save JSON and keep the file as rag-design.json."], {"Design name": "facilities-rag"}, "Bedrock RAG Studio")]
+STEPS["gcp"][14] = [s("Design the RAG in RAG Studio", None, ["Open Vertex AI, then RAG Studio.", "Load the course documents, change one setting at a time (chunk size, search type, top K, rerank) and run the golden set after each change.", "Keep the design that scores best, then export it and keep the file as rag-design.json."], {"Design name": "facilities-rag"}, "Vertex AI RAG Studio",
+                    note="Every cloud's console has the same RAG Studio, and every one exports the same rag-design.json.")]
+STEPS["azure"][14] = [s("Design the RAG in RAG Studio", None, ["Open AI Search, then RAG Studio.", "Load the course documents, change one setting at a time (chunk size, search type, top K, rerank) and run the golden set after each change.", "Keep the design that scores best, then export it and keep the file as rag-design.json."], {"Design name": "facilities-rag"}, "Azure AI Search RAG Studio",
+                      note="Every cloud's console has the same RAG Studio, and every one exports the same rag-design.json.")]
+
 _CLICK = {"Create the AgentCore runtime", "Create the knowledge base", "Create the guardrail", "Create the memory", "Create the gateway", "Open the agent deployments", "Create the RAG corpus", "Create the memory bank"}
 for _c in STEPS.values():
     for _l in _c.values():
