@@ -4,6 +4,7 @@ failure labs and the Ship it capstone. Appended to LAB by labs_aws.extend(); eve
 
 IAMKIT = r'''
 """Least-privilege helper for the IAM Enforce labs: make a principal with an inline policy, switch the simulator to Enforce, and read the audit log."""
+import atexit
 import json
 import os
 import urllib.request
@@ -21,7 +22,11 @@ def _admin(method, path, body=None):
 
 
 def enforce(mode="enforce"):
-    """off | audit | enforce for the whole space. The root test credentials stay allowed; only the IAM users you create are judged."""
+    """off | audit | enforce for the whole space. The root test credentials stay allowed for every service the simulator can map to an IAM action;
+    only the IAM users you create are judged. Enforce is switched back off when your script ends, so the other chapters keep working
+    (a production account would leave it on and map every service)."""
+    if mode != "off":
+        atexit.register(lambda: _admin("PUT", "/api/iam/aws/enforcement", {"space": "off"}))
     return _admin("PUT", "/api/iam/aws/enforcement", {"space": mode})
 
 
@@ -596,4 +601,105 @@ denials = [r for r in recs if r["decision"] == "deny"]
 print("every denial in the trail names a principal and an action:", all(r["principal"] and r["action"] for r in denials), "(%d denials)" % len(denials))
 print("identity audit verified")
 ''', run="python audit_who.py", expect="identity audit verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
+    ]
+
+    # ───────────────────────── chapter 12: knowledge pipeline ─────────────────────────
+    LAB[12] += [
+     b("Re-ingestion is idempotent and edits replace, never duplicate", "An event-driven pipeline will ingest the same document many times: retries, duplicate S3 events, a nightly full sync. This block ingests everything again and asserts the index holds the same chunks, once each. Then it edits the boiler SOP (the limit changes from 30 to 25 psi), re-ingests, and asserts the new text is what retrieval returns and the superseded text is gone: a knowledge base that serves last quarter's limit is a safety problem.",
+       "reingest.py", r'''
+import time
+
+import boto3
+
+ag, rt, s3 = boto3.client("bedrock-agent"), boto3.client("bedrock-agent-runtime"), boto3.client("s3")
+kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+ds = ag.list_data_sources(knowledgeBaseId=kb)["dataSourceSummaries"][0]["dataSourceId"]
+
+
+def ingest():
+    job = ag.start_ingestion_job(knowledgeBaseId=kb, dataSourceId=ds)["ingestionJob"]
+    for _ in range(60):
+        job = ag.get_ingestion_job(knowledgeBaseId=kb, dataSourceId=ds, ingestionJobId=job["ingestionJobId"])["ingestionJob"]
+        if job["status"] in ("COMPLETE", "FAILED"):
+            break
+        time.sleep(0.5)
+    assert job["status"] == "COMPLETE", job
+    return job
+
+
+def chunks(query="boiler pressure"):
+    r = rt.retrieve(knowledgeBaseId=kb, retrievalQuery={"text": query}, retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": 25}})
+    return [x["content"]["text"] for x in r["retrievalResults"]]
+
+
+before = chunks()
+ingest()
+ingest()
+after = chunks()
+assert len(after) == len(set(after)), "re-ingestion duplicated chunks: %d results, %d unique" % (len(after), len(set(after)))
+assert len(after) == len(before), "re-ingesting unchanged documents changed the index size (%d -> %d)" % (len(before), len(after))
+print("ingested twice more: the index still holds", len(after), "chunks, each once")
+
+key = "docs/boiler-sop.md"
+old = s3.get_object(Bucket="facilities-docs", Key=key)["Body"].read().decode()
+assert "30 psi" in old
+s3.put_object(Bucket="facilities-docs", Key=key, Body=old.replace("30 psi", "25 psi").encode(), ContentType="text/markdown")
+try:
+    ingest()
+    fresh = chunks("What boiler pressure triggers the valve closure?")
+    assert any("25 psi" in c for c in fresh), "the edited limit (25 psi) is not retrievable"
+    assert not any("30 psi" in c for c in fresh), "the superseded limit (30 psi) is still served"
+    print("edited SOP: retrieval serves 25 psi and no longer serves 30 psi")
+finally:
+    s3.put_object(Bucket="facilities-docs", Key=key, Body=old.encode(), ContentType="text/markdown")     # restore the original for the later chapters
+    ingest()
+print("idempotent ingestion verified")
+''', run="python reingest.py", expect="idempotent ingestion verified", kind="harden", edition=MESH,
+       nano_note="Not verified on Nano: the Nano knowledge base engine must replace chunks on re-ingestion."),
+     b("Failure lab: a poison message, retries and a dead-letter queue", "Ingestion events arrive through a queue. A malformed event that always fails must not block the queue or retry forever. The queue gets a redrive policy (two receives, then the dead-letter queue). The consumer processes a good event, fails on a poison one, and the block asserts: the good message is deleted, the poison message is retried exactly twice and then lands in the DLQ with its body intact where an operator can inspect it, and the main queue is empty.",
+       "dlq_ingest.py", r'''
+import json
+import time
+
+import boto3
+
+sqs = boto3.client("sqs")
+dlq = sqs.create_queue(QueueName="ingest-events-dlq")["QueueUrl"]
+dlq_arn = sqs.get_queue_attributes(QueueUrl=dlq, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
+q = sqs.create_queue(QueueName="ingest-events", Attributes={
+    "VisibilityTimeout": "1", "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_arn, "maxReceiveCount": "2"})})["QueueUrl"]
+
+
+def process(body):
+    """The consumer: a valid event names an S3 key under docs/; anything else is a poison message."""
+    event = json.loads(body)
+    if not str(event["key"]).startswith("docs/"):
+        raise ValueError("refusing key outside docs/: %r" % event["key"])
+    return event["key"]
+
+
+sqs.send_message(QueueUrl=q, MessageBody=json.dumps({"key": "docs/boiler-sop.md"}))
+sqs.send_message(QueueUrl=q, MessageBody=json.dumps({"key": "../../etc/passwd"}))
+done, attempts = [], {}
+for _ in range(14):
+    for m in sqs.receive_message(QueueUrl=q, MaxNumberOfMessages=5, WaitTimeSeconds=1).get("Messages", []):
+        attempts[m["Body"]] = attempts.get(m["Body"], 0) + 1
+        try:
+            done.append(process(m["Body"]))
+            sqs.delete_message(QueueUrl=q, ReceiptHandle=m["ReceiptHandle"])
+        except Exception as e:
+            print("attempt", attempts[m["Body"]], "failed:", e)          # not deleted: it becomes visible again, up to the redrive limit
+    time.sleep(1.2)
+
+poison = json.dumps({"key": "../../etc/passwd"})
+assert done == ["docs/boiler-sop.md"], "the good message must be processed exactly once, got %s" % done
+assert attempts[poison] == 2, "the poison message must be retried exactly maxReceiveCount=2 times, was %d" % attempts[poison]
+parked = sqs.receive_message(QueueUrl=dlq, WaitTimeSeconds=2).get("Messages", [])
+assert parked and parked[0]["Body"] == poison, "the poison message must be waiting in the dead-letter queue with its body intact"
+left = sqs.get_queue_attributes(QueueUrl=q, AttributeNames=["ApproximateNumberOfMessages", "ApproximateNumberOfMessagesNotVisible"])["Attributes"]
+assert left["ApproximateNumberOfMessages"] == "0" and left["ApproximateNumberOfMessagesNotVisible"] == "0", "the main queue must be drained: %s" % left
+print("poison retried", attempts[poison], "times, then parked in the DLQ; main queue empty")
+print("dead-letter handling verified")
+''', run="python dlq_ingest.py", expect="dead-letter handling verified", kind="failure", edition=MESH,
+       nano_note="Not verified on Nano: needs SQS redrive (RedrivePolicy) in the Nano SQS engine."),
     ]
