@@ -61,7 +61,7 @@ body { font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, B
 .vy-cmdbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 4px 0; border-bottom: 1px solid var(--colorNeutralStroke2); margin-bottom: 12px; }
 .vy-cmdbar .sep { width: 1px; height: 20px; background: var(--colorNeutralStroke2); margin: 0 6px; }
 .vy-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
-.vy-pill { border-radius: 12px !important; min-height: 24px; font-size: 12px !important; background: var(--colorNeutralBackground3) !important; }
+.vy-pill { border-radius: 12px !important; min-height: 24px; font-size: 12px !important; background: #e8f2fa !important; }
 .vy-pill b { font-weight: 600; margin-left: 4px; }
 .vy-count { font-size: 12px; color: var(--colorNeutralForeground2); margin: 6px 0; }
 .vy-grid { width: 100%; }
