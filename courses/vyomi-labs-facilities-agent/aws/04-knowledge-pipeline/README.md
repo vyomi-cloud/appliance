@@ -52,6 +52,22 @@ Deploys the function, lets S3 invoke it, and subscribes the bucket's `docs/` pre
 - Run: `python event_driven.py` (or `./run_all.sh 4` from the project root)
 - You should see: `started ingestion job #2`
 
+### 7. Re-ingestion is idempotent and edits replace, never duplicate
+
+An event-driven pipeline will ingest the same document many times: retries, duplicate S3 events, a nightly full sync. This block ingests everything again and asserts the index holds the same chunks, once each. Then it edits the boiler SOP (the limit changes from 30 to 25 psi), re-ingests, and asserts the new text is what retrieval returns and the superseded text is gone: a knowledge base that serves last quarter's limit is a safety problem.
+
+- File: [`reingest.py`](./reingest.py)
+- Run: `python reingest.py` (or `./run_all.sh 4` from the project root)
+- You should see: `idempotent ingestion verified`
+
+### 8. Failure lab: a poison message, retries and a dead-letter queue
+
+Ingestion events arrive through a queue. A malformed event that always fails must not block the queue or retry forever. The queue gets a redrive policy (two receives, then the dead-letter queue). The consumer processes a good event, fails on a poison one, and the block asserts: the good message is deleted, the poison message is retried exactly twice and then lands in the DLQ with its body intact where an operator can inspect it, and the main queue is empty.
+
+- File: [`dlq_ingest.py`](./dlq_ingest.py)
+- Run: `python dlq_ingest.py` (or `./run_all.sh 4` from the project root)
+- You should see: `dead-letter handling verified`
+
 ## It works when
 
 - documents are in the bucket

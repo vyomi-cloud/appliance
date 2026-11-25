@@ -1,6 +1,6 @@
 from google.genai import types
 
-from models import chat, chat_with_tools, embed
+from vymodels import chat, chat_with_tools, embed
 
 print("chat:", chat("Reply with the single word OK."))
 

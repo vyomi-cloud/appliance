@@ -51,6 +51,14 @@ A second request is rejected: the ledger says `REJECTED`, `create-work-order` re
 - Run: `python reject_request.py` (or `./run_all.sh 9` from the project root)
 - You should see: `decision with a stale ETag refused: 412`
 
+### 7. Approval expiry: nobody answers, the request expires
+
+A request that waits forever is a risk. Every ledger row gets `expires_at`; a sweeper marks PENDING rows past their deadline EXPIRED using an ETag condition, so a row decided a moment earlier is never overwritten (the same optimistic-concurrency rule the decision function uses). The block proves three things: an unanswered request expires, an already-approved request is untouched, and an expired request can no longer be approved.
+
+- File: [`expiry.py`](./expiry.py)
+- Run: `python expiry.py` (or `./run_all.sh 9` from the project root)
+- You should see: `approval expiry verified`
+
 ## It works when
 
 - request parks as PENDING

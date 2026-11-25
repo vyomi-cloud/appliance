@@ -44,6 +44,30 @@ The Firestore ledger approval-ledger is the system of record for the approvals t
 - Run: `python ledger_audit.py` (or `./run_all.sh 13` from the project root)
 - You should see: `approved by duty.manager@example.com`
 
+### 6. Key rotation without re-encrypting data
+
+Rotation adds a new key VERSION and makes it primary; earlier versions still decrypt what they sealed, so nothing already wrapped breaks. The block wraps a data key, creates a new version, promotes it, asserts the primary changed, decrypts the OLD ciphertext (Cloud KMS picks the version from the ciphertext) and wraps again under the new primary.
+
+- File: [`key_rotation.py`](./key_rotation.py)
+- Run: `python key_rotation.py` (or `./run_all.sh 13` from the project root)
+- You should see: `key rotation verified`
+
+### 7. Tamper-evident audit trail
+
+Cloud Audit Logs record the control plane; they cannot prove nobody edited your own approval records. Chain them: each audit document stores the SHA-256 of the previous one plus its own content, so changing, deleting or re-ordering any entry breaks every hash after it. The block writes five events to Firestore, verifies the chain, edits one entry the way an attacker with database access would and asserts the verifier names exactly that entry.
+
+- File: [`audit_chain.py`](./audit_chain.py)
+- Run: `python audit_chain.py` (or `./run_all.sh 13` from the project root)
+- You should see: `audit chain verified`
+
+### 8. Ship it: deploy the stack with Infrastructure Manager
+
+The capstone. Infrastructure Manager runs Terraform for you: you hand it a configuration and a service account, it creates a deployment, a revision and the resources. Here the configuration describes the course's bucket and Pub/Sub topic. The block creates the deployment through the real `config.googleapis.com` REST API, waits for the long-running operation, asserts the revision applied and lists its resources. On real Google Cloud you point `gcsSource` or `gitSource` at the same files, and replace simulator-only values (project id, bucket names must be globally unique) first.
+
+- File: [`ship_it.py`](./ship_it.py)
+- Run: `python ship_it.py` (or `./run_all.sh 13` from the project root)
+- You should see: `ship it verified`
+
 ## It works when
 
 - key with rotation

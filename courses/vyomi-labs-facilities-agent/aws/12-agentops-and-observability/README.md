@@ -22,6 +22,14 @@ AgentCore Evaluations score agent behaviour (correctness, helpfulness, tool sele
 - Run: `python evaluators.py` (or `./run_all.sh 12` from the project root)
 - You should see: `evaluators available:`
 
+### 3. A cost meter and a budget limit per layer
+
+Cost is a feature of an enterprise agent, not an invoice surprise. Every layer gets a meter and a ceiling: tokens in and out are converted to a notional dollar figure (the simulator's models are free, the arithmetic is the lesson), published to CloudWatch with a Layer dimension, and checked against that layer's budget before the next call. The block asserts the metrics are readable per layer, an alarm exists on the budget, and a layer over budget is refused while the others keep working.
+
+- File: [`cost_meter.py`](./cost_meter.py)
+- Run: `python cost_meter.py` (or `./run_all.sh 12` from the project root)
+- You should see: `cost control verified`
+
 ## It works when
 
 - trace can be read back

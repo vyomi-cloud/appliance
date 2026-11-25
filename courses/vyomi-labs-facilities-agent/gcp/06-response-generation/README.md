@@ -8,7 +8,7 @@ _Grounded answers with citations and sensitive data masked_
 
 ### 1. Install the libraries
 
-Chapter 11 answers from retrieved documents and filters the answer before the user sees it. It relies on gcp.py and models.py (chapter 10), search.py (chapter 6) and the knowledge base (chapter 12). The output filter is a Model Armor template: chapter 2 reuses the same template for the input side, and whichever chapter you run first creates it.
+Chapter 11 answers from retrieved documents and filters the answer before the user sees it. It relies on gcp.py and vymodels.py (chapter 10), search.py (chapter 6) and the knowledge base (chapter 12). The output filter is a Model Armor template: chapter 2 reuses the same template for the input side, and whichever chapter you run first creates it.
 
 - File: [`install_11.sh`](./install_11.sh)
 

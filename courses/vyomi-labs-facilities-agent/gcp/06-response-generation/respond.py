@@ -1,4 +1,4 @@
-import models
+import vymodels as models
 from search import search
 
 SYSTEM = "Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say so."

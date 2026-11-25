@@ -46,6 +46,14 @@ Same helper and same question as chapter 3, new session. The agent now discovers
 - Run: `python agent_via_gateway.py` (or `./run_all.sh 8` from the project root)
 - You should see: `tools reached through the gateway: True`
 
+### 6. Failure lab: a denied tool call at the gateway
+
+Writing a Cedar policy proves nothing until the gateway enforces it. This block registers the write tool as a target (so it is discoverable), attaches the policy engine in ENFORCE mode, then makes the two calls an attacker or a confused model would make: the permitted read, and the forbidden write. It asserts the write tool is hidden from discovery, the read works, a direct call to the guessed write name is refused by policy before the Lambda runs, no work order appears, and a malformed argument to the permitted tool is still rejected by the tool's own validation.
+
+- File: [`cedar_enforce.py`](./cedar_enforce.py)
+- Run: `python cedar_enforce.py` (or `./run_all.sh 8` from the project root)
+- You should see: `gateway policy enforcement verified`
+
 ## It works when
 
 - gateway READY

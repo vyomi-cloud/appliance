@@ -3,9 +3,16 @@ vyomilabs/labrun.py executes these blocks in order against a clean simulator (py
 so what the guide shows is what has actually run. Model replies in verification come from the repo's deterministic test stub (tools/llm_stub), not a real model."""
 
 
-def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False):
-    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox."""
-    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime)
+BOTH = ["nano", "mesh"]
+MESH = ["mesh"]
+
+
+def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False, edition=None, nano_note=None, kind="build", needs_appliance=False):
+    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox.
+    needs_appliance: needs the full appliance (labrun only runs it with --endpoint). edition: ["nano","mesh"] (default) or ["mesh"] for the paid Mesh course only.
+    nano_note: why a block is not on Nano or what a Nano learner should expect. kind: build | harden | iam | failure | ship."""
+    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime,
+                edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
 LAB = {}
@@ -92,8 +99,8 @@ LAB[10] = [
    "install_10.sh", "pip install google-genai google-auth google-api-core", lang="bash"),
  b("Write the client factory", "Every chapter imports this one file, so keep the name gcp.py. It reads where the simulator is from VYOMI_ENDPOINT (your lab environment sets it, together with GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_REGION, the Pub/Sub and Firestore emulator hosts and the simulator's gRPC address). On real Google Cloud you would delete the endpoint overrides and the libraries would use your Application Default Credentials.",
    "gcp.py", GCP_PY),
- b("Write the model client", "Every other layer imports these three functions, so keep the names. The model ids are not hard-coded: models.py asks the simulator's Model Garden which models it hosts. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.",
-   "models.py", '''
+ b("Write the model client", "Every other layer imports these three functions, so keep the names. The model ids are not hard-coded: vymodels.py asks the simulator's Model Garden which models it hosts. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.",
+   "vymodels.py", '''
 from google.genai import types
 
 import gcp
@@ -132,7 +139,7 @@ def embed(texts):
    "try_models.py", '''
 from google.genai import types
 
-from models import chat, chat_with_tools, embed
+from vymodels import chat, chat_with_tools, embed
 
 print("chat:", chat("Reply with the single word OK."))
 
@@ -149,7 +156,7 @@ print("embed: vectors of", len(v[0]), "numbers; paraphrase %.2f, unrelated %.2f"
 ]
 
 LAB[3] = [
- b("Install the libraries", "Chapter 3 hosts the agent on Vertex AI Agent Engine and builds the graph with LangGraph. It relies on the gcp.py and models.py files from chapter 10.",
+ b("Install the libraries", "Chapter 3 hosts the agent on Vertex AI Agent Engine and builds the graph with LangGraph. It relies on the gcp.py and vymodels.py files from chapter 10.",
    "install_3.sh", "pip install google-cloud-aiplatform langgraph google-cloud-storage", lang="bash"),
  b("Write the starter tools", "The sub-agents need something to look things up in. Until chapters 7 (tools), 12 (pipeline) and 5 (approval) exist, they use this small in-package data set (the same four SOP documents, three assets and three work orders you will load into Cloud Storage and Firestore later). Those chapters replace each function with a real backend; the agents code below does not change shape.",
    "starter_tools.py", '''
@@ -206,7 +213,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
-import models
+import vymodels as models
 import starter_tools as tools
 
 ROUTER_PROMPT = (
@@ -354,7 +361,7 @@ import gcp
 PKG = "engine_pkg"
 shutil.rmtree(PKG, ignore_errors=True)
 os.makedirs(PKG)
-for f in ("agent_engine_app.py", "agents.py", "models.py", "gcp.py", "starter_tools.py"):
+for f in ("agent_engine_app.py", "agents.py", "vymodels.py", "gcp.py", "starter_tools.py"):
     shutil.copy(f, os.path.join(PKG, f))
 with open(os.path.join(PKG, "requirements.txt"), "w") as f:
     f.write("google-cloud-aiplatform\\ngoogle-genai\\nlanggraph\\n")
@@ -920,13 +927,13 @@ def match(result):
 '''
 
 LAB[11] = [
- b("Install the libraries", "Chapter 11 answers from retrieved documents and filters the answer before the user sees it. It relies on gcp.py and models.py (chapter 10), search.py (chapter 6) and the knowledge base (chapter 12). The output filter is a Model Armor template: chapter 2 reuses the same template for the input side, and whichever chapter you run first creates it.",
+ b("Install the libraries", "Chapter 11 answers from retrieved documents and filters the answer before the user sees it. It relies on gcp.py and vymodels.py (chapter 10), search.py (chapter 6) and the knowledge base (chapter 12). The output filter is a Model Armor template: chapter 2 reuses the same template for the input side, and whichever chapter you run first creates it.",
    "install_11.sh", "pip install google-genai google-cloud-modelarmor google-cloud-aiplatform", lang="bash"),
  b("Write the Model Armor helper", "Model Armor screens text with filters: prompt-injection and jailbreak, harmful content and sensitive data. This helper creates the template facilities-guardrail (or reuses it) and tells you whether a screening result matched a filter.",
    "guardrail.py", GUARDRAIL_PY),
  b("Write the grounded answer function", "Retrieve passages, number them, and ask the model to answer only from them, so every claim can be traced to a source. In this verification the model is the deterministic test stub: it answers with the first retrieved passage and a [1] marker, which is enough to prove the grounding and citation plumbing; a larger model would write a fluent sentence.",
    "respond.py", '''
-import models
+import vymodels as models
 from search import search
 
 SYSTEM = "Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say so."
@@ -1001,7 +1008,7 @@ import rag
 corpus = rag.corpus_name()
 tool = types.Tool(retrieval=types.Retrieval(vertex_rag_store=types.VertexRagStore(
     rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=2)))
-from models import CHAT_MODEL
+from vymodels import CHAT_MODEL
 client = gcp.genai_client()          # keep a reference: a garbage-collected genai client closes its HTTP session
 r = client.models.generate_content(model=CHAT_MODEL, contents="What should I do when boiler pressure exceeds 30 psi?",
                                    config=types.GenerateContentConfig(tools=[tool]))
@@ -1799,3 +1806,9 @@ assert done, "no executed request"
 print("executed:", done[0]["request_id"], "approved by", done[0]["approver"], "-> work order", done[0]["work_order_id"])
 ''', run="python ledger_audit.py", expect="approved by duty.manager@example.com"),
 ]
+
+
+# Enterprise additions (hardening, failure labs, key rotation, tamper evidence, the ship-it capstone) live in labs_gcp_ent.py and are appended here.
+from .labs_gcp_ent import extend  # noqa: E402
+
+extend(LAB, b)

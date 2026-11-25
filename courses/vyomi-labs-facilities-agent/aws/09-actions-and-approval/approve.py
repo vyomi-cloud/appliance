@@ -19,7 +19,7 @@ print("approval request in the inbox:", msg["request_id"], "-", msg["summary"][:
 
 sm = next(s for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval")["stateMachineArn"]
 ex = next(e for e in sf.list_executions(stateMachineArn=sm)["executions"] if e["name"] == msg["request_id"])["executionArn"]
-sf.send_task_success(taskToken=msg["task_token"], output=json.dumps({"approved_by": "duty.manager@example.com"}))
+sf.send_task_success(taskToken=msg["task_token"], output=json.dumps({"decision": "approved"}))   # who approved is not typed into the output: the Enforce step records the real caller
 for _ in range(40):
     d = sf.describe_execution(executionArn=ex)
     if d["status"] != "RUNNING":

@@ -2,7 +2,9 @@
  "cloud": "azure",
  "cloud_name": "Microsoft Azure",
  "ai_platform": "Azure OpenAI / AI Foundry",
- "title": "Build the Enterprise Facilities agent on Microsoft Azure",
+ "edition": "mesh",
+ "schema": 2,
+ "title": "Build the Enterprise Facilities agent on Microsoft Azure (Mesh, enterprise)",
  "image": "img/azure.svg",
  "repo": "vyomi-cloud/vyomi-labs-facilities-agent",
  "repo_path": "",
@@ -15,8 +17,8 @@
   1800,
   1270
  ],
- "total_minutes": 445,
- "updated": "November 25, 2026",
+ "total_minutes": 469,
+ "updated": "November 26, 2026",
  "layers": [
   {
    "id": 10,
@@ -115,7 +117,14 @@
      "code": "pip install azure-core azure-identity azure-mgmt-resource azure-mgmt-cognitiveservices openai\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the shared Azure settings",
@@ -125,7 +134,14 @@
      "code": "import os\nimport time\nfrom urllib.parse import urlparse\n\nENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\nHTTP_ENDPOINT = os.environ.get(\"VYOMI_AZURE_HTTP_ENDPOINT\", ENDPOINT)   # the same simulator on plain http, used by functions and containers\nAMQP_PORT = int(os.environ.get(\"VYOMI_AZURE_AMQP_PORT\", \"5672\"))        # Service Bus AMQP 1.0 listener\nSUB = os.environ.get(\"AZURE_SUBSCRIPTION_ID\", \"00000000-0000-0000-0000-cloudlearn01\")\nRG = \"rg-facilities\"\nLOC = \"eastus\"\nTENANT = \"facilities-tenant\"\nHOST = urlparse(ENDPOINT).hostname or \"localhost\"\nSTORAGE = \"devstoreaccount1\"\nACCOUNT_KEY = \"Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==\"   # the public Azurite development key\nCHAT, EMBED = \"chat\", \"embed\"                                            # your deployment names\nOPENAI_ACCOUNT = \"facilities-openai\"\n\n_cache = {}\n\n\nclass DevToken:\n    \"\"\"A TokenCredential that always returns the same development token (the simulator does not check it).\"\"\"\n    def get_token(self, *scopes, **kwargs):\n        from azure.core.credentials import AccessToken\n        return AccessToken(os.environ.get(\"VYOMI_ACCESS_TOKEN\", \"vyomi-local\"), int(time.time()) + 3600)\n\n\ndef arm(cls, **kw):\n    \"\"\"Any azure-mgmt-* client, pointed at the simulator.\"\"\"\n    if cls not in _cache:\n        _cache[cls] = cls(DevToken(), SUB, base_url=ENDPOINT, polling_interval=0, **kw)\n    return _cache[cls]\n\n\ndef rid(provider, kind, name):\n    return f\"/subscriptions/{SUB}/resourceGroups/{RG}/providers/{provider}/{kind}/{name}\"\n\n\ndef ensure_rg():\n    from azure.mgmt.resource.resources import ResourceManagementClient\n    arm(ResourceManagementClient).resource_groups.create_or_update(RG, {\"location\": LOC})\n\n\ndef pick_models():\n    \"\"\"The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Returns (chat, embedding) as\n    the {format, name, version} a deployment needs. Never hard-code a vendor model.\"\"\"\n    from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient\n    ms = [{\"format\": m.model.format, \"name\": m.model.name, \"version\": m.model.version} for m in arm(CognitiveServicesManagementClient).models.list(LOC) if m.kind == \"OpenAI\"]\n    emb = [m for m in ms if \"embed\" in m[\"name\"] or \"minilm\" in m[\"name\"]]\n    return [m for m in ms if m not in emb][0], emb[0]\n\n\ndef aoai(api_version=\"2024-10-21\"):\n    from openai import AzureOpenAI\n    key = (\"aoai\", api_version)\n    if key not in _cache:\n        _cache[key] = AzureOpenAI(azure_endpoint=ENDPOINT, api_key=\"vyomi-local\", api_version=api_version, max_retries=0, timeout=120)\n    return _cache[key]\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the Azure OpenAI account and the two deployments",
@@ -135,27 +151,48 @@
      "code": "from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient\nfrom azlab import arm, ensure_rg, pick_models, RG, LOC, OPENAI_ACCOUNT, CHAT, EMBED\n\nensure_rg()\ncs = arm(CognitiveServicesManagementClient)\ncs.accounts.begin_create(RG, OPENAI_ACCOUNT, {\"location\": LOC, \"kind\": \"OpenAI\", \"sku\": {\"name\": \"S0\"},\n                                              \"properties\": {\"customSubDomainName\": OPENAI_ACCOUNT}}).result()\nchat_model, embed_model = pick_models()\nfor name, model in ((CHAT, chat_model), (EMBED, embed_model)):\n    cs.deployments.begin_create_or_update(RG, OPENAI_ACCOUNT, name, {\"sku\": {\"name\": \"Standard\", \"capacity\": 1},\n        \"properties\": {\"model\": model}}).result()\nprint(\"deployments:\", sorted(d.name for d in cs.deployments.list(RG, OPENAI_ACCOUNT)))\n",
      "run": "python create_openai.py",
      "expect": "deployments: ['chat', 'embed']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the model client",
      "text": "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a larger hosted model.",
-     "file": "models.py",
+     "file": "vymodels.py",
      "lang": "python",
      "code": "import json\nfrom azlab import aoai, CHAT, EMBED\n\n\ndef chat(prompt, system=None):\n    msgs = ([{\"role\": \"system\", \"content\": system}] if system else []) + [{\"role\": \"user\", \"content\": prompt}]\n    r = aoai().chat.completions.create(model=CHAT, messages=msgs, max_tokens=200, temperature=0)\n    return r.choices[0].message.content\n\n\ndef chat_with_tools(prompt, tools):\n    r = aoai().chat.completions.create(model=CHAT, messages=[{\"role\": \"user\", \"content\": prompt}], tools=tools, tool_choice=\"auto\")\n    m = r.choices[0].message\n    call = m.tool_calls[0] if m.tool_calls else None\n    return {\"finish_reason\": r.choices[0].finish_reason,\n            \"tool_use\": {\"name\": call.function.name, \"input\": json.loads(call.function.arguments)} if call else None,\n            \"text\": m.content or \"\"}\n\n\ndef embed(text):\n    return aoai().embeddings.create(model=EMBED, input=[text]).data[0].embedding\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Try chat, a tool call and an embedding",
      "text": "A chat turn, a tool-calling turn (the model asks for `asset_status`, your code would run it) and an embedding (a list of numbers: its length depends on the embedding model your simulator hosts). The tool definition is the one the agents use later.",
      "file": "try_models.py",
      "lang": "python",
-     "code": "from models import chat, chat_with_tools, embed\n\nprint(\"chat:\", chat(\"Reply with the single word OK.\"))\n\nTOOL = {\"type\": \"function\", \"function\": {\"name\": \"asset_status\", \"description\": \"Look up an asset by id\",\n        \"parameters\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}}}\nr = chat_with_tools(\"What is the status of asset B-12?\", [TOOL])\nprint(\"tools: finish_reason =\", r[\"finish_reason\"], \"| tool =\", r[\"tool_use\"])\n\nprint(\"embed: vector of\", len(embed(\"boiler pressure limit\")), \"numbers\")\n",
+     "code": "from vymodels import chat, chat_with_tools, embed\n\nprint(\"chat:\", chat(\"Reply with the single word OK.\"))\n\nTOOL = {\"type\": \"function\", \"function\": {\"name\": \"asset_status\", \"description\": \"Look up an asset by id\",\n        \"parameters\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}}}\nr = chat_with_tools(\"What is the status of asset B-12?\", [TOOL])\nprint(\"tools: finish_reason =\", r[\"finish_reason\"], \"| tool =\", r[\"tool_use\"])\n\nprint(\"embed: vector of\", len(embed(\"boiler pressure limit\")), \"numbers\")\n",
      "run": "python try_models.py",
      "expect": "embed: vector of",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Streaming, smaller embeddings and an unknown deployment",
@@ -165,7 +202,14 @@
      "code": "from openai import NotFoundError\nfrom azlab import aoai, CHAT, EMBED\n\nchunks = [c for c in aoai().chat.completions.create(model=CHAT, messages=[{\"role\": \"user\", \"content\": \"hi\"}], stream=True)]\nprint(\"stream:\", len(chunks), \"chunks\")\n\nsmall = aoai().embeddings.create(model=EMBED, input=\"a\", dimensions=256)\nprint(\"embedding with dimensions=256:\", len(small.data[0].embedding), \"numbers\")\n\ntry:\n    aoai().chat.completions.create(model=\"no-such-deployment\", messages=[{\"role\": \"user\", \"content\": \"x\"}])\nexcept NotFoundError as e:\n    print(\"unknown deployment ->\", e.status_code, getattr(e, \"code\", \"\"))\n",
      "run": "python try_more.py",
      "expect": "unknown deployment -> 404",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -326,7 +370,11 @@
      "how": "client.chat.completions.create(model='chat', messages=[...])",
      "expect": "A reply and token usage"
     }
-   ]
+   ],
+   "blocks_total": 6,
+   "blocks_nano": 6,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 3,
@@ -422,7 +470,14 @@
      "code": "pip install azure-ai-agents azure-core azure-mgmt-appcontainers azure-mgmt-resource openai langgraph fastapi uvicorn requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the supervisor and the three sub-agents in Foundry",
@@ -432,7 +487,14 @@
      "code": "import time\nfrom azure.ai.agents import AgentsClient\nfrom azlab import ENDPOINT, DevToken, CHAT\n\nclient = AgentsClient(endpoint=f\"{ENDPOINT}/api/projects/facilities-project\", credential=DevToken())\n\nTOOLS = [\n    {\"type\": \"function\", \"function\": {\"name\": \"kb_search\", \"description\": \"Search the facilities knowledge base (read-only).\",\n        \"parameters\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"]}}},\n    {\"type\": \"function\", \"function\": {\"name\": \"asset_status\", \"description\": \"Look up an asset and its work orders (read-only).\",\n        \"parameters\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}}},\n    {\"type\": \"function\", \"function\": {\"name\": \"create_work_order\", \"description\": \"Request a work order (needs human approval).\",\n        \"parameters\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}, \"summary\": {\"type\": \"string\"}}, \"required\": [\"asset_id\", \"summary\"]}}},\n]\nAGENTS = ((\"facilities_supervisor\", \"You route facilities requests to the Facilities, Maintenance and Analytics agents and combine their answers.\", TOOLS),\n          (\"facilities_facilities\", \"Answer from the knowledge base only, with citations.\", TOOLS[:1]),\n          (\"facilities_maintenance\", \"Look up assets and raise work orders (approval required).\", TOOLS[1:]),\n          (\"facilities_analytics\", \"Count and summarise work orders.\", []))\nids = {}\nfor name, instructions, tools in AGENTS:\n    ids[name] = client.create_agent(model=CHAT, name=name, instructions=instructions, tools=tools).id\nprint(\"agents:\", sorted(a.name for a in client.list_agents() if a.name in ids))\n\nthread = client.threads.create()\nclient.messages.create(thread_id=thread.id, role=\"user\", content=\"Boiler B-12 is at 34 psi. What does the SOP say?\")\nrun = client.runs.create(thread_id=thread.id, agent_id=ids[\"facilities_supervisor\"])\nfor _ in range(60):\n    run = client.runs.get(thread_id=thread.id, run_id=run.id)\n    if str(run.status).lower().split(\".\")[-1] not in (\"queued\", \"in_progress\"):\n        break\n    time.sleep(0.5)\nprint(\"supervisor run:\", str(run.status).lower().split(\".\")[-1], \"| messages on the thread:\", len(list(client.messages.list(thread_id=thread.id))))\n",
      "run": "python foundry_agents.py",
      "expect": "agents: ['facilities_analytics', 'facilities_facilities', 'facilities_maintenance', 'facilities_supervisor']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the supervisor graph",
@@ -442,7 +504,14 @@
      "code": "import json\nimport re\nimport time\nfrom typing import TypedDict\nfrom langgraph.graph import StateGraph, END\n\nROUTER_PROMPT = (\n    \"You route facilities requests to specialist agents. The agents are:\\n\"\n    \"- facilities: searches the knowledge base (SOPs, safety rules, policies, maintenance procedures, how-to guidance).\\n\"\n    \"- maintenance: looks up a specific asset (ids like B-12 or AHU-7) and its work orders, and can raise a work order.\\n\"\n    \"- analytics: counts and statistics over work orders (how many, trends, summaries).\\n\"\n    \"Pick every agent needed. Reply with only a JSON list such as [\\\"facilities\\\",\\\"maintenance\\\"], drawn from [\\\"facilities\\\",\\\"maintenance\\\",\\\"analytics\\\"].\"\n)\nROLES = {\"facilities\": \"You are the Facilities agent. Answer procedure and safety questions.\",\n         \"maintenance\": \"You are the Maintenance agent. Answer questions about assets and work orders.\",\n         \"analytics\": \"You are the Analytics agent. Answer questions that need counts or summaries.\"}\n\n\nclass State(TypedDict, total=False):\n    question: str\n    user: str\n    route: list\n    notes: dict\n    citations: list\n    approval: str\n    answer: str\n    llm_used: bool\n    spans: list\n\n\ndef build(converse, tools=None):\n    \"\"\"converse(system, text) -> str. tools: optional {name: callable}; sub-agents use a tool when one is supplied (chapters 7 and 4 supply them).\"\"\"\n    tools = tools or {}\n\n    def span(st, name, t0):\n        st.setdefault(\"spans\", []).append({\"name\": name, \"kind\": \"agent\", \"start\": t0, \"end\": time.time()})\n\n    def supervisor(st):\n        t0 = time.time()\n        plan = None\n        text = converse(ROUTER_PROMPT, st[\"question\"])\n        try:\n            plan = [p for p in json.loads(re.search(r\"\\[.*\\]\", text, re.S).group(0)) if p in ROLES]\n        except Exception:\n            plan = None\n        st[\"llm_used\"] = bool(plan)\n        st[\"route\"] = plan or [\"facilities\"]\n        st[\"notes\"] = {}\n        span(st, \"supervisor.plan\", t0)\n        return st\n\n    def sub_agent(name):\n        def node(st):\n            t0 = time.time()\n            if name in tools:\n                st[\"notes\"][name] = tools[name](st)\n            else:\n                st[\"notes\"][name] = converse(ROLES[name], st[\"question\"])\n            span(st, f\"agent:{name}\", t0)\n            return st\n        return node\n\n    def synthesize(st):\n        t0 = time.time()\n        context = \"\\n\".join(f\"[{i + 1}] {n}\" for i, n in enumerate(st[\"notes\"].values()))\n        st[\"answer\"] = converse(\"Answer using only the context. Cite sources like [1].\", f\"Context:\\n{context}\\n\\nQuestion: {st['question']}\")\n        span(st, \"supervisor.synthesize\", t0)\n        return st\n\n    g = StateGraph(State)\n    g.add_node(\"supervisor\", supervisor)\n    for n in ROLES:\n        g.add_node(n, sub_agent(n))\n    g.add_node(\"synth\", synthesize)\n    g.set_entry_point(\"supervisor\")\n    order = list(ROLES)\n\n    def next_after(after):\n        def pick(st):\n            rest = [a for a in (order[order.index(after) + 1:] if after else order) if a in st[\"route\"]]\n            return rest[0] if rest else \"synth\"\n        return pick\n    targets = {**{n: n for n in order}, \"synth\": \"synth\"}\n    for src in [\"supervisor\"] + order:\n        g.add_conditional_edges(src, next_after(None if src == \"supervisor\" else src), targets)\n    g.add_edge(\"synth\", END)\n    return g.compile()\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the HTTP app with isolated sessions",
@@ -452,7 +521,14 @@
      "code": "import os\nfrom fastapi import FastAPI\nfrom openai import AzureOpenAI\nimport agent_graph\n\nclient = AzureOpenAI(azure_endpoint=os.environ[\"VYOMI_ENDPOINT\"], api_key=\"vyomi-local\", api_version=\"2024-10-21\", max_retries=0, timeout=120)\n\n\ndef converse(system, text, max_tokens=300):\n    r = client.chat.completions.create(model=\"chat\", max_tokens=max_tokens, temperature=0,\n                                       messages=[{\"role\": \"system\", \"content\": system}, {\"role\": \"user\", \"content\": text}])\n    return r.choices[0].message.content\n\n\ngraph = agent_graph.build(converse)\nSESSIONS = {}           # session id -> list of turns; nothing is shared between sessions\napp = FastAPI(title=\"facilities-supervisor\")\n\n\n@app.get(\"/healthz\")\ndef healthz():\n    return {\"ok\": True}\n\n\n@app.post(\"/query\")\ndef query(body: dict):\n    session = body.get(\"session\", \"default\")\n    history = SESSIONS.setdefault(session, [])\n    st = graph.invoke({\"question\": body[\"prompt\"], \"user\": body.get(\"user\", \"anonymous\"), \"spans\": []})\n    history.append({\"q\": body[\"prompt\"], \"a\": st[\"answer\"]})\n    return {\"answer\": st[\"answer\"], \"route\": st[\"route\"], \"llm_used\": st[\"llm_used\"], \"session\": session, \"turns\": len(history),\n            \"spans\": st[\"spans\"], \"pid\": os.getpid()}\n\n\nif __name__ == \"__main__\":\n    import uvicorn\n    uvicorn.run(app, host=\"127.0.0.1\", port=int(os.environ.get(\"PORT\", \"8080\")))\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Run the graph locally first",
@@ -462,7 +538,14 @@
      "code": "import os\nos.environ.setdefault(\"VYOMI_ENDPOINT\", os.environ[\"VYOMI_AZURE_HTTP_ENDPOINT\"])\nfrom app import graph\n\nst = graph.invoke({\"question\": \"Boiler B-12 is at 34 psi. What does the SOP say, and what is its status?\", \"user\": \"maria\", \"spans\": []})\nprint(\"route:\", st[\"route\"], \"| model routed:\", st[\"llm_used\"])\nprint(\"spans:\", [s[\"name\"] for s in st[\"spans\"]])\nprint(\"answer:\", st[\"answer\"][:80])\n",
      "run": "python try_graph.py",
      "expect": "route: ['facilities', 'maintenance'] | model routed: True",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the Container Apps environment and the app",
@@ -472,7 +555,14 @@
      "code": "import base64\nimport io\nimport os\nimport zipfile\nfrom azure.mgmt.appcontainers import ContainerAppsAPIClient\nfrom azlab import arm, rid, RG, LOC, HTTP_ENDPOINT\n\nAPP, ENV = \"facilities-supervisor\", \"facilities-env\"\n\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.write(\"app.py\", \"app.py\")\n    z.write(\"agent_graph.py\", \"agent_graph.py\")\n    z.writestr(\"requirements.txt\", \"fastapi\\nuvicorn\\nopenai\\nlanggraph\\n\")\nbundle = base64.b64encode(buf.getvalue()).decode()\n\nc = arm(ContainerAppsAPIClient)\nc.managed_environments.begin_create_or_update(RG, ENV, {\"location\": LOC, \"properties\": {}}).result()\napp = c.container_apps.begin_create_or_update(RG, APP, {\"location\": LOC, \"properties\": {\n    \"managedEnvironmentId\": rid(\"Microsoft.App\", \"managedEnvironments\", ENV),\n    \"configuration\": {\"ingress\": {\"external\": True, \"targetPort\": 8080}},\n    \"template\": {\"containers\": [{\"name\": \"supervisor\", \"image\": \"vyomi/python-app:latest\", \"env\": [\n        {\"name\": \"VYOMI_APP_SOURCE_B64\", \"value\": bundle}, {\"name\": \"VYOMI_ENDPOINT\", \"value\": HTTP_ENDPOINT}]}]}}}).result()\nprint(\"container app\", app.name, \"state:\", getattr(app.provisioning_state, \"value\", app.provisioning_state))\n",
      "run": "python deploy_container_app.py",
      "expect": "container app facilities-supervisor state: Succeeded",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Call the hosted supervisor in two sessions",
@@ -482,7 +572,14 @@
      "code": "import requests\nfrom azure.mgmt.appcontainers import ContainerAppsAPIClient\nfrom azlab import arm, RG\n\nraw = arm(ContainerAppsAPIClient).container_apps.get(RG, \"facilities-supervisor\", cls=lambda resp, des, hdr: resp.http_response.json())\nbase = raw[\"properties\"][\"vyomiIngressUrl\"].rstrip(\"/\")\n\n\ndef ask(session, prompt):\n    r = requests.post(base + \"/query\", json={\"prompt\": prompt, \"user\": \"maria\", \"session\": session}, timeout=60)\n    r.raise_for_status()\n    return r.json()\n\n\na1 = ask(\"s1\", \"Boiler B-12 is at 34 psi. What does the SOP say?\")\na2 = ask(\"s1\", \"And what about AHU-7?\")\nb1 = ask(\"s2\", \"How many work orders are open?\")\nprint(\"s1 turns:\", a1[\"turns\"], \"->\", a2[\"turns\"], \"| s2 turns:\", b1[\"turns\"])\nprint(\"route for s2:\", b1[\"route\"], \"| spans:\", [s[\"name\"] for s in b1[\"spans\"]])\n",
      "run": "python call_container_app.py",
      "expect": "s1 turns: 1 -> 2 | s2 turns: 1",
-     "needs_runtime": true
+     "needs_runtime": true,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -660,7 +757,11 @@
      "how": "Azure AI Foundry, Agents",
      "expect": "The supervisor and the three sub-agents"
     }
-   ]
+   ],
+   "blocks_total": 7,
+   "blocks_nano": 7,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 7,
@@ -713,7 +814,7 @@
     850
    ],
    "level": "Intermediate",
-   "minutes": 35,
+   "minutes": 39,
    "outcome": "Read-only and approval-gated tools your agents can call",
    "lessons": 5,
    "color": "#0f766e",
@@ -772,7 +873,14 @@
      "code": "pip install azure-core azure-data-tables azure-mgmt-resource azure-mgmt-web azure-mgmt-search requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the data helpers",
@@ -782,7 +890,14 @@
      "code": "import requests\nfrom urllib.parse import urlparse\nfrom azure.data.tables import TableServiceClient\nfrom azlab import arm, ENDPOINT, HTTP_ENDPOINT, STORAGE, ACCOUNT_KEY, RG, HOST\n\nSEARCH_SERVICE = \"facilities-search\"\nINDEX = \"facilities-kb\"\nFUNCTION_APP = \"facilities-tools\"\n\n\ndef storage_cs(service, endpoint=ENDPOINT, proto=\"https\"):\n    return f\"DefaultEndpointsProtocol={proto};AccountName={STORAGE};AccountKey={ACCOUNT_KEY};{service}Endpoint={endpoint}/{STORAGE};\"\n\n\ndef tables():\n    return TableServiceClient.from_connection_string(storage_cs(\"Table\"))\n\n\ndef table(name):\n    return tables().create_table_if_not_exists(name)\n\n\ndef search_endpoint():\n    \"\"\"The data-plane address of the AI Search service. A real service advertises https://<name>.search.windows.net; the simulator serves the same wire under its own path.\"\"\"\n    from azure.mgmt.search import SearchManagementClient\n    advertised = arm(SearchManagementClient).services.get(RG, SEARCH_SERVICE).endpoint or \"\"\n    if advertised and (urlparse(advertised).hostname or \"\") in (HOST, \"localhost\", \"127.0.0.1\"):\n        return advertised.rstrip(\"/\")\n    return f\"{ENDPOINT}/azure-data/search/{SEARCH_SERVICE}\"\n\n\ndef search_key():\n    from azure.mgmt.search import SearchManagementClient\n    return arm(SearchManagementClient).admin_keys.get(RG, SEARCH_SERVICE).primary_key\n\n\ndef function_key(app=FUNCTION_APP):\n    from azure.mgmt.web import WebSiteManagementClient\n    keys = arm(WebSiteManagementClient).web_apps.list_host_keys(RG, app)\n    return (keys.function_keys or {}).get(\"default\") or keys.master_key\n\n\ndef call_function(app, name, payload, timeout=120):\n    r = requests.post(f\"{ENDPOINT}/azure-data/functions/{app}/api/{name}\", json=payload, headers={\"x-functions-key\": function_key(app)}, timeout=timeout)\n    if r.status_code != 200:\n        raise RuntimeError(f\"function {app}/{name} HTTP {r.status_code}: {r.text[-300:]}\")\n    return r.json()\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the AI Search service",
@@ -792,7 +907,14 @@
      "code": "from azure.mgmt.search import SearchManagementClient\nfrom azlab import arm, ensure_rg, RG, LOC\nfrom azdata import SEARCH_SERVICE, search_endpoint\n\nensure_rg()\narm(SearchManagementClient).services.begin_create_or_update(RG, SEARCH_SERVICE, {\"location\": LOC, \"sku\": {\"name\": \"basic\"}}).result()\nprint(\"search service\", SEARCH_SERVICE, \"ready; data-plane address:\", search_endpoint())\n",
      "run": "python create_search.py",
      "expect": "search service facilities-search ready",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the Table storage tables and seed the data",
@@ -802,7 +924,14 @@
      "code": "from azdata import table\n\nASSETS = [\n    {\"asset_id\": \"B-12\", \"name\": \"Boiler B-12\", \"site\": \"HQ-1\", \"type\": \"boiler\", \"status\": \"RUNNING\", \"pressure_psi\": 34, \"last_inspection\": \"2026-08-02\"},\n    {\"asset_id\": \"AHU-7\", \"name\": \"Air handling unit 7\", \"site\": \"HQ-1\", \"type\": \"hvac\", \"status\": \"DEGRADED\", \"supply_temp_drift_c\": 3.8, \"last_inspection\": \"2026-09-12\"},\n    {\"asset_id\": \"EL-3\", \"name\": \"Elevator 3\", \"site\": \"HQ-2\", \"type\": \"elevator\", \"status\": \"RUNNING\", \"last_inspection\": \"2026-10-01\"},\n]\nWORK_ORDERS = [\n    {\"work_order_id\": \"WO-000101\", \"asset_id\": \"AHU-7\", \"title\": \"Replace AHU-7 filter\", \"priority\": \"P3\", \"status\": \"CLOSED\", \"requester\": \"seed\"},\n    {\"work_order_id\": \"WO-000102\", \"asset_id\": \"B-12\", \"title\": \"Quarterly PRV inspection\", \"priority\": \"P2\", \"status\": \"OPEN\", \"requester\": \"seed\"},\n    {\"work_order_id\": \"WO-000103\", \"asset_id\": \"EL-3\", \"title\": \"Door-zone sensor check\", \"priority\": \"P2\", \"status\": \"OPEN\", \"requester\": \"seed\"},\n]\nfor name, rows, pk, key in ((\"assets\", ASSETS, \"asset\", \"asset_id\"), (\"workorders\", WORK_ORDERS, \"wo\", \"work_order_id\")):\n    t = table(name)\n    for row in rows:\n        t.upsert_entity(dict(row, PartitionKey=pk, RowKey=row[key]))\n    print(\"seeded\", name, len(list(t.list_entities())))\ntable(\"approvalledger\")\nprint(\"created approvalledger (empty)\")\n",
      "run": "python seed.py",
      "expect": "created approvalledger (empty)",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the knowledge-search tool",
@@ -812,7 +941,14 @@
      "code": "import json\nimport os\nimport azure.functions as func\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    from azure.core.credentials import AzureKeyCredential\n    from azure.search.documents import SearchClient\n    body = req.get_json() if req.get_body() else {}\n    sc = SearchClient(os.environ[\"SEARCH_ENDPOINT\"], os.environ.get(\"SEARCH_INDEX\", \"facilities-kb\"), AzureKeyCredential(os.environ[\"SEARCH_KEY\"]))\n    rows = sc.search(search_text=body.get(\"query\", \"\"), top=int(body.get(\"top_k\", 3)))\n    results = [{\"text\": r[\"content\"], \"score\": r.get(\"@search.score\"), \"source\": r.get(\"source\") or r.get(\"title\") or r[\"id\"]} for r in rows]\n    caller = req.headers.get(\"x-vyomi-caller\") or \"anonymous\"      # set by the API Management gateway in chapter 1 after it validated the token\n    return func.HttpResponse(json.dumps({\"results\": results, \"caller\": caller}), mimetype=\"application/json\")\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the asset-status tool",
@@ -822,7 +958,14 @@
      "code": "import json\nimport os\nimport azure.functions as func\n\n\ndef _table(name):\n    from azure.data.tables import TableClient\n    return TableClient.from_connection_string(os.environ[\"TABLE_CONNECTION_STRING\"], name)\n\n\ndef _clean(d):\n    return {k: v for k, v in d.items() if k not in (\"PartitionKey\", \"RowKey\", \"Timestamp\") and not hasattr(v, \"isoformat\")}\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    from azure.core.exceptions import ResourceNotFoundError\n    body = req.get_json() if req.get_body() else {}\n    aid = body[\"asset_id\"]\n    try:\n        asset = dict(_table(os.environ.get(\"ASSETS_TABLE\", \"assets\")).get_entity(\"asset\", aid))\n    except ResourceNotFoundError:\n        return func.HttpResponse(json.dumps({\"found\": False}), mimetype=\"application/json\")\n    wos = [dict(e) for e in _table(os.environ.get(\"WORK_ORDERS_TABLE\", \"workorders\")).query_entities(\"asset_id eq @a\", parameters={\"a\": aid})]\n    return func.HttpResponse(json.dumps({\"found\": True, \"asset\": _clean(asset), \"work_orders\": [_clean(w) for w in wos]}), mimetype=\"application/json\")\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the approval-decision tool",
@@ -832,7 +975,14 @@
      "code": "import json\nimport os\nimport time\nimport azure.functions as func\n\nAPPROVERS = (\"@example.com\",)\n\n\ndef _table(name):\n    from azure.data.tables import TableClient\n    return TableClient.from_connection_string(os.environ[\"TABLE_CONNECTION_STRING\"], name)\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    from azure.core import MatchConditions\n    from azure.core.exceptions import ResourceModifiedError, ResourceNotFoundError\n    from azure.data.tables import UpdateMode\n    b = req.get_json() if req.get_body() else {}\n    rid, decision, approver = b.get(\"request_id\"), (b.get(\"decision\") or \"\").upper(), b.get(\"approver\", \"\")\n    ledger = _table(os.environ.get(\"LEDGER_TABLE\", \"approvalledger\"))\n    out = lambda d: func.HttpResponse(json.dumps(d), mimetype=\"application/json\")\n    try:\n        row = ledger.get_entity(\"req\", rid)\n    except ResourceNotFoundError:\n        return out({\"ok\": False, \"error\": \"unknown request\"})\n    if row.get(\"status\") != \"PENDING\":\n        return out({\"ok\": False, \"error\": f\"request is {row.get('status')}, not PENDING\"})\n    if decision not in (\"APPROVE\", \"REJECT\") or not approver.endswith(APPROVERS):\n        return out({\"ok\": False, \"error\": \"decision must be APPROVE or REJECT from an authorised approver\"})\n    status = \"APPROVED\" if decision == \"APPROVE\" else \"REJECTED\"\n    try:\n        ledger.update_entity({\"PartitionKey\": \"req\", \"RowKey\": rid, \"status\": status, \"approver\": approver, \"decided_at\": int(time.time())},\n                             mode=UpdateMode.MERGE, etag=row.metadata[\"etag\"], match_condition=MatchConditions.IfNotModified)\n    except ResourceModifiedError:\n        return out({\"ok\": False, \"error\": \"request was decided concurrently\"})\n    return out({\"ok\": True, \"request_id\": rid, \"status\": status, \"approver\": approver})\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the work-order tool",
@@ -842,7 +992,14 @@
      "code": "import json\nimport os\nimport azure.functions as func\n\n\ndef _table(name):\n    from azure.data.tables import TableClient\n    return TableClient.from_connection_string(os.environ[\"TABLE_CONNECTION_STRING\"], name)\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    from azure.core import MatchConditions\n    from azure.core.exceptions import ResourceNotFoundError\n    from azure.data.tables import UpdateMode\n    b = req.get_json() if req.get_body() else {}\n    rid = b.get(\"request_id\", \"\")\n    ledger = _table(os.environ.get(\"LEDGER_TABLE\", \"approvalledger\"))\n    out = lambda d: func.HttpResponse(json.dumps(d), mimetype=\"application/json\")\n    try:\n        row = ledger.get_entity(\"req\", rid)\n    except ResourceNotFoundError:\n        return out({\"ok\": False, \"error\": \"refused: unknown request\"})\n    if row.get(\"status\") == \"EXECUTED\":\n        return out({\"ok\": True, \"work_order_id\": row[\"work_order_id\"], \"idempotent\": True})\n    if row.get(\"status\") != \"APPROVED\":\n        return out({\"ok\": False, \"error\": f\"refused: ledger status is {row.get('status')}, a work order needs APPROVED\"})\n    wo_id = \"WO-\" + rid[-6:].upper()\n    _table(os.environ.get(\"WORK_ORDERS_TABLE\", \"workorders\")).upsert_entity({\n        \"PartitionKey\": \"wo\", \"RowKey\": wo_id, \"work_order_id\": wo_id, \"asset_id\": row[\"asset_id\"], \"title\": row[\"summary\"],\n        \"priority\": row.get(\"priority\", \"P3\"), \"status\": \"OPEN\", \"requester\": row.get(\"requester\", \"\")})\n    ledger.update_entity({\"PartitionKey\": \"req\", \"RowKey\": rid, \"status\": \"EXECUTED\", \"work_order_id\": wo_id}, mode=UpdateMode.MERGE,\n                         etag=row.metadata[\"etag\"], match_condition=MatchConditions.IfNotModified)\n    return out({\"ok\": True, \"work_order_id\": wo_id})\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Deploy the Function App",
@@ -852,7 +1009,14 @@
      "code": "import io\nimport json\nimport zipfile\nimport requests\nfrom azure.mgmt.web import WebSiteManagementClient\nfrom azure.mgmt.web.models import StringDictionary\nfrom azlab import arm, rid, RG, LOC, ENDPOINT, HTTP_ENDPOINT\nfrom azdata import storage_cs, search_endpoint, search_key, function_key, FUNCTION_APP, INDEX\n\nFUNCTIONS = {\"kb-search\": \"fn_kb_search.py\", \"asset-status\": \"fn_asset_status.py\",\n             \"approval-decision\": \"fn_approval_decision.py\", \"create-work-order\": \"fn_create_work_order.py\"}\n\nweb = arm(WebSiteManagementClient)\nweb.app_service_plans.begin_create_or_update(RG, FUNCTION_APP + \"-plan\", {\"location\": LOC, \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}, \"kind\": \"functionapp\"}).result()\nweb.web_apps.begin_create_or_update(RG, FUNCTION_APP, {\"location\": LOC, \"kind\": \"functionapp,linux\",\n                                                       \"server_farm_id\": rid(\"Microsoft.Web\", \"serverfarms\", FUNCTION_APP + \"-plan\")}).result()\nweb.web_apps.update_application_settings(RG, FUNCTION_APP, StringDictionary(properties={\n    \"FUNCTIONS_WORKER_RUNTIME\": \"python\",\n    \"TABLE_CONNECTION_STRING\": storage_cs(\"Table\", HTTP_ENDPOINT, \"http\"),     # the function sandbox reaches the simulator over plain http\n    \"SEARCH_ENDPOINT\": search_endpoint().replace(ENDPOINT, HTTP_ENDPOINT, 1), \"SEARCH_KEY\": search_key(), \"SEARCH_INDEX\": INDEX,\n    \"ASSETS_TABLE\": \"assets\", \"WORK_ORDERS_TABLE\": \"workorders\", \"LEDGER_TABLE\": \"approvalledger\", \"INDEXER_NAME\": \"docs-indexer\"}))\n\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.writestr(\"host.json\", json.dumps({\"version\": \"2.0\"}))\n    z.writestr(\"requirements.txt\", \"azure-functions\\nazure-data-tables\\nazure-search-documents\\n\")\n    for name, path in FUNCTIONS.items():\n        z.writestr(f\"{name}/__init__.py\", open(path).read())\n        z.writestr(f\"{name}/function.json\", json.dumps({\"scriptFile\": \"__init__.py\", \"bindings\": [\n            {\"authLevel\": \"function\", \"type\": \"httpTrigger\", \"direction\": \"in\", \"name\": \"req\", \"methods\": [\"get\", \"post\"]},\n            {\"type\": \"http\", \"direction\": \"out\", \"name\": \"$return\"}]}))\nr = requests.post(f\"{ENDPOINT}/azure-data/functions/{FUNCTION_APP}/api/zipdeploy\", data=buf.getvalue(), timeout=60)\nr.raise_for_status()\nlisted = sorted(f.name.split(\"/\")[-1] for f in web.web_apps.list_functions(RG, FUNCTION_APP))\nprint(\"deployed\", FUNCTION_APP, listed)\nprint(\"host key listed through ARM:\", bool(function_key()))\n",
      "run": "python deploy_tools.py",
      "expect": "deployed facilities-tools ['approval-decision', 'asset-status', 'create-work-order', 'kb-search']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Call the read-only tool",
@@ -862,13 +1026,36 @@
      "code": "from azdata import call_function, FUNCTION_APP\n\nout = call_function(FUNCTION_APP, \"asset-status\", {\"asset_id\": \"B-12\"})\nprint(\"found:\", out[\"found\"], \"| status:\", out[\"asset\"][\"status\"], \"| work orders:\", len(out[\"work_orders\"]))\n",
      "run": "python call_tools.py",
      "expect": "found: True | status: RUNNING | work orders: 1",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Failure lab: a poisoned tool call is refused",
+     "text": "The model builds the arguments of every tool call, so a manipulated prompt means hostile arguments. The tool contract is checked before any storage call: asset ids must match `^[A-Z]{1,3}-[0-9]{1,4}$`, priorities come from a closed set, and free text is length-limited and stripped of control characters. The block fires the poisoned inputs a prompt injection would produce (an OData filter injection, a path traversal, an oversized summary, an unknown priority) and asserts every one is refused with a reason while valid input passes.",
+     "file": "tool_contract.py",
+     "lang": "python",
+     "code": "import re\n\nASSET = re.compile(r\"^[A-Z]{1,3}-[0-9]{1,4}$\")\nPRIORITIES = {\"P1\", \"P2\", \"P3\", \"P4\"}\n\n\ndef validate(call):\n    errs = []\n    if not ASSET.match(str(call.get(\"asset_id\", \"\"))):\n        errs.append(\"asset_id must look like B-12\")\n    if call.get(\"priority\", \"P3\") not in PRIORITIES:\n        errs.append(\"priority must be one of P1..P4\")\n    s = str(call.get(\"summary\", \"\"))\n    if not 3 <= len(s) <= 300 or any(ord(c) < 32 for c in s):\n        errs.append(\"summary must be 3-300 printable characters\")\n    return errs\n\n\ngood = {\"asset_id\": \"B-12\", \"priority\": \"P2\", \"summary\": \"Boiler pressure above limit\"}\nassert validate(good) == []\npoisoned = {\n    \"odata injection\": {**good, \"asset_id\": \"B-12' or PartitionKey ne '\"},\n    \"path traversal\": {**good, \"asset_id\": \"../../secrets\"},\n    \"oversized summary\": {**good, \"summary\": \"x\" * 5000},\n    \"control characters\": {**good, \"summary\": \"ok\\x00\\x1b[31m\"},\n    \"unknown priority\": {**good, \"priority\": \"P0; drop\"},\n}\nfor name, call in poisoned.items():\n    errs = validate(call)\n    assert errs, name + \" must be refused\"\n    print(\"refused:\", name, \"->\", errs[0])\nprint(\"tool contract verified: 5 of 5 poisoned calls refused\")\n",
+     "run": "python tool_contract.py",
+     "expect": "tool contract verified: 5 of 5 poisoned calls refused",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Pure Python: would run on Nano, kept Mesh-only until the Nano matrix verifies it.",
+     "kind": "failure",
+     "needs_appliance": false
     }
    ],
    "explain": {
     "lead": [
      "Tools are how an agent touches the real world. A tool is an ordinary function with a strict contract: what it accepts, what it returns, what it is allowed to do. The agent is only ever as safe as the tools you hand it.",
-     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, request-approval and create-work-order, that must sit behind a human decision."
+     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, an approval-request step and create-work-order, that must sit behind a human decision."
     ],
     "concepts": [
      [
@@ -899,14 +1086,14 @@
      ],
      [
       "Deploy write tools",
-      "Deploy request-approval and create-work-order. They do not write directly: they hand off to approval."
+      "Deploy an approval-request step and create-work-order. They do not write directly: they hand off to approval."
      ],
      [
       "Invoke each tool",
       "Call every tool directly and check what comes back, before any agent uses them."
      ]
     ],
-    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls request-approval, which records the request and waits. It cannot call create-work-order itself.",
+    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls the approval-request step, which records the request and waits. It cannot call create-work-order itself.",
     "pitfalls": [
      "Giving a tool a broad permission \"for now\".",
      "Letting a write tool run without a human or idempotency key: a retry then creates duplicates.",
@@ -931,7 +1118,7 @@
      ],
      [
       "Deploy two write tools",
-      "request-approval and create-work-order exist, but request-approval only records a request. It cannot create the work order itself."
+      "the approval request and create-work-order exist, but the approval request only records a request. It cannot create the work order itself."
      ],
      [
       "Call every tool by hand first",
@@ -940,7 +1127,7 @@
     ],
     "quiz": [
      [
-      "Why does request-approval not create the work order directly?",
+      "Why does the approval request not create the work order directly?",
       [
        "It is slower",
        "A model may propose a write, but a person must approve it",
@@ -1040,6 +1227,12 @@
      "how": "Storage account, Tables, assets",
      "expect": "Your seeded assets"
     }
+   ],
+   "blocks_total": 11,
+   "blocks_nano": 10,
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Failure lab: a poisoned tool call is refused"
    ]
   },
   {
@@ -1151,7 +1344,14 @@
      "code": "pip install azure-core azure-storage-blob azure-search-documents azure-mgmt-storage azure-mgmt-search azure-mgmt-eventgrid azure-mgmt-web requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Save the four documents",
@@ -1161,7 +1361,14 @@
      "code": "# SOP-101 Boiler plant operation (Site HQ-1, Building A)\n\nIf boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order.\nThe pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log.\nNever bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Save the elevator SOP",
@@ -1171,7 +1378,14 @@
      "code": "# SOP-215 Elevator faults\n\nAn elevator reporting door-zone faults must be taken out of service and tagged. Raise a P2 work order with the vendor.\nPassengers trapped in a car: call the vendor emergency line and keep security on the floor until released.\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Save the fire-safety SOP",
@@ -1181,7 +1395,14 @@
      "code": "# SOP-310 Fire safety and evacuation\n\nFire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of the affected zone.\nFire extinguishers are inspected annually. Sprinkler valve closures require a P1 work order and a fire watch until restored.\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Save the HVAC manual",
@@ -1191,7 +1412,14 @@
      "code": "# MM-220 HVAC air handling unit maintenance manual (AHU-7)\n\nReplace the AHU-7 filter every 60 days or when differential pressure exceeds 250 Pa.\nInspect belts and bearings quarterly. A supply air temperature drift greater than 3 degrees C indicates a failing chilled water valve.\nRaise a P2 work order for chilled water valve replacement. Spare valves are stocked in store room S-2.\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the storage account and upload the documents",
@@ -1201,17 +1429,31 @@
      "code": "import os\nfrom azure.mgmt.storage import StorageManagementClient\nfrom azure.storage.blob import BlobServiceClient\nfrom azlab import arm, ensure_rg, RG, LOC\nfrom azdata import storage_cs\n\nensure_rg()\narm(StorageManagementClient).storage_accounts.begin_create(RG, \"facilitiesdocs\", {\"location\": LOC, \"sku\": {\"name\": \"Standard_LRS\"}, \"kind\": \"StorageV2\"}).result()\nblobs = BlobServiceClient.from_connection_string(storage_cs(\"Blob\"))\ntry:\n    blobs.create_container(\"docs\")\nexcept Exception as e:\n    if \"ContainerAlreadyExists\" not in str(e):\n        raise\nfor name in (\"boiler-sop.md\", \"elevator-sop.md\", \"fire-safety-sop.md\", \"hvac-maintenance-manual.md\"):\n    blobs.get_blob_client(\"docs\", name).upload_blob(open(name, \"rb\").read(), overwrite=True)\nnames = sorted(b.name for b in blobs.get_container_client(\"docs\").list_blobs())\nprint(\"container docs:\", names)\nprint(\"read back:\", blobs.get_blob_client(\"docs\", \"boiler-sop.md\").download_blob().readall().decode().splitlines()[0])\n",
      "run": "python upload_docs.py",
      "expect": "read back: # SOP-101 Boiler plant operation",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Define and create the search index",
      "text": "The index `facilities-kb` is the schema of what is searchable: an `id` key, `source` (the blob name, for citations), `title` and `content` as full-text fields, and `content_vector`, a 1536-number vector field with an HNSW algorithm. A semantic configuration `sem` tells the semantic ranker which fields matter. Chapter 6 queries this index with text, vectors and the ranker. `kb_index()` is reused there.",
      "file": "kb_index.py",
      "lang": "python",
-     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents.indexes import SearchIndexClient\nfrom azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, SearchField, SearchFieldDataType, SearchIndex, SearchableField,\n                                                   SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,\n                                                   VectorSearch, VectorSearchProfile)\nfrom azdata import search_endpoint, search_key, INDEX\nfrom models import embed\n\nDIMS = len(embed(\"dimension probe\"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)\n\n\ndef kb_index():\n    fields = [SimpleField(name=\"id\", type=SearchFieldDataType.String, key=True, filterable=True),\n              SimpleField(name=\"source\", type=SearchFieldDataType.String, filterable=True),\n              SearchableField(name=\"title\", type=SearchFieldDataType.String),\n              SearchableField(name=\"content\", type=SearchFieldDataType.String),\n              SearchField(name=\"content_vector\", type=SearchFieldDataType.Collection(SearchFieldDataType.Single), searchable=True,\n                          vector_search_dimensions=DIMS, vector_search_profile_name=\"vp\")]\n    return SearchIndex(name=INDEX, fields=fields,\n                       vector_search=VectorSearch(algorithms=[HnswAlgorithmConfiguration(name=\"h\")],\n                                                  profiles=[VectorSearchProfile(name=\"vp\", algorithm_configuration_name=\"h\")]),\n                       semantic_search=SemanticSearch(configurations=[SemanticConfiguration(name=\"sem\", prioritized_fields=SemanticPrioritizedFields(\n                           title_field=SemanticField(field_name=\"title\"), content_fields=[SemanticField(field_name=\"content\")]))]))\n\n\ndef index_client():\n    return SearchIndexClient(search_endpoint(), AzureKeyCredential(search_key()))\n\n\nif __name__ == \"__main__\":\n    ic = index_client()\n    ic.create_or_update_index(kb_index())\n    print(\"index\", INDEX, \"fields:\", [f.name for f in ic.get_index(INDEX).fields])\n",
+     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents.indexes import SearchIndexClient\nfrom azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, SearchField, SearchFieldDataType, SearchIndex, SearchableField,\n                                                   SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,\n                                                   VectorSearch, VectorSearchProfile)\nfrom azdata import search_endpoint, search_key, INDEX\nfrom vymodels import embed\n\nDIMS = len(embed(\"dimension probe\"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)\n\n\ndef kb_index():\n    fields = [SimpleField(name=\"id\", type=SearchFieldDataType.String, key=True, filterable=True),\n              SimpleField(name=\"source\", type=SearchFieldDataType.String, filterable=True),\n              SearchableField(name=\"title\", type=SearchFieldDataType.String),\n              SearchableField(name=\"content\", type=SearchFieldDataType.String),\n              SearchField(name=\"content_vector\", type=SearchFieldDataType.Collection(SearchFieldDataType.Single), searchable=True,\n                          vector_search_dimensions=DIMS, vector_search_profile_name=\"vp\")]\n    return SearchIndex(name=INDEX, fields=fields,\n                       vector_search=VectorSearch(algorithms=[HnswAlgorithmConfiguration(name=\"h\")],\n                                                  profiles=[VectorSearchProfile(name=\"vp\", algorithm_configuration_name=\"h\")]),\n                       semantic_search=SemanticSearch(configurations=[SemanticConfiguration(name=\"sem\", prioritized_fields=SemanticPrioritizedFields(\n                           title_field=SemanticField(field_name=\"title\"), content_fields=[SemanticField(field_name=\"content\")]))]))\n\n\ndef index_client():\n    return SearchIndexClient(search_endpoint(), AzureKeyCredential(search_key()))\n\n\nif __name__ == \"__main__\":\n    ic = index_client()\n    ic.create_or_update_index(kb_index())\n    print(\"index\", INDEX, \"fields:\", [f.name for f in ic.get_index(INDEX).fields])\n",
      "run": "python kb_index.py",
      "expect": "index facilities-kb fields: ['id', 'source', 'title', 'content', 'content_vector']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the blob data source and the indexer",
@@ -1221,7 +1463,14 @@
      "code": "import time\nfrom azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents.indexes import SearchIndexerClient\nfrom azure.search.documents.indexes.models import FieldMapping, SearchIndexer, SearchIndexerDataContainer, SearchIndexerDataSourceConnection\nfrom azlab import HTTP_ENDPOINT\nfrom azdata import search_endpoint, search_key, storage_cs, INDEX\n\nic = SearchIndexerClient(search_endpoint(), AzureKeyCredential(search_key()))\nic.create_or_update_data_source_connection(SearchIndexerDataSourceConnection(\n    name=\"docs-blob\", type=\"azureblob\", connection_string=storage_cs(\"Blob\", HTTP_ENDPOINT, \"http\"), container=SearchIndexerDataContainer(name=\"docs\")))\nic.create_or_update_indexer(SearchIndexer(name=\"docs-indexer\", data_source_name=\"docs-blob\", target_index_name=INDEX, field_mappings=[\n    FieldMapping(source_field_name=\"metadata_storage_path\", target_field_name=\"id\", mapping_function={\"name\": \"base64Encode\"}),\n    FieldMapping(source_field_name=\"metadata_storage_name\", target_field_name=\"source\"),\n    FieldMapping(source_field_name=\"metadata_storage_name\", target_field_name=\"title\")]))\nic.run_indexer(\"docs-indexer\")\nfor _ in range(40):\n    last = ic.get_indexer_status(\"docs-indexer\").last_result\n    if last and str(last.status).lower().endswith(\"success\"):\n        break\n    time.sleep(1)\nprint(\"indexer last run:\", str(last.status).split(\".\")[-1].lower(), \"| documents:\", last.item_count)\n",
      "run": "python indexer.py",
      "expect": "indexer last run: success | documents: 4",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Check the documents are searchable",
@@ -1231,7 +1480,14 @@
      "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azdata import search_endpoint, search_key, INDEX\n\nsc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\nrows = list(sc.search(search_text=\"boiler pressure\", select=[\"id\", \"source\", \"content\"], top=3))\nprint(\"documents in the index:\", len(list(sc.search(search_text=\"*\", top=50))))\nprint(\"'boiler pressure' ->\", rows[0][\"source\"])\n",
      "run": "python check_search.py",
      "expect": "'boiler pressure' -> boiler-sop.md",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the ingest function",
@@ -1241,7 +1497,14 @@
      "code": "import json\nimport os\nimport azure.functions as func\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    events = req.get_json() if req.get_body() else []\n    events = events if isinstance(events, list) else [events]\n    out = lambda d: func.HttpResponse(json.dumps(d), mimetype=\"application/json\")\n    for ev in events:\n        if ev.get(\"eventType\") == \"Microsoft.EventGrid.SubscriptionValidationEvent\":\n            return out({\"validationResponse\": ev[\"data\"][\"validationCode\"]})\n    ran = []\n    for ev in events:\n        if ev.get(\"eventType\") != \"Microsoft.Storage.BlobCreated\":\n            continue\n        from azure.core.credentials import AzureKeyCredential\n        from azure.search.documents.indexes import SearchIndexerClient\n        SearchIndexerClient(os.environ[\"SEARCH_ENDPOINT\"], AzureKeyCredential(os.environ[\"SEARCH_KEY\"])).run_indexer(os.environ.get(\"INDEXER_NAME\", \"docs-indexer\"))\n        ran.append(ev.get(\"subject\", \"\"))\n    return out({\"received\": len(events), \"indexer_runs\": ran})\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Deploy the function and subscribe it to blob events",
@@ -1251,7 +1514,14 @@
      "code": "import io\nimport json\nimport zipfile\nimport requests\nfrom azure.mgmt.eventgrid import EventGridManagementClient\nfrom azure.mgmt.eventgrid.models import AzureFunctionEventSubscriptionDestination, EventSubscription, EventSubscriptionFilter, SystemTopic\nfrom azure.mgmt.web import WebSiteManagementClient\nfrom azure.mgmt.web.models import StringDictionary\nfrom azlab import arm, rid, RG, LOC, ENDPOINT, HTTP_ENDPOINT\nfrom azdata import search_endpoint, search_key\n\nAPP = \"facilities-ingest\"\nweb = arm(WebSiteManagementClient)\nweb.app_service_plans.begin_create_or_update(RG, APP + \"-plan\", {\"location\": LOC, \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}, \"kind\": \"functionapp\"}).result()\nweb.web_apps.begin_create_or_update(RG, APP, {\"location\": LOC, \"kind\": \"functionapp,linux\", \"server_farm_id\": rid(\"Microsoft.Web\", \"serverfarms\", APP + \"-plan\")}).result()\nweb.web_apps.update_application_settings(RG, APP, StringDictionary(properties={\n    \"FUNCTIONS_WORKER_RUNTIME\": \"python\", \"SEARCH_ENDPOINT\": search_endpoint().replace(ENDPOINT, HTTP_ENDPOINT, 1), \"SEARCH_KEY\": search_key(), \"INDEXER_NAME\": \"docs-indexer\"}))\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.writestr(\"host.json\", json.dumps({\"version\": \"2.0\"}))\n    z.writestr(\"on-blob/__init__.py\", open(\"fn_ingest_docs.py\").read())\n    z.writestr(\"on-blob/function.json\", json.dumps({\"scriptFile\": \"__init__.py\", \"bindings\": [\n        {\"authLevel\": \"function\", \"type\": \"httpTrigger\", \"direction\": \"in\", \"name\": \"req\", \"methods\": [\"get\", \"post\"]}, {\"type\": \"http\", \"direction\": \"out\", \"name\": \"$return\"}]}))\nrequests.post(f\"{ENDPOINT}/azure-data/functions/{APP}/api/zipdeploy\", data=buf.getvalue(), timeout=60).raise_for_status()\n\neg = arm(EventGridManagementClient)\neg.system_topics.begin_create_or_update(RG, \"facilitiesdocs-topic\", SystemTopic(\n    location=LOC, source=rid(\"Microsoft.Storage\", \"storageAccounts\", \"facilitiesdocs\"), topic_type=\"Microsoft.Storage.StorageAccounts\")).result()\nsub = eg.system_topic_event_subscriptions.begin_create_or_update(RG, \"facilitiesdocs-topic\", \"blob-created\", EventSubscription(\n    destination=AzureFunctionEventSubscriptionDestination(resource_id=rid(\"Microsoft.Web\", \"sites\", APP) + \"/functions/on-blob\"),\n    filter=EventSubscriptionFilter(included_event_types=[\"Microsoft.Storage.BlobCreated\"]))).result()\nprint(\"function app\", APP, \"deployed; event subscription blob-created:\", getattr(sub.provisioning_state, \"value\", sub.provisioning_state))\n",
      "run": "python deploy_ingest.py",
      "expect": "event subscription blob-created: Succeeded",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Upload a new document and watch it become searchable",
@@ -1261,7 +1531,14 @@
      "code": "import time\nimport uuid\nfrom azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azure.storage.blob import BlobServiceClient\nfrom azdata import search_endpoint, search_key, storage_cs, INDEX\n\nword = \"zebrafish\" + uuid.uuid4().hex[:6]\nBlobServiceClient.from_connection_string(storage_cs(\"Blob\")).get_blob_client(\"docs\", \"water-leak-sop.md\").upload_blob(\n    f\"# SOP-205 Water leak\\nReport a {word} water leak in the lobby to facilities immediately.\".encode(), overwrite=True)\nsc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\nfound = []\nfor _ in range(45):\n    found = [r[\"source\"] for r in sc.search(search_text=word, select=[\"source\"], top=3)]\n    if found:\n        break\n    time.sleep(1)\nprint(\"new upload became searchable as:\", found[0] if found else \"NOT FOUND\")\n",
      "run": "python new_doc.py",
      "expect": "new upload became searchable as: water-leak-sop.md",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -1473,7 +1750,11 @@
      "how": "AI Search, Indexers, facilities-kb",
      "expect": "A successful run and the documents searchable"
     }
-   ]
+   ],
+   "blocks_total": 12,
+   "blocks_nano": 12,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 6,
@@ -1565,7 +1846,14 @@
      "code": "pip install azure-core azure-search-documents openai\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Look at the index you built",
@@ -1575,7 +1863,14 @@
      "code": "from kb_index import index_client\nfrom azdata import INDEX\n\nix = index_client().get_index(INDEX)\nprint(\"fields:\", [(f.name, \"vector\" if f.name == \"content_vector\" else \"text/key\") for f in ix.fields])\nprint(\"vector dimensions:\", next(f.vector_search_dimensions for f in ix.fields if f.name == \"content_vector\"))\nprint(\"semantic configurations:\", [c.name for c in ix.semantic_search.configurations])\n",
      "run": "python inspect_index.py",
      "expect": "vector dimensions:",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Embed the documents and store the vectors",
@@ -1585,7 +1880,14 @@
      "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azlab import aoai, EMBED\nfrom azdata import search_endpoint, search_key, INDEX\n\nsc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\nrows = list(sc.search(search_text=\"*\", select=[\"id\", \"source\", \"content\"], top=50))\nvectors = [d.embedding for d in aoai().embeddings.create(model=EMBED, input=[r[\"content\"] for r in rows]).data]\nresults = sc.merge_documents([{\"id\": r[\"id\"], \"content_vector\": v} for r, v in zip(rows, vectors)])\nprint(\"embedded and merged\", sum(1 for r in results if r.succeeded), \"documents\")\n",
      "run": "python embed_docs.py",
      "expect": "embedded and merged 5 documents",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the retrieval helper",
@@ -1595,7 +1897,14 @@
      "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azure.search.documents.models import VectorizedQuery\nfrom azlab import aoai, EMBED\nfrom azdata import search_endpoint, search_key, INDEX\n\n_sc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\n\n\ndef kb_search(query, mode=\"text\", top=3):\n    vector = None\n    if mode in (\"vector\", \"hybrid\"):\n        emb = aoai().embeddings.create(model=EMBED, input=[query]).data[0].embedding\n        vector = [VectorizedQuery(vector=emb, k_nearest_neighbors=top, fields=\"content_vector\")]\n    kw = {\"query_type\": \"semantic\", \"semantic_configuration_name\": \"sem\"} if mode == \"semantic\" else {}\n    rows = _sc.search(search_text=None if mode == \"vector\" else query, vector_queries=vector, select=[\"id\", \"source\", \"title\", \"content\"], top=top, **kw)\n    return [{\"source\": r[\"source\"], \"text\": r[\"content\"], \"score\": r[\"@search.score\"], \"reranker\": r.get(\"@search.reranker_score\")} for r in rows]\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Run the four kinds of query",
@@ -1605,7 +1914,14 @@
      "code": "from kb import kb_search\n\nfor mode, q in ((\"text\", \"boiler pressure exceeds 30 psi\"), (\"text\", \"AHU-7 supply air temperature drift chilled water valve\"),\n                (\"vector\", \"what to do when boiler pressure is too high\"), (\"hybrid\", \"fire alarm evacuation procedure\"),\n                (\"semantic\", \"who signs off on boiler work\")):\n    hits = kb_search(q, mode)\n    extra = f\" reranker={hits[0]['reranker']}\" if mode == \"semantic\" else \"\"\n    print(f\"{mode:8} {q[:44]:44} -> {hits[0]['source']}{extra}\")\nprint(\"every hit has a source:\", all(h[\"source\"] for h in kb_search(\"fire alarm evacuation\")))\n",
      "run": "python try_search.py",
      "expect": "vector   what to do when boiler pressure is too high  -> boiler-sop.md\nhybrid   fire alarm evacuation procedure              -> fire-safety-sop.md",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -1760,7 +2076,11 @@
      "how": "search_client.search(search_text='boiler pressure above 30 psi')",
      "expect": "The boiler SOP first, with its source name"
     }
-   ]
+   ],
+   "blocks_total": 5,
+   "blocks_nano": 5,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 11,
@@ -1852,7 +2172,14 @@
      "code": "pip install azure-core azure-ai-contentsafety azure-search-documents openai\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the grounded answer function",
@@ -1862,7 +2189,14 @@
      "code": "from azlab import aoai, CHAT\nfrom kb import kb_search\n\nSYSTEM = \"Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say you do not know.\"\n\n\ndef answer(question, mode=\"hybrid\", top=3):\n    hits = kb_search(question, mode, top)\n    citations = [{\"n\": i + 1, \"source\": h[\"source\"], \"text\": h[\"text\"][:160]} for i, h in enumerate(hits)]\n    context = \"\\n\".join(f\"[{c['n']}] {h['text']}\" for c, h in zip(citations, hits))\n    r = aoai().chat.completions.create(model=CHAT, max_tokens=300, temperature=0, messages=[\n        {\"role\": \"system\", \"content\": SYSTEM}, {\"role\": \"user\", \"content\": f\"Context:\\n{context}\\n\\nQuestion: {question}\"}])\n    return {\"answer\": r.choices[0].message.content, \"citations\": citations}\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Try it: a cited answer",
@@ -1872,7 +2206,14 @@
      "code": "from respond import answer\n\nr = answer(\"What must I do when boiler pressure exceeds 30 psi?\")\nprint(\"answer:\", r[\"answer\"][:110])\nfor c in r[\"citations\"]:\n    print(f\"citation [{c['n']}]:\", c[\"source\"])\nprint(\"grounded:\", \"[1]\" in r[\"answer\"] and r[\"citations\"][0][\"source\"] == \"boiler-sop.md\")\n",
      "run": "python try_respond.py",
      "expect": "grounded: True",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Filter the output with Azure AI Content Safety",
@@ -1882,7 +2223,14 @@
      "code": "from azure.ai.contentsafety import ContentSafetyClient\nfrom azure.ai.contentsafety.models import AnalyzeTextOptions\nfrom azure.core.credentials import AzureKeyCredential\nfrom azlab import ENDPOINT\n\n_client = ContentSafetyClient(ENDPOINT, AzureKeyCredential(\"vyomi-local\"))\nTHRESHOLD = 2\n\n\ndef severities(text):\n    return {x.category: x.severity for x in _client.analyze_text(AnalyzeTextOptions(text=text)).categories_analysis}\n\n\ndef check_output(text):\n    sev = severities(text)\n    return {\"allowed\": all((v or 0) < THRESHOLD for v in sev.values()), \"severities\": sev}\n\n\nif __name__ == \"__main__\":\n    from respond import answer\n    good = check_output(answer(\"What must I do when boiler pressure exceeds 30 psi?\")[\"answer\"])\n    bad = check_output(\"You should torture and kill the technician who reports to you.\")\n    print(\"agent answer allowed:\", good[\"allowed\"])\n    print(\"harmful completion allowed:\", bad[\"allowed\"], \"| flagged categories:\", [k for k, v in bad[\"severities\"].items() if v and v >= 2])\n",
      "run": "python guard.py",
      "expect": "harmful completion allowed: False",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Ground with Assistants file search",
@@ -1892,7 +2240,14 @@
      "code": "import time\nfrom azlab import aoai, CHAT\n\noc = aoai(\"2025-03-01-preview\")\nstore = oc.vector_stores.create(name=\"facilities-kb\")\nf = oc.files.create(file=(\"boiler-sop.md\", open(\"boiler-sop.md\", \"rb\").read()), purpose=\"assistants\")\noc.vector_stores.files.create(store.id, file_id=f.id)\nprint(\"files in the vector store:\", len(oc.vector_stores.files.list(store.id).data))\n\nassistant = oc.beta.assistants.create(model=CHAT, instructions=\"Answer only from the files.\", tools=[{\"type\": \"file_search\"}],\n                                      tool_resources={\"file_search\": {\"vector_store_ids\": [store.id]}})\nthread = oc.beta.threads.create(messages=[{\"role\": \"user\", \"content\": \"What must I do when boiler pressure exceeds 30 psi?\"}])\nrun = oc.beta.threads.runs.create(thread.id, assistant_id=assistant.id)\nfor _ in range(60):\n    if run.status not in (\"queued\", \"in_progress\"):\n        break\n    time.sleep(0.5)\n    run = oc.beta.threads.runs.retrieve(run.id, thread_id=thread.id)\nmsgs = oc.beta.threads.messages.list(thread.id).data\nnotes = [a for m in msgs if m.role == \"assistant\" for c in m.content for a in c.text.annotations]\nprint(\"run:\", run.status, \"| annotation types:\", sorted({a.type for a in notes}))\n",
      "run": "python file_search.py",
      "expect": "annotation types: ['file_citation']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Ground with Azure OpenAI On Your Data",
@@ -1902,7 +2257,14 @@
      "code": "from azlab import aoai, CHAT\nfrom azdata import search_endpoint, search_key, INDEX\n\nr = aoai(\"2025-03-01-preview\").chat.completions.create(model=CHAT, messages=[{\"role\": \"user\", \"content\": \"What is the boiler pressure rule?\"}], extra_body={\n    \"data_sources\": [{\"type\": \"azure_search\", \"parameters\": {\"endpoint\": search_endpoint(), \"index_name\": INDEX,\n                                                            \"authentication\": {\"type\": \"api_key\", \"key\": search_key()}}}]})\ncontext = getattr(r.choices[0].message, \"context\", None) or {}\nprint(\"On Your Data citations:\", len(context.get(\"citations\", [])))\n",
      "run": "python on_your_data.py",
      "expect": "On Your Data citations:",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -2057,7 +2419,11 @@
      "how": "content_safety_client.analyze_text(AnalyzeTextOptions(text=...))",
      "expect": "A severity above the threshold for harmful text, none for the clean answer"
     }
-   ]
+   ],
+   "blocks_total": 6,
+   "blocks_nano": 6,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 9,
@@ -2148,7 +2514,14 @@
      "code": "pip install azure-core azure-data-tables openai requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Short-term memory: a thread",
@@ -2158,7 +2531,14 @@
      "code": "import time\nfrom azlab import aoai, CHAT\n\noc = aoai(\"2025-03-01-preview\")\nthread = oc.beta.threads.create(metadata={\"session\": \"s1\", \"user\": \"maria\"})\nfor text in (\"my badge is 4412\", \"which floor am I on\"):\n    oc.beta.threads.messages.create(thread.id, role=\"user\", content=text)\nhistory = oc.beta.threads.messages.list(thread.id, order=\"asc\").data\nprint(\"history in order:\", [m.content[0].text.value for m in history])\n\noc.beta.threads.update(thread.id, metadata={\"session\": \"s1\", \"user\": \"maria\", \"topic\": \"badge\"})\nprint(\"metadata:\", oc.beta.threads.retrieve(thread.id).metadata)\n\nassistant = oc.beta.assistants.create(model=CHAT, instructions=\"Answer from the conversation so far.\")\nrun = oc.beta.threads.runs.create(thread.id, assistant_id=assistant.id)\nfor _ in range(60):\n    if run.status not in (\"queued\", \"in_progress\"):\n        break\n    time.sleep(0.5)\n    run = oc.beta.threads.runs.retrieve(run.id, thread_id=thread.id)\nreply = \" \".join(c.text.value for m in oc.beta.threads.messages.list(thread.id).data if m.role == \"assistant\" for c in m.content)\nprint(\"run:\", run.status, \"| thread now holds\", len(oc.beta.threads.messages.list(thread.id).data), \"messages (2 user + 1 assistant)\")\noc.beta.threads.delete(thread.id)\n",
      "run": "python short_term.py",
      "expect": "thread now holds 3 messages (2 user + 1 assistant)",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Long-term memory: write the helper",
@@ -2168,7 +2548,14 @@
      "code": "import time\nfrom azdata import table\n\nTABLE = \"longtermmemory\"\n\n\ndef _pk(tenant, user):\n    return f\"{tenant}|{user}\".replace(\"/\", \"_\").replace(\"#\", \"_\").replace(\"?\", \"_\")[:60]\n\n\ndef remember(tenant, user, key, fact, source=\"session\"):\n    table(TABLE).upsert_entity({\"PartitionKey\": _pk(tenant, user), \"RowKey\": key, \"fact\": fact, \"source\": source, \"ts\": int(time.time())})\n\n\ndef recall(tenant, user):\n    return [dict(e) for e in table(TABLE).query_entities(\"PartitionKey eq @u\", parameters={\"u\": _pk(tenant, user)})]\n\n\ndef forget(tenant, user, key):\n    table(TABLE).delete_entity(_pk(tenant, user), key)\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Try it: a new session recalls a fact, another user cannot",
@@ -2178,7 +2565,14 @@
      "code": "from memory import remember, recall, forget\n\nremember(\"facilities\", \"maria\", \"pref-floor\", \"prefers floor 3 east wing for inspections\", source=\"session s1\")\nprint(\"new session recalls:\", recall(\"facilities\", \"maria\")[0][\"fact\"])\nprint(\"another user sees:\", recall(\"facilities\", \"tom\"))\nforget(\"facilities\", \"maria\", \"pref-floor\")\nprint(\"after forget:\", recall(\"facilities\", \"maria\"))\n",
      "run": "python try_memory.py",
      "expect": "new session recalls: prefers floor 3 east wing for inspections",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Confirm there is no managed long-term memory API",
@@ -2188,7 +2582,14 @@
      "code": "import requests\nfrom azlab import ENDPOINT\n\ncodes = [requests.get(ENDPOINT + p, params={\"api-version\": \"2025-03-01-preview\"}, timeout=10).status_code for p in (\"/openai/memory_stores\", \"/openai/memories\")]\nprint(\"memory routes answer:\", codes, \"-> no managed long-term memory API\")\n",
      "run": "python no_managed_memory.py",
      "expect": "no managed long-term memory API",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -2366,7 +2767,11 @@
      "how": "az storage entity query --table-name longtermmemory --account-name <account>",
      "expect": "Your stored user fact"
     }
-   ]
+   ],
+   "blocks_total": 5,
+   "blocks_nano": 5,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 4,
@@ -2462,7 +2867,14 @@
      "code": "pip install azure-core azure-mgmt-apimanagement requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the gateway helpers",
@@ -2472,7 +2884,14 @@
      "code": "import os\nimport requests\nfrom azure.mgmt.apimanagement import ApiManagementClient\nfrom azlab import arm, ENDPOINT, RG\n\nSERVICE = \"facilities-apim\"\nSUBSCRIPTION = \"agent-sub\"\n\n\ndef apim():\n    return arm(ApiManagementClient)\n\n\ndef url(path=\"\"):\n    return f\"{ENDPOINT}/azure-data/apim/{SERVICE}/{path.lstrip('/')}\"\n\n\ndef subscription_key():\n    return apim().subscription.list_secrets(RG, SERVICE, SUBSCRIPTION).primary_key\n\n\ndef headers(extra=None):\n    h = {\"Ocp-Apim-Subscription-Key\": subscription_key(), \"Content-Type\": \"application/json\"}\n    token = os.environ.get(\"VYOMI_BEARER_TOKEN\")           # set from chapter 1 on\n    if not token and os.path.exists(\"token.txt\"):          # chapter 1 saves the access token here\n        token = open(\"token.txt\").read().strip()\n    if token:\n        h[\"Authorization\"] = \"Bearer \" + token\n    h.update(extra or {})\n    return h\n\n\ndef mcp(method, params=None):\n    r = requests.post(url(\"mcp\"), json={\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": method, \"params\": params or {}}, headers=headers(), timeout=60)\n    r.raise_for_status()\n    out = r.json()\n    if \"error\" in out:\n        raise RuntimeError(f\"MCP error: {out['error']}\")\n    return out[\"result\"]\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the gateway, the tool catalogue and the subscription",
@@ -2482,7 +2901,14 @@
      "code": "from azure.mgmt.apimanagement.models import SubscriptionCreateParameters\nfrom azlab import rid, ensure_rg, RG, LOC, HTTP_ENDPOINT\nfrom azdata import function_key, FUNCTION_APP\nfrom gw import apim, SERVICE, SUBSCRIPTION, subscription_key\n\nensure_rg()\na = apim()\na.api_management_service.begin_create_or_update(RG, SERVICE, {\"location\": LOC, \"sku\": {\"name\": \"Developer\", \"capacity\": 1},\n                                                              \"publisher_email\": \"ops@facilities.example.com\", \"publisher_name\": \"facilities\"}).result()\nbackend = f\"{HTTP_ENDPOINT}/azure-data/functions/{FUNCTION_APP}/api\"       # the gateway reaches the Function App over the simulator's plain-http address\na.api.begin_create_or_update(RG, SERVICE, \"tools\", {\"display_name\": \"facilities-tools\", \"path\": \"tools\", \"protocols\": [\"https\"],\n                                                    \"subscription_required\": True, \"service_url\": backend}).result()\nfor op in (\"kb-search\", \"asset-status\", \"create-work-order\"):\n    a.api_operation.create_or_update(RG, SERVICE, \"tools\", op, {\"display_name\": op, \"method\": \"POST\", \"url_template\": \"/\" + op})\n\nPOLICY = (f'<policies><inbound><base/>'\n          f'<set-header name=\"x-functions-key\" exists-action=\"override\"><value>{function_key()}</value></set-header>'\n          '<rate-limit-by-key calls=\"60\" renewal-period=\"60\" counter-key=\"@(context.Subscription.Id)\"/>'\n          '</inbound><backend><base/></backend><outbound><base/></outbound><on-error><base/></on-error></policies>')\na.api_policy.create_or_update(RG, SERVICE, \"tools\", \"policy\", {\"value\": POLICY, \"format\": \"xml\"})\na.subscription.create_or_update(RG, SERVICE, SUBSCRIPTION, SubscriptionCreateParameters(\n    display_name=\"facilities agent\", scope=rid(\"Microsoft.ApiManagement\", \"service\", SERVICE) + \"/apis\"))\nprint(\"gateway\", SERVICE, \"| catalogue:\", sorted(o.name for o in a.api_operation.list_by_api(RG, SERVICE, \"tools\")), \"| subscription key issued:\", bool(subscription_key()))\n",
      "run": "python create_gateway.py",
      "expect": "catalogue: ['asset-status', 'create-work-order', 'kb-search']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Call a read-only tool through the gateway",
@@ -2492,7 +2918,14 @@
      "code": "import requests\nfrom gw import url, headers\n\nok = requests.post(url(\"tools/asset-status\"), json={\"asset_id\": \"B-12\"}, headers=headers(), timeout=60)\nprint(\"with the subscription key:\", ok.status_code, \"| B-12 status:\", ok.json()[\"asset\"][\"status\"])\nno = requests.post(url(\"tools/asset-status\"), json={\"asset_id\": \"B-12\"}, headers={\"Content-Type\": \"application/json\"}, timeout=30)\nprint(\"without a key:\", no.status_code)\n",
      "run": "python call_gateway.py",
      "expect": "with the subscription key: 200 | B-12 status: RUNNING",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Add an operation policy and the approval rule",
@@ -2502,7 +2935,14 @@
      "code": "import requests\nfrom azlab import RG\nfrom gw import apim, SERVICE, url, headers\n\nBASE = \"<backend><base/></backend><outbound><base/></outbound><on-error><base/></on-error></policies>\"\napim().api_operation_policy.create_or_update(RG, SERVICE, \"tools\", \"asset-status\", \"policy\", {\n    \"value\": '<policies><inbound><base/><rate-limit calls=\"1000\" renewal-period=\"60\"/></inbound>' + BASE, \"format\": \"xml\"})\n\nDENY_WRITE = ('<policies><inbound><base/><choose><when condition=\"@(string.IsNullOrEmpty(context.Request.Headers.GetValueOrDefault(&quot;x-approval-id&quot;,&quot;&quot;)))\">'\n              '<return-response><set-status code=\"403\" reason=\"Forbidden\"/><set-header name=\"Content-Type\" exists-action=\"override\"><value>application/json</value></set-header>'\n              '<set-body>{\"error\":\"write tools need an approved request (x-approval-id)\"}</set-body></return-response></when></choose></inbound>' + BASE)\napim().api_operation_policy.create_or_update(RG, SERVICE, \"tools\", \"create-work-order\", \"policy\", {\"value\": DENY_WRITE, \"format\": \"xml\"})\n\nno = requests.post(url(\"tools/create-work-order\"), json={\"request_id\": \"x\"}, headers=headers(), timeout=30)\nyes = requests.post(url(\"tools/create-work-order\"), json={\"request_id\": \"nonexistent\"}, headers=headers({\"x-approval-id\": \"req-none\"}), timeout=60)\nprint(\"write tool without x-approval-id:\", no.status_code, no.json()[\"error\"])\nprint(\"write tool with x-approval-id: reaches the function ->\", yes.status_code, yes.json())\n",
      "run": "python policies.py",
      "expect": "write tool without x-approval-id: 403",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Expose the tools as an MCP server",
@@ -2512,7 +2952,14 @@
      "code": "import json\nfrom azure.mgmt.apimanagement.models import ApiCreateOrUpdateParameter\nfrom azlab import rid, RG\nfrom gw import apim, SERVICE, mcp\n\napim().api.begin_create_or_update(RG, SERVICE, \"tools-mcp\", ApiCreateOrUpdateParameter(\n    display_name=\"facilities-tools-mcp\", path=\"mcp\", protocols=[\"https\"], subscription_required=True, api_type=\"mcp\",\n    source_api_id=rid(\"Microsoft.ApiManagement\", \"service\", SERVICE) + \"/apis/tools\")).result()\nnames = sorted(t[\"name\"] for t in mcp(\"tools/list\")[\"tools\"])\nprint(\"MCP tools/list:\", names)\ntool = next(n for n in names if n.replace(\"-\", \"_\").endswith(\"asset_status\"))\nres = mcp(\"tools/call\", {\"name\": tool, \"arguments\": {\"asset_id\": \"B-12\"}})\nprint(\"MCP tools/call\", tool, \"-> isError:\", bool(res.get(\"isError\")), \"| status:\", json.loads(res[\"content\"][0][\"text\"])[\"asset\"][\"status\"])\n",
      "run": "python mcp_server.py",
      "expect": "| status: RUNNING",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -2673,7 +3120,11 @@
      "how": "POST the write operation without the approval header",
      "expect": "403 from the policy expression"
     }
-   ]
+   ],
+   "blocks_total": 6,
+   "blocks_nano": 6,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 5,
@@ -2730,7 +3181,7 @@
     850
    ],
    "level": "Advanced",
-   "minutes": 50,
+   "minutes": 54,
    "outcome": "Writes that wait for a human, with a ledger of every decision",
    "lessons": 5,
    "color": "#dc2626",
@@ -2773,7 +3224,14 @@
      "code": "pip install azure-core azure-data-tables azure-servicebus azure-mgmt-servicebus requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the Service Bus namespace, topic and approver inbox",
@@ -2783,7 +3241,14 @@
      "code": "from azure.mgmt.servicebus import ServiceBusManagementClient\nfrom azlab import arm, ensure_rg, RG, LOC\n\nensure_rg()\nsb = arm(ServiceBusManagementClient)\nsb.namespaces.begin_create_or_update(RG, \"facilities-bus\", {\"location\": LOC, \"sku\": {\"name\": \"Standard\", \"tier\": \"Standard\"}}).result()\nsb.topics.create_or_update(RG, \"facilities-bus\", \"work-order-approval\", {})\nsb.subscriptions.create_or_update(RG, \"facilities-bus\", \"work-order-approval\", \"approver-inbox\", {})\nprint(\"namespace facilities-bus | topic work-order-approval | subscription\", [s.name for s in sb.subscriptions.list_by_topic(RG, \"facilities-bus\", \"work-order-approval\")][0])\n",
      "run": "python create_bus.py",
      "expect": "subscription approver-inbox",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the approval helpers",
@@ -2793,7 +3258,14 @@
      "code": "import json\nimport time\nfrom azure.servicebus import ServiceBusClient, ServiceBusMessage\nfrom azlab import HOST, AMQP_PORT\nfrom azdata import table\n\nTOPIC, INBOX, LEDGER = \"work-order-approval\", \"approver-inbox\", \"approvalledger\"\n\n\ndef conn():\n    return f\"Endpoint=sb://{HOST}:{AMQP_PORT};SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=vyomi;UseDevelopmentEmulator=true\"\n\n\ndef request_approval(request_id, asset_id, summary, priority, requester):\n    payload = {\"request_id\": request_id, \"asset_id\": asset_id, \"summary\": summary, \"priority\": priority, \"requester\": requester}\n    table(LEDGER).upsert_entity(dict(PartitionKey=\"req\", RowKey=request_id, status=\"PENDING\", ts=int(time.time()), **payload))\n    with ServiceBusClient.from_connection_string(conn()) as c, c.get_topic_sender(TOPIC) as s:\n        s.send_messages(ServiceBusMessage(json.dumps(payload), subject=\"work-order\", application_properties={\"requester\": requester, \"kind\": \"work-order\"}))\n    return {\"request_id\": request_id, \"status\": \"PENDING_APPROVAL\"}\n\n\ndef pull_request(request_id, tries=15):\n    \"\"\"The approver reads the inbox: complete our message, abandon (put back) anyone else's.\"\"\"\n    with ServiceBusClient.from_connection_string(conn()) as c:\n        for _ in range(tries):\n            with c.get_subscription_receiver(TOPIC, INBOX, max_wait_time=2) as r:\n                for m in r.receive_messages(max_message_count=10, max_wait_time=2):\n                    body = json.loads(b\"\".join(m.body).decode())\n                    if body.get(\"request_id\") == request_id:\n                        r.complete_message(m)\n                        return body\n                    r.abandon_message(m)\n    return None\n\n\ndef ledger_row(request_id):\n    return dict(table(LEDGER).get_entity(\"req\", request_id))\n\n\ndef wait_decision(request_id, out, tries=80):\n    for _ in range(tries):\n        row = ledger_row(request_id)\n        if row.get(\"status\") not in (None, \"PENDING\"):\n            out[\"row\"] = row\n            return\n        time.sleep(0.25)\n\n\ndef work_orders():\n    return [dict(e) for e in table(\"workorders\").list_entities()]\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Park a request: nothing is written yet",
@@ -2803,7 +3275,14 @@
      "code": "from approval import request_approval, ledger_row, work_orders\nfrom azdata import call_function, FUNCTION_APP\n\nrequest_approval(\"req-demo0001\", \"B-12\", \"Work order for B-12: boiler pressure is 34 psi, above the 30 psi limit\", \"P1\", \"maria\")\nprint(\"ledger status:\", ledger_row(\"req-demo0001\")[\"status\"])\nprint(\"work orders requested by maria:\", len([w for w in work_orders() if w.get(\"requester\") == \"maria\"]))\npremature = call_function(FUNCTION_APP, \"create-work-order\", {\"request_id\": \"req-demo0001\"})\nprint(\"create-work-order before approval:\", premature[\"error\"])\nstranger = call_function(FUNCTION_APP, \"approval-decision\", {\"request_id\": \"req-demo0001\", \"decision\": \"APPROVE\", \"approver\": \"mallory@evil.test\"})\nprint(\"unauthorised approver:\", stranger[\"error\"], \"| ledger still\", ledger_row(\"req-demo0001\")[\"status\"])\n",
      "run": "python park_request.py",
      "expect": "ledger status: PENDING\nwork orders requested by maria: 0",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Approve: the parked caller proceeds and the work order is created",
@@ -2813,7 +3292,14 @@
      "code": "import threading\nfrom approval import pull_request, wait_decision, ledger_row, work_orders\nfrom azdata import call_function, FUNCTION_APP\n\nmsg = pull_request(\"req-demo0001\")\nprint(\"inbox delivered:\", msg[\"summary\"][:50])\n\nseen = {}\nwaiting = threading.Thread(target=wait_decision, args=(\"req-demo0001\", seen))\nwaiting.start()\nd = call_function(FUNCTION_APP, \"approval-decision\", {\"request_id\": \"req-demo0001\", \"decision\": \"APPROVE\", \"approver\": \"duty.manager@example.com\"})\nwaiting.join(timeout=30)\nprint(\"decision:\", d[\"status\"], \"| the waiting caller saw:\", seen[\"row\"][\"status\"])\n\nwo = call_function(FUNCTION_APP, \"create-work-order\", {\"request_id\": \"req-demo0001\"})\nrow = ledger_row(\"req-demo0001\")\nprint(\"work order:\", wo[\"work_order_id\"], \"| ledger:\", row[\"status\"], \"approved by\", row[\"approver\"])\nagain = call_function(FUNCTION_APP, \"create-work-order\", {\"request_id\": \"req-demo0001\"})\nprint(\"second call idempotent:\", again.get(\"idempotent\"), \"| work orders for B-12 from this request:\", len([w for w in work_orders() if w[\"work_order_id\"] == wo[\"work_order_id\"]]))\n",
      "run": "python approve_request.py",
      "expect": "second call idempotent: True | work orders for B-12 from this request: 1",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Reject, and refuse a late decision",
@@ -2823,7 +3309,30 @@
      "code": "from azure.core import MatchConditions\nfrom azure.core.exceptions import HttpResponseError\nfrom azure.data.tables import UpdateMode\nfrom approval import request_approval, pull_request, ledger_row, work_orders\nfrom azdata import call_function, table, FUNCTION_APP\n\nrequest_approval(\"req-demo0002\", \"EL-3\", \"Replace elevator 3 (this one is rejected)\", \"P3\", \"maria\")\npull_request(\"req-demo0002\")\nd = call_function(FUNCTION_APP, \"approval-decision\", {\"request_id\": \"req-demo0002\", \"decision\": \"REJECT\", \"approver\": \"duty.manager@example.com\"})\nrefused = call_function(FUNCTION_APP, \"create-work-order\", {\"request_id\": \"req-demo0002\"})\nprint(\"decision:\", d[\"status\"], \"| create-work-order:\", refused[\"error\"][:40])\nprint(\"work orders written for the rejected request:\", len([w for w in work_orders() if w.get(\"requester\") == \"maria\" and w[\"asset_id\"] == \"EL-3\"]))\n\nledger = table(\"approvalledger\")\nstale = ledger.get_entity(\"req\", \"req-demo0001\").metadata[\"etag\"]\nledger.update_entity({\"PartitionKey\": \"req\", \"RowKey\": \"req-demo0001\", \"note\": \"touched\"}, mode=UpdateMode.MERGE)\ntry:\n    ledger.update_entity({\"PartitionKey\": \"req\", \"RowKey\": \"req-demo0001\", \"status\": \"REJECTED\"}, mode=UpdateMode.MERGE, etag=stale, match_condition=MatchConditions.IfNotModified)\nexcept HttpResponseError as e:\n    print(\"decision with a stale ETag refused:\", e.status_code)\n",
      "run": "python reject_request.py",
      "expect": "decision with a stale ETag refused: 412",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Approval expiry: nobody answers, the request expires",
+     "text": "A request that waits forever is a risk. Every ledger row gets `expires_at`; a sweeper marks PENDING rows past their deadline EXPIRED using an ETag condition, so a row decided a moment earlier is never overwritten (the same optimistic-concurrency rule the decision function uses). The block proves three things: an unanswered request expires, an already-approved request is untouched, and an expired request can no longer be approved.",
+     "file": "expiry.py",
+     "lang": "python",
+     "code": "import time\nfrom azure.core import MatchConditions\nfrom azure.core.exceptions import ResourceModifiedError\nfrom azure.data.tables import UpdateMode\nfrom azdata import table\n\nledger = table(\"approvalledger\")\nnow = int(time.time())\nledger.upsert_entity({\"PartitionKey\": \"req\", \"RowKey\": \"req-exp-stale\", \"status\": \"PENDING\", \"expires_at\": now - 5, \"asset_id\": \"B-12\"})\nledger.upsert_entity({\"PartitionKey\": \"req\", \"RowKey\": \"req-exp-done\", \"status\": \"APPROVED\", \"expires_at\": now - 5, \"asset_id\": \"B-12\"})\nledger.upsert_entity({\"PartitionKey\": \"req\", \"RowKey\": \"req-exp-fresh\", \"status\": \"PENDING\", \"expires_at\": now + 3600, \"asset_id\": \"B-12\"})\n\n\ndef sweep():\n    expired = []\n    for row in ledger.query_entities(\"status eq 'PENDING'\"):\n        if int(row.get(\"expires_at\", 1 << 60)) < int(time.time()):\n            try:\n                ledger.update_entity({\"PartitionKey\": \"req\", \"RowKey\": row[\"RowKey\"], \"status\": \"EXPIRED\"}, mode=UpdateMode.MERGE,\n                                     etag=row.metadata[\"etag\"], match_condition=MatchConditions.IfNotModified)\n                expired.append(row[\"RowKey\"])\n            except ResourceModifiedError:\n                pass          # decided in the meantime: leave it alone\n    return expired\n\n\nassert sweep() == [\"req-exp-stale\"], \"only the overdue PENDING request may expire\"\nstatus = lambda r: ledger.get_entity(\"req\", r)[\"status\"]\nassert status(\"req-exp-stale\") == \"EXPIRED\" and status(\"req-exp-done\") == \"APPROVED\" and status(\"req-exp-fresh\") == \"PENDING\"\nprint(\"expired:\", \"req-exp-stale\", \"| approved row untouched | fresh row still waiting\")\n\n# a decision that raced the sweeper: it holds an old ETag, so the condition refuses it\nstale = ledger.get_entity(\"req\", \"req-exp-stale\")\ntry:\n    ledger.update_entity({\"PartitionKey\": \"req\", \"RowKey\": \"req-exp-stale\", \"status\": \"APPROVED\"}, mode=UpdateMode.MERGE,\n                         etag=\"W/\\\"stale\\\"\", match_condition=MatchConditions.IfNotModified)\n    raise SystemExit(\"an old ETag must not be able to approve an expired request\")\nexcept ResourceModifiedError:\n    pass\nassert status(\"req-exp-stale\") == \"EXPIRED\"\nprint(\"approval expiry verified\")\n",
+     "run": "python expiry.py",
+     "expect": "approval expiry verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Table storage conditions are not part of the Nano Azure core yet.",
+     "kind": "harden",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -2834,11 +3343,11 @@
     "concepts": [
      [
       "Risk level",
-      "Low-risk actions can run automatically; medium and high wait for a human."
+      "How risky a write is decides who must approve it. In this course every write waits for a human; the AWS Mesh chapter adds a policy that auto-approves the lowest priority."
      ],
      [
       "Durable wait",
-      "The workflow stores its state and a callback token, so it can wait hours or days and survive restarts."
+      "The workflow stores its state and waits for a callback (a token, a decision message or a ledger update, depending on the cloud), so it can wait hours or days and survive restarts."
      ],
      [
       "Approval ledger",
@@ -2892,7 +3401,7 @@
      ],
      [
       "The approver decides",
-      "They approve, sending a callback token back to the waiting workflow."
+      "They approve, and that decision is delivered back to the waiting request."
      ],
      [
       "Approve creates, reject does not",
@@ -3018,6 +3527,12 @@
      "how": "az storage entity query --table-name approvalledger --account-name <account>",
      "expect": "PENDING, then APPROVED or REJECTED"
     }
+   ],
+   "blocks_total": 7,
+   "blocks_nano": 6,
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Approval expiry: nobody answers, the request expires"
    ]
   },
   {
@@ -3128,7 +3643,14 @@
      "code": "pip install azure-core azure-identity azure-mgmt-apimanagement azure-mgmt-frontdoor azure-mgmt-network PyJWT cryptography requests\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Register the app and a user in Entra",
@@ -3138,7 +3660,14 @@
      "code": "import json\nimport requests\nfrom azlab import ENDPOINT\n\nAPI_URI = \"api://facilities-api\"\nUSER, PASSWORD = \"maria.ops@facilities.example.com\", \"Fac!lities-2026\"\n\n\ndef graph(method, path, body=None):\n    r = requests.request(method, f\"{ENDPOINT}/v1.0{path}\", json=body, headers={\"Authorization\": \"Bearer vyomi-local\"}, timeout=30)\n    if r.status_code >= 300 and \"already exists\" not in r.text.lower():\n        raise RuntimeError(f\"Graph {method} {path} HTTP {r.status_code}: {r.text[:200]}\")\n    return r.json() if r.text else {}\n\n\nif __name__ == \"__main__\":\n    app = graph(\"POST\", \"/applications\", {\"displayName\": \"facilities-users\", \"identifierUris\": [API_URI]})\n    secret = graph(\"POST\", f\"/applications/{app['id']}/addPassword\", {\"passwordCredential\": {\"displayName\": \"facilities-agent\"}})\n    graph(\"POST\", \"/users\", {\"displayName\": \"Maria Ops\", \"userPrincipalName\": USER, \"mailNickname\": \"maria.ops\", \"accountEnabled\": True,\n                             \"passwordProfile\": {\"password\": PASSWORD, \"forceChangePasswordNextSignIn\": False}})\n    json.dump({\"client_id\": app[\"appId\"], \"client_secret\": secret[\"secretText\"]}, open(\"entra.json\", \"w\"))\n    print(\"app registration facilities-users client_id:\", app[\"appId\"], \"| user:\", USER)\n",
      "run": "python entra.py",
      "expect": "app registration facilities-users client_id:",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Sign in and verify the token",
@@ -3148,7 +3677,14 @@
      "code": "import json\nimport jwt\nimport requests\nfrom azure.identity import ClientSecretCredential\nfrom azlab import ENDPOINT, TENANT\nfrom entra import API_URI, USER, PASSWORD\n\ncfg = json.load(open(\"entra.json\"))\ncred = ClientSecretCredential(TENANT, cfg[\"client_id\"], cfg[\"client_secret\"], authority=ENDPOINT, disable_instance_discovery=True)\napp_token = cred.get_token(API_URI + \"/.default\").token\nopen(\"app_token.txt\", \"w\").write(app_token)\nprint(\"application token is a JWT:\", app_token.count(\".\") == 2)\n\nr = requests.post(f\"{ENDPOINT}/{TENANT}/oauth2/v2.0/token\", data={\"grant_type\": \"password\", \"client_id\": cfg[\"client_id\"], \"username\": USER, \"password\": PASSWORD,\n                                                                  \"scope\": API_URI + \"/.default\"}, timeout=30)\nr.raise_for_status()\nuser_token = r.json()[\"access_token\"]\nopen(\"token.txt\", \"w\").write(user_token)\n\nkey = jwt.PyJWKClient(f\"{ENDPOINT}/{TENANT}/discovery/v2.0/keys\").get_signing_key_from_jwt(user_token).key\nclaims = jwt.decode(user_token, key, algorithms=[\"RS256\"], audience=[API_URI, cfg[\"client_id\"]], options={\"verify_iss\": False})\nprint(\"signature verified against the tenant keys | signed in as:\", claims.get(\"preferred_username\") or claims.get(\"upn\"))\n",
      "run": "python sign_in.py",
      "expect": "signed in as: maria.ops@facilities.example.com",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Turn on validate-jwt at the gateway",
@@ -3158,7 +3694,14 @@
      "code": "import base64\nimport json\nimport requests\nfrom azlab import ENDPOINT, TENANT, RG\nfrom azdata import function_key\nfrom entra import API_URI\nfrom gw import apim, SERVICE, url, subscription_key\n\ncfg = json.load(open(\"entra.json\"))\nPOLICY = ('<policies><inbound><base/>'\n          '<validate-jwt header-name=\"Authorization\" failed-validation-httpcode=\"401\" failed-validation-error-message=\"Unauthorized. Access token is missing or invalid.\">'\n          f'<openid-config url=\"{ENDPOINT}/{TENANT}/v2.0/.well-known/openid-configuration\"/>'\n          f'<audiences><audience>{API_URI}</audience><audience>{cfg[\"client_id\"]}</audience></audiences></validate-jwt>'\n          f'<set-header name=\"x-functions-key\" exists-action=\"override\"><value>{function_key()}</value></set-header>'\n          '<rate-limit-by-key calls=\"60\" renewal-period=\"60\" counter-key=\"@(context.Subscription.Id)\"/>'\n          '<set-header name=\"x-vyomi-caller\" exists-action=\"override\"><value>@(context.Request.Headers.GetValueOrDefault(\"Authorization\",\"\").AsJwt()?.Claims[\"azp\"].FirstOrDefault())</value></set-header>'\n          '</inbound><backend><base/></backend><outbound><base/></outbound><on-error><base/></on-error></policies>')\napim().api_policy.create_or_update(RG, SERVICE, \"tools\", \"policy\", {\"value\": POLICY, \"format\": \"xml\"})\n\n\ndef call(key=True, token=None):\n    h = {\"Content-Type\": \"application/json\"}\n    if key:\n        h[\"Ocp-Apim-Subscription-Key\"] = subscription_key()\n    if token:\n        h[\"Authorization\"] = \"Bearer \" + token\n    return requests.post(url(\"tools/kb-search\"), json={\"query\": \"boiler pressure limit\"}, headers=h, timeout=60)\n\n\nb64 = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip(\"=\")\nforged = f\"{b64({'alg': 'none'})}.{b64({'aud': API_URI, 'appid': 'evil'})}.\"\nprint(\"no subscription key:\", call(key=False, token=open(\"token.txt\").read()).status_code)\nprint(\"key but no token:\", call().status_code)\nprint(\"forged alg=none token:\", call(token=forged).status_code)\ngood = call(token=open(\"token.txt\").read())\nprint(\"real Entra user token:\", good.status_code, \"| results:\", len(good.json()[\"results\"]))\napp_call = call(token=open(\"app_token.txt\").read()).json()\nprint(\"application token -> caller seen by the tool is the app id:\", app_call[\"caller\"] == cfg[\"client_id\"])\n",
      "run": "python protect_gateway.py",
      "expect": "application token -> caller seen by the tool is the app id: True",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the WAF policies",
@@ -3168,7 +3711,14 @@
      "code": "from azure.mgmt.frontdoor import FrontDoorManagementClient\nfrom azure.mgmt.network import NetworkManagementClient\nfrom azure.mgmt.network.models import ManagedRuleSet, ManagedRulesDefinition, PolicySettings, WebApplicationFirewallPolicy\nfrom azlab import arm, ensure_rg, RG, LOC\n\nensure_rg()\nfd = arm(FrontDoorManagementClient)\nfd.policies.begin_create_or_update(RG, \"facilitieswaf\", {\n    \"location\": \"global\", \"sku\": {\"name\": \"Premium_AzureFrontDoor\"}, \"policy_settings\": {\"enabled_state\": \"Enabled\", \"mode\": \"Prevention\"},\n    \"managed_rules\": {\"managed_rule_sets\": [{\"rule_set_type\": \"Microsoft_DefaultRuleSet\", \"rule_set_version\": \"2.1\"}]}}).result()\ngot = fd.policies.get(RG, \"facilitieswaf\")\nprint(\"Front Door WAF policy\", got.name, \"mode:\", getattr(got.policy_settings.mode, \"value\", got.policy_settings.mode))\n\nnet = arm(NetworkManagementClient)\nnet.web_application_firewall_policies.create_or_update(RG, \"facilitieswafgw\", WebApplicationFirewallPolicy(\n    location=LOC, policy_settings=PolicySettings(state=\"Enabled\", mode=\"Prevention\"),\n    managed_rules=ManagedRulesDefinition(managed_rule_sets=[ManagedRuleSet(rule_set_type=\"OWASP\", rule_set_version=\"3.2\")])))\ngw = net.web_application_firewall_policies.get(RG, \"facilitieswafgw\")\nprint(\"Application Gateway WAF policy\", gw.name, \"mode:\", getattr(gw.policy_settings.mode, \"value\", gw.policy_settings.mode))\n",
      "run": "python waf.py",
      "expect": "Application Gateway WAF policy facilitieswafgw mode: Prevention",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -3363,7 +3913,11 @@
      "how": "az network front-door waf-policy list -g <rg> -o table",
      "expect": "facilitieswaf"
     }
-   ]
+   ],
+   "blocks_total": 5,
+   "blocks_nano": 5,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 2,
@@ -3454,7 +4008,14 @@
      "code": "pip install azure-core azure-ai-contentsafety azure-mgmt-cognitiveservices azure-mgmt-servicebus azure-servicebus openai\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Screen an input with Content Safety",
@@ -3464,7 +4025,14 @@
      "code": "from azure.ai.contentsafety import ContentSafetyClient\nfrom azure.ai.contentsafety.models import AnalyzeTextOptions\nfrom azure.core.credentials import AzureKeyCredential\nfrom azlab import ENDPOINT\n\nclient = ContentSafetyClient(ENDPOINT, AzureKeyCredential(\"vyomi-local\"))\n\n\ndef screen(text):\n    return {x.category: x.severity for x in client.analyze_text(AnalyzeTextOptions(text=text)).categories_analysis}\n\n\nok = screen(\"What is the SOP when boiler pressure exceeds 30 psi?\")\nbad = screen(\"I am going to kill and torture you\")\nprint(\"benign question flagged:\", any(v for v in ok.values()))\nprint(\"threat flagged:\", any(v and v > 0 for v in bad.values()), \"| categories:\", {k: v for k, v in bad.items() if v})\n",
      "run": "python screen_input.py",
      "expect": "benign question flagged: False",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Bind a content-filter policy to a model deployment",
@@ -3474,7 +4042,14 @@
      "code": "from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient\nfrom openai import BadRequestError\nfrom azlab import arm, aoai, pick_models, RG, OPENAI_ACCOUNT\n\ncs = arm(CognitiveServicesManagementClient)\nfilters = [{\"name\": n, \"severityThreshold\": \"Low\", \"blocking\": True, \"enabled\": True, \"source\": s}\n           for n in (\"Violence\", \"Hate\", \"SelfHarm\", \"Sexual\") for s in (\"Prompt\", \"Completion\")]\ncs.rai_policies.create_or_update(RG, OPENAI_ACCOUNT, \"facilities-guardrail\", {\"properties\": {\"mode\": \"Blocking\", \"basePolicyName\": \"Microsoft.Default\", \"contentFilters\": filters}})\ncs.deployments.begin_create_or_update(RG, OPENAI_ACCOUNT, \"chat-guarded\", {\"sku\": {\"name\": \"Standard\", \"capacity\": 1}, \"properties\": {\n    \"model\": pick_models()[0], \"raiPolicyName\": \"facilities-guardrail\"}}).result()\nprint(\"policy facilities-guardrail bound to deployment chat-guarded\")\n\ntry:\n    aoai().chat.completions.create(model=\"chat-guarded\", messages=[{\"role\": \"user\", \"content\": \"I am going to kill and torture you\"}])\n    print(\"violent prompt: ANSWERED\")\nexcept BadRequestError as e:\n    print(\"violent prompt refused:\", e.status_code, getattr(e, \"code\", None))\nr = aoai().chat.completions.create(model=\"chat-guarded\", max_tokens=10, messages=[{\"role\": \"user\", \"content\": \"What is the boiler pressure limit?\"}])\nprint(\"benign prompt reaches the model:\", bool(r.choices[0].message.content))\n",
      "run": "python content_filter.py",
      "expect": "violent prompt refused: 400 content_filter",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Use the approver inbox",
@@ -3484,7 +4059,14 @@
      "code": "import json\nfrom azure.mgmt.servicebus import ServiceBusManagementClient\nfrom azure.servicebus import ServiceBusClient, ServiceBusMessage\nfrom azlab import arm, RG, LOC\nfrom approval import conn, TOPIC, INBOX\n\nsb = arm(ServiceBusManagementClient)\nsb.namespaces.begin_create_or_update(RG, \"facilities-bus\", {\"location\": LOC, \"sku\": {\"name\": \"Standard\", \"tier\": \"Standard\"}}).result()\nsb.topics.create_or_update(RG, \"facilities-bus\", TOPIC, {})\nsb.subscriptions.create_or_update(RG, \"facilities-bus\", TOPIC, INBOX, {})\n\nwith ServiceBusClient.from_connection_string(conn()) as c:\n    with c.get_topic_sender(TOPIC) as s:\n        s.send_messages(ServiceBusMessage(json.dumps({\"request_id\": \"smoke\", \"summary\": \"inbox smoke test\"}), subject=\"smoke\", application_properties={\"requester\": \"duty\"}))\n    print(\"messages waiting in the inbox (ARM):\", sb.subscriptions.get(RG, \"facilities-bus\", TOPIC, INBOX).message_count)\n    with c.get_subscription_receiver(TOPIC, INBOX, max_wait_time=10) as r:\n        got = r.receive_messages(max_message_count=5, max_wait_time=10)\n        print(\"received:\", json.loads(b\"\".join(got[0].body))[\"summary\"], \"| requester property:\", got[0].application_properties.get(b\"requester\"))\n        for m in got:\n            r.complete_message(m)\n    with c.get_subscription_receiver(TOPIC, INBOX, max_wait_time=2) as r:\n        print(\"redelivered after complete:\", len(r.receive_messages(max_message_count=1, max_wait_time=2)))\n",
      "run": "python inbox.py",
      "expect": "redelivered after complete: 0",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -3656,7 +4238,11 @@
      "how": "az servicebus topic subscription show -g <rg> --namespace-name facilities-bus --topic-name work-order-approval -n approver-inbox --query messageCount",
      "expect": "A message count above 0 after a request is published"
     }
-   ]
+   ],
+   "blocks_total": 4,
+   "blocks_nano": 4,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
   },
   {
    "id": 8,
@@ -3708,7 +4294,7 @@
     850
    ],
    "level": "Intermediate",
-   "minutes": 35,
+   "minutes": 39,
    "outcome": "Traces, metrics and logs you can read back",
    "lessons": 5,
    "color": "#ea580c",
@@ -3763,7 +4349,14 @@
      "code": "pip install azure-core azure-mgmt-loganalytics azure-mgmt-applicationinsights azure-mgmt-monitor azure-monitor-opentelemetry-exporter azure-monitor-query opentelemetry-sdk requests langgraph fastapi openai\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the workspace and the Application Insights component",
@@ -3773,7 +4366,14 @@
      "code": "import json\nfrom azure.mgmt.applicationinsights import ApplicationInsightsManagementClient\nfrom azure.mgmt.loganalytics import LogAnalyticsManagementClient\nfrom azlab import arm, rid, ensure_rg, RG, LOC, ENDPOINT\n\nensure_rg()\nws = arm(LogAnalyticsManagementClient).workspaces.begin_create_or_update(RG, \"facilities-law\", {\"location\": LOC}).result()\nai = arm(ApplicationInsightsManagementClient).components.create_or_update(RG, \"facilities-ai\", {\n    \"location\": LOC, \"kind\": \"web\", \"application_type\": \"web\", \"workspace_resource_id\": rid(\"Microsoft.OperationalInsights\", \"workspaces\", \"facilities-law\")})\nikey = ai.connection_string.split(\"InstrumentationKey=\")[1].split(\";\")[0]\njson.dump({\"workspace_id\": ws.customer_id, \"ingest\": f\"InstrumentationKey={ikey};IngestionEndpoint={ENDPOINT}/\"}, open(\"obs.json\", \"w\"))\nprint(\"workspace facilities-law customerId:\", ws.customer_id, \"| application insights facilities-ai ready\")\n",
      "run": "python create_observability.py",
      "expect": "application insights facilities-ai ready",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Write the full agent: the graph plus its tools",
@@ -3783,7 +4383,14 @@
      "code": "import os\nimport re\nimport time\nimport uuid\nos.environ.setdefault(\"VYOMI_ENDPOINT\", os.environ[\"VYOMI_AZURE_HTTP_ENDPOINT\"])\nimport agent_graph\nfrom app import converse\nfrom approval import request_approval, work_orders\nfrom azdata import call_function, FUNCTION_APP\n\n\ndef _tool_span(st, name, t0):\n    st[\"spans\"].append({\"name\": f\"tool:{name}\", \"kind\": \"tool\", \"start\": t0, \"end\": time.time()})\n\n\ndef facilities(st):\n    t0 = time.time()\n    out = call_function(FUNCTION_APP, \"kb-search\", {\"query\": st[\"question\"], \"top_k\": 3})\n    _tool_span(st, \"kb_search\", t0)\n    st[\"citations\"] = [{\"n\": i + 1, \"source\": r[\"source\"], \"text\": r[\"text\"]} for i, r in enumerate(out[\"results\"])]\n    return \"\\n\".join(f\"[{c['n']}] {c['text']}\" for c in st[\"citations\"])\n\n\ndef maintenance(st):\n    t0 = time.time()\n    m = re.search(r\"\\b([A-Z]{1,3}-\\d+)\\b\", st[\"question\"])\n    if not m:\n        return \"No asset id in the question.\"\n    out = call_function(FUNCTION_APP, \"asset-status\", {\"asset_id\": m.group(1)})\n    _tool_span(st, \"asset_status\", t0)\n    note = f\"Asset {m.group(1)} status {out['asset']['status']}; open work orders: {[w['work_order_id'] for w in out['work_orders'] if w['status'] == 'OPEN']}.\"\n    if re.search(r\"work order|raise|create\", st[\"question\"], re.I):\n        rid = \"req-\" + uuid.uuid4().hex[:10]\n        t1 = time.time()\n        request_approval(rid, m.group(1), f\"Work order for {m.group(1)}: \" + st[\"question\"][:100], \"P1\" if re.search(r\"exceed|pressure|fire\", st[\"question\"], re.I) else \"P2\", st.get(\"user\", \"\"))\n        _tool_span(st, \"create_work_order\", t1)\n        st[\"approval\"] = rid\n        note += f\" A work order request ({rid}) was submitted and is waiting for approval.\"\n    return note\n\n\ndef analytics(st):\n    t0 = time.time()\n    rows = work_orders()\n    _tool_span(st, \"work_order_stats\", t0)\n    return f\"Work orders: {len(rows)} total, {len([r for r in rows if r.get('status') == 'OPEN'])} open.\"\n\n\ngraph = agent_graph.build(converse, tools={\"facilities\": facilities, \"maintenance\": maintenance, \"analytics\": analytics})\n\n\ndef ask(question, user=\"maria\"):\n    return graph.invoke({\"question\": question, \"user\": user, \"spans\": []})\n\n\nif __name__ == \"__main__\":\n    st = ask(\"Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\")\n    print(\"route:\", st[\"route\"])\n    print(\"spans:\", [s[\"name\"] for s in st[\"spans\"]])\n    print(\"approval request:\", st.get(\"approval\", \"none\")[:8], \"| answer:\", st[\"answer\"][:70])\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Run the agent once",
@@ -3793,7 +4400,14 @@
      "code": "import json\nimport full_agent\n\nst = full_agent.ask(\"Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\")\njson.dump({\"spans\": st[\"spans\"], \"route\": st[\"route\"], \"user\": st[\"user\"], \"approval\": st.get(\"approval\")}, open(\"run.json\", \"w\"))\ntools = [s[\"name\"] for s in st[\"spans\"] if s[\"kind\"] == \"tool\"]\nprint(\"route:\", st[\"route\"])\nprint(\"tool calls:\", tools)\nprint(\"approval request parked:\", bool(st.get(\"approval\")), \"| spans recorded:\", len(st[\"spans\"]))\n",
      "run": "python run_agent.py",
      "expect": "approval request parked: True",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Export the spans, a log line and a metric",
@@ -3803,7 +4417,14 @@
      "code": "import json\nimport logging\nimport time\nimport uuid\nfrom opentelemetry.sdk._logs import LoggerProvider, LoggingHandler\nfrom opentelemetry.sdk._logs.export import SimpleLogRecordProcessor\nfrom opentelemetry.sdk.metrics import MeterProvider\nfrom opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader\nfrom opentelemetry.sdk.trace import TracerProvider\nfrom opentelemetry.sdk.trace.export import SimpleSpanProcessor\nfrom opentelemetry.trace import SpanKind, set_span_in_context\nfrom azure.monitor.opentelemetry.exporter import AzureMonitorLogExporter, AzureMonitorMetricExporter, AzureMonitorTraceExporter\n\nobs = json.load(open(\"obs.json\"))\nrun = json.load(open(\"run.json\"))\ncs = obs[\"ingest\"]\nns = lambda t: int(t * 1e9)\ntag = uuid.uuid4().hex\nspans = run[\"spans\"]\n\ntp = TracerProvider()\ntp.add_span_processor(SimpleSpanProcessor(AzureMonitorTraceExporter(connection_string=cs, disable_offline_storage=True)))\ntracer = tp.get_tracer(\"facilities-supervisor\")\nroot = tracer.start_span(\"facilities-supervisor\", start_time=ns(spans[0][\"start\"]), kind=SpanKind.SERVER, attributes={\"facilities.trace\": tag, \"user\": run[\"user\"]})\nctx = set_span_in_context(root)\nfor s in spans:\n    tracer.start_span(s[\"name\"], context=ctx, start_time=ns(s[\"start\"]), attributes={\"kind\": s[\"kind\"], \"facilities.trace\": tag}).end(end_time=ns(s[\"end\"]))\nroot.end(end_time=ns(spans[-1][\"end\"]))\ntp.shutdown()\ntrace_id = format(root.get_span_context().trace_id, \"032x\")\n\nlp = LoggerProvider()\nlp.add_log_record_processor(SimpleLogRecordProcessor(AzureMonitorLogExporter(connection_string=cs, disable_offline_storage=True)))\nlog = logging.getLogger(\"facilities-agent-\" + tag[:6])\nlog.setLevel(logging.INFO)\nlog.addHandler(LoggingHandler(level=logging.INFO, logger_provider=lp))\nlog.info(\"agent_run %s\", json.dumps({\"event\": \"agent_run\", \"trace\": tag, \"route\": run[\"route\"], \"tools\": [s[\"name\"] for s in spans if s[\"kind\"] == \"tool\"]}))\nlp.shutdown()\n\nn_tools = len([s for s in spans if s[\"kind\"] == \"tool\"])\nreader = PeriodicExportingMetricReader(AzureMonitorMetricExporter(connection_string=cs, disable_offline_storage=True), export_interval_millis=3600_000)\nmp = MeterProvider(metric_readers=[reader])\nmp.get_meter(\"facilities\").create_counter(\"facilities.tool_calls\").add(n_tools, {\"agent\": \"facilities-supervisor\"})\nmp.force_flush()\nmp.shutdown()\n\njson.dump({\"trace_id\": trace_id, \"tag\": tag, \"tool_calls\": n_tools}, open(\"trace.json\", \"w\"))\nprint(\"exported\", len(spans) + 1, \"spans, 1 log line and the metric facilities.tool_calls =\", n_tools, \"| trace id\", trace_id)\n",
      "run": "python export_telemetry.py",
      "expect": "the metric facilities.tool_calls = 4",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Read it back with KQL",
@@ -3813,7 +4434,14 @@
      "code": "import json\nimport time\nfrom datetime import timedelta\nfrom azure.monitor.query import LogsQueryClient\nfrom azlab import DevToken, ENDPOINT\n\nobs, tr = json.load(open(\"obs.json\")), json.load(open(\"trace.json\"))\nclient = LogsQueryClient(DevToken(), endpoint=ENDPOINT + \"/azure-data/loganalytics\")\n\n\ndef q(text):\n    r = client.query_workspace(obs[\"workspace_id\"], text, timespan=timedelta(hours=2))\n    return r.tables[0].rows if r.tables else []\n\n\nrows = []\nfor _ in range(20):\n    rows = q(f\"AppDependencies | where OperationId == '{tr['trace_id']}' | project Name | order by Name asc\")\n    if rows:\n        break\n    time.sleep(1)\nnames = sorted({r[0] for r in rows})\nprint(\"spans read back:\", names)\nprint(\"log lines:\", len(q(f\"AppTraces | where Message has '{tr['tag']}' | project Message\")))\ntotal = q(\"AppMetrics | where Name == 'facilities.tool_calls' | summarize total=sum(Sum)\")[0][0]\nprint(\"facilities.tool_calls total:\", total)\n",
      "run": "python query_telemetry.py",
      "expect": "facilities.tool_calls total: 4",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Ingest into a custom table and summarise",
@@ -3823,7 +4451,14 @@
      "code": "import json\nimport uuid\nfrom datetime import timedelta\nimport requests\nfrom azure.monitor.query import LogsQueryClient\nfrom azlab import DevToken, ENDPOINT, rid\n\nobs = json.load(open(\"obs.json\"))\nrun_id = uuid.uuid4().hex\nrows = [{\"run\": run_id, \"tool\": t, \"via\": \"function\"} for t in (\"kb_search\", \"asset_status\", \"asset_status\", \"work_order_stats\")]\nr = requests.post(f\"{ENDPOINT}{rid('Microsoft.OperationalInsights', 'workspaces', 'facilities-law')}/api/logs\", headers={\"Log-Type\": \"AgentRun\"}, json=rows, timeout=20)\nprint(\"ingest HTTP\", r.status_code)\nclient = LogsQueryClient(DevToken(), endpoint=ENDPOINT + \"/azure-data/loganalytics\")\nres = client.query_workspace(obs[\"workspace_id\"], f\"AgentRun_CL | where run_s == '{run_id}' | summarize n=count() by tool_s | order by tool_s asc\", timespan=timedelta(hours=2))\nprint(\"calls per tool:\", {r[0]: r[1] for r in res.tables[0].rows})\n",
      "run": "python custom_table.py",
      "expect": "calls per tool: {'asset_status': 2, 'kb_search': 1, 'work_order_stats': 1}",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Read platform metrics from Azure Monitor",
@@ -3833,7 +4468,30 @@
      "code": "from azure.mgmt.monitor import MonitorManagementClient\nfrom azlab import arm, rid\n\nm = arm(MonitorManagementClient).metrics.list(rid(\"Microsoft.Storage\", \"storageAccounts\", \"facilitiesdocs\"), metricnames=\"Transactions\", aggregation=\"Total\",\n                                              timespan=\"2026-11-17T00:00:00Z/2026-11-30T00:00:00Z\", interval=\"PT1H\")\nprint(\"platform metrics returned:\", [x.name.value for x in m.value])\n",
      "run": "python platform_metrics.py",
      "expect": "platform metrics returned: ['Transactions']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Cost and budget limit per layer",
+     "text": "Cost belongs in the telemetry. A budget object counts notional model tokens per layer and refuses the call that would cross the limit, so a runaway loop stops itself instead of reaching the bill. The block drives the real Azure OpenAI deployments from chapter 10 until the budget trips, asserts the call that crosses it is refused and that spend never exceeds the limit.",
+     "file": "cost_meter.py",
+     "lang": "python",
+     "code": "from vymodels import chat\n\nPRICE_PER_1K = {\"chat\": 0.0006}       # notional price per 1,000 tokens: the real rate card goes here\n\n\nclass BudgetExceeded(Exception):\n    pass\n\n\nclass Budget:\n    def __init__(self, layer, limit_usd):\n        self.layer, self.limit, self.spent, self.calls = layer, limit_usd, 0.0, 0\n\n    def charge(self, text_in, text_out):\n        tokens = (len(text_in) + len(text_out)) / 4\n        cost = tokens / 1000 * PRICE_PER_1K[\"chat\"]\n        if self.spent + cost > self.limit:\n            raise BudgetExceeded(f\"{self.layer}: {self.spent + cost:.6f} would exceed the {self.limit:.6f} limit\")\n        self.spent += cost\n        self.calls += 1\n\n\nbudget = Budget(\"agents\", limit_usd=0.0004)\nrefused = None\nfor i in range(200):\n    q = \"Summarise the boiler shutdown procedure in one sentence. \" * 3\n    try:\n        a = chat(q)\n        budget.charge(q, a)\n    except BudgetExceeded as e:\n        refused = str(e)\n        break\nassert refused, \"the budget must trip before 200 calls\"\nassert budget.spent <= budget.limit\nprint(\"calls allowed:\", budget.calls, \"| spent:\", round(budget.spent, 6), \"| limit:\", budget.limit)\nprint(\"refused:\", refused)\nprint(\"cost limit verified\")\n",
+     "run": "python cost_meter.py",
+     "expect": "cost limit verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Needs the model deployments; Nano replays this against the in-browser model.",
+     "kind": "harden",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -4011,6 +4669,12 @@
      "how": "Application Insights, Metrics, facilities.tool_calls",
      "expect": "A non-empty series"
     }
+   ],
+   "blocks_total": 9,
+   "blocks_nano": 8,
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Cost and budget limit per layer"
    ]
   },
   {
@@ -4061,7 +4725,7 @@
     1256
    ],
    "level": "Advanced",
-   "minutes": 30,
+   "minutes": 42,
    "outcome": "Encrypted records and an audit trail of the run",
    "lessons": 4,
    "color": "#7c3aed",
@@ -4104,7 +4768,14 @@
      "code": "pip install azure-core azure-mgmt-keyvault azure-keyvault-keys azure-mgmt-monitor cryptography azure-data-tables\n",
      "run": null,
      "expect": null,
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the Key Vault",
@@ -4114,7 +4785,14 @@
      "code": "from azure.mgmt.keyvault import KeyVaultManagementClient\nfrom azure.mgmt.keyvault.models import Sku, SkuFamily, SkuName, VaultCreateOrUpdateParameters, VaultProperties\nfrom azlab import arm, ensure_rg, RG, LOC\n\nensure_rg()\nv = arm(KeyVaultManagementClient).vaults.begin_create_or_update(RG, \"facilities-kv\", VaultCreateOrUpdateParameters(location=LOC, properties=VaultProperties(\n    tenant_id=\"00000000-0000-0000-0000-000000000000\", sku=Sku(family=SkuFamily.A, name=SkuName.STANDARD), access_policies=[]))).result()\nprint(\"vault\", v.name, \"created; uri advertised by ARM:\", v.properties.vault_uri)\n",
      "run": "python create_vault.py",
      "expect": "vault facilities-kv created",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Create the key",
@@ -4124,7 +4802,14 @@
      "code": "from azure.keyvault.keys import KeyClient\nfrom azlab import DevToken, ENDPOINT\n\nclient = KeyClient(vault_url=ENDPOINT, credential=DevToken(), verify_challenge_resource=False)\nkey = client.create_rsa_key(\"ledger-key\", size=2048)\nprint(\"key\", key.name, \"type\", key.key.kty, \"| listed:\", [k.name for k in client.list_properties_of_keys()])\n",
      "run": "python make_key.py",
      "expect": "listed: ['ledger-key']",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Encrypt the approval record with envelope encryption",
@@ -4134,7 +4819,14 @@
      "code": "import os\nfrom azure.keyvault.keys import KeyClient\nfrom azure.keyvault.keys.crypto import CryptographyClient, EncryptionAlgorithm, KeyWrapAlgorithm\nfrom cryptography.hazmat.primitives.ciphers.aead import AESGCM\nfrom azlab import DevToken, ENDPOINT\nfrom approval import ledger_row\n\nrow = ledger_row(\"req-demo0001\")\nrecord = f\"ledger record: work order {row['work_order_id']} approved by {row['approver']}\".encode()\n\nkc = KeyClient(vault_url=ENDPOINT, credential=DevToken(), verify_challenge_resource=False)\ncrypto = CryptographyClient(kc.get_key(\"ledger-key\").id, DevToken(), verify_challenge_resource=False)\n\ndek = AESGCM.generate_key(bit_length=256)\nnonce = os.urandom(12)\nciphertext = AESGCM(dek).encrypt(nonce, record, b\"approvalledger\")\nwrapped = crypto.wrap_key(KeyWrapAlgorithm.rsa_oaep_256, dek).encrypted_key\nprint(\"the data key is wrapped by ledger-key; wrapped differs from the key:\", wrapped != dek)\n\nunwrapped = crypto.unwrap_key(KeyWrapAlgorithm.rsa_oaep_256, wrapped).key\nprint(\"unwrap + decrypt restores the record:\", AESGCM(unwrapped).decrypt(nonce, ciphertext, b\"approvalledger\") == record)\n\nsealed = crypto.encrypt(EncryptionAlgorithm.rsa_oaep_256, b\"hello\")\nprint(\"direct encrypt/decrypt round trip:\", crypto.decrypt(EncryptionAlgorithm.rsa_oaep_256, sealed.ciphertext).plaintext == b\"hello\")\n",
      "run": "python envelope.py",
      "expect": "unwrap + decrypt restores the record: True",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
     },
     {
      "title": "Read the audit trail from the Activity Log",
@@ -4144,13 +4836,68 @@
      "code": "import time\nfrom azure.mgmt.monitor import MonitorManagementClient\nfrom azlab import arm, RG\n\nsince = time.strftime(\"%Y-%m-%dT00:00:00Z\", time.gmtime(time.time() - 86400))\nlog = arm(MonitorManagementClient).activity_logs\nevents = list(log.list(filter=f\"eventTimestamp ge '{since}'\"))\nops = {e.operation_name.value for e in events if e.operation_name}\nprint(\"control-plane events:\", len(events) > 0, \"| vault create recorded:\", \"Microsoft.KeyVault/vaults/write\" in ops, \"| function app create recorded:\", \"Microsoft.Web/sites/write\" in ops)\nprint(\"events for resource group\", RG + \":\", len(list(log.list(filter=f\"eventTimestamp ge '{since}' and resourceGroupName eq '{RG}'\"))) > 0)\n",
      "run": "python audit.py",
      "expect": "vault create recorded: True | function app create recorded: True",
-     "needs_runtime": false
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Key rotation without re-encrypting data",
+     "text": "Rotation creates a new key VERSION under the same name; old versions stay available to decrypt, so nothing already wrapped breaks. The block wraps a data key, rotates `ledger-key`, asserts the version list grew and the current version changed, then unwraps the OLD wrapped key (pinned to its version) and wraps a new one with the new version.",
+     "file": "key_rotation.py",
+     "lang": "python",
+     "code": "from azure.keyvault.keys import KeyClient\nfrom azure.keyvault.keys.crypto import CryptographyClient, KeyWrapAlgorithm\nfrom cryptography.hazmat.primitives.ciphers.aead import AESGCM\nfrom azlab import DevToken, ENDPOINT\n\nkc = KeyClient(vault_url=ENDPOINT, credential=DevToken(), verify_challenge_resource=False)\nv1 = kc.get_key(\"ledger-key\")\ndek = AESGCM.generate_key(bit_length=256)\nalg = KeyWrapAlgorithm.rsa_oaep_256\nwrapped_v1 = CryptographyClient(v1.id, DevToken(), verify_challenge_resource=False).wrap_key(alg, dek).encrypted_key\n\nv2 = kc.rotate_key(\"ledger-key\")\nversions = list(kc.list_properties_of_key_versions(\"ledger-key\"))\nassert len(versions) >= 2 and v2.properties.version != v1.properties.version, \"rotation must create a new version\"\nprint(\"versions:\", len(versions), \"| current changed:\", v2.properties.version != v1.properties.version)\n\nassert CryptographyClient(v1.id, DevToken(), verify_challenge_resource=False).unwrap_key(alg, wrapped_v1).key == dek\nprint(\"data wrapped by the old version still unwraps\")\nwrapped_v2 = CryptographyClient(v2.id, DevToken(), verify_challenge_resource=False).wrap_key(alg, dek).encrypted_key\nassert wrapped_v2 != wrapped_v1\nprint(\"key rotation verified\")\n",
+     "run": "python key_rotation.py",
+     "expect": "key rotation verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Key Vault key versions are not in the Nano Azure core.",
+     "kind": "harden",
+     "needs_appliance": false
+    },
+    {
+     "title": "Tamper-evident audit trail",
+     "text": "The Activity Log tells you what happened; it cannot prove nobody edited your own approval records. Chain them: each audit entry stores the SHA-256 of the previous entry plus its own content, so changing, deleting or re-ordering any entry breaks every hash after it. The block writes five approval events to a table, verifies the chain, edits one entry the way an attacker with table access would, and asserts the verifier finds exactly where.",
+     "file": "audit_chain.py",
+     "lang": "python",
+     "code": "import hashlib\nimport json\nimport time\nfrom azdata import table\n\naudit = table(\"approvalaudit\")\nfor e in list(audit.list_entities()):\n    audit.delete_entity(e[\"PartitionKey\"], e[\"RowKey\"])\n\n\ndef digest(prev, body):\n    return hashlib.sha256((prev + json.dumps(body, sort_keys=True)).encode()).hexdigest()\n\n\ndef append(seq, event):\n    prev = \"0\" * 64 if seq == 0 else audit.get_entity(\"a\", f\"{seq - 1:06d}\")[\"hash\"]\n    body = {\"seq\": seq, \"ts\": int(time.time()), **event}\n    audit.upsert_entity({\"PartitionKey\": \"a\", \"RowKey\": f\"{seq:06d}\", \"body\": json.dumps(body, sort_keys=True), \"prev\": prev, \"hash\": digest(prev, body)})\n\n\ndef verify():\n    prev = \"0\" * 64\n    for row in sorted(audit.list_entities(), key=lambda r: r[\"RowKey\"]):\n        if row[\"prev\"] != prev or digest(prev, json.loads(row[\"body\"])) != row[\"hash\"]:\n            return row[\"RowKey\"]\n        prev = row[\"hash\"]\n    return None\n\n\nfor i, ev in enumerate([{\"event\": \"requested\", \"by\": \"maria\"}, {\"event\": \"approved\", \"by\": \"duty.manager\"}, {\"event\": \"executed\", \"wo\": \"WO-17\"},\n                        {\"event\": \"requested\", \"by\": \"sam\"}, {\"event\": \"rejected\", \"by\": \"duty.manager\"}]):\n    append(i, ev)\nassert verify() is None\nprint(\"chain of 5 verified\")\nrow = audit.get_entity(\"a\", \"000001\")\nbody = json.loads(row[\"body\"]); body[\"by\"] = \"mallory\"\naudit.update_entity({\"PartitionKey\": \"a\", \"RowKey\": \"000001\", \"body\": json.dumps(body, sort_keys=True)}, mode=\"merge\")\nassert verify() == \"000001\", \"the edit must be detected at the edited entry\"\nprint(\"tampering detected at entry\", verify())\nprint(\"audit chain verified\")\n",
+     "run": "python audit_chain.py",
+     "expect": "audit chain verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Table storage on Nano is not yet verified for this block.",
+     "kind": "harden",
+     "needs_appliance": false
+    },
+    {
+     "title": "Ship it: export the resource group as an ARM template",
+     "text": "The capstone. Export `rg-facilities` as an ARM template (the same call as the portal's Export template and `az group export`), read the portability warnings the export returns, and check the template is a real deployable: schema, parameters, and the resources the course created. On real Azure you would deploy it with `az deployment group create` into a new subscription, after replacing simulator-only values (storage keys, host names) and resolving the warnings.",
+     "file": "ship_it.py",
+     "lang": "python",
+     "code": "from azure.mgmt.resource.resources import ResourceManagementClient\nfrom azlab import arm, RG\n\nrc = arm(ResourceManagementClient)\nres = rc.resource_groups.begin_export_template(RG, {\"resources\": [\"*\"], \"options\": \"IncludeParameterDefaultValue\"}).result()\nt = res.template\nassert \"$schema\" in t and t.get(\"contentVersion\"), \"an ARM template needs a schema and contentVersion\"\ntypes = sorted({r[\"type\"] for r in t[\"resources\"]})\nprint(\"resources exported:\", len(t[\"resources\"]), \"| types:\", len(types))\nfor must in (\"Microsoft.KeyVault/vaults\", \"Microsoft.Web/sites\"):\n    assert must in types, must + \" must be in the template\"\nerrors = getattr(res, \"error\", None)\nprint(\"export warnings:\", [getattr(d, \"code\", None) for d in (getattr(errors, \"details\", None) or [])] or \"none returned\")\nparams = t.get(\"parameters\", {})\nassert params, \"names should be parameterised so the template can be deployed elsewhere\"\nprint(\"parameters:\", sorted(params)[:4], \"...\")\nprint(\"ship it verified: template exported with\", len(t[\"resources\"]), \"resources; review it, then az deployment group create\")\n",
+     "run": "python ship_it.py",
+     "expect": "ship it verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Export template on Nano is not verified; Mesh uses the full ARM core.",
+     "kind": "ship",
+     "needs_appliance": false
     }
    ],
    "explain": {
     "lead": [
      "The last layer protects the whole application and proves what it did. Sensitive records are encrypted with keys you control, and an audit trail records who did what, so you can answer an auditor.",
-     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object with server-side encryption, and read the audit trail of the run."
+     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object encrypted with your key, and read the audit log of the run."
     ],
     "concepts": [
      [
@@ -4181,11 +4928,11 @@
      ],
      [
       "Store encrypted",
-      "Write an object that the storage service encrypts with the key."
+      "Write an object that the storage service encrypts with your key."
      ],
      [
       "Read the audit",
-      "Create the trail and look up the approval events from your run."
+      "Open the cloud's audit log and look up the approval events from your run."
      ]
     ],
     "example": "The approval record for work order WO-17 is stored encrypted. An auditor asks who approved it: the audit trail shows the approver and the time, and the record only decrypts with the right context.",
@@ -4213,7 +4960,7 @@
      ],
      [
       "Store it encrypted",
-      "The object store encrypts it with the key on write."
+      "The object store encrypts it with your key on write."
      ],
      [
       "Read the trail",
@@ -4322,6 +5069,14 @@
      "how": "az monitor activity-log list -g <rg> --max-events 5",
      "expect": "Recent control-plane operations from your run"
     }
+   ],
+   "blocks_total": 8,
+   "blocks_nano": 5,
+   "blocks_mesh_only": 3,
+   "mesh_only_titles": [
+    "Key rotation without re-encrypting data",
+    "Tamper-evident audit trail",
+    "Ship it: export the resource group as an ARM template"
    ]
   }
  ]

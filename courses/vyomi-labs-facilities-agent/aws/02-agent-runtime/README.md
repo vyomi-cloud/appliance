@@ -60,6 +60,22 @@ StopRuntimeSession ends that session's agent process immediately (otherwise it i
 - Run: `python stop_session.py` (or `./run_all.sh 2` from the project root)
 - You should see: `runtime still READY`
 
+### 9. Failure lab: a runaway agent hits its step budget
+
+An agent that loops, or a question engineered to make it call every tool, must stop. The step limit is an environment variable of the runtime (so a caller cannot raise it). The block lowers the budget to two steps, asks the full question in a fresh session, and asserts the run stops with `step_budget`, does not start an approval or reach any tool it had no budget for, and says so in plain language; then it restores the limit and asserts the same question completes normally.
+
+- File: [`runaway.py`](./runaway.py)
+- Run: `python runaway.py` (or `./run_all.sh 2` from the project root)
+- You should see: `runaway protection verified`
+
+### 10. Least privilege for the agent's role
+
+The runtime role is the agent's whole blast radius. Settle it from the audit log by running what the agent really does as that identity: call the model, retrieve from the knowledge base, ask the approval workflow, and check it may run the two read tools (a dry-run invoke, so nothing executes). Then assert the dangerous neighbours are refused: the write tool, deleting a work order, reading the approval ledger directly, and calling the approval API as the approver.
+
+- File: [`iam_runtime.py`](./iam_runtime.py)
+- Run: `python iam_runtime.py` (or `./run_all.sh 2` from the project root)
+- You should see: `agent role verified`
+
 ## It works when
 
 - facilities-supervisor exists and is READY

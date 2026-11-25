@@ -3,9 +3,16 @@ vyomilabs/labrun.py executes these blocks in order against a clean local Azure s
 The model is the repo's deterministic test stub (tools/llm_stub), not a large hosted model: calls and shapes are identical, replies are fixed and short."""
 
 
-def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False):
-    """needs_runtime: the block needs real function / container execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox."""
-    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime)
+BOTH = ["nano", "mesh"]
+MESH = ["mesh"]
+
+
+def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False, edition=None, nano_note=None, kind="build", needs_appliance=False):
+    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox.
+    needs_appliance: needs the full appliance (labrun only runs it with --endpoint). edition: ["nano","mesh"] (default) or ["mesh"] for the paid Mesh course only.
+    nano_note: why a block is not on Nano or what a Nano learner should expect. kind: build | harden | iam | failure | ship."""
+    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime,
+                edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
 LAB = {}
@@ -1354,7 +1361,7 @@ for name, model in ((CHAT, chat_model), (EMBED, embed_model)):
 print("deployments:", sorted(d.name for d in cs.deployments.list(RG, OPENAI_ACCOUNT)))
 ''', run="python create_openai.py", expect="deployments: ['chat', 'embed']"),
  b("Write the model client", "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a larger hosted model.",
-   "models.py", '''
+   "vymodels.py", '''
 import json
 from azlab import aoai, CHAT, EMBED
 
@@ -1379,7 +1386,7 @@ def embed(text):
 '''),
  b("Try chat, a tool call and an embedding", "A chat turn, a tool-calling turn (the model asks for `asset_status`, your code would run it) and an embedding (a list of numbers: its length depends on the embedding model your simulator hosts). The tool definition is the one the agents use later.",
    "try_models.py", '''
-from models import chat, chat_with_tools, embed
+from vymodels import chat, chat_with_tools, embed
 
 print("chat:", chat("Reply with the single word OK."))
 
@@ -1563,7 +1570,7 @@ from azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, S
                                                    SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,
                                                    VectorSearch, VectorSearchProfile)
 from azdata import search_endpoint, search_key, INDEX
-from models import embed
+from vymodels import embed
 
 DIMS = len(embed("dimension probe"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)
 
@@ -1773,3 +1780,9 @@ print("control-plane events:", len(events) > 0, "| vault create recorded:", "Mic
 print("events for resource group", RG + ":", len(list(log.list(filter=f"eventTimestamp ge '{since}' and resourceGroupName eq '{RG}'"))) > 0)
 ''', run="python audit.py", expect="vault create recorded: True | function app create recorded: True"),
 ]
+
+
+# Enterprise additions (hardening, failure labs, key rotation, tamper evidence, the ship-it capstone) live in labs_azure_ent.py and are appended here.
+from .labs_azure_ent import extend  # noqa: E402
+
+extend(LAB, b)

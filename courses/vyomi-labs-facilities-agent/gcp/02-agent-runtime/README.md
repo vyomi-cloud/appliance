@@ -8,7 +8,7 @@ _A supervisor agent and three sub-agents answering in isolated sessions_
 
 ### 1. Install the libraries
 
-Chapter 3 hosts the agent on Vertex AI Agent Engine and builds the graph with LangGraph. It relies on the gcp.py and models.py files from chapter 10.
+Chapter 3 hosts the agent on Vertex AI Agent Engine and builds the graph with LangGraph. It relies on the gcp.py and vymodels.py files from chapter 10.
 
 - File: [`install_3.sh`](./install_3.sh)
 

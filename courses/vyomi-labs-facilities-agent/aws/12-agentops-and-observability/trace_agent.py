@@ -23,13 +23,17 @@ print("sent", len(docs), "segments")
 trace = xr.batch_get_traces(TraceIds=[trace_id])["Traces"][0]
 names = {json.loads(sg["Document"]).get("name") for sg in trace["Segments"]}
 print("read trace back with", len(trace["Segments"]), "segments; sub-agent spans:", sorted(n for n in names if n.startswith("agent:")))
+assert len(trace["Segments"]) == len(docs), "the trace must hold every segment that was sent (%d of %d)" % (len(trace["Segments"]), len(docs))
+assert any(n.startswith("agent:") for n in names), "the trace must contain a span per sub-agent"
 listed = xr.get_trace_summaries(StartTime=time.time() - 3600, EndTime=time.time() + 60)["TraceSummaries"]
 print("trace listed by GetTraceSummaries:", any(t["Id"] == trace_id for t in listed))
+assert any(t["Id"] == trace_id for t in listed), "the trace must be findable by time range"
 
 cw.put_metric_data(Namespace="FacilitiesAgent", MetricData=[
     {"MetricName": "ToolCalls", "Value": len(res["tools"]), "Unit": "Count"},
     {"MetricName": "AgentLatencyMs", "Value": (spans[-1]["end"] - spans[0]["start"]) * 1000, "Unit": "Milliseconds"}])
 print("metrics:", sorted(m["MetricName"] for m in cw.list_metrics(Namespace="FacilitiesAgent")["Metrics"]))
+assert {"ToolCalls", "AgentLatencyMs"} <= {m["MetricName"] for m in cw.list_metrics(Namespace="FacilitiesAgent")["Metrics"]}, "both KPIs must be readable"
 
 group = "/aws/agentcore/runtimes/facilities-supervisor"
 try:
@@ -41,3 +45,4 @@ lg.put_log_events(logGroupName=group, logStreamName="s1", logEvents=[{"timestamp
     {"trace_id": trace_id, "route": res["route"], "tools": [t["tool"] for t in res["tools"]]})}])
 line = lg.get_log_events(logGroupName=group, logStreamName="s1")["events"][0]["message"]
 print("structured log carries the trace id:", trace_id in line)
+assert trace_id in line, "the log line must carry the trace id, or a log cannot be joined to its trace"

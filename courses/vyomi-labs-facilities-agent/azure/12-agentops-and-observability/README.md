@@ -66,6 +66,14 @@ Azure resources publish their own metrics. `MonitorManagementClient.metrics.list
 - Run: `python platform_metrics.py` (or `./run_all.sh 12` from the project root)
 - You should see: `platform metrics returned: ['Transactions']`
 
+### 9. Cost and budget limit per layer
+
+Cost belongs in the telemetry. A budget object counts notional model tokens per layer and refuses the call that would cross the limit, so a runaway loop stops itself instead of reaching the bill. The block drives the real Azure OpenAI deployments from chapter 10 until the budget trips, asserts the call that crosses it is refused and that spend never exceeds the limit.
+
+- File: [`cost_meter.py`](./cost_meter.py)
+- Run: `python cost_meter.py` (or `./run_all.sh 12` from the project root)
+- You should see: `cost limit verified`
+
 ## It works when
 
 - spans readable with KQL

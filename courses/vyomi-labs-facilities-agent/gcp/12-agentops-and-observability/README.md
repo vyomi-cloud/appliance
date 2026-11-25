@@ -52,6 +52,14 @@ Cloud Logging's default transport is gRPC. The same structured log written and r
 - Run: `python log_grpc.py` (or `./run_all.sh 12` from the project root)
 - You should see: `gRPC log entry written and read back`
 
+### 7. Cost and budget limit per layer
+
+A budget object counts notional model tokens per layer and refuses the call that would cross the limit, so a runaway loop stops itself before the bill. The block drives the real Gemini-compatible model from chapter 10 until the budget trips, then asserts the crossing call was refused and spend never exceeded the limit.
+
+- File: [`cost_meter.py`](./cost_meter.py)
+- Run: `python cost_meter.py` (or `./run_all.sh 12` from the project root)
+- You should see: `cost limit verified`
+
 ## It works when
 
 - trace readable

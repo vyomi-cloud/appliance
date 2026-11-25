@@ -46,6 +46,14 @@ The authorizer rejects an anonymous caller before the Lambda ever runs.
 - Run: `python call_without_token.py` (or `./run_all.sh 10` from the project root)
 - You should see: `(401 or 403: True )`
 
+### 6. Failure lab: forged, tampered and replayed tokens
+
+The edge is only as good as its token check. This block sends the API a valid token and then five bad ones: a token with a damaged signature, one whose payload was edited to claim an admin group, an unsigned `alg: none` token, garbage, and a token whose expiry was moved into the past. Each must be rejected before any Lambda runs; the valid token must still work. Then it hammers the API with a burst to see what the web ACL's rate rule does.
+
+- File: [`token_attacks.py`](./token_attacks.py)
+- Run: `python token_attacks.py` (or `./run_all.sh 10` from the project root)
+- You should see: `token attacks verified`
+
 ## It works when
 
 - user pool exists

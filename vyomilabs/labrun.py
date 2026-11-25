@@ -13,6 +13,9 @@ def main(argv=None):
     endpoint_arg = None
     if "--endpoint" in argv:
         i = argv.index("--endpoint"); endpoint_arg = argv[i + 1]; del argv[i:i + 2]
+    skip = set()
+    if "--skip" in argv:       # comma-separated block files to save but not run (e.g. blocks a given endpoint cannot execute)
+        i = argv.index("--skip"); skip = set(argv[i + 1].split(",")); del argv[i:i + 2]
     cloud, layers = argv[0], [int(x) for x in argv[1:]]
     import importlib
     endpoint, env = importlib.import_module(f"vyomilabs.labenv_{cloud}").start(endpoint_arg)
@@ -25,13 +28,22 @@ def main(argv=None):
         for blk in lab[lid]:
             with open(os.path.join(work, blk["file"]), "w") as f:
                 f.write(blk["code"])
-            if not blk["run"]:
+            if not blk["run"] or blk["file"] in skip:
                 print(f"  saved  {blk['file']}")
+                continue
+            if blk.get("needs_appliance") and not endpoint_arg:
+                print(f"  BLOCKED  {blk['run']}  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)")
                 continue
             if blk.get("needs_runtime") and not endpoint_arg and os.environ.get("VYOMILABS_HAS_RUNTIME") != "1":
                 print(f"  BLOCKED  {blk['run']}  (needs real function execution: run with --endpoint <appliance or Mesh>)")
                 continue
-            p = subprocess.run([sys.executable] + blk["run"].split()[1:], cwd=work, env=env, capture_output=True, text=True, timeout=180)
+            try:
+                p = subprocess.run([sys.executable] + blk["run"].split()[1:], cwd=work, env=env, capture_output=True, text=True,
+                                   timeout=int(os.environ.get("VYOMILABS_TIMEOUT", "180")))
+            except subprocess.TimeoutExpired:
+                bad += 1
+                print(f"  FAIL  {blk['run']}  -> timed out")
+                continue
             ok = p.returncode == 0 and (not blk["expect"] or blk["expect"] in p.stdout)
             bad += not ok
             print(f"  {'PASS' if ok else 'FAIL'}  {blk['run']}  -> {(p.stdout.strip().splitlines() or [''])[-1][:100]}")

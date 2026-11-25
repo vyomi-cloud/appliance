@@ -50,6 +50,14 @@ The other outcome: a request that is rejected stays out of work-orders. The scri
 - Run: `python reject_request.py` (or `./run_all.sh 9` from the project root)
 - You should see: `decision: REJECTED | create refused: True | work orders written: 0`
 
+### 7. Approval expiry: nobody answers, the request expires
+
+A request that waits forever is a risk. Each Firestore ledger document gets `expires_at`; a sweeper marks PENDING documents past their deadline EXPIRED inside a transaction that re-reads the status, so a request approved a moment earlier is never overwritten. The block proves an unanswered request expires, an approved one is untouched and an expired one cannot be approved afterwards.
+
+- File: [`expiry.py`](./expiry.py)
+- Run: `python expiry.py` (or `./run_all.sh 9` from the project root)
+- You should see: `approval expiry verified`
+
 ## It works when
 
 - request parks as PENDING

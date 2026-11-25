@@ -228,12 +228,24 @@ def _ops(cloud, docs, lab):
 
 LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
 
-def _lab(cloud, lid):
-    """Hands-on code blocks (complete, copy-paste), verified by vyomilabs/labrun.py. Empty until a chapter has been written and run."""
+def _lab(cloud, lid, edition="mesh"):
+    """Hands-on code blocks (complete, copy-paste), verified by vyomilabs/labrun.py. Empty until a chapter has been written and run.
+    Every block carries `edition` (which course ships it: ["nano","mesh"] or ["mesh"]), `nano_note`, `kind` (build | harden | iam | failure | ship)
+    and `needs_appliance`; blocks written before the two-edition split default to both editions. edition="nano" keeps only the blocks that run on Nano."""
     try:
-        return importlib.import_module(f"vyomilabs.content.labs_{cloud}").LAB.get(lid, [])
+        blocks = importlib.import_module(f"vyomilabs.content.labs_{cloud}").LAB.get(lid, [])
     except ModuleNotFoundError:
         return []
+    out = []
+    for b in blocks:
+        b = dict(b)
+        b.setdefault("edition", ["nano", "mesh"])
+        b.setdefault("nano_note", None)
+        b.setdefault("kind", "build")
+        b.setdefault("needs_appliance", False)
+        if edition in b["edition"]:
+            out.append(b)
+    return out
 
 C = {}  # cloud -> layer -> dict(services, build, names, checks, simplified, native, ref, code)
 C["aws"] = {
@@ -341,24 +353,38 @@ C["azure"] = {
 CHECKERS = {"aws": {2, 10}}
 
 
+EDITIONS = {"mesh": "", "nano": "-nano"}      # edition -> file suffix: wasm/labs/data/<cloud>.json (Mesh, everything) and <cloud>-nano.json (Nano subset)
+SCHEMA = 2                                      # 2 = blocks carry edition/nano_note/kind/needs_appliance; layers carry blocks_total/blocks_nano/blocks_mesh_only
+
+
 def build():
     os.makedirs(OUT, exist_ok=True)
     for cloud, per in C.items():
-        layers = []
-        for n, lid in enumerate(ORDER, 1):
-            t, short, obj, learn, deps = SHARED[lid]
-            d = per[lid]
-            layers.append(dict(id=lid, order=n, title=t, short=short, objective=obj, learn=learn, services=d["services"], build=d["build"],
-                               contract=dict(needs=deps, names=d["names"]), checks=d["checks"], simplified=d["simplified"], native=d.get("native"),
-                               reference="examples/enterprise-facilities-agent/facilities/" + ("" if cloud == "aws" else "") + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
-                               code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
-                               level=META[lid][0], minutes=META[lid][1], outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
-                               about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=_lab(cloud, lid), explain=EXPLAIN[lid], narr=NARR[lid], docs=_docs(cloud, C[cloud][lid]["services"]), ops=_ops(cloud, _docs(cloud, C[cloud][lid]["services"]), _lab(cloud, lid)), validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]]))
-        doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}",
-                   image=f"img/{cloud}.svg", repo="vyomi-cloud/vyomi-labs-facilities-agent", repo_path="", repo_ref="main", plan=["Pro", "Max"], image_size=IMG_SIZE, total_minutes=sum(META[i][1] for i in ORDER), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
-        with open(os.path.join(OUT, cloud + ".json"), "w", encoding="utf-8") as f:
-            json.dump(doc, f, indent=1, ensure_ascii=False)
-        print(cloud, len(layers), "layers")
+        for edition, suffix in EDITIONS.items():
+            layers = []
+            for n, lid in enumerate(ORDER, 1):
+                t, short, obj, learn, deps = SHARED[lid]
+                d = per[lid]
+                full, lab = _lab(cloud, lid, "mesh"), _lab(cloud, lid, edition)
+                layers.append(dict(id=lid, order=n, title=t, short=short, objective=obj, learn=learn, services=d["services"], build=d["build"],
+                                   contract=dict(needs=deps, names=d["names"]), checks=d["checks"], simplified=d["simplified"], native=d.get("native"),
+                                   reference="examples/enterprise-facilities-agent/facilities/" + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
+                                   code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
+                                   level=META[lid][0], minutes=META[lid][1] + (0 if edition == "nano" else 4 * sum(1 for b in full if b["edition"] == ["mesh"])),
+                                   outcome=META[lid][2], lessons=len(d["build"]), color=COL[LAYER_COLOR[lid]],
+                                   about=INTRO[lid][0], why=INTRO[lid][1], icon=ICON[LAYER_ICON[lid]], prereq=PRE, setup=_setup(cloud, lid), lab=lab, explain=EXPLAIN[lid], narr=NARR[lid],
+                                   docs=_docs(cloud, C[cloud][lid]["services"]), ops=_ops(cloud, _docs(cloud, C[cloud][lid]["services"]), lab),
+                                   validate=[dict(kind=k, what=w, how=h, expect=e) for k, w, h, e in V[cloud][lid]],
+                                   blocks_total=len(full), blocks_nano=sum(1 for b in full if "nano" in b["edition"]), blocks_mesh_only=sum(1 for b in full if b["edition"] == ["mesh"]),
+                                   mesh_only_titles=[b["title"] for b in full if b["edition"] == ["mesh"]]))
+            doc = dict(cloud=cloud, cloud_name=CLOUDS[cloud], ai_platform=AI[cloud], edition=edition, schema=SCHEMA,
+                       title=f"Build the Enterprise Facilities agent on {CLOUDS[cloud]}" + (" (Nano, free)" if edition == "nano" else " (Mesh, enterprise)"),
+                       image=f"img/{cloud}.svg", repo="vyomi-cloud/vyomi-labs-facilities-agent", repo_path="", repo_ref="main",
+                       plan=["Free", "Pro", "Max"] if edition == "nano" else ["Pro", "Max"], image_size=IMG_SIZE,
+                       total_minutes=sum(l["minutes"] for l in layers), updated=datetime.date.today().strftime("%B %-d, %Y"), layers=layers)
+            with open(os.path.join(OUT, cloud + suffix + ".json"), "w", encoding="utf-8") as f:
+                json.dump(doc, f, indent=1, ensure_ascii=False)
+            print(cloud, edition, len(layers), "layers,", sum(len(l["lab"]) for l in layers), "blocks")
 
 
 if __name__ == "__main__":

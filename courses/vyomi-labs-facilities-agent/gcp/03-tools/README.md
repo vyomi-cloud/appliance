@@ -68,6 +68,14 @@ The three safety properties of a write tool, checked end to end with a throwaway
 - Run: `python check_write_tool.py` (or `./run_all.sh 3` from the project root)
 - You should see: `ledger: EXECUTED`
 
+### 10. Failure lab: a poisoned tool call is refused
+
+The model builds the arguments of every tool call, so a manipulated prompt means hostile arguments. The contract is checked before any Firestore call: asset ids must match `^[A-Z]{1,3}-[0-9]{1,4}$`, priorities come from a closed set, free text is length-limited and stripped of control characters. The block fires the inputs a prompt injection would produce (a query-injection id, a path traversal, an oversized summary, control characters, an unknown priority) and asserts each is refused with a reason while valid input passes.
+
+- File: [`tool_contract.py`](./tool_contract.py)
+- Run: `python tool_contract.py` (or `./run_all.sh 3` from the project root)
+- You should see: `tool contract verified: 5 of 5 poisoned calls refused`
+
 ## It works when
 
 - five functions exist
