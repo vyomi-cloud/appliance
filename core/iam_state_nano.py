@@ -208,6 +208,12 @@ def azure_state(reg) -> dict:
         if t in ("microsoft.authorization/roleeligibilityschedules", "microsoft.authorization/roleassignmentschedules"):
             from core.iam_engine import azure_pim as _pim              # PIM schedules (eligible grant nothing; active ones carry their window)
             _pim.fold_into_state(out, rec)
+        elif t == _AZ_T[0] and str(p.get("kind") or "").lower() == "deny":
+            # the console's "Add deny assignment" PUTs a roleAssignments record with kind=deny + denyActions (azure_iam_core's model; checkAccess reads it)
+            out["deny_assignments"].append({"id": rec.get("id") or rec.get("name") or "", "scope": _scope_of(rec),
+                                            "principals": [{"id": p.get("principalId") or "", "type": p.get("principalType") or "User"}], "exclude_principals": [],
+                                            "permissions": [{"actions": list(p.get("denyActions") or []), "notActions": [], "dataActions": [], "notDataActions": []}],
+                                            "is_system_protected": False, "do_not_apply_to_child_scopes": False})
         elif t == _AZ_T[0]:
             out["role_assignments"].append({"id": rec.get("id") or rec.get("name") or "", "principal_id": p.get("principalId") or "",
                                             "principal_type": p.get("principalType"), "scope": _scope_of(rec),

@@ -6,7 +6,7 @@ import { reasonText } from "../../../common/iamEnforce.js";
 import { useIamApi } from "../../../common/iamEnforceHooks.js";
 import { PageHeader, Section } from "../../kit/common.jsx";
 import { getProject } from "../../project.js";
-import { PermissionAutocomplete, PrincipalPicker, ResourceAutocomplete } from "./pickers.jsx";
+import { PermissionAutocomplete, PrincipalPicker, ResourceAutocomplete, normalizeMember } from "./pickers.jsx";
 import { usePickerData } from "./usePickerData.js";
 import * as iamApi from "./api.js";
 
@@ -25,7 +25,7 @@ export default function EffectiveAccess() {
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true); setErr(null); setRes(null);
-    try { const m = /^(user|serviceAccount|group|domain):/.test(principal) ? principal : `user:${principal}`; setRes(await api.evaluate({ principal: { member: m }, action: perm.trim(), resource: resource.trim() })); }
+    try { const m = normalizeMember(principal); setRes(await api.evaluate({ principal: { member: m }, action: perm.trim(), resource: resource.trim() })); }
     catch (e) { setErr(e); } finally { setBusy(false); }
   };
   return (

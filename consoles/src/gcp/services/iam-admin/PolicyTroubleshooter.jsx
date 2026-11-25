@@ -7,6 +7,8 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { PageHeader, Section } from "../../kit/common.jsx";
 import { getProject } from "../../project.js";
+import { useIamApi } from "../../../common/iamEnforceHooks.js";
+import { normalizeMember } from "./pickers.jsx";
 import * as api from "./api.js";
 
 /* `projects/_/buckets/b/...` -> //storage.googleapis.com/...; `projects/p` and other CRM resources -> //cloudresourcemanager.googleapis.com/...; `//host/...` as typed. */
@@ -18,6 +20,7 @@ const fullResourceName = (r) => {
 
 export default function PolicyTroubleshooter() {
   const notify = useNotify();
+  const iam = useIamApi("gcp");
   const [mode, setMode] = useState("manual");
   const [principal, setPrincipal] = useState("");
   const [pairs, setPairs] = useState([{ resource: `projects/${getProject()}`, permission: "" }]);
@@ -31,7 +34,7 @@ export default function PolicyTroubleshooter() {
     setBusy(true); setResult(null);
     try {
       const outcomes = await Promise.all(pairs.map(async (p) => {
-        const member = /^(user|serviceAccount|group|domain):/.test(principal) ? principal : `user:${principal}`;
+        const member = normalizeMember(principal);
         const r = await api.troubleshoot(member, fullResourceName(p.resource), p.permission);
         return { ...p, granted: r.overallAccessState === "CAN_ACCESS", state: r.overallAccessState };
       }));

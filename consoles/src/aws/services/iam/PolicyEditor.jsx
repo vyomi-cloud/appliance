@@ -109,7 +109,7 @@ function ResourceRow({ st, cat, type, applies, set }) {
   const hasAcct = tpl.includes("${Account}");
   const arns = st.arns[type] || [];
   const unspecified = !arns.length && !st.anyAcct[type] && !st.anyRes[type];
-  const startAdd = () => { setArn(tpl.replace(/\$\{Partition\}/g, "aws").replace(/\$\{Region\}/g, "us-east-1").replace(/\$\{Account\}/g, "000000000000")); setAdding(true); };
+  const startAdd = () => { setArn(tpl.replace(/\$\{Partition\}/g, "aws").replace(/\$\{Region\}/g, "us-east-1").replace(/\$\{Account\}/g, "123456789012")); setAdding(true); };
   return (
     <div style={{ display: "grid", gridTemplateColumns: "minmax(110px, 190px) 1fr 150px", gap: 16, alignItems: "start", padding: "8px 0" }} data-testid={`res-row-${type}`}>
       <Box variant="strong">{type} <Popover triggerType="text" header={type} content={<Box variant="small">ARN format: {tpl}</Box>} dismissButton={false}>Info</Popover></Box>
@@ -312,7 +312,7 @@ function EditPanel({ doc, setDoc }) {
           )}
           <div style={h}>Add a resource</div>
           <Select ariaLabel="Resource type" placeholder={cat ? "Choose a resource type" : "Choose a service first"} disabled={!cat} options={resTypes.map((t) => ({ value: t, label: t, description: arnTemplate(cat, t) }))}
-            selectedOption={rt ? { value: rt, label: rt } : null} onChange={({ detail }) => { setRt(detail.selectedOption.value); setArn(arnTemplate(cat, detail.selectedOption.value).replace(/\$\{Partition\}/g, "aws").replace(/\$\{Account\}/g, "000000000000").replace(/\$\{Region\}/g, "us-east-1")); }} />
+            selectedOption={rt ? { value: rt, label: rt } : null} onChange={({ detail }) => { setRt(detail.selectedOption.value); setArn(arnTemplate(cat, detail.selectedOption.value).replace(/\$\{Partition\}/g, "aws").replace(/\$\{Account\}/g, "123456789012").replace(/\$\{Region\}/g, "us-east-1")); }} />
           <Input value={arn} onChange={({ detail }) => setArn(detail.value)} ariaLabel="Resource ARN" placeholder="arn:aws:s3:::my-bucket" />
           <Button disabled={!arn} onClick={() => { run((a) => { const s = a[sel]; s.Resource = [...new Set([...asArr(s.Resource).filter((r) => r !== "*"), arn])]; }); setArn(""); setRt(""); }}>Add</Button>
           <div style={h}>Add a condition</div>

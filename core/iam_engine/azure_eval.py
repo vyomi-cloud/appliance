@@ -430,11 +430,13 @@ def _rbac(req, state):
     state = state or {}
     pr = req.get("principal") or {}
     ids = _ids(pr, state)
-    data = bool(req.get("data"))
+    # The gate always states the plane (map_azure sets data True/False). A caller that does not (effective-access / /evaluate, which only has the
+    # action string) is evaluated in both planes: an action is a control-plane action OR a data action, never both for the same role.
+    planes = [bool(req["data"])] if req.get("data") is not None else [False, True]
     ctx = req.get("context") or {}
     denies = []
     for d in state.get("deny_assignments") or []:
-        hit = _deny_applies(d, req, ids, state, data)
+        hit = next((h for h in (_deny_applies(d, req, ids, state, pl) for pl in planes) if h), None)
         if hit:
             denies.append({"source": "deny_assignment", "id": d.get("id", ""), "effect": "Deny",
                            "statement": {"scope": d.get("scope"), "matchedAction": hit, "isSystemProtected": bool(d.get("is_system_protected"))}})
@@ -451,7 +453,7 @@ def _rbac(req, state):
             continue
         if not _assignable(role, ra.get("scope"), state):      # a custom role only exists inside its assignableScopes
             continue
-        hit = role_grants(role, req["action"], data)
+        hit = next((h for h in (role_grants(role, req["action"], pl) for pl in planes) if h), None)
         if not hit:
             continue
         if ra.get("condition") and not eval_condition(ra["condition"], req["action"], ctx):
