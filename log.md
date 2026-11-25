@@ -1,3 +1,17 @@
+### Upstream watch — 2026-11-25T20:33:49+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**4 change(s), 0 actionable.**
+- · `announcement` AWS IoT Core now supports custom domain names for the AWS IoT credential provider  ([link](https://aws.amazon.com/aws-iot-core-custom-domains-credential-provider))
+- · `release` cli:aws: 2.42.3 → 2.42.4
+- · `release` pypi:boto3: 1.44.11 → 1.44.12
+- · `release` pypi:botocore: 1.44.11 → 1.44.12
+
+Sources that failed this run (2): maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-25T19:33:44+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3011,4 @@ Sources that failed this run (7): maven/software.amazon.awssdk:dynamodb: The rea
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
 ### Upstream watch — 2026-11-13T18:10:18+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**2 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure web: [Microsoft.Web] Introduce api version 2026-09-01 and VirtualConnections Entity (#45406) ([link](https://github.com/Azure/azure-rest-api-specs/commit/5489588d840c97097d653b15566cb73f003205cb))
-- · `announcement` Announcing Accelerated Compute Insights for Amazon CloudWatch ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/accelerated-compute-insights-cloudwatch/))
-
-Sources that failed this run (12): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out
-
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
 
