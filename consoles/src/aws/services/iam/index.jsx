@@ -33,6 +33,7 @@ import UnusedAccess from "./UnusedAccess.jsx";
 import AnalyzerSettings from "./AnalyzerSettings.jsx";
 import Enforcement from "./Enforcement.jsx";
 import EffectiveAccess from "./EffectiveAccess.jsx";
+import OrgGovernance from "./OrgGovernance.jsx";
 
 const iamCrumb = { text: "IAM", href: "#/iam" };
 
@@ -62,6 +63,7 @@ export default {
     { type: "section", text: "Multi-account access", items: [
       { type: "link", text: "Account access manager", href: "#/iam/account-access-manager" },
       { type: "link", text: "Organization activity", href: "#/iam/organization-activity" },
+      { type: "link", text: "Organization governance", href: "#/iam/organization-governance" },
       { type: "link", text: "Service control policies", href: "#/iam/service-control-policies" },
       { type: "link", text: "Resource control policies", href: "#/iam/resource-control-policies" },
     ] },
@@ -105,6 +107,7 @@ export default {
     { pattern: "/iam/security-credentials", component: SecurityCredentials, crumbs: () => [iamCrumb, { text: "My security credentials", href: "#/iam/security-credentials" }] },
 
     { pattern: "/iam/organization-activity", component: OrganizationActivity, crumbs: () => [iamCrumb, { text: "Organization activity", href: "#/iam/organization-activity" }] },
+    { pattern: "/iam/organization-governance", component: OrgGovernance, crumbs: () => [iamCrumb, { text: "Organization governance", href: "#/iam/organization-governance" }] },
     { pattern: "/iam/service-control-policies", component: ServiceControlPolicies, crumbs: () => [iamCrumb, { text: "AWS Organizations: Service control policies (SCPs)", href: "#/iam/service-control-policies" }] },
     { pattern: "/iam/service-control-policies/:name", component: ServiceControlPolicyDetail, crumbs: (p) => [iamCrumb, { text: "AWS Organizations: Service control policies (SCPs)", href: "#/iam/service-control-policies" }, { text: p.name, href: `#/iam/service-control-policies/${p.name}` }] },
     { pattern: "/iam/resource-control-policies", component: ResourceControlPolicies, crumbs: () => [iamCrumb, { text: "AWS Organizations: Resource control policies (RCPs)", href: "#/iam/resource-control-policies" }] },

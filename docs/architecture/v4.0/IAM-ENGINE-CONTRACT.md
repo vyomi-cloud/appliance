@@ -27,6 +27,20 @@ Resolved most-specific-first: resource > service > space > global. Default every
 ## HTTP API (Mesh and Nano, identical): `/api/iam/<cloud>/...`
 `GET/PUT /api/iam/<cloud>/enforcement` (settings document) ; `GET /api/iam/<cloud>/audit?limit=` ; `POST /api/iam/<cloud>/evaluate` (body = request) -> decision (the effective-access view / Policy Simulator / Troubleshooter / checkAccess front end) ; `GET /api/iam/<cloud>/catalog/<service>` (catalog slice + `vyomi.simulated` flag).
 
+## Governance (hierarchies, org policy, guardrails) - branch `v4/iam-governance`
+Real stores + read models for the org-level controls, same on Mesh and Nano (cores vendored by `wasm/build_cores.py`):
+| Cloud | Native wire (writes) | Core | Engine state key(s) |
+|---|---|---|---|
+| AWS | Organizations JSON 1.1 (`AttachPolicy`, `DetachPolicy`, `CreatePolicy`, `EnablePolicyType`, `MoveAccount` ...), S3 `PutPublicAccessBlock` (bucket) / s3control (account) | `organizations_core` (attaches FullAWSAccess / RCPFullAWSAccess to every root, OU, account) | `scps`, `rcps` (levels), `s3_bpa` (account + per-bucket flags; `RestrictPublicBuckets` / `IgnorePublicAcls` enforced for anonymous / cross-account callers in `aws_eval`) |
+| GCP | `GET /v2/{organizations\|folders\|projects}/{id}/constraints`, `POST\|PATCH\|DELETE /v2/{node}/policies[/{constraint}]`, `...:getEffectivePolicy`, `...:check` (Vyomi extension), resourcemanager v3 folders/projects | `gcp_orgpolicy_core` (catalog, inheritance merge, `dryRunSpec`), `gcp_resourcemanager_core`, `gcp_iam_core` | `hierarchy`, `deny_policies`, `pab_policies`, `pab_bindings` (existing) + org-policy enforcement hooks |
+| Azure | `/providers/Microsoft.Management/managementGroups[/{id}[/subscriptions/{sub}]]`, `.../providers/Microsoft.Authorization/{roleAssignments,policyAssignments}` at MG scope | `azure_mgmt_groups_core` | `management_groups`, `subscriptions`, `role_assignments`, `deny_assignments` |
+
+Read models (not native, console + tests): `GET|POST /api/iam/<cloud>/governance/<what>` served by `IamApi` -> `core/iam_governance.handle` (hosts: Mesh `routes/iam_enforcement.py`, Nano `nano-iam-hook`, dev server). `aws`: `organization`, `effective?account=`, `check` (POST), `settings` (POST `{scpAppliesToManagement}`), `s3-public-access`. `gcp`: `hierarchy?project=`, `orgpolicy?node=`, `orgpolicy/check` (POST), `iam-policies?node=`. `azure`: `hierarchy`, `effective?scope=`.
+
+Semantics: AWS SCP/RCP = every level must Allow, a Deny anywhere wins, the management account is exempt unless the Vyomi lab opt-in `scp_apply_to_management` is on (all principals live in that one account). GCP org policy: boolean = nearest policy wins; list = `inheritFromParent` merges, `reset` ignores ancestors; `dryRunSpec` is evaluated separately and never enforced; conditional rules are stored, not evaluated. Azure MG: depth <= 6, 409 on delete with children, root group (id = tenant id) cannot be deleted, RBAC and Policy assignments at an MG apply to every subscription below it.
+
+Known limits (kept honest in the UI): the GCP constraint catalog is a curated subset (~45), engine hooks exist only for service-account / key creation, `gcp.resourceLocations`, `storage.uniformBucketLevelAccess`, `storage.publicAccessPrevention` (bucket create); AWS `DescribeEffectivePolicy` (tag / backup) is not implemented; Azure GET of a missing MG answers 404 (real Azure can answer 403).
+
 ## Error shapes when denying (enforce)
 AWS: 403 `AccessDenied` / `AccessDeniedException` / EC2 `UnauthorizedOperation` per protocol (XML or JSON x-amz-json), message "User: <arn> is not authorized to perform: <action> on resource: <resource> ...". GCP: 403 `{"error":{"code":403,"status":"PERMISSION_DENIED","message":"Permission '<p>' denied on resource '<r>' (or it may not exist)."}}`. Azure: 403 `AuthorizationFailed` "The client '<oid>' with object id '<oid>' does not have authorization to perform action '<a>' over scope '<s>' ...".
 

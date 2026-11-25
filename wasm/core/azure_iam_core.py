@@ -263,13 +263,13 @@ def _list_role_assignments(store) -> AzureIamResponse:
     return _json(200, {"value": value})
 
 
-def _put_role_assignment(store, name: str, body: dict) -> AzureIamResponse:
+def _put_role_assignment(store, name: str, body: dict, scope_hint: str | None = None) -> AzureIamResponse:
     props = body.get("properties") or body
     assignment = {
         "name": name,
         "principalId": props.get("principalId", ""),
         "roleDefinition": props.get("roleName") or props.get("roleDefinitionId", ""),
-        "scope": props.get("scope", "/"),
+        "scope": props.get("scope") or scope_hint or "/",        # the scope in the URL (subscription / RG / management group) when the body has none
         "kind": str(props.get("kind", "allow")).lower(),   # "allow" | "deny"
         "denyActions": props.get("denyActions") or [],
     }
@@ -445,7 +445,7 @@ def dispatch(store, method: str, path: str,
             return _list_role_assignments(store)
         if len(tail) >= 2:
             if method == "PUT":
-                return _put_role_assignment(store, tail[1], payload)
+                return _put_role_assignment(store, tail[1], payload, scope_hint="/" + "/".join(segs[:i - 1]) if i >= 2 else None)
             if method == "DELETE":
                 return _delete_role_assignment(store, tail[1])
     return _err(404, "NotFound", f"Unsupported {method} {path}")

@@ -147,6 +147,9 @@ def _collect(stores):
             meta = _dict(meta)
             arn = "arn:aws:s3:::%s" % b
             put(arn, _dict(meta.get("cfg")).get("policy") or meta.get("policy"), meta.get("tags"))
+            if not s3_bpa(s3, b)["IgnorePublicAcls"]:                  # public ACL grants act as resource policy statements (S3 evaluates ACLs beside the policy)
+                for res, doc in _acl_policies(s3, b, meta).items():
+                    pol[res] = _merge_docs(pol.get(res), doc) if res in pol else doc
         ecr = _dict(_dict(getattr(s3, "account", None)).get("ecr"))
         acct = _acct(s3)
         reg = _doc(ecr.get("registryPolicy"))                     # registry permissions policy (PutRegistryPolicy): applies to every repository
@@ -251,9 +254,98 @@ def aws_requires_grant(stores):
 
 
 def aws_resource_state(stores):
-    """The three state keys at once (one scan)."""
+    """The state keys at once (one scan): resource_policies, resource_tags, resource_policy_requires_grant, s3_bpa (effective Block Public Access)."""
     pol, tags, need = _collect(stores or {})
-    return {"resource_policies": ResourcePolicyMap(pol), "resource_tags": tags, "resource_policy_requires_grant": need}
+    out = {"resource_policies": ResourcePolicyMap(pol), "resource_tags": tags, "resource_policy_requires_grant": need}
+    s3 = (stores or {}).get("s3")
+    if s3 is not None:
+        out["s3_bpa"] = {b: s3_bpa(s3, b) for b in _dict(getattr(s3, "buckets", None))}
+    return out
+
+
+# ----------------------------------------------------------------------------- S3 Block Public Access + ACL grants
+_BPA_KEYS = ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")
+_ALL_USERS = "http://acs.amazonaws.com/groups/global/AllUsers"
+
+
+def _bpa_flags(xml):
+    out = dict.fromkeys(_BPA_KEYS, False)
+    if isinstance(xml, str) and xml.strip():
+        try:
+            import xml.etree.ElementTree as ET
+            for el in ET.fromstring(xml).iter():
+                tag = el.tag.rsplit("}", 1)[-1]
+                if tag in out:
+                    out[tag] = (el.text or "").strip().lower() == "true"
+        except Exception:
+            pass
+    return out
+
+
+def s3_bpa(s3, bucket):
+    """EFFECTIVE Block Public Access of a bucket: its own settings OR the account's (store.account['pab'], s3control PutPublicAccessBlock)."""
+    meta = _dict(_dict(getattr(s3, "buckets", None)).get(bucket))
+    own = _bpa_flags(_dict(meta.get("cfg")).get("publicAccessBlock"))
+    acct = _dict(_dict(getattr(s3, "account", None)).get("pab"))
+    return {k: bool(own[k] or acct.get(k)) for k in _BPA_KEYS}
+
+
+def _acl_public_perms(xml):
+    """Permissions the AllUsers group holds in an AccessControlPolicy XML -> set of READ / WRITE / READ_ACP / WRITE_ACP / FULL_CONTROL."""
+    out = set()
+    if isinstance(xml, str) and _ALL_USERS in xml:
+        try:
+            import xml.etree.ElementTree as ET
+            for g in ET.fromstring(xml).iter():
+                if g.tag.rsplit("}", 1)[-1] != "Grant":
+                    continue
+                uri = perm = None
+                for el in g.iter():
+                    t = el.tag.rsplit("}", 1)[-1]
+                    if t == "URI":
+                        uri = (el.text or "").strip()
+                    elif t == "Permission":
+                        perm = (el.text or "").strip()
+                if uri == _ALL_USERS and perm:
+                    out.add(perm)
+        except Exception:
+            pass
+    return out
+
+
+def _entry_acl(entry):
+    e = _dict(entry)
+    if e.get("acl"):
+        return e["acl"]
+    vers = e.get("versions")
+    seq = list(vers.values()) if isinstance(vers, Mapping) else (list(vers) if isinstance(vers, (list, tuple)) else [])
+    for v in reversed(seq):
+        if _dict(v).get("acl"):
+            return _dict(v)["acl"]
+    return None
+
+
+def _acl_policies(s3, bucket, meta):
+    """Public ACL grants as synthetic policies {resource ARN: policy}: bucket ACL (READ -> list, WRITE -> write/delete objects) and object ACLs
+    (READ -> GetObject). Sid 'vyomi-acl:*' marks them: RestrictPublicBuckets does not drop them (IgnorePublicAcls is what turns them off)."""
+    out, b = {}, "arn:aws:s3:::%s" % bucket
+    perms = _acl_public_perms(meta.get("acl"))
+    stmts = []
+    if perms & {"READ", "FULL_CONTROL"}:
+        stmts.append({"Sid": "vyomi-acl:bucket-read", "Effect": "Allow", "Principal": "*", "Action": ["s3:ListBucket", "s3:ListBucketVersions", "s3:ListBucketMultipartUploads"], "Resource": b})
+    if perms & {"WRITE", "FULL_CONTROL"}:
+        stmts.append({"Sid": "vyomi-acl:bucket-write", "Effect": "Allow", "Principal": "*", "Action": ["s3:PutObject", "s3:DeleteObject"], "Resource": b + "/*"})
+    if stmts:
+        out[b] = {"Version": "2012-10-17", "Statement": stmts}
+    objs = _dict(_dict(getattr(s3, "objects", None)).get(bucket))
+    for key, entry in objs.items():
+        p = _acl_public_perms(_entry_acl(entry))
+        if p & {"READ", "FULL_CONTROL"}:
+            ost = {"Sid": "vyomi-acl:object-read", "Effect": "Allow", "Principal": "*", "Action": ["s3:GetObject", "s3:GetObjectVersion"], "Resource": "%s/%s" % (b, key)}
+            doc = out.get(b) or {"Version": "2012-10-17", "Statement": []}
+            doc = {"Version": doc["Version"], "Statement": doc["Statement"] + [ost]}
+            out[b] = doc        # one policy per bucket (the ARN map widens object ARNs to their bucket); statements name the exact object
+    return out
 
 
 def host_stores():

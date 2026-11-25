@@ -196,3 +196,22 @@ def test_mesh_policy_assignment_at_management_group_blocks_resources_below(clien
         c.delete(pa)
         c.delete(rg + "?api-version=2021-04-01")
         c.delete(MGP + g + api)
+
+
+def test_governance_read_models_pure():
+    from core import iam_governance as gov
+    st = {}
+    mkgroup(st, "a", display="Alpha"); mkgroup(st, "b", "a")
+    call(st, "PUT", MGP + "b/subscriptions/" + SUB)
+    call(st, "PUT", MGP + "a/providers/Microsoft.Authorization/policyAssignments/pa1",
+         {"properties": {"policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/e56962a6-4747-49cd-b67b-bf8b01975c4c"}})
+    t = gov.azure_hierarchy(st)["root"]
+    assert t["name"] == mg.TENANT_ID and t["children"][0]["name"] == "a" and t["children"][0]["policyAssignments"] == 1
+    assert t["children"][0]["children"][0]["children"][0] == {"id": "/subscriptions/" + SUB, "name": SUB, "displayName": "Vyomi Subscription", "kind": "subscription", "children": [], "policyAssignments": None}
+    state = _state(st, [{"id": "ra1", "principal_id": "alice", "role_definition_id": READER, "scope": MGP + "a"},
+                        {"id": "ra2", "principal_id": "bob", "role_definition_id": READER, "scope": f"/subscriptions/{SUB}"}])
+    eff = gov.azure_effective(st, state, f"/subscriptions/{SUB}/resourceGroups/rg")
+    assert [(r["principalId"], r["inheritedFrom"]) for r in eff["roleAssignments"]] == [("bob", f"/subscriptions/{SUB}"), ("alice", MGP + "a")]
+    assert [p["name"] for p in eff["policyAssignments"]] == ["pa1"]
+    eff_mg = gov.azure_effective(st, state, MGP + "b")
+    assert [r["principalId"] for r in eff_mg["roleAssignments"]] == ["alice"] and [p["name"] for p in eff_mg["policyAssignments"]] == ["pa1"]

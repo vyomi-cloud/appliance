@@ -1046,7 +1046,8 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
     # ---- Org Policy v2 on every hierarchy level: {organizations|folders|projects}/{id}/{constraints|policies[/{constraint}][:getEffectivePolicy]} ----
     if len(segs) >= 3 and segs[0] in ("organizations", "folders", "projects") and (
             segs[2] == "constraints"
-            or (segs[2] == "policies" and (segs[0] != "projects" or method == "PATCH" or ":" in "/".join(segs[3:])))):
+            or (segs[2] == "policies" and (segs[0] != "projects" or method == "PATCH" or ":" in "/".join(segs[3:])
+                                      or (method == "POST" and len(segs) == 3 and not query.get("policyId") and isinstance(_body(), dict) and _body().get("name"))))):
         r = _orgpolicy(store, method, segs, query, _body())
         if r is not None:
             return r

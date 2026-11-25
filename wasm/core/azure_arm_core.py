@@ -1358,6 +1358,11 @@ class AzureArm:
                 base.update(op.get("result") or {})
                 base["status"] = "Succeeded"    # a resource body's own "status" (e.g. plan "Ready") must not hide the LRO status
             return _ok(base)
+        if "/providers/microsoft.management/" in path.split("?", 1)[0].lower():     # management groups (core/azure_mgmt_groups_core.py)
+            from core import azure_mgmt_groups_core as _mgc
+            _r = _mgc.handle(self.state, method, path, query, body)
+            if _r is not None:
+                return _r
         bare = path.split("?", 1)[0].rstrip("/")
         # Only the TOP-LEVEL account listings: a child collection named "subscriptions" (API Management
         # service/{n}/subscriptions) or "tenants" under a resource must reach its own engine.
@@ -2523,6 +2528,13 @@ class AzureArm:
             if str((r.get("properties") or {}).get("enforcementMode", "Default")).lower() == "donotenforce":
                 continue
             out.append(r)
+        try:        # assignments at the management groups above this subscription apply to it too
+            from core import azure_mgmt_groups_core as _mgc
+            for r in _mgc.policy_assignments_above(self.state, sub):
+                if str((r.get("properties") or {}).get("enforcementMode", "Default")).lower() != "donotenforce":
+                    out.append(r)
+        except Exception:
+            pass
         return out
 
     def _policy_skip(self, defn, res):

@@ -116,7 +116,8 @@
  "core": [
   "iam_state_adapters.py",
   "iam_state_nano.py",
-  "iam_resource_policies.py"
+  "iam_resource_policies.py",
+  "iam_governance.py"
  ],
  "digest": "1862e5b9fa5709f4",
  "engine": [

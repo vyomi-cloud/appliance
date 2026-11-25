@@ -225,6 +225,13 @@ def azure_state(reg) -> dict:
     m = re.match(r"^(/subscriptions/[^/]+)", str(first or ""), re.I)
     if m:
         ds["/cognitiveservices/_"] = m.group(1)           # an OpenAI request whose account cannot be told: authorize at the subscription
+    for a in (getattr(reg.get("iam"), "_azure_role_assignments", None) or {}).values():     # PUT .../roleAssignments on the wire (core/azure_iam_core), any scope incl. management groups
+        if isinstance(a, dict) and a.get("kind") != "deny":
+            out["role_assignments"].append({"id": a.get("name", ""), "principal_id": a.get("principalId", ""),
+                                            "role_definition_id": a.get("roleDefinition", ""), "scope": a.get("scope") or "/"})
+        elif isinstance(a, dict):
+            out["deny_assignments"].append({"id": a.get("name", ""), "scope": a.get("scope") or "/", "principals": [{"id": a.get("principalId", ""), "type": "User"}],
+                                            "permissions": [{"actions": list(a.get("denyActions") or [])}]})
     _require(("azure", "_roles"))
     out["builtin_roles"] = _assigned_builtin_roles(out["role_assignments"])
     return out

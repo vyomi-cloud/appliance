@@ -160,3 +160,22 @@ def test_mesh_orgpolicy_v2_wire_and_enforcement(client):
             c.delete(f"/v2/{folder}/policies/{n}")
         c.post(f"/v3/projects/{pid}:move", json={"destinationParent": org})
         c.delete(f"/v3/{folder}")
+
+
+def test_governance_read_models_pure():
+    from core import iam_governance as gov
+    s = _store()
+    put(s, ORG, "storage.publicAccessPrevention", {"rules": [{"enforce": True}]})
+    put(s, "folders/1", "gcp.resourceLocations", {"rules": [{"values": {"allowedValues": ["in:eu-locations"]}}]}, {"rules": [{"values": {"allowedValues": ["europe-west1"]}}]})
+    tree = gov.gcp_hierarchy(s)
+    assert tree["type"] == "organization" and tree["orgPolicies"] == 1
+    f1 = next(c for c in tree["children"] if c["id"] == "folders/1")
+    assert f1["orgPolicies"] == 1 and f1["children"][0]["id"] == "folders/2" and f1["children"][0]["children"][0]["id"] == "projects/p1"
+    view = gov.gcp_orgpolicy_view(s, "projects/p1")
+    assert view["chain"] == ["projects/p1", "folders/2", "folders/1", ORG]
+    by = {r["constraint"]: r for r in view["constraints"]}
+    assert by["constraints/storage.publicAccessPrevention"]["effective"]["enforce"] is True
+    assert by["constraints/storage.publicAccessPrevention"]["effective"]["source"] == ORG
+    loc = by["constraints/gcp.resourceLocations"]
+    assert loc["effective"]["source"] == "folders/1" and loc["dryRunEffective"]["allowedValues"] == ["europe-west1"]
+    assert [l["node"] for l in loc["levels"]] == [ORG, "folders/1", "folders/2", "projects/p1"]
