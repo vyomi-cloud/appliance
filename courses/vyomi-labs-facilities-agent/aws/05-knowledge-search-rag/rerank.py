@@ -10,4 +10,8 @@ out = boto3.client("bedrock-agent-runtime").rerank(
     sources=[{"type": "INLINE", "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": h["content"]["text"]}}} for h in hits],
     rerankingConfiguration={"type": "BEDROCK_RERANKING_MODEL", "bedrockRerankingConfiguration": {
         "numberOfResults": 2, "modelConfiguration": {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0"}}})
-print("rerank returned", len(out["results"]), "results; best index", out["results"][0]["index"])
+best = hits[out["results"][0]["index"]]["content"]["text"]
+assert len(out["results"]) == 2, "rerank must return the 2 requested results"
+assert "elevator" in best.lower(), "the best reranked passage must be about the elevator, got: " + best[:60]
+assert out["results"][0]["relevanceScore"] >= out["results"][1]["relevanceScore"], "results must be ordered best first"
+print("rerank returned", len(out["results"]), "results; best index", out["results"][0]["index"], "-> the elevator SOP")

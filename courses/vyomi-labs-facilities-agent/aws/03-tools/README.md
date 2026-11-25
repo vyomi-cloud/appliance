@@ -56,6 +56,22 @@ Invoke asset-status for boiler B-12, the way an agent will.
 - Run: `python call_tools.py` (or `./run_all.sh 3` from the project root)
 - You should see: `found: True | status: RUNNING | open work orders: 1`
 
+### 8. Failure lab: hostile input and a replayed approval
+
+The tools are called with arguments a model wrote, so treat them as hostile. This block throws a SQL-injection string, a wrong type, a missing field and an oversized summary at the tools and asserts each is refused before any data is touched. Then it approves the same request twice and asserts exactly one work order exists: the conditional write makes the second call a harmless replay.
+
+- File: [`tool_contract.py`](./tool_contract.py)
+- Run: `python tool_contract.py` (or `./run_all.sh 3` from the project root)
+- You should see: `tool contract verified`
+
+### 9. Least privilege per tool, from the audit log
+
+Each tool gets its own identity with the smallest policy that works. The read tool starts with only GetItem on the assets table: run its real handler as that identity, get refused when it scans the work orders, and read the audit log to learn the missing action and resource. Then prove the boundaries: the read tool cannot write, the write tool cannot read assets, and nothing can touch the ledger except the write tool. The same policies are attached to IAM roles for the functions; on real AWS the role is what the function runs as (the simulator's Lambda runner uses the account root, so this proof runs the handler as an IAM user carrying the identical policy).
+
+- File: [`iam_tools.py`](./iam_tools.py)
+- Run: `python iam_tools.py` (or `./run_all.sh 3` from the project root)
+- You should see: `least privilege per tool verified`
+
 ## It works when
 
 - four functions exist

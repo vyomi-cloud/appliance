@@ -17,7 +17,7 @@
   1800,
   1270
  ],
- "total_minutes": 445,
+ "total_minutes": 469,
  "updated": "November 26, 2026",
  "layers": [
   {
@@ -761,7 +761,7 @@
     850
    ],
    "level": "Intermediate",
-   "minutes": 35,
+   "minutes": 39,
    "outcome": "Read-only and approval-gated tools your agents can call",
    "lessons": 4,
    "color": "#0f766e",
@@ -962,12 +962,28 @@
      "nano_note": null,
      "kind": "build",
      "needs_appliance": false
+    },
+    {
+     "title": "Failure lab: a poisoned tool call is refused",
+     "text": "The model builds the arguments of every tool call, so a manipulated prompt means hostile arguments. The contract is checked before any Firestore call: asset ids must match `^[A-Z]{1,3}-[0-9]{1,4}$`, priorities come from a closed set, free text is length-limited and stripped of control characters. The block fires the inputs a prompt injection would produce (a query-injection id, a path traversal, an oversized summary, control characters, an unknown priority) and asserts each is refused with a reason while valid input passes.",
+     "file": "tool_contract.py",
+     "lang": "python",
+     "code": "import re\n\nASSET = re.compile(r\"^[A-Z]{1,3}-[0-9]{1,4}$\")\nPRIORITIES = {\"P1\", \"P2\", \"P3\", \"P4\"}\n\n\ndef validate(call):\n    errs = []\n    if not ASSET.match(str(call.get(\"asset_id\", \"\"))):\n        errs.append(\"asset_id must look like B-12\")\n    if call.get(\"priority\", \"P3\") not in PRIORITIES:\n        errs.append(\"priority must be one of P1..P4\")\n    s = str(call.get(\"summary\", \"\"))\n    if not 3 <= len(s) <= 300 or any(ord(c) < 32 for c in s):\n        errs.append(\"summary must be 3-300 printable characters\")\n    return errs\n\n\ngood = {\"asset_id\": \"B-12\", \"priority\": \"P2\", \"summary\": \"Boiler pressure above limit\"}\nassert validate(good) == []\npoisoned = {\n    \"document path injection\": {**good, \"asset_id\": \"B-12/../approval-ledger/x\"},\n    \"path traversal\": {**good, \"asset_id\": \"../../secrets\"},\n    \"oversized summary\": {**good, \"summary\": \"x\" * 5000},\n    \"control characters\": {**good, \"summary\": \"ok\\x00\\x1b[31m\"},\n    \"unknown priority\": {**good, \"priority\": \"P0; drop\"},\n}\nfor name, call in poisoned.items():\n    errs = validate(call)\n    assert errs, name + \" must be refused\"\n    print(\"refused:\", name, \"->\", errs[0])\nprint(\"tool contract verified: 5 of 5 poisoned calls refused\")\n",
+     "run": "python tool_contract.py",
+     "expect": "tool contract verified: 5 of 5 poisoned calls refused",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Pure Python: kept Mesh-only until the Nano matrix verifies it.",
+     "kind": "failure",
+     "needs_appliance": false
     }
    ],
    "explain": {
     "lead": [
      "Tools are how an agent touches the real world. A tool is an ordinary function with a strict contract: what it accepts, what it returns, what it is allowed to do. The agent is only ever as safe as the tools you hand it.",
-     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, request-approval and create-work-order, that must sit behind a human decision."
+     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, an approval-request step and create-work-order, that must sit behind a human decision."
     ],
     "concepts": [
      [
@@ -998,14 +1014,14 @@
      ],
      [
       "Deploy write tools",
-      "Deploy request-approval and create-work-order. They do not write directly: they hand off to approval."
+      "Deploy an approval-request step and create-work-order. They do not write directly: they hand off to approval."
      ],
      [
       "Invoke each tool",
       "Call every tool directly and check what comes back, before any agent uses them."
      ]
     ],
-    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls request-approval, which records the request and waits. It cannot call create-work-order itself.",
+    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls the approval-request step, which records the request and waits. It cannot call create-work-order itself.",
     "pitfalls": [
      "Giving a tool a broad permission \"for now\".",
      "Letting a write tool run without a human or idempotency key: a retry then creates duplicates.",
@@ -1030,7 +1046,7 @@
      ],
      [
       "Deploy two write tools",
-      "request-approval and create-work-order exist, but request-approval only records a request. It cannot create the work order itself."
+      "the approval request and create-work-order exist, but the approval request only records a request. It cannot create the work order itself."
      ],
      [
       "Call every tool by hand first",
@@ -1039,7 +1055,7 @@
     ],
     "quiz": [
      [
-      "Why does request-approval not create the work order directly?",
+      "Why does the approval request not create the work order directly?",
       [
        "It is slower",
        "A model may propose a write, but a person must approve it",
@@ -1137,10 +1153,12 @@
      "expect": "Your seeded assets"
     }
    ],
-   "blocks_total": 9,
+   "blocks_total": 10,
    "blocks_nano": 9,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Failure lab: a poisoned tool call is refused"
+   ]
   },
   {
    "id": 12,
@@ -3097,7 +3115,7 @@
     850
    ],
    "level": "Advanced",
-   "minutes": 50,
+   "minutes": 54,
    "outcome": "Writes that wait for a human, with a ledger of every decision",
    "lessons": 5,
    "color": "#dc2626",
@@ -3247,6 +3265,22 @@
      "nano_note": null,
      "kind": "build",
      "needs_appliance": false
+    },
+    {
+     "title": "Approval expiry: nobody answers, the request expires",
+     "text": "A request that waits forever is a risk. Each Firestore ledger document gets `expires_at`; a sweeper marks PENDING documents past their deadline EXPIRED inside a transaction that re-reads the status, so a request approved a moment earlier is never overwritten. The block proves an unanswered request expires, an approved one is untouched and an expired one cannot be approved afterwards.",
+     "file": "expiry.py",
+     "lang": "python",
+     "code": "import time\n\nfrom google.cloud import firestore\n\nimport gcp\n\ndb = gcp.firestore_client()\ncol = db.collection(\"approval-ledger\")\nnow = int(time.time())\ncol.document(\"req-exp-stale\").set({\"status\": \"PENDING\", \"expires_at\": now - 5})\ncol.document(\"req-exp-done\").set({\"status\": \"APPROVED\", \"expires_at\": now - 5})\ncol.document(\"req-exp-fresh\").set({\"status\": \"PENDING\", \"expires_at\": now + 3600})\n\n\n@firestore.transactional\ndef expire(tx, ref):\n    snap = ref.get(transaction=tx)\n    if snap.get(\"status\") == \"PENDING\" and snap.get(\"expires_at\") < int(time.time()):\n        tx.update(ref, {\"status\": \"EXPIRED\"})\n        return True\n    return False\n\n\n@firestore.transactional\ndef decide(tx, ref, status):\n    snap = ref.get(transaction=tx)\n    if snap.get(\"status\") != \"PENDING\":\n        return False                  # only a PENDING request can be decided\n    tx.update(ref, {\"status\": status})\n    return True\n\n\nexpired = [d.id for d in col.where(\"status\", \"==\", \"PENDING\").stream() if expire(db.transaction(), col.document(d.id))]\nassert expired == [\"req-exp-stale\"], expired\nstatus = lambda r: col.document(r).get().get(\"status\")\nassert status(\"req-exp-stale\") == \"EXPIRED\" and status(\"req-exp-done\") == \"APPROVED\" and status(\"req-exp-fresh\") == \"PENDING\"\nprint(\"expired:\", expired[0], \"| approved document untouched | fresh one still waiting\")\nassert decide(db.transaction(), col.document(\"req-exp-stale\"), \"APPROVED\") is False\nassert status(\"req-exp-stale\") == \"EXPIRED\"\nfor r in (\"req-exp-stale\", \"req-exp-done\", \"req-exp-fresh\"):\n    col.document(r).delete()\nprint(\"approval expiry verified\")\n",
+     "run": "python expiry.py",
+     "expect": "approval expiry verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Firestore transactions are not verified on the Nano GCP core.",
+     "kind": "harden",
+     "needs_appliance": false
     }
    ],
    "explain": {
@@ -3257,11 +3291,11 @@
     "concepts": [
      [
       "Risk level",
-      "Low-risk actions can run automatically; medium and high wait for a human."
+      "How risky a write is decides who must approve it. In this course every write waits for a human; the AWS Mesh chapter adds a policy that auto-approves the lowest priority."
      ],
      [
       "Durable wait",
-      "The workflow stores its state and a callback token, so it can wait hours or days and survive restarts."
+      "The workflow stores its state and waits for a callback (a token, a decision message or a ledger update, depending on the cloud), so it can wait hours or days and survive restarts."
      ],
      [
       "Approval ledger",
@@ -3315,7 +3349,7 @@
      ],
      [
       "The approver decides",
-      "They approve, sending a callback token back to the waiting workflow."
+      "They approve, and that decision is delivered back to the waiting request."
      ],
      [
       "Approve creates, reject does not",
@@ -3443,10 +3477,12 @@
      "expect": "PENDING, then APPROVED or REJECTED"
     }
    ],
-   "blocks_total": 6,
+   "blocks_total": 7,
    "blocks_nano": 6,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Approval expiry: nobody answers, the request expires"
+   ]
   },
   {
    "id": 1,
@@ -4170,7 +4206,7 @@
     850
    ],
    "level": "Intermediate",
-   "minutes": 35,
+   "minutes": 39,
    "outcome": "Traces, metrics and logs you can read back",
    "lessons": 4,
    "color": "#ea580c",
@@ -4303,6 +4339,22 @@
      ],
      "nano_note": null,
      "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Cost and budget limit per layer",
+     "text": "A budget object counts notional model tokens per layer and refuses the call that would cross the limit, so a runaway loop stops itself before the bill. The block drives the real Gemini-compatible model from chapter 10 until the budget trips, then asserts the crossing call was refused and spend never exceeded the limit.",
+     "file": "cost_meter.py",
+     "lang": "python",
+     "code": "from vymodels import chat\n\nPRICE_PER_1K = 0.0006      # notional price per 1,000 tokens: put the real rate card here\n\n\nclass BudgetExceeded(Exception):\n    pass\n\n\nclass Budget:\n    def __init__(self, layer, limit_usd):\n        self.layer, self.limit, self.spent, self.calls = layer, limit_usd, 0.0, 0\n\n    def charge(self, text_in, text_out):\n        cost = (len(text_in) + len(text_out)) / 4 / 1000 * PRICE_PER_1K\n        if self.spent + cost > self.limit:\n            raise BudgetExceeded(f\"{self.layer}: {self.spent + cost:.6f} would exceed the {self.limit:.6f} limit\")\n        self.spent += cost\n        self.calls += 1\n\n\nbudget = Budget(\"agents\", limit_usd=0.0004)\nrefused = None\nfor _ in range(200):\n    q = \"Summarise the boiler shutdown procedure in one sentence. \" * 3\n    try:\n        budget.charge(q, chat(q))\n    except BudgetExceeded as e:\n        refused = str(e)\n        break\nassert refused, \"the budget must trip before 200 calls\"\nassert budget.spent <= budget.limit\nprint(\"calls allowed:\", budget.calls, \"| spent:\", round(budget.spent, 6), \"| limit:\", budget.limit)\nprint(\"refused:\", refused)\nprint(\"cost limit verified\")\n",
+     "run": "python cost_meter.py",
+     "expect": "cost limit verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Replays against the in-browser model on Nano once the Nano matrix verifies it.",
+     "kind": "harden",
      "needs_appliance": false
     }
    ],
@@ -4495,10 +4547,12 @@
      "expect": "One span per agent or tool step"
     }
    ],
-   "blocks_total": 6,
+   "blocks_total": 7,
    "blocks_nano": 6,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Cost and budget limit per layer"
+   ]
   },
   {
    "id": 13,
@@ -4548,7 +4602,7 @@
     1256
    ],
    "level": "Advanced",
-   "minutes": 30,
+   "minutes": 42,
    "outcome": "Encrypted records and an audit trail of the run",
    "lessons": 4,
    "color": "#7c3aed",
@@ -4681,12 +4735,60 @@
      "nano_note": null,
      "kind": "build",
      "needs_appliance": false
+    },
+    {
+     "title": "Key rotation without re-encrypting data",
+     "text": "Rotation adds a new key VERSION and makes it primary; earlier versions still decrypt what they sealed, so nothing already wrapped breaks. The block wraps a data key, creates a new version, promotes it, asserts the primary changed, decrypts the OLD ciphertext (Cloud KMS picks the version from the ciphertext) and wraps again under the new primary.",
+     "file": "key_rotation.py",
+     "lang": "python",
+     "code": "from google.cloud import kms\n\nimport gcp\n\nclient = gcp.rest(kms.KeyManagementServiceClient)\nKEY = f\"{gcp.PARENT}/keyRings/facilities/cryptoKeys/ledger-key\"\nCTX = b\"collection=approval-ledger\"\ndek = b\"0123456789abcdef0123456789abcdef\"\n\nbefore = client.get_crypto_key(request={\"name\": KEY}).primary.name\nold = client.encrypt(request={\"name\": KEY, \"plaintext\": dek, \"additional_authenticated_data\": CTX}).ciphertext\n\nnew_version = client.create_crypto_key_version(request={\"parent\": KEY, \"crypto_key_version\": {}}).name\nclient.update_crypto_key_primary_version(request={\"name\": KEY, \"crypto_key_version_id\": new_version.rsplit(\"/\", 1)[-1]})\nafter = client.get_crypto_key(request={\"name\": KEY}).primary.name\nassert after != before and after == new_version, \"the new version must be primary\"\nprint(\"primary:\", before.rsplit(\"/\", 1)[-1], \"->\", after.rsplit(\"/\", 1)[-1])\n\nassert client.decrypt(request={\"name\": KEY, \"ciphertext\": old, \"additional_authenticated_data\": CTX}).plaintext == dek\nprint(\"ciphertext from the old version still decrypts\")\nfresh = client.encrypt(request={\"name\": KEY, \"plaintext\": dek, \"additional_authenticated_data\": CTX}).ciphertext\nassert fresh != old\nprint(\"key rotation verified\")\n",
+     "run": "python key_rotation.py",
+     "expect": "key rotation verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "KMS key versions are not verified on the Nano GCP core.",
+     "kind": "harden",
+     "needs_appliance": false
+    },
+    {
+     "title": "Tamper-evident audit trail",
+     "text": "Cloud Audit Logs record the control plane; they cannot prove nobody edited your own approval records. Chain them: each audit document stores the SHA-256 of the previous one plus its own content, so changing, deleting or re-ordering any entry breaks every hash after it. The block writes five events to Firestore, verifies the chain, edits one entry the way an attacker with database access would and asserts the verifier names exactly that entry.",
+     "file": "audit_chain.py",
+     "lang": "python",
+     "code": "import hashlib\nimport json\nimport time\n\nimport gcp\n\ncol = gcp.firestore_client().collection(\"approval-audit\")\nfor d in col.stream():\n    d.reference.delete()\n\n\ndef digest(prev, body):\n    return hashlib.sha256((prev + json.dumps(body, sort_keys=True)).encode()).hexdigest()\n\n\ndef append(seq, event):\n    prev = \"0\" * 64 if seq == 0 else col.document(f\"{seq - 1:06d}\").get().get(\"hash\")\n    body = {\"seq\": seq, \"ts\": int(time.time()), **event}\n    col.document(f\"{seq:06d}\").set({\"body\": json.dumps(body, sort_keys=True), \"prev\": prev, \"hash\": digest(prev, body)})\n\n\ndef verify():\n    prev = \"0\" * 64\n    for d in sorted(col.stream(), key=lambda d: d.id):\n        r = d.to_dict()\n        if r[\"prev\"] != prev or digest(prev, json.loads(r[\"body\"])) != r[\"hash\"]:\n            return d.id\n        prev = r[\"hash\"]\n    return None\n\n\nfor i, ev in enumerate([{\"event\": \"requested\", \"by\": \"maria\"}, {\"event\": \"approved\", \"by\": \"duty.manager\"}, {\"event\": \"executed\", \"wo\": \"WO-17\"},\n                        {\"event\": \"requested\", \"by\": \"sam\"}, {\"event\": \"rejected\", \"by\": \"duty.manager\"}]):\n    append(i, ev)\nassert verify() is None\nprint(\"chain of 5 verified\")\nbody = json.loads(col.document(\"000001\").get().get(\"body\"))\nbody[\"by\"] = \"mallory\"\ncol.document(\"000001\").update({\"body\": json.dumps(body, sort_keys=True)})\nassert verify() == \"000001\", \"the edit must be detected at the edited entry\"\nprint(\"tampering detected at entry\", verify())\nprint(\"audit chain verified\")\n",
+     "run": "python audit_chain.py",
+     "expect": "audit chain verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Firestore on Nano is not yet verified for this block.",
+     "kind": "harden",
+     "needs_appliance": false
+    },
+    {
+     "title": "Ship it: deploy the stack with Infrastructure Manager",
+     "text": "The capstone. Infrastructure Manager runs Terraform for you: you hand it a configuration and a service account, it creates a deployment, a revision and the resources. Here the configuration describes the course's bucket and Pub/Sub topic. The block creates the deployment through the real `config.googleapis.com` REST API, waits for the long-running operation, asserts the revision applied and lists its resources. On real Google Cloud you point `gcsSource` or `gitSource` at the same files, and replace simulator-only values (project id, bucket names must be globally unique) first.",
+     "file": "ship_it.py",
+     "lang": "python",
+     "code": "import json\nimport time\n\nimport gcp\n\nTF = \"\"\"\nresource \"google_storage_bucket\" \"docs\" {\n  name     = \"facilities-ship-docs\"\n  location = \"US\"\n}\nresource \"google_pubsub_topic\" \"approvals\" {\n  name = \"facilities-ship-approvals\"\n}\n\"\"\"\ns = gcp.authed_session()\nbase = f\"{gcp.ENDPOINT}/v1/{gcp.PARENT}/deployments\"\ndep = f\"{gcp.PARENT}/deployments/facilities-ship\"\ns.delete(f\"{gcp.ENDPOINT}/v1/{dep}\")\ntime.sleep(1)\nr = s.post(base + \"?deploymentId=facilities-ship\", json={\n    \"terraformBlueprint\": {\"vyomiFiles\": {\"main.tf\": TF}},\n    \"serviceAccount\": f\"projects/{gcp.PROJECT}/serviceAccounts/infra-manager@{gcp.PROJECT}.iam.gserviceaccount.com\"})\nassert r.status_code == 200, r.text[:300]\nop = r.json()\nfor _ in range(60):\n    if op.get(\"done\"):\n        break\n    time.sleep(0.5)\n    op = s.get(f\"{gcp.ENDPOINT}/v1/{op['name']}\").json()\nassert op.get(\"done\") and not op.get(\"error\"), op\nd = s.get(f\"{gcp.ENDPOINT}/v1/{dep}\").json()\nprint(\"deployment state:\", d.get(\"state\"))\nassert d.get(\"state\") == \"ACTIVE\", d\nrev = d[\"latestRevision\"]\nres = s.get(f\"{gcp.ENDPOINT}/v1/{rev}/resources\").json().get(\"resources\", [])\ntypes = sorted(x[\"terraformInfo\"][\"type\"] for x in res)\nprint(\"resources applied:\", types)\nassert types == [\"google_pubsub_topic\", \"google_storage_bucket\"]\nprint(\"ship it verified: Infrastructure Manager applied\", len(res), \"resources; review them, then point gcsSource at the same files on real Google Cloud\")\n",
+     "run": "python ship_it.py",
+     "expect": "ship it verified",
+     "needs_runtime": false,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Infrastructure Manager is not in the Nano GCP core.",
+     "kind": "ship",
+     "needs_appliance": false
     }
    ],
    "explain": {
     "lead": [
      "The last layer protects the whole application and proves what it did. Sensitive records are encrypted with keys you control, and an audit trail records who did what, so you can answer an auditor.",
-     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object with server-side encryption, and read the audit trail of the run."
+     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object encrypted with your key, and read the audit log of the run."
     ],
     "concepts": [
      [
@@ -4717,11 +4819,11 @@
      ],
      [
       "Store encrypted",
-      "Write an object that the storage service encrypts with the key."
+      "Write an object that the storage service encrypts with your key."
      ],
      [
       "Read the audit",
-      "Create the trail and look up the approval events from your run."
+      "Open the cloud's audit log and look up the approval events from your run."
      ]
     ],
     "example": "The approval record for work order WO-17 is stored encrypted. An auditor asks who approved it: the audit trail shows the approver and the time, and the record only decrypts with the right context.",
@@ -4749,7 +4851,7 @@
      ],
      [
       "Store it encrypted",
-      "The object store encrypts it with the key on write."
+      "The object store encrypts it with your key on write."
      ],
      [
       "Read the trail",
@@ -4867,10 +4969,14 @@
      "expect": "CreateKeyRing and CreateCryptoKey entries"
     }
    ],
-   "blocks_total": 5,
+   "blocks_total": 8,
    "blocks_nano": 5,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 3,
+   "mesh_only_titles": [
+    "Key rotation without re-encrypting data",
+    "Tamper-evident audit trail",
+    "Ship it: deploy the stack with Infrastructure Manager"
+   ]
   }
  ]
 }

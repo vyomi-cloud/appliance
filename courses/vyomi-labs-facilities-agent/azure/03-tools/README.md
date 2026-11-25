@@ -74,6 +74,14 @@ Call asset-status for boiler B-12 over HTTPS with the host key (`x-functions-key
 - Run: `python call_tools.py` (or `./run_all.sh 3` from the project root)
 - You should see: `found: True | status: RUNNING | work orders: 1`
 
+### 11. Failure lab: a poisoned tool call is refused
+
+The model builds the arguments of every tool call, so a manipulated prompt means hostile arguments. The tool contract is checked before any storage call: asset ids must match `^[A-Z]{1,3}-[0-9]{1,4}$`, priorities come from a closed set, and free text is length-limited and stripped of control characters. The block fires the poisoned inputs a prompt injection would produce (an OData filter injection, a path traversal, an oversized summary, an unknown priority) and asserts every one is refused with a reason while valid input passes.
+
+- File: [`tool_contract.py`](./tool_contract.py)
+- Run: `python tool_contract.py` (or `./run_all.sh 3` from the project root)
+- You should see: `tool contract verified: 5 of 5 poisoned calls refused`
+
 ## It works when
 
 - functions listed

@@ -17,6 +17,7 @@ buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     z.write("agent_main.py", "main.py")
     z.write("agents.py", "agents.py")
+    z.write("vymodels.py", "vymodels.py")
     z.write("mcp_client.py", "mcp_client.py")
 s3.put_object(Bucket=BUCKET, Key=KEY, Body=buf.getvalue())
 print("uploaded s3://%s/%s (%d bytes)" % (BUCKET, KEY, len(buf.getvalue())))

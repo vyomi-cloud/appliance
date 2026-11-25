@@ -1,6 +1,6 @@
 import boto3
 
-from models import EMBED_MODEL
+from vymodels import EMBED_MODEL
 
 REGION = "us-east-1"
 ag = boto3.client("bedrock-agent")

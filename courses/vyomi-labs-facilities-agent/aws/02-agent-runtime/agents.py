@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 import uuid
@@ -9,7 +10,7 @@ from langgraph.graph import END, StateGraph
 
 import mcp_client
 
-from models import CHAT_MODEL as MODEL_ID
+from vymodels import CHAT_MODEL as MODEL_ID
 LAMBDAS = {"kb_search": "facilities-kb-search", "asset_status": "facilities-asset-status"}
 GATEWAY = {}
 
@@ -26,6 +27,24 @@ class S(TypedDict, total=False):
     llm_used: bool
     tools: list
     spans: list
+    steps: int
+    stopped: str
+
+
+def guarded(fn):
+    """Step budget and kill switch: every agent node counts as a step, and over budget the graph stops cleanly instead of running on.
+    The limit belongs to the runtime (an environment variable), not to the caller, so a user cannot raise it."""
+    def run(st):
+        limit = int(os.environ.get("AGENT_MAX_STEPS", "12"))
+        if st.get("stopped"):
+            return st
+        st["steps"] = st.get("steps", 0) + 1
+        if st["steps"] > limit:
+            st["stopped"] = "step_budget"
+            st["answer"] = "I stopped because this request needed more than %d steps." % limit
+            return st
+        return fn(st)
+    return run
 
 
 def converse(system, text, max_tokens=300):
@@ -181,7 +200,7 @@ def build():
 
     g = StateGraph(S)
     for n, f in [("supervisor", supervisor), ("facilities", facilities), ("maintenance", maintenance), ("analytics", analytics), ("synth", synth)]:
-        g.add_node(n, f)
+        g.add_node(n, guarded(f))
     g.set_entry_point("supervisor")
 
     def nxt(after):

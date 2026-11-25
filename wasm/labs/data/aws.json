@@ -17,7 +17,7 @@
   1800,
   1270
  ],
- "total_minutes": 529,
+ "total_minutes": 533,
  "updated": "November 26, 2026",
  "layers": [
   {
@@ -1068,7 +1068,7 @@
    "explain": {
     "lead": [
      "Tools are how an agent touches the real world. A tool is an ordinary function with a strict contract: what it accepts, what it returns, what it is allowed to do. The agent is only ever as safe as the tools you hand it.",
-     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, request-approval and create-work-order, that must sit behind a human decision."
+     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, an approval-request step and create-work-order, that must sit behind a human decision."
     ],
     "concepts": [
      [
@@ -1099,14 +1099,14 @@
      ],
      [
       "Deploy write tools",
-      "Deploy request-approval and create-work-order. They do not write directly: they hand off to approval."
+      "Deploy an approval-request step and create-work-order. They do not write directly: they hand off to approval."
      ],
      [
       "Invoke each tool",
       "Call every tool directly and check what comes back, before any agent uses them."
      ]
     ],
-    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls request-approval, which records the request and waits. It cannot call create-work-order itself.",
+    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls the approval-request step, which records the request and waits. It cannot call create-work-order itself.",
     "pitfalls": [
      "Giving a tool a broad permission \"for now\".",
      "Letting a write tool run without a human or idempotency key: a retry then creates duplicates.",
@@ -1131,7 +1131,7 @@
      ],
      [
       "Deploy two write tools",
-      "request-approval and create-work-order exist, but request-approval only records a request. It cannot create the work order itself."
+      "the approval request and create-work-order exist, but the approval request only records a request. It cannot create the work order itself."
      ],
      [
       "Call every tool by hand first",
@@ -1140,7 +1140,7 @@
     ],
     "quiz": [
      [
-      "Why does request-approval not create the work order directly?",
+      "Why does the approval request not create the work order directly?",
       [
        "It is slower",
        "A model may propose a write, but a person must approve it",
@@ -3078,7 +3078,7 @@
     850
    ],
    "level": "Advanced",
-   "minutes": 58,
+   "minutes": 62,
    "outcome": "Writes that wait for a human, with a ledger of every decision",
    "lessons": 5,
    "color": "#dc2626",
@@ -3181,7 +3181,7 @@
      "text": "The workflow is the safety rail. `RequestApproval` is a callback task (`waitForTaskToken`): Step Functions calls the request-approval function with a task token and then waits, for a deadline you set (four hours here), until a human sends the token back with SendTaskSuccess or SendTaskFailure. Only then does `CreateWorkOrder` run; a rejection goes to the failing `Rejected` state and nothing is written. If nobody answers before the deadline the `States.Timeout` catch runs the expire function: the ledger entry becomes EXPIRED and the late token is dead, so an old request can never be approved by accident.",
      "file": "state_machine.py",
      "lang": "python",
-     "code": "import io\nimport json\nimport zipfile\n\nimport boto3\n\nROLE = \"arn:aws:iam::123456789012:role/facilities-role\"\nEXPIRE_SOURCE = \"\"\"\nimport os\nimport boto3\n\n\ndef handler(event, context):\n    # A request nobody answered in time becomes EXPIRED. The condition means an already-decided request is never overwritten.\n    ddb = boto3.client(\"dynamodb\")\n    try:\n        ddb.update_item(TableName=os.environ[\"LEDGER_TABLE\"], Key={\"request_id\": {\"S\": event[\"request_id\"]}},\n                        UpdateExpression=\"SET #s = :e\", ConditionExpression=\"#s = :p\", ExpressionAttributeNames={\"#s\": \"status\"},\n                        ExpressionAttributeValues={\":e\": {\"S\": \"EXPIRED\"}, \":p\": {\"S\": \"PENDING\"}})\n        return {\"expired\": True}\n    except ddb.exceptions.ConditionalCheckFailedException:\n        return {\"expired\": False}\n\"\"\"\n\n\ndef build_asl(timeout_seconds=4 * 3600):\n    \"\"\"The approval workflow. A human has `timeout_seconds` to answer; after that the request EXPIRES instead of waiting forever.\"\"\"\n    return {\"Comment\": \"Human approval before any write\", \"StartAt\": \"RequestApproval\", \"States\": {\n        \"RequestApproval\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke.waitForTaskToken\",\n                            \"Parameters\": {\"FunctionName\": \"facilities-request-approval\",\n                                           \"Payload\": {\"TaskToken.$\": \"$$.Task.Token\", \"request_id.$\": \"$.request_id\",\n                                                       \"summary.$\": \"$.summary\", \"requester.$\": \"$.requester\"}},\n                            \"ResultPath\": \"$.approval\", \"TimeoutSeconds\": timeout_seconds,\n                            \"Catch\": [{\"ErrorEquals\": [\"States.Timeout\"], \"ResultPath\": \"$.error\", \"Next\": \"ExpireRequest\"},\n                                      {\"ErrorEquals\": [\"States.ALL\"], \"ResultPath\": \"$.error\", \"Next\": \"Rejected\"}], \"Next\": \"CreateWorkOrder\"},\n        \"CreateWorkOrder\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\",\n                            \"Parameters\": {\"FunctionName\": \"facilities-create-work-order\", \"Payload\": {\"request.$\": \"$\"}},\n                            \"ResultSelector\": {\"work_order.$\": \"$.Payload\"}, \"ResultPath\": \"$.result\", \"End\": True},\n        \"ExpireRequest\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\",\n                          \"Parameters\": {\"FunctionName\": \"facilities-expire-request\", \"Payload\": {\"request_id.$\": \"$.request_id\"}},\n                          \"ResultPath\": \"$.expiry\", \"Next\": \"Expired\"},\n        \"Expired\": {\"Type\": \"Fail\", \"Error\": \"ApprovalExpired\", \"Cause\": \"Nobody answered before the deadline\"},\n        \"Rejected\": {\"Type\": \"Fail\", \"Error\": \"ApprovalRejected\", \"Cause\": \"Approver rejected the request\"}}}\n\n\ndef deploy_expire_function():\n    lam = boto3.client(\"lambda\")\n    buf = io.BytesIO()\n    with zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n        z.writestr(\"expire_request.py\", EXPIRE_SOURCE)\n    env = lam.get_function_configuration(FunctionName=\"facilities-request-approval\")[\"Environment\"][\"Variables\"]\n    try:\n        lam.create_function(FunctionName=\"facilities-expire-request\", Runtime=\"python3.12\", Role=ROLE, Handler=\"expire_request.handler\",\n                            Code={\"ZipFile\": buf.getvalue()}, Timeout=30, Environment={\"Variables\": env})\n    except lam.exceptions.ResourceConflictException:\n        pass\n\n\nif __name__ == \"__main__\":\n    deploy_expire_function()\n    sf = boto3.client(\"stepfunctions\")\n    arn = sf.create_state_machine(name=\"work-order-approval\", definition=json.dumps(build_asl()), roleArn=ROLE, type=\"STANDARD\")[\"stateMachineArn\"]\n    print(\"state machine\", arn)\n",
+     "code": "import io\nimport json\nimport zipfile\n\nimport boto3\n\nROLE = \"arn:aws:iam::123456789012:role/facilities-role\"\nEXPIRE_SOURCE = \"\"\"\nimport os\nimport boto3\n\n\ndef handler(event, context):\n    # A request nobody answered in time becomes EXPIRED. The condition means an already-decided request is never overwritten.\n    ddb = boto3.client(\"dynamodb\")\n    try:\n        ddb.update_item(TableName=os.environ[\"LEDGER_TABLE\"], Key={\"request_id\": {\"S\": event[\"request_id\"]}},\n                        UpdateExpression=\"SET #s = :e\", ConditionExpression=\"#s = :p\", ExpressionAttributeNames={\"#s\": \"status\"},\n                        ExpressionAttributeValues={\":e\": {\"S\": \"EXPIRED\"}, \":p\": {\"S\": \"PENDING\"}})\n        return {\"expired\": True}\n    except ddb.exceptions.ConditionalCheckFailedException:\n        return {\"expired\": False}\n\"\"\"\n\n\ndef build_asl(timeout_seconds=4 * 3600):\n    \"\"\"The approval workflow. Low-risk (P4) requests are approved by policy; every other request needs a human, who has `timeout_seconds` to answer before the request EXPIRES instead of waiting forever.\"\"\"\n    return {\"Comment\": \"Risk-based approval before any write\", \"StartAt\": \"RiskGate\", \"States\": {\n        # Risk levels: informational P4 requests on non-safety work are approved by policy; everything else waits for a human.\n        \"RiskGate\": {\"Type\": \"Choice\", \"Choices\": [{\"Variable\": \"$.priority\", \"StringEquals\": \"P4\", \"Next\": \"AutoApprove\"}], \"Default\": \"RequestApproval\"},\n        \"AutoApprove\": {\"Type\": \"Pass\", \"Result\": {\"decision\": \"auto-approved\", \"policy\": \"P4-low-risk\"}, \"ResultPath\": \"$.approval\", \"Next\": \"CreateWorkOrder\"},\n        \"RequestApproval\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke.waitForTaskToken\",\n                            \"Parameters\": {\"FunctionName\": \"facilities-request-approval\",\n                                           \"Payload\": {\"TaskToken.$\": \"$$.Task.Token\", \"request_id.$\": \"$.request_id\",\n                                                       \"summary.$\": \"$.summary\", \"requester.$\": \"$.requester\"}},\n                            \"ResultPath\": \"$.approval\", \"TimeoutSeconds\": timeout_seconds,\n                            \"Catch\": [{\"ErrorEquals\": [\"States.Timeout\"], \"ResultPath\": \"$.error\", \"Next\": \"ExpireRequest\"},\n                                      {\"ErrorEquals\": [\"States.ALL\"], \"ResultPath\": \"$.error\", \"Next\": \"Rejected\"}], \"Next\": \"CreateWorkOrder\"},\n        \"CreateWorkOrder\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\",\n                            \"Parameters\": {\"FunctionName\": \"facilities-create-work-order\", \"Payload\": {\"request.$\": \"$\"}},\n                            \"ResultSelector\": {\"work_order.$\": \"$.Payload\"}, \"ResultPath\": \"$.result\", \"End\": True},\n        \"ExpireRequest\": {\"Type\": \"Task\", \"Resource\": \"arn:aws:states:::lambda:invoke\",\n                          \"Parameters\": {\"FunctionName\": \"facilities-expire-request\", \"Payload\": {\"request_id.$\": \"$.request_id\"}},\n                          \"ResultPath\": \"$.expiry\", \"Next\": \"Expired\"},\n        \"Expired\": {\"Type\": \"Fail\", \"Error\": \"ApprovalExpired\", \"Cause\": \"Nobody answered before the deadline\"},\n        \"Rejected\": {\"Type\": \"Fail\", \"Error\": \"ApprovalRejected\", \"Cause\": \"Approver rejected the request\"}}}\n\n\ndef deploy_expire_function():\n    lam = boto3.client(\"lambda\")\n    buf = io.BytesIO()\n    with zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n        z.writestr(\"expire_request.py\", EXPIRE_SOURCE)\n    env = lam.get_function_configuration(FunctionName=\"facilities-request-approval\")[\"Environment\"][\"Variables\"]\n    try:\n        lam.create_function(FunctionName=\"facilities-expire-request\", Runtime=\"python3.12\", Role=ROLE, Handler=\"expire_request.handler\",\n                            Code={\"ZipFile\": buf.getvalue()}, Timeout=30, Environment={\"Variables\": env})\n    except lam.exceptions.ResourceConflictException:\n        pass\n\n\nif __name__ == \"__main__\":\n    deploy_expire_function()\n    sf = boto3.client(\"stepfunctions\")\n    arn = sf.create_state_machine(name=\"work-order-approval\", definition=json.dumps(build_asl()), roleArn=ROLE, type=\"STANDARD\")[\"stateMachineArn\"]\n    print(\"state machine\", arn)\n",
      "run": "python state_machine.py",
      "expect": "state machine arn:aws:states",
      "needs_runtime": false,
@@ -3278,6 +3278,22 @@
      "needs_appliance": false
     },
     {
+     "title": "Risk levels: low risk approves itself, everything else waits",
+     "text": "The learn list for this chapter promises risk levels; here they are real. The workflow starts with a Choice state: a P4 request (informational, no safety impact) is approved by policy and recorded as `auto-approved`, any other priority parks for a human. The block asserts both paths on the real workflow: a P4 request creates its work order with no human and the ledger-free audit shows the policy name; a P2 request stays RUNNING and creates nothing.",
+     "file": "risk_levels.py",
+     "lang": "python",
+     "code": "import json\nimport time\n\nimport boto3\n\nsf, ddb = boto3.client(\"stepfunctions\"), boto3.client(\"dynamodb\")\nsm = next(s for s in sf.list_state_machines()[\"stateMachines\"] if s[\"name\"] == \"work-order-approval\")[\"stateMachineArn\"]\n\n\ndef start(rid, priority):\n    return sf.start_execution(stateMachineArn=sm, name=rid, input=json.dumps(\n        {\"request_id\": rid, \"asset_id\": \"EL-3\", \"summary\": \"Risk level check \" + priority, \"priority\": priority, \"requester\": \"risk-test\"}))[\"executionArn\"]\n\n\ndef wait(ex, seconds=15):\n    for _ in range(int(seconds / 0.5)):\n        d = sf.describe_execution(executionArn=ex)\n        if d[\"status\"] != \"RUNNING\":\n            return d\n        time.sleep(0.5)\n    return d\n\n\nlow = wait(start(\"req-risk-low1\", \"P4\"))\nassert low[\"status\"] == \"SUCCEEDED\", \"a P4 request must complete without a human, got \" + low[\"status\"]\nout = json.loads(low[\"output\"])\nassert out[\"approval\"][\"decision\"] == \"auto-approved\" and out[\"approval\"][\"policy\"] == \"P4-low-risk\", out[\"approval\"]\nwo = out[\"result\"][\"work_order\"][\"work_order_id\"]\nassert ddb.get_item(TableName=\"facilities-work-orders\", Key={\"work_order_id\": {\"S\": wo}}).get(\"Item\"), \"the auto-approved work order must exist\"\nprint(\"P4: auto-approved by policy\", out[\"approval\"][\"policy\"], \"->\", wo)\n\nhigh = start(\"req-risk-high1\", \"P2\")\ntime.sleep(2)\nassert sf.describe_execution(executionArn=high)[\"status\"] == \"RUNNING\", \"a P2 request must wait for a human\"\nmine = [i for i in ddb.scan(TableName=\"facilities-work-orders\")[\"Items\"] if i[\"requester\"][\"S\"] == \"risk-test\" and i[\"priority\"][\"S\"] == \"P2\"]\nassert not mine, \"a waiting P2 request must not have written anything\"\nprint(\"P2: waiting for a human, nothing written\")\nprint(\"risk levels verified\")\n",
+     "run": "python risk_levels.py",
+     "expect": "risk levels verified",
+     "needs_runtime": true,
+     "edition": [
+      "mesh"
+     ],
+     "nano_note": "Needs the Lambda tools and a Choice-capable Step Functions engine on Nano.",
+     "kind": "harden",
+     "needs_appliance": false
+    },
+    {
      "title": "Real approver identity and no self-approval",
      "text": "A string like `duty.manager@example.com` typed into the approval proves nothing. Here the identity is the credential. The smallest form of the callback pattern (publish a task token, wait) runs with two IAM identities: the agent that asks may start the workflow but may NOT call SendTaskSuccess; the duty manager may read the inbox and answer. The audit log records which principal made each decision: that record, not a typed name, is who approved. (The simulator's STS GetCallerIdentity currently returns the account root for any key, so the audit log is the reliable record here.)",
      "file": "iam_approval.py",
@@ -3302,11 +3318,11 @@
     "concepts": [
      [
       "Risk level",
-      "Low-risk actions can run automatically; medium and high wait for a human."
+      "How risky a write is decides who must approve it. In this course every write waits for a human; the AWS Mesh chapter adds a policy that auto-approves the lowest priority."
      ],
      [
       "Durable wait",
-      "The workflow stores its state and a callback token, so it can wait hours or days and survive restarts."
+      "The workflow stores its state and waits for a callback (a token, a decision message or a ledger update, depending on the cloud), so it can wait hours or days and survive restarts."
      ],
      [
       "Approval ledger",
@@ -3360,7 +3376,7 @@
      ],
      [
       "The approver decides",
-      "They approve, sending a callback token back to the waiting workflow."
+      "They approve, and that decision is delivered back to the waiting request."
      ],
      [
       "Approve creates, reject does not",
@@ -3504,11 +3520,12 @@
      "expect": "A row with status PENDING, then APPROVED or REJECTED after the decision"
     }
    ],
-   "blocks_total": 8,
+   "blocks_total": 9,
    "blocks_nano": 6,
-   "blocks_mesh_only": 2,
+   "blocks_mesh_only": 3,
    "mesh_only_titles": [
     "Failure lab: nobody answers, then someone approves too late",
+    "Risk levels: low risk approves itself, everything else waits",
     "Real approver identity and no self-approval"
    ]
   },
@@ -4735,7 +4752,7 @@
    "explain": {
     "lead": [
      "The last layer protects the whole application and proves what it did. Sensitive records are encrypted with keys you control, and an audit trail records who did what, so you can answer an auditor.",
-     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object with server-side encryption, and read the audit trail of the run."
+     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object encrypted with your key, and read the audit log of the run."
     ],
     "concepts": [
      [
@@ -4766,11 +4783,11 @@
      ],
      [
       "Store encrypted",
-      "Write an object that the storage service encrypts with the key."
+      "Write an object that the storage service encrypts with your key."
      ],
      [
       "Read the audit",
-      "Create the trail and look up the approval events from your run."
+      "Open the cloud's audit log and look up the approval events from your run."
      ]
     ],
     "example": "The approval record for work order WO-17 is stored encrypted. An auditor asks who approved it: the audit trail shows the approver and the time, and the record only decrypts with the right context.",
@@ -4798,7 +4815,7 @@
      ],
      [
       "Store it encrypted",
-      "The object store encrypts it with the key on write."
+      "The object store encrypts it with your key on write."
      ],
      [
       "Read the trail",

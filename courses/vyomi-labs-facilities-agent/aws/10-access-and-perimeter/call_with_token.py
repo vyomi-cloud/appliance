@@ -16,3 +16,4 @@ req = urllib.request.Request(url, data=json.dumps({"query": "boiler pressure lim
 with urllib.request.urlopen(req, timeout=60) as r:
     body = json.loads(r.read())
 print("HTTP", r.status, "| results:", len(body["results"]), "| top source:", body["results"][0]["source"])
+assert r.status == 200 and body["results"] and body["results"][0]["source"].startswith("s3://"), "the signed-in call must return cited results"

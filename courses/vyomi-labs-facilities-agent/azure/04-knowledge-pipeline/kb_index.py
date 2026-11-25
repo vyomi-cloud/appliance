@@ -4,7 +4,7 @@ from azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, S
                                                    SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,
                                                    VectorSearch, VectorSearchProfile)
 from azdata import search_endpoint, search_key, INDEX
-from models import embed
+from vymodels import embed
 
 DIMS = len(embed("dimension probe"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)
 

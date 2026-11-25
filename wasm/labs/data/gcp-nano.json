@@ -968,7 +968,7 @@
    "explain": {
     "lead": [
      "Tools are how an agent touches the real world. A tool is an ordinary function with a strict contract: what it accepts, what it returns, what it is allowed to do. The agent is only ever as safe as the tools you hand it.",
-     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, request-approval and create-work-order, that must sit behind a human decision."
+     "You will build read-only tools first, a knowledge search and an asset-status lookup, and then the write tools, an approval-request step and create-work-order, that must sit behind a human decision."
     ],
     "concepts": [
      [
@@ -999,14 +999,14 @@
      ],
      [
       "Deploy write tools",
-      "Deploy request-approval and create-work-order. They do not write directly: they hand off to approval."
+      "Deploy an approval-request step and create-work-order. They do not write directly: they hand off to approval."
      ],
      [
       "Invoke each tool",
       "Call every tool directly and check what comes back, before any agent uses them."
      ]
     ],
-    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls request-approval, which records the request and waits. It cannot call create-work-order itself.",
+    "example": "Asked about asset B-204, the agent calls asset-status with the asset id and gets its status and last service date. Asked to open a work order, it calls the approval-request step, which records the request and waits. It cannot call create-work-order itself.",
     "pitfalls": [
      "Giving a tool a broad permission \"for now\".",
      "Letting a write tool run without a human or idempotency key: a retry then creates duplicates.",
@@ -1031,7 +1031,7 @@
      ],
      [
       "Deploy two write tools",
-      "request-approval and create-work-order exist, but request-approval only records a request. It cannot create the work order itself."
+      "the approval request and create-work-order exist, but the approval request only records a request. It cannot create the work order itself."
      ],
      [
       "Call every tool by hand first",
@@ -1040,7 +1040,7 @@
     ],
     "quiz": [
      [
-      "Why does request-approval not create the work order directly?",
+      "Why does the approval request not create the work order directly?",
       [
        "It is slower",
        "A model may propose a write, but a person must approve it",
@@ -1138,10 +1138,12 @@
      "expect": "Your seeded assets"
     }
    ],
-   "blocks_total": 9,
+   "blocks_total": 10,
    "blocks_nano": 9,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Failure lab: a poisoned tool call is refused"
+   ]
   },
   {
    "id": 12,
@@ -3258,11 +3260,11 @@
     "concepts": [
      [
       "Risk level",
-      "Low-risk actions can run automatically; medium and high wait for a human."
+      "How risky a write is decides who must approve it. In this course every write waits for a human; the AWS Mesh chapter adds a policy that auto-approves the lowest priority."
      ],
      [
       "Durable wait",
-      "The workflow stores its state and a callback token, so it can wait hours or days and survive restarts."
+      "The workflow stores its state and waits for a callback (a token, a decision message or a ledger update, depending on the cloud), so it can wait hours or days and survive restarts."
      ],
      [
       "Approval ledger",
@@ -3316,7 +3318,7 @@
      ],
      [
       "The approver decides",
-      "They approve, sending a callback token back to the waiting workflow."
+      "They approve, and that decision is delivered back to the waiting request."
      ],
      [
       "Approve creates, reject does not",
@@ -3444,10 +3446,12 @@
      "expect": "PENDING, then APPROVED or REJECTED"
     }
    ],
-   "blocks_total": 6,
+   "blocks_total": 7,
    "blocks_nano": 6,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Approval expiry: nobody answers, the request expires"
+   ]
   },
   {
    "id": 1,
@@ -4496,10 +4500,12 @@
      "expect": "One span per agent or tool step"
     }
    ],
-   "blocks_total": 6,
+   "blocks_total": 7,
    "blocks_nano": 6,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 1,
+   "mesh_only_titles": [
+    "Cost and budget limit per layer"
+   ]
   },
   {
    "id": 13,
@@ -4687,7 +4693,7 @@
    "explain": {
     "lead": [
      "The last layer protects the whole application and proves what it did. Sensitive records are encrypted with keys you control, and an audit trail records who did what, so you can answer an auditor.",
-     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object with server-side encryption, and read the audit trail of the run."
+     "You create a key with rotation, encrypt and decrypt the approval record with an encryption context, store an object encrypted with your key, and read the audit log of the run."
     ],
     "concepts": [
      [
@@ -4718,11 +4724,11 @@
      ],
      [
       "Store encrypted",
-      "Write an object that the storage service encrypts with the key."
+      "Write an object that the storage service encrypts with your key."
      ],
      [
       "Read the audit",
-      "Create the trail and look up the approval events from your run."
+      "Open the cloud's audit log and look up the approval events from your run."
      ]
     ],
     "example": "The approval record for work order WO-17 is stored encrypted. An auditor asks who approved it: the audit trail shows the approver and the time, and the record only decrypts with the right context.",
@@ -4750,7 +4756,7 @@
      ],
      [
       "Store it encrypted",
-      "The object store encrypts it with the key on write."
+      "The object store encrypts it with your key on write."
      ],
      [
       "Read the trail",
@@ -4868,10 +4874,14 @@
      "expect": "CreateKeyRing and CreateCryptoKey entries"
     }
    ],
-   "blocks_total": 5,
+   "blocks_total": 8,
    "blocks_nano": 5,
-   "blocks_mesh_only": 0,
-   "mesh_only_titles": []
+   "blocks_mesh_only": 3,
+   "mesh_only_titles": [
+    "Key rotation without re-encrypting data",
+    "Tamper-evident audit trail",
+    "Ship it: deploy the stack with Infrastructure Manager"
+   ]
   }
  ]
 }

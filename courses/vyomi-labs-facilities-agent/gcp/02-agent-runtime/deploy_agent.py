@@ -6,7 +6,7 @@ import gcp
 PKG = "engine_pkg"
 shutil.rmtree(PKG, ignore_errors=True)
 os.makedirs(PKG)
-for f in ("agent_engine_app.py", "agents.py", "models.py", "gcp.py", "starter_tools.py"):
+for f in ("agent_engine_app.py", "agents.py", "vymodels.py", "gcp.py", "starter_tools.py"):
     shutil.copy(f, os.path.join(PKG, f))
 with open(os.path.join(PKG, "requirements.txt"), "w") as f:
     f.write("google-cloud-aiplatform\ngoogle-genai\nlanggraph\n")

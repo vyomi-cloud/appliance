@@ -5,7 +5,7 @@ from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
-import models
+import vymodels as models
 import starter_tools as tools
 
 ROUTER_PROMPT = (

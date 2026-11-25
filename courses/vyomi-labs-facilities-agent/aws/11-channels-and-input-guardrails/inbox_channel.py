@@ -16,4 +16,5 @@ for _ in range(10):
             seen = msg
     if seen:
         break
-print("inbox delivered:", seen["summary"] if seen else "nothing received")
+assert seen, "nothing arrived in the approver inbox: the topic-to-queue subscription is broken"
+print("inbox delivered:", seen["summary"])

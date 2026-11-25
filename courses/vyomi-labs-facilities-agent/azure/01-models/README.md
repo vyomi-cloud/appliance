@@ -30,7 +30,7 @@ Azure OpenAI is a resource: an account of kind `OpenAI`, and inside it one *depl
 
 Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a larger hosted model.
 
-- File: [`models.py`](./models.py)
+- File: [`vymodels.py`](./vymodels.py)
 
 ### 5. Try chat, a tool call and an embedding
 

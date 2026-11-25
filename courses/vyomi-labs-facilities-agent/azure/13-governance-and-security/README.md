@@ -44,6 +44,30 @@ Every create you ran in this course was a control-plane operation, and Azure rec
 - Run: `python audit.py` (or `./run_all.sh 13` from the project root)
 - You should see: `vault create recorded: True | function app create recorded: True`
 
+### 6. Key rotation without re-encrypting data
+
+Rotation creates a new key VERSION under the same name; old versions stay available to decrypt, so nothing already wrapped breaks. The block wraps a data key, rotates `ledger-key`, asserts the version list grew and the current version changed, then unwraps the OLD wrapped key (pinned to its version) and wraps a new one with the new version.
+
+- File: [`key_rotation.py`](./key_rotation.py)
+- Run: `python key_rotation.py` (or `./run_all.sh 13` from the project root)
+- You should see: `key rotation verified`
+
+### 7. Tamper-evident audit trail
+
+The Activity Log tells you what happened; it cannot prove nobody edited your own approval records. Chain them: each audit entry stores the SHA-256 of the previous entry plus its own content, so changing, deleting or re-ordering any entry breaks every hash after it. The block writes five approval events to a table, verifies the chain, edits one entry the way an attacker with table access would, and asserts the verifier finds exactly where.
+
+- File: [`audit_chain.py`](./audit_chain.py)
+- Run: `python audit_chain.py` (or `./run_all.sh 13` from the project root)
+- You should see: `audit chain verified`
+
+### 8. Ship it: export the resource group as an ARM template
+
+The capstone. Export `rg-facilities` as an ARM template (the same call as the portal's Export template and `az group export`), read the portability warnings the export returns, and check the template is a real deployable: schema, parameters, and the resources the course created. On real Azure you would deploy it with `az deployment group create` into a new subscription, after replacing simulator-only values (storage keys, host names) and resolving the warnings.
+
+- File: [`ship_it.py`](./ship_it.py)
+- Run: `python ship_it.py` (or `./run_all.sh 13` from the project root)
+- You should see: `ship it verified`
+
 ## It works when
 
 - key exists

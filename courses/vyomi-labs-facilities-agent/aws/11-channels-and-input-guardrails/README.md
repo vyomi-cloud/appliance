@@ -22,6 +22,14 @@ The approver inbox from chapter 5 is the human channel: this publishes a test no
 - Run: `python inbox_channel.py` (or `./run_all.sh 11` from the project root)
 - You should see: `inbox delivered: inbox smoke test`
 
+### 3. Failure lab: trying to bypass the input guardrail
+
+Break the front door on purpose. A battery of attacks (the classic phrasing, a paraphrase, look-alike digits, zero-width characters, an instruction hidden in a quoted email) goes through the managed guardrail alone and then through the two-layer screen from chapter 11, next to benign questions that must never be blocked. The block prints which attacks the guardrail alone missed (that is the finding), and asserts the two layers together block every attack with no false positive. A record of each decision is written for the audit trail.
+
+- File: [`guardrail_bypass.py`](./guardrail_bypass.py)
+- Run: `python guardrail_bypass.py` (or `./run_all.sh 11` from the project root)
+- You should see: `input screen verified`
+
 ## It works when
 
 - guardrail and version exist

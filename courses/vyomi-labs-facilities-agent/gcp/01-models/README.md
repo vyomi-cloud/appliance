@@ -20,9 +20,9 @@ Every chapter imports this one file, so keep the name gcp.py. It reads where the
 
 ### 3. Write the model client
 
-Every other layer imports these three functions, so keep the names. The model ids are not hard-coded: models.py asks the simulator's Model Garden which models it hosts. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.
+Every other layer imports these three functions, so keep the names. The model ids are not hard-coded: vymodels.py asks the simulator's Model Garden which models it hosts. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.
 
-- File: [`models.py`](./models.py)
+- File: [`vymodels.py`](./vymodels.py)
 
 ### 4. Try all three calls
 

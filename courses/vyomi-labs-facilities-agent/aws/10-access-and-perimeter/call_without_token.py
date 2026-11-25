@@ -10,6 +10,7 @@ url = os.environ["AWS_ENDPOINT_URL"].rstrip("/") + "/restapis/%s/prod/_user_requ
 req = urllib.request.Request(url, data=json.dumps({"query": "boiler pressure limit"}).encode(), method="POST", headers={"Content-Type": "application/json"})
 try:
     urllib.request.urlopen(req, timeout=60)
-    print("anonymous call was accepted: this is a bug")
+    raise AssertionError("an anonymous call was accepted by the API")
 except urllib.error.HTTPError as e:
     print("anonymous call rejected with HTTP", e.code, "(401 or 403:", e.code in (401, 403), ")")
+    assert e.code in (401, 403), "expected 401/403 for an anonymous call, got %d" % e.code
