@@ -1696,7 +1696,7 @@ class AwsWireRouter:
                 if out is not None:
                     self._record_async(svc, method, path, lheaders, bytes(b), _t1, out)
                     return out
-        if svc == "gcp-gateway-invoke" and __import__("sys").platform != "emscripten":
+        if svc in ("gcp-gateway-invoke", "azure-apim-gw") and __import__("sys").platform != "emscripten":
             # the sync gateway engine makes a blocking HTTP call to the backend, which can be this very server (a Cloud Function's
             # /gcf URL): run it off the event loop or the loop waits on itself and the call times out (503 UNAVAILABLE)
             import asyncio as _aio

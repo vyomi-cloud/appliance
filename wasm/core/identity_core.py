@@ -32,13 +32,27 @@ _TARGETS = {"AWSCognitoIdentityProviderService.": ("cognito-idp", "cognito-idp")
 _POOL_PATH = re.compile(r"^/([a-z0-9-]+_[A-Za-z0-9]+)/(?:\.well-known/(?:jwks\.json|openid-configuration)|login|oauth2/(?:authorize|token|userInfo))$")
 
 
-def available() -> bool:
+def _moto_ok() -> bool:
     try:
         import moto.cognitoidp.models  # noqa: F401
         import flask  # noqa: F401
+        import joserfc  # noqa: F401
         return True
     except Exception:
         return False
+
+
+def native() -> bool:
+    """True when the pure-Python engine (core/identity_native) serves Cognito + WAFv2: always on Nano (no moto in Pyodide), and on the
+    appliance when moto is not installed or VYOMI_IDENTITY_NATIVE=1 forces it (tests, parity checks)."""
+    import os
+    if os.environ.get("VYOMI_IDENTITY_NATIVE") == "1":
+        return True
+    return not _moto_ok()
+
+
+def available() -> bool:
+    return True   # moto when installed, else the pure-Python engine
 
 
 def service_for(path, lheaders):
@@ -65,8 +79,19 @@ def _err(status, code, msg):
 
 
 def dispatch(svc, method, path, query, lheaders, body):
-    if not available():
-        return _err(501, "NotImplementedException", "identity services need moto + flask + joserfc (pip install 'moto[cognitoidp,server]')")
+    if native():
+        from core import identity_native as nat
+        bare = path.split("?", 1)[0]
+        m = re.match(r"^/([a-z0-9-]+_[A-Za-z0-9]+)/\.well-known/jwks\.json$", bare)
+        if svc == "cognito-idp" and m and method == "GET":
+            doc = nat.pool_jwks(m.group(1))
+            return {"status": 200, "headers": {"content-type": "application/json"}, "body": json.dumps(doc).encode()} if doc else _err(404, "ResourceNotFoundException", "User pool does not exist.")
+        if svc == "cognito-idp" and _POOL_PATH.match(bare):
+            hosted = _hosted_dispatch(method, bare, query or {}, lheaders, body)
+            if hosted is not None:
+                return hosted
+            return _err(404, "ResourceNotFoundException", "Not found")
+        return nat.dispatch(svc, lheaders, body)
     if svc == "cognito-idp" and _POOL_PATH.match(path.split("?", 1)[0]):
         hosted = _hosted_dispatch(method, path.split("?", 1)[0], query or {}, lheaders, body)
         if hosted is not None:
@@ -91,6 +116,9 @@ _CODES: dict = {}
 
 
 def _moto(target, payload):
+    if native():
+        from core import identity_native as nat
+        return nat.call_json(target, payload)
     r = _app("cognito-idp").test_client().post("/", data=json.dumps(payload), headers={
         "x-amz-target": "AWSCognitoIdentityProviderService." + target, "content-type": "application/x-amz-json-1.1",
         "authorization": "AWS4-HMAC-SHA256 Credential=AKIAVYOMI/20260101/us-east-1/cognito-idp/aws4_request, SignedHeaders=host, Signature=0"})
@@ -134,10 +162,16 @@ def _hosted_dispatch(method, path, query, lheaders, body):
     host = lheaders.get("host", "localhost")
     base = f"{'https' if lheaders.get('x-forwarded-proto') == 'https' else 'http'}://{host}/{pool}"
     if tail == ".well-known/openid-configuration" and method == "GET":
-        r = _app("cognito-idp").test_client().get(path, headers={"host": host})
-        if r.status_code != 200:
-            return None
-        doc = json.loads(r.data)
+        if native():
+            from core import identity_native as nat
+            doc = nat.openid_config(pool, host)
+            if doc is None:
+                return None
+        else:
+            r = _app("cognito-idp").test_client().get(path, headers={"host": host})
+            if r.status_code != 200:
+                return None
+            doc = json.loads(r.data)
         doc.update(authorization_endpoint=f"{base}/oauth2/authorize", token_endpoint=f"{base}/oauth2/token", userinfo_endpoint=f"{base}/oauth2/userInfo",
                    grant_types_supported=["authorization_code", "refresh_token"], code_challenge_methods_supported=["S256"],
                    token_endpoint_auth_methods_supported=["client_secret_basic", "client_secret_post", "none"])
@@ -226,8 +260,12 @@ _ISS = re.compile(r"^https?://cognito-idp\.([a-z0-9-]+)\.amazonaws\.com/([a-z0-9
 def local_jwks(issuer):
     """-> list of JWK dicts when `issuer` is a Cognito user pool that EXISTS in this simulator, else None (unknown pool: fail closed)."""
     m = _ISS.match(issuer or "")
-    if not m or not available():
+    if not m:
         return None
+    if native():
+        from core import identity_native as nat
+        p = nat.issuer_pool(issuer)
+        return [nat.jwk()] if p is not None else None
     try:
         from moto.cognitoidp.models import cognitoidp_backends
         pool = cognitoidp_backends[ACCOUNT][m.group(1)].user_pools.get(m.group(2))
@@ -247,6 +285,9 @@ _ARN = re.compile(r"/(?:restapis|apis)/([A-Za-z0-9]+)/stages/([^/]+)$")
 
 
 def _wacl_for(api_id, stage):
+    if native():
+        from core import identity_native as nat
+        return nat.waf_view(api_id, stage)
     from moto.wafv2.models import wafv2_backends
     for region in ("us-east-1",) + tuple(wafv2_backends[ACCOUNT].keys()):
         be = wafv2_backends[ACCOUNT][region]
@@ -380,8 +421,6 @@ def reset_rate():
 
 def waf_check(api_id, stage, method, path, query, headers, body, source_ip="127.0.0.1", now=None):
     """-> None to let the request through, else a router response dict (403 like real WAF) for a blocking rule."""
-    if not available():
-        return None
     try:
         be, w = _wacl_for(api_id, stage)
     except Exception:
@@ -393,10 +432,23 @@ def waf_check(api_id, stage, method, path, query, headers, body, source_ip="127.
     req = {"method": method.upper(), "path": "/" + path.lstrip("/") if not path.startswith("/") else path,
            "qs": "&".join(f"{k}={v}" for k, v in qd.items()), "query": qd,
            "headers": {k.lower(): str(v) for k, v in (headers or {}).items()}, "body": bytes(body or b""), "ip": source_ip}
-    for r in sorted(w.rules, key=lambda r: getattr(r, "priority", 0)):
+    def _prio(r):
+        return r.get("Priority", 0) if isinstance(r, dict) else getattr(r, "priority", 0)
+    for r in sorted(w.rules, key=_prio):
         d = r if isinstance(r, dict) else {"Name": r.name, "Statement": r.statement, "Action": r.action}
         act = d.get("Action") or d.get("action") or {}
-        if not _eval(d.get("Statement") or {}, req, be, (w.arn, d.get("Name")), now):
+        st = d.get("Statement") or {}
+        if "ManagedRuleGroupStatement" in st and native():   # signature STUB of an AWS managed group; OverrideAction None enforces, Count only counts
+            from core import identity_native as nat
+            g = st["ManagedRuleGroupStatement"]
+            ex = {x.get("Name") for x in g.get("ExcludedRules") or []} | {x.get("Name") for x in g.get("RuleActionOverrides") or [] if "Count" in (x.get("ActionToUse") or {})}
+            if g.get("VendorName") == "AWS" and nat.managed_match(g.get("Name"), req, ex):
+                if "Count" in (d.get("OverrideAction") or {}):
+                    continue
+                return {"status": 403, "headers": {"content-type": "text/html", "x-amzn-waf-action": "block"},
+                        "body": b"<html><head><title>403 Forbidden</title></head><body><center><h1>403 Forbidden</h1></center></body></html>"}
+            continue
+        if not _eval(st, req, be, (w.arn, d.get("Name")), now):
             continue
         if "Count" in act:
             continue
