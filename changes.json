@@ -1,26 +1,16 @@
 {
- "at": "2026-11-25T21:33:50+00:00",
+ "at": "2026-11-25T22:33:50+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "API Gateway",
-   "kind": "announcement",
-   "key": "feed:aws:852a6bd31332",
-   "title": "AWS IoT Core now uses dedicated IPv6 address ranges for the HTTP rule action",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-iot-core-dedicated-ipv6-ranges/",
-   "detail": "AWS IoT Core can now send traffic to HTTPS endpoints within a dedicated, published IPv6 address range. This launch enables you to configure your HTTPS endpoints to accept requests only from AWS IoT Core and block all other traffic, thereby reducing your endpoint's exposure to public internet. AWS IoT Core is a fully managed service that securely connects IoT devices at scale to the AWS cloud and routes IoT device data to AWS and third-party services. AWS IoT Core's HTTP rule action delivers IoT device data to any HTTPS endpoint, such as your application servers, on-premises systems, or partner",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:d64b6696a8ca",
-   "title": "AWS IoT Core quotas and usage are now visible in AWS Service Quotas console",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-iot-core-quota-usage-monitoring/",
-   "detail": "AWS IoT Core now publishes its most used service quotas and your current usage against the quotas in AWS Service Quotas console , improving observability and monitoring of API limits and quotas. This launch enables you to monitor your service quota usage, set alarms before you are throttled, and request quota increases ahead of planned growth. AWS IoT Core is a fully managed service that securely connects IoT devices at scale to the AWS cloud and routes IoT device data to AWS and third-party services. As your device fleet grows, your applications depend on quotas for operations, such as connec",
-   "actionable": false
+   "cloud": "azure",
+   "service": "Azure Functions",
+   "kind": "lifecycle",
+   "key": "feed:azure:c72503ee9f75",
+   "title": "Retirement: Support for Java 8, 11 and 17 in Azure Functions ends on September 1, 2027",
+   "link": "https://azure.microsoft.com/updates?id=568586",
+   "detail": "Support for Java 8, 11 and 17 on Azure Functions is ending on September 1, 2027. Your apps that are hosted on Azure Functions will continue to run, but security updates will no longer be available, and we\u2019ll no longer provide customer service for Java 8,",
+   "actionable": true
   }
  ],
  "errors": []
