@@ -3,15 +3,15 @@
  "enforce_pct": 90.0,
  "totals": {
   "aws": {
-   "services": 26,
+   "services": 27,
    "enforceable": 26,
-   "catalog_none": 0,
+   "catalog_none": 1,
    "permissions": 4607
   },
   "gcp": {
-   "services": 29,
+   "services": 30,
    "enforceable": 21,
-   "catalog_none": 0,
+   "catalog_none": 1,
    "permissions": 13808
   },
   "azure": {
@@ -301,6 +301,17 @@
    "mapped_pct": 100.0,
    "floor": 100,
    "enforceable": true
+  },
+  {
+   "cloud": "aws",
+   "id": "tfstudio",
+   "title": "Infrastructure Studio",
+   "catalog": "none",
+   "reason": "Infrastructure Studio is a client-side Terraform import/export workspace: it has no resource-provider actions of its own and every call it makes is authorised under the target service's own IAM actions",
+   "permissions": 0,
+   "mapped_pct": null,
+   "floor": 0,
+   "enforceable": false
   },
   {
    "cloud": "aws",
@@ -663,6 +674,21 @@
    "strict_floor": 7,
    "surface_methods": 138,
    "surface_mapped": 128
+  },
+  {
+   "cloud": "gcp",
+   "id": "infra-manager",
+   "title": "Infrastructure Manager",
+   "catalog": "none",
+   "reason": "Infrastructure Manager (config.googleapis.com) permission catalog is not yet onboarded; its actions are not IAM-enforced until a config slice is generated",
+   "permissions": 0,
+   "mapped_pct": null,
+   "floor": 0,
+   "enforceable": false,
+   "strict_pct": null,
+   "strict_floor": 0,
+   "surface_methods": 0,
+   "surface_mapped": 0
   },
   {
    "cloud": "gcp",

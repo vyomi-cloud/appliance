@@ -5,7 +5,7 @@ Mapped % = share of the catalog slice the request->permission map reproduces (de
 Enforceable = catalog slice exists AND mapped >= 90%. Floor = recorded minimum mapped % (only goes up).
 GCP (see the script header): Mapped % is measured over the service's request surface (methods of its APIs; a method counts when a synthesized request round-trips to its permission). `Catalog reach %` is the strict measure (share of the slice's permissions emitted by some REST method; low because many catalog permissions are console/gcloud/internal-only) and has its own floor. The enforceable bar stays 90%; what changed is what is measured, not the bar.
 
-## AWS: 26/26 services enforceable, 0 without a catalog slice, 4607 catalog permissions
+## AWS: 26/27 services enforceable, 1 without a catalog slice, 4607 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Enforceable |
 |---|---|---:|---:|---:|---|
@@ -32,11 +32,12 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Kinesis (`kinesis`) | kinesis | 60 | 100.0 | 100 | yes |
 | Step Functions (`states`) | states | 39 | 100.0 | 100 | yes |
 | Cost Explorer (`cost-explorer`) | ce | 59 | 100.0 | 100 | yes |
+| Infrastructure Studio (`tfstudio`) | none: Infrastructure Studio is a client-side Terraform import/export workspace: it has no resource-provider actions of its own and every call it makes is authorised under the target service's own IAM actions | 0 | - | 0 | no |
 | Systems Manager (`ssm`) | ssm | 166 | 100.0 | 100 | yes |
 | Security Hub & GuardDuty (`securityhub`) | securityhub | 141 | 100.0 | 100 | yes |
 | AWS Backup (`backup`) | backup | 122 | 100.0 | 100 | yes |
 
-## GCP: 21/29 services enforceable, 0 without a catalog slice, 13808 catalog permissions
+## GCP: 21/30 services enforceable, 1 without a catalog slice, 13808 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Methods mapped | Catalog reach % | Reach floor | Enforceable |
 |---|---|---:|---:|---:|---:|---:|---:|---|
@@ -60,6 +61,7 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Cloud KMS (`security/kms`) | cloudkms | 92 | 97.7 | 97 | 85/87 | 70.7 | 70 | yes |
 | IAM & Admin (`iam-admin`) | iam | 3053 | 88.2 | 88 | 127/144 | 19.9 | 19 | no |
 | Manage resources (`resource-manager`) | resourcemanager, orgpolicy | 884 | 92.8 | 92 | 128/138 | 7.2 | 7 | yes |
+| Infrastructure Manager (`infra-manager`) | none: Infrastructure Manager (config.googleapis.com) permission catalog is not yet onboarded; its actions are not IAM-enforced until a config slice is generated | 0 | - | 0 | - | - | 0 | no |
 | Artifact Registry (`artifacts`) | artifactregistry | 78 | 94.2 | 94 | 65/69 | 80.8 | 80 | yes |
 | Cloud Deploy (`clouddeploy`) | clouddeploy | 87 | 100.0 | 100 | 61/61 | 83.9 | 83 | yes |
 | Backup and DR (`backupdr`) | backupdr | 305 | 70.3 | 70 | 64/91 | 37.0 | 37 | no |

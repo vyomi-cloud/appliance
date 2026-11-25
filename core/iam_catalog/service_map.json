@@ -161,6 +161,11 @@
      "backup"
     ],
     "floor": 100
+   },
+   "tfstudio": {
+    "catalog": "none",
+    "reason": "Infrastructure Studio is a client-side Terraform import/export workspace: it has no resource-provider actions of its own and every call it makes is authorised under the target service's own IAM actions",
+    "floor": 0
    }
   },
   "gcp": {
@@ -492,6 +497,11 @@
     ],
     "floor": 96,
     "strict_floor": 70
+   },
+   "infra-manager": {
+    "catalog": "none",
+    "reason": "Infrastructure Manager (config.googleapis.com) permission catalog is not yet onboarded; its actions are not IAM-enforced until a config slice is generated",
+    "floor": 0
    }
   },
   "azure": {
