@@ -182,7 +182,7 @@ def _make_remote_verifier(ttl, timeout, fetch_json):
         from cryptography.hazmat.primitives import hashes
         from cryptography.hazmat.primitives.asymmetric import padding, rsa
     except ImportError:
-        return None
+        hashes = padding = rsa = None   # Pyodide ships no `cryptography` by default: verify RS256 in pure Python (identity_native)
 
     def get_json(url):
         if fetch_json is not None:
@@ -219,6 +219,9 @@ def _make_remote_verifier(ttl, timeout, fetch_json):
             if key is None:
                 return False
             n, e = (int.from_bytes(b64u(key[x]), "big") for x in ("n", "e"))
+            if rsa is None:
+                from core import identity_native
+                return identity_native.rs256_verify(("%s.%s" % (h, p)).encode(), b64u(sig), n, e)
             rsa.RSAPublicNumbers(e, n).public_key().verify(b64u(sig), ("%s.%s" % (h, p)).encode(), padding.PKCS1v15(), hashes.SHA256())
             return True
         except Exception:
