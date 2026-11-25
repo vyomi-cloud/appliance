@@ -355,7 +355,7 @@ def _searchable_text(doc, idx, only=None):
                     for v in [doc.get(f["name"])] if v is not None)
 
 
-def search(index_rec, params):
+def search(index_rec, params, _trace=None):
     idx, docs = index_rec["_def"], index_rec["_docs"]
     text = (params.get("search") or "*").strip()
     fm = _fmap(idx)
@@ -409,12 +409,18 @@ def search(index_rec, params):
             if (terms or must) and score == 0.0:
                 continue
         scored.append((score, d))
+    if _trace is not None:
+        _trace["candidates"] = len(cand)
+        _trace["keyword"] = {d[keyf]: s for s, d in scored} if text != "*" else {}
+        _trace["vector"] = {d[keyf]: s for s, d in vranked} if vranked is not None else {}
     if vranked is not None:
         if text == "*":
             scored = vranked
         else:
             scored.sort(key=lambda sd: -sd[0])
             scored = vec.fuse(scored, vranked, keyf, vec.query_weight(vq))
+        if _trace is not None:
+            _trace["fused"] = {d[keyf]: s for s, d in scored}
     sem = None
     qtype = str(params.get("queryType") or "simple").lower()
     if qtype == "semantic":
@@ -428,6 +434,8 @@ def search(index_rec, params):
             scored, sem = vec.semantic_rerank(index_rec, idx, text, scored, params)
         except vec.llm.LlmUnavailable as e:
             return _err(400, "InvalidRequest", f"The semantic ranker's embedding model is not available: {e}")
+        if _trace is not None:
+            _trace["reranker"] = {k: v["score"] for k, v in sem["docs"].items()}
     elif qtype not in ("simple", "full"):
         return _err(400, "InvalidRequest", f"Unsupported queryType '{qtype}'.")
     order = params.get("$orderby") or params.get("orderby")
@@ -1049,6 +1057,8 @@ def _indexes(svc, method, rest, payload, query):
         if len(rest) == 3 and method == "GET":
             d = rec["_docs"].get(rest[2])
             return _ok(d) if d else _err(404, "DocumentNotFound", f"Document with key '{rest[2]}' not found.")
+    if rest[1].lower() in ("chunks", "retrieve-trace"):
+        return inspect_index(rec, rest[1].lower(), method, payload, query)
     if rest[1].lower() == "stats" and method == "GET":
         return _ok({"documentCount": len(rec["_docs"]), "storageSize": sum(len(json.dumps(d)) for d in rec["_docs"].values()),
                     "vectorIndexSize": sum(4 * len(v) for d in rec["_docs"].values() for v in d.values() if isinstance(v, list) and v and isinstance(v[0], float))})
@@ -1176,3 +1186,122 @@ def _put_ds_ix(svc, kind, name, body, status):
     body["@odata.etag"] = '"0x%s"' % uuid.uuid4().hex[:14].upper()
     svc["_" + kind][name] = body
     return _ok(body, status)
+
+
+# ───────────────────────── Vyomi inspect extension (RAG Studio) ─────────────────────────
+# GET  /_vyomi/azure/search/{svc}/indexes/{ix}/chunks[?vectors=true]   (also ARM-extension path .../searchServices/{svc}/indexes/{ix}/chunks)
+# POST /_vyomi/azure/search/{svc}/indexes/{ix}/retrieve-trace          (body = a normal docs/search body; plain search output is unchanged)
+def _first(idx, pred):
+    return next((f for f in idx["fields"] if pred(f)), None)
+
+
+def _project2d(rows, vecs):
+    """2-D PCA projection (power iteration, pure Python): same maths as core/bedrock_agents_core._project2d, with an O(n*d) deflation step."""
+    n = len(vecs)
+    if n < 2:
+        for r in rows:
+            r["projection2d"] = [0.0, 0.0]
+        return
+    d = len(vecs[0])
+    mean = [sum(v[j] for v in vecs) / n for j in range(d)]
+    X = [[v[j] - mean[j] for j in range(d)] for v in vecs]
+    comps = []
+    for c in range(2):
+        w = [((j * 7919 + c * 104729) % 1000) / 1000.0 - 0.5 for j in range(d)]
+        for _ in range(25):
+            t = [sum(x[j] * w[j] for j in range(d)) for x in X]
+            nw = [sum(X[i][j] * t[i] for i in range(n)) for j in range(d)]
+            norm = sum(a * a for a in nw) ** 0.5 or 1.0
+            w = [a / norm for a in nw]
+        comps.append(w)
+        dots = [sum(x[m] * w[m] for m in range(d)) for x in X]      # deflate: O(n*d), not O(n*d^2) (1536-dim embeddings)
+        X = [[x[j] - dots[i] * w[j] for j in range(d)] for i, x in enumerate(X)]
+    for i, r in enumerate(rows):
+        c = [v - m for v, m in zip(vecs[i], mean)]
+        r["projection2d"] = [round(sum(c[j] * comps[k][j] for j in range(d)), 6) for k in range(2)]
+
+
+_PII = (("email", re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")), ("phone", re.compile(r"\b\d{3}[-. ]\d{3}[-. ]\d{4}\b")), ("ssn", re.compile(r"\b\d{3}-\d{2}-\d{4}\b")))
+
+
+def inspect_index(index_rec, what, method, payload, query):
+    idx = index_rec["_def"]
+    vf = _first(idx, lambda f: f["type"] == "Collection(Edm.Single)")
+    keyf = next(f["name"] for f in idx["fields"] if f["key"])
+    strs = [f["name"] for f in idx["fields"] if f["type"] == "Edm.String" and not f["key"]]
+    textf = next((n for n in ("chunk", "content", "text") if n in strs), strs[0] if strs else keyf)
+    urif = next((n for n in ("title", "metadata_storage_name", "metadata_storage_path", "source", "parent_id") if any(f["name"] == n for f in idx["fields"])), None)
+    if what == "chunks":
+        if method != "GET":
+            return _err(405, "MethodNotAllowed", "GET only.")
+        want_vec = str((query or {}).get("vectors", "false")).lower() == "true"
+        docs = list(index_rec["_docs"].values())
+        meta_skip = {keyf, textf, vf["name"] if vf else None}
+        rows, vecs = [], []
+        for d in docs:
+            t = str(d.get(textf) or "")
+            pii = [n for n, rx in _PII if rx.search(t)]
+            rows.append({"id": d[keyf], "documentUri": str(d.get(urif) or d[keyf]) if urif else d[keyf], "text": t, "tokenCount": len(tokenize(t)),
+                         "metadata": {k: v for k, v in d.items() if k not in meta_skip and not isinstance(v, (list, dict))}, "section": str(d.get("title") or ""),
+                         "pii": pii or "ok", "projection2d": None, "vector": d.get(vf["name"]) if (vf and want_vec) else None})
+            if vf and d.get(vf["name"]):
+                vecs.append(d[vf["name"]])
+        if len(vecs) == len(rows):
+            _project2d(rows, vecs)
+        else:
+            for r in rows:
+                r["projection2d"] = [0.0, 0.0]
+        return _ok({"index": idx["name"], "count": len(rows), "dimensions": vf["dimensions"] if vf else 0, "textField": textf, "vectorField": vf["name"] if vf else None, "chunks": rows})
+    if method != "POST":
+        return _err(405, "MethodNotAllowed", "POST only.")
+    p = {k: v for k, v in dict(payload or {}).items() if k not in ("$select", "select")}
+    tr = {}
+    r = search(index_rec, dict(p, **{"$top": p.get("$top") or p.get("top") or 50}), _trace=tr)
+    if r["status"] != 200:
+        return r
+    fmap = {d[keyf]: d for d in index_rec["_docs"].values()}
+    def rank(m):
+        return {k: i for i, (k, _v) in enumerate(sorted(m.items(), key=lambda kv: -kv[1]), 1)}
+    kr, vr = rank(tr.get("keyword", {})), rank(tr.get("vector", {}))
+    fr, rr = rank(tr.get("fused", {})), rank(tr.get("reranker", {}))
+    finals = [row.get(keyf) for row in r["body"]["value"]]
+    if vf:
+        for row in r["body"]["value"]:
+            row.pop(vf["name"], None)
+    k = int(p.get("$top") or p.get("top") or 50)
+    keys = list(dict.fromkeys(finals + list(fr) + list(kr) + list(vr)))[: max(k * 3, 30)]
+    cand = []
+    for key in keys:
+        d = fmap.get(key, {})
+        cand.append({"chunkId": key, "uri": str(d.get(urif) or key) if urif else key, "text": str(d.get(textf) or ""),
+                     "keyword_score": tr.get("keyword", {}).get(key), "keyword_rank": kr.get(key),
+                     "vector_score": tr.get("vector", {}).get(key), "vector_rank": vr.get(key),
+                     "fused_score": tr.get("fused", {}).get(key), "fused_rank": fr.get(key),
+                     "reranker_score": tr.get("reranker", {}).get(key), "reranker_rank": rr.get(key),
+                     "final_rank": finals.index(key) + 1 if key in finals else None})
+    return _ok({"value": r["body"]["value"], "trace": {"candidates": cand, "filtered": tr.get("candidates"), "finalOrder": finals, "total": len(fmap),
+                                                      "semanticRanker": "approximation" if "reranker" in tr else None,
+                                                      "searchType": "hybrid" if tr.get("keyword") and tr.get("vector") else "vector" if tr.get("vector") else "keyword"}})
+
+
+def inspect_dispatch(state, svc_name, method, path, query, body, headers=None, **_stores):
+    """Vyomi extension route: /_vyomi/azure/search/{svc}/indexes/{ix}/(chunks|retrieve-trace). `path` is the part after the service name."""
+    svc = next((r for r in _services(state) if r["name"].lower() == (svc_name or "").lower()), None)
+    if svc is None:
+        return _err(404, "ResourceNotFound", f"The search service '{svc_name}' was not found.")
+    lh = {k.lower(): v for k, v in (headers or {}).items()}
+    if not (lh.get("authorization", "").lower().startswith("bearer ") or lh.get("api-key") in (svc["_admin"]["primary"], svc["_admin"]["secondary"])):
+        return _err(403, "Forbidden", "Access denied: an admin api-key or bearer token is required.")
+    segs = [x for x in path.strip("/").split("/") if x]
+    if len(segs) != 3 or segs[0] != "indexes" or segs[2] not in ("chunks", "retrieve-trace"):
+        return _err(404, "ResourceNotFound", f"Unsupported inspect route: {method} {path}")
+    ix = svc["_indexes"].get(segs[1])
+    if ix is None:
+        return _err(404, "IndexNotFound", f"Index '{segs[1]}' was not found.")
+    payload = None
+    if body:
+        try:
+            payload = json.loads(body)
+        except ValueError:
+            return _err(400, "InvalidRequest", "The request body is not valid JSON.")
+    return inspect_index(ix, segs[2], method.upper(), payload, query or {})
