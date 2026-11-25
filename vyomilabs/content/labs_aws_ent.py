@@ -419,6 +419,48 @@ assert not mine, "an expired request must never create a work order"
 print("expiry verified: no work order, request closed")
 ''', run="python expiry.py", expect="expiry verified", needs_runtime=True, kind="failure", edition=MESH,
        nano_note="Needs the Lambda tools to execute and a timer; on Nano the approval chain cannot run yet."),
+     b("Risk levels: low risk approves itself, everything else waits", "The learn list for this chapter promises risk levels; here they are real. The workflow starts with a Choice state: a P4 request (informational, no safety impact) is approved by policy and recorded as `auto-approved`, any other priority parks for a human. The block asserts both paths on the real workflow: a P4 request creates its work order with no human and the ledger-free audit shows the policy name; a P2 request stays RUNNING and creates nothing.",
+       "risk_levels.py", r'''
+import json
+import time
+
+import boto3
+
+sf, ddb = boto3.client("stepfunctions"), boto3.client("dynamodb")
+sm = next(s for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval")["stateMachineArn"]
+
+
+def start(rid, priority):
+    return sf.start_execution(stateMachineArn=sm, name=rid, input=json.dumps(
+        {"request_id": rid, "asset_id": "EL-3", "summary": "Risk level check " + priority, "priority": priority, "requester": "risk-test"}))["executionArn"]
+
+
+def wait(ex, seconds=15):
+    for _ in range(int(seconds / 0.5)):
+        d = sf.describe_execution(executionArn=ex)
+        if d["status"] != "RUNNING":
+            return d
+        time.sleep(0.5)
+    return d
+
+
+low = wait(start("req-risk-low1", "P4"))
+assert low["status"] == "SUCCEEDED", "a P4 request must complete without a human, got " + low["status"]
+out = json.loads(low["output"])
+assert out["approval"]["decision"] == "auto-approved" and out["approval"]["policy"] == "P4-low-risk", out["approval"]
+wo = out["result"]["work_order"]["work_order_id"]
+assert ddb.get_item(TableName="facilities-work-orders", Key={"work_order_id": {"S": wo}}).get("Item"), "the auto-approved work order must exist"
+print("P4: auto-approved by policy", out["approval"]["policy"], "->", wo)
+
+high = start("req-risk-high1", "P2")
+time.sleep(2)
+assert sf.describe_execution(executionArn=high)["status"] == "RUNNING", "a P2 request must wait for a human"
+mine = [i for i in ddb.scan(TableName="facilities-work-orders")["Items"] if i["requester"]["S"] == "risk-test" and i["priority"]["S"] == "P2"]
+assert not mine, "a waiting P2 request must not have written anything"
+print("P2: waiting for a human, nothing written")
+print("risk levels verified")
+''', run="python risk_levels.py", expect="risk levels verified", needs_runtime=True, kind="harden", edition=MESH,
+       nano_note="Needs the Lambda tools and a Choice-capable Step Functions engine on Nano."),
      b("Real approver identity and no self-approval", "A string like `duty.manager@example.com` typed into the approval proves nothing. Here the identity is the credential. The smallest form of the callback pattern (publish a task token, wait) runs with two IAM identities: the agent that asks may start the workflow but may NOT call SendTaskSuccess; the duty manager may read the inbox and answer. The audit log records which principal made each decision: that record, not a typed name, is who approved. (The simulator's STS GetCallerIdentity currently returns the account root for any key, so the audit log is the reliable record here.)",
        "iam_approval.py", r'''
 import json

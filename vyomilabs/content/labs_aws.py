@@ -1213,8 +1213,11 @@ def handler(event, context):
 
 
 def build_asl(timeout_seconds=4 * 3600):
-    """The approval workflow. A human has `timeout_seconds` to answer; after that the request EXPIRES instead of waiting forever."""
-    return {"Comment": "Human approval before any write", "StartAt": "RequestApproval", "States": {
+    """The approval workflow. Low-risk (P4) requests are approved by policy; every other request needs a human, who has `timeout_seconds` to answer before the request EXPIRES instead of waiting forever."""
+    return {"Comment": "Risk-based approval before any write", "StartAt": "RiskGate", "States": {
+        # Risk levels: informational P4 requests on non-safety work are approved by policy; everything else waits for a human.
+        "RiskGate": {"Type": "Choice", "Choices": [{"Variable": "$.priority", "StringEquals": "P4", "Next": "AutoApprove"}], "Default": "RequestApproval"},
+        "AutoApprove": {"Type": "Pass", "Result": {"decision": "auto-approved", "policy": "P4-low-risk"}, "ResultPath": "$.approval", "Next": "CreateWorkOrder"},
         "RequestApproval": {"Type": "Task", "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
                             "Parameters": {"FunctionName": "facilities-request-approval",
                                            "Payload": {"TaskToken.$": "$$.Task.Token", "request_id.$": "$.request_id",
