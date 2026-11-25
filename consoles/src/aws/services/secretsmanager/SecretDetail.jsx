@@ -29,6 +29,7 @@ import { ErrorAlert, fmtDate, KeyValue } from "../../kit/common.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import RotationFunction from "./RotationFunction.jsx";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 function SecretValueSection({ name }) {
   const notify = useNotify();
@@ -99,7 +100,7 @@ function ResourcePolicySection({ name }) {
 function OverviewTab({ name }) {
   return (
     <SpaceBetween size="l">
-      <ResourcePolicySection name={name} />
+      <ResourcePolicyTab kind="secret" args={{ name }} />
       <SecretValueSection name={name} />
     </SpaceBetween>
   );

@@ -48,6 +48,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -109,7 +110,7 @@ export default function ApimBlade({ params, query }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defenderforcloud: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
-      iam: () => <AccessControlIam a={a} />,
+      iam: () => <ResourceIam a={a} capId="azure.apim.iam" />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="apim" />,
       tags: () => <Tags a={a} reload={reload} />,
       apis: () => <Apis rg={rg} svc={name} self={self} />,
@@ -272,66 +273,6 @@ function Properties({ a }) {
 // real ARM resources scoped to THIS service (plus its subscription/resource-group
 // ancestors); Roles (roleDefinitions) are the flat built-in + custom catalog — see
 // capabilities.json azure.apim.iam. ─────────────────────────────────────────────────────
-function AccessControlIam({ a }) {
-  const [tab, setTab] = useState("checkaccess");
-  const [gap, setGap] = useState(null);
-  const roleAssignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
-  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
-  return (
-    <CapabilityContainer id="azure.apim.iam" title={`${a.name} | Access control (IAM)`}>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
-        <Tab value="checkaccess">Check access</Tab>
-        <Tab value="roleassignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="deny">Deny assignments</Tab>
-        <Tab value="classic">Classic administrators</Tab>
-      </TabList>
-      {tab === "checkaccess" && (
-        <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <MyAccess a={a} />
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
-        </div>
-      )}
-      {tab === "roleassignments" && (
-        <section className="vy-section" style={{ marginTop: 12 }}>
-          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
-            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
-            csvName="role-assignments.csv"
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
-              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
-              { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() },
-              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
-              { key: "condition", label: "Condition", value: () => "None" },
-            ]}
-          />
-        </section>
-      )}
-      {tab === "roles" && (
-        <section className="vy-section" style={{ marginTop: 12 }}>
-          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
-            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
-            csvName="roles.csv"
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
-              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
-              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
-              { key: "category", label: "Category", value: () => "General" },
-            ]}
-          />
-        </section>
-      )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
-      {tab === "classic" && <ClassicAdminsPanel />}
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Coming soon"}>
-          <DialogBody><DialogTitle>{gap}</DialogTitle><DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions></DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────
 export function TagRows({ tags, onChange, resource }) {

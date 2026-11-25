@@ -19,6 +19,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import { CapabilityBadge } from "../../kit/Capability.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { SubscriptionMetrics } from "./Metrics.jsx";
+import ResourcePermissionsPanel from "../../kit/ResourcePermissionsPanel.jsx";
 import * as api from "./api.js";
 
 export default function SubscriptionDetail({ params }) {
@@ -50,11 +51,13 @@ export default function SubscriptionDetail({ params }) {
         <Tab value="details" label="Details" />
         <Tab value="messages" label="Messages" />
         <Tab value="snapshots" label="Snapshots" />
+        <Tab value="permissions" label="Permissions" />
       </Tabs>
       {tab === "metrics" && <SubscriptionMetrics id={id} />}
       {tab === "details" && <DetailsTab sub={sub} />}
       {tab === "messages" && <MessagesTab id={id} />}
       {tab === "snapshots" && <SnapshotsTab sub={sub} />}
+      {tab === "permissions" && <ResourcePermissionsPanel kind="pubsub-subscription" args={{ name: id }} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete subscription?" confirmText={id} warning="This can't be undone."
         onConfirm={async () => { await api.deleteSubscription(id); notify.success(`Deleted subscription "${id}"`); location.hash = "/pubsub/subscriptions"; }}>

@@ -15,10 +15,12 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget, setInactive, isNotFound } from "../../kit/recent.js";
 import * as api from "./api.js";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
   { id: "activitylog", label: "Activity log" },
+  { id: "iam", label: "Access control (IAM)" },
   { group: "Search management", items: [{ id: "indexes", label: "Indexes" }, { id: "indexers", label: "Indexers" }, { id: "datasources", label: "Data sources" }, { id: "skillsets", label: "Skillsets" }] },
   { group: "Settings", items: [{ id: "keys", label: "Keys" }] },
 ];
@@ -47,6 +49,7 @@ export default function SearchServiceBlade({ params }) {
     body = {
       overview: () => <Overview a={a} reload={svc.reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
+      iam: () => <ResourceIam a={a} capId="azure.aisearch.iam" />,
       indexes: () => <Indexes a={a} />,
       indexers: () => <Indexers a={a} />,
       datasources: () => <DataSources a={a} />,
