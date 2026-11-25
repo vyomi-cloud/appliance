@@ -43,6 +43,15 @@ def _shape(vcpu: int, ram_mb: int, family: str, *, name: str | None = None) -> d
 # AWS (EC2)
 # ──────────────────────────────────────────────────────────────────────────────
 AWS: dict[str, dict] = {
+    # Older burstable t2 + AMD t3a (x86; the small sizes both substrates can honour)
+    "t2.nano":     _shape(1,   512, "burstable"),
+    "t2.micro":    _shape(1,  1024, "burstable"),
+    "t2.small":    _shape(1,  2048, "burstable"),
+    "t2.medium":   _shape(2,  4096, "burstable"),
+    "t3a.nano":    _shape(2,   512, "burstable"),
+    "t3a.micro":   _shape(2,  1024, "burstable"),
+    "t3a.small":   _shape(2,  2048, "burstable"),
+    "t3a.medium":  _shape(2,  4096, "burstable"),
     # Burstable t3 — shared cores, low baseline, CPU-credit bursting (uncomodeled)
     "t3.nano":     _shape(2,   512, "burstable"),
     "t3.micro":    _shape(2,  1024, "burstable"),
@@ -84,6 +93,9 @@ AWS: dict[str, dict] = {
 # GCP Compute Engine
 # ──────────────────────────────────────────────────────────────────────────────
 GCP: dict[str, dict] = {
+    # Legacy shared-core N1 (f1/g1)
+    "f1-micro":      _shape(1,   614, "burstable"),
+    "g1-small":      _shape(1,  1740, "burstable"),
     # Cost-optimized E2 (shared-core for micro/small/medium)
     "e2-micro":      _shape(2,  1024, "burstable"),
     "e2-small":      _shape(2,  2048, "burstable"),
@@ -117,6 +129,7 @@ GCP: dict[str, dict] = {
 # Azure
 # ──────────────────────────────────────────────────────────────────────────────
 AZURE: dict[str, dict] = {
+    "Standard_B1ls":  _shape(1,   512, "burstable"),
     # Burstable B
     "Standard_B1s":   _shape(1,  1024, "burstable"),
     "Standard_B1ms":  _shape(1,  2048, "burstable"),

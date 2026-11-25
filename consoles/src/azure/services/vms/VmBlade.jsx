@@ -40,6 +40,7 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import ResourceIam from "../../kit/ResourceIam.jsx";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -530,6 +531,7 @@ function Size({ a, reload }) {
   };
   return (
     <CapabilityContainer id="azure.vms.size" title={`${a.name} | Size`} actions={<ToolbarButton disabled={busy || sel === a.properties?.hardwareProfile?.vmSize} onClick={resize}>{busy ? "Resizing..." : "Resize"}</ToolbarButton>}>
+      {sizesNote(sizeSubstrate(sizes.data)) && <div style={{ fontSize: 12, opacity: 0.75, margin: "4px 0" }}>{sizesNote(sizeSubstrate(sizes.data))}</div>}
       <div className="vy-filters"><Input size="small" style={{ width: 260 }} placeholder="Search by VM size..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Search by VM size..." /></div>
       {sizes.loading && !sizes.data ? <Loading /> : (
       <Table size="small" aria-label="VM sizes" className="vy-grid">
