@@ -43,10 +43,41 @@ def _out(r: dict) -> dict:
             "body_b64": base64.b64encode(bytes(out)).decode()}
 
 
+_AGENT_DEPS = {"done": False, "error": ""}
+# langgraph is pure Python but PyPI's current release pulls native wheels Pyodide 0.26 does not have (xxhash>=3.5, ormsgpack, uuid-utils,
+# pydantic-core==2.50, zstandard). This pinned set is pure Python and loads on Pyodide's own pydantic/msgpack/orjson/xxhash/anyio (verified on 0.26.2).
+_PYODIDE_PKGS = ["pydantic", "pyyaml", "orjson", "xxhash", "msgpack", "requests", "anyio", "packaging", "typing-extensions"]
+_PIP_PINS = ["langgraph==0.2.60", "langgraph-checkpoint==2.0.9", "langchain-core==0.3.28", "langsmith==0.2.10", "requests-toolbelt", "jsonpointer",
+             "tenacity", "jsonpatch", "httpx", "httpcore", "h11", "certifi", "idna", "sniffio"]
+
+
+async def ensure_agent_deps() -> str:
+    """Hosted AgentCore agents import langgraph. Fetch it once, on the first runtime call (needs the browser online); '' when ready, else why not."""
+    if _AGENT_DEPS["done"]:
+        return _AGENT_DEPS["error"]
+    _AGENT_DEPS["done"] = True
+    try:
+        import langgraph  # noqa: F401
+        return ""
+    except ImportError:
+        pass
+    try:
+        import pyodide_js
+        await pyodide_js.loadPackage(["micropip"] + _PYODIDE_PKGS)
+        import micropip
+        await micropip.install(_PIP_PINS, deps=False)
+    except Exception as e:  # noqa: BLE001
+        _AGENT_DEPS["error"] = f"langgraph could not be installed in this browser ({type(e).__name__}: {str(e)[:160]}). Hosted agents that import langgraph need network access to PyPI."
+        _AGENT_DEPS["done"] = False   # retry on the next call (offline now, online later)
+    return _AGENT_DEPS["error"]
+
+
 async def ahandle(p: dict) -> dict:
     """Async twin of handle(): AwsWireRouter.ahandle (RDS snapshots / Parquet exports
     and the RDS Data API await their engines)."""
     try:
+        if "/runtimes/" in str(p.get("path") or "") and str(p.get("path") or "").split("?")[0].rstrip("/").endswith("/invocations"):
+            await ensure_agent_deps()
         body = base64.b64decode(p.get("body_b64") or "")
         return _out(await router().ahandle(str(p.get("method") or "GET").upper(), p.get("path") or "/",
                                            p.get("query") or {}, p.get("headers") or {}, body))
