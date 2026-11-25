@@ -14,9 +14,11 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, InfoBar, Loading, fmtDate } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
+  { id: "iam", label: "Access control (IAM)" },
   { group: "Protected items", items: [{ id: "items", label: "Backup items" }, { id: "replicated", label: "Replicated items" }] },
   { group: "Manage", items: [{ id: "policies", label: "Backup policies" }, { id: "jobs", label: "Backup jobs" }, { id: "srjobs", label: "Site Recovery jobs" }] },
   { group: "Settings", items: [{ id: "properties", label: "Properties" }] },
@@ -52,7 +54,7 @@ export default function VaultBlade({ params }) {
   else if (vault.error) body = <><ErrorBar error={vault.error} title="Failed to load the vault" /><Link href="#/recoveryservices">Back to Recovery Services vaults</Link></>;
   else {
     const v = vault.data;
-    body = { overview: () => <Overview v={v} self={self} />, items: () => <Items v={v} />, policies: () => <Policies v={v} />, jobs: () => <Jobs v={v} />,
+    body = { overview: () => <Overview v={v} self={self} />, iam: () => <ResourceIam a={v} capId="azure.common.resource.iam" />, items: () => <Items v={v} />, policies: () => <Policies v={v} />, jobs: () => <Jobs v={v} />,
       replicated: () => <Replicated v={v} />, srjobs: () => <SrJobs v={v} />, properties: () => <Properties v={v} reload={vault.reload} /> }[panel]?.() ?? null;
   }
   return (

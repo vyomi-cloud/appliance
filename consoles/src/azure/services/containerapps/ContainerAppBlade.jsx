@@ -24,9 +24,10 @@ import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, Glyph, Loading, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 import * as api from "./api.js";
 import * as Tools from "./Tools.jsx";
-import { AccessControlIam, ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
+import { ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
 import SharedResourceHealth from "../../kit/ResourceHealth.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
@@ -97,7 +98,7 @@ export default function ContainerAppBlade({ params }) {
       events: () => <Tools.Events path={resPath} cap="azure.containerapps.app.tools" />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog resPath={resPath} name={a.name} />,
-      iam: () => <AccessControlIam resPath={resPath} name={a.name} capId="azure.containerapps.iam" />,
+      iam: () => <ResourceIam a={{ id: resPath, name: a.name }} capId="azure.containerapps.iam" />,
       tags: () => <Tags a={a} name={a.name} reload={reload} save={(tags) => api.updateAppTags(rg, a.name, tags)} />,
       containers: () => <Containers a={a} rg={rg} name={a.name} reload={reload} />,
       revisions: () => <Revisions rg={rg} name={a.name} mode={a.properties?.configuration?.activeRevisionsMode} />,

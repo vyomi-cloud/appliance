@@ -21,6 +21,7 @@ import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import { TopicMetrics } from "./Metrics.jsx";
 import * as api from "./api.js";
+import ResourcePermissionsPanel from "../../kit/ResourcePermissionsPanel.jsx";
 
 export default function TopicDetail({ params }) {
   const id = params.name;
@@ -59,12 +60,14 @@ export default function TopicDetail({ params }) {
         <Tab value="metrics" label="Metrics" />
         <Tab value="details" label="Details" />
         <Tab value="messages" label="Messages" />
+        <Tab value="permissions" label="Permissions" />
       </Tabs>
       {tab === "subscriptions" && <SubscriptionsTab id={id} />}
       {tab === "snapshots" && <SnapshotsTab id={id} />}
       {tab === "metrics" && <TopicMetrics id={id} />}
       {tab === "details" && <DetailsTab topic={topic} />}
       {tab === "messages" && <MessagesTab id={id} />}
+      {tab === "permissions" && <ResourcePermissionsPanel kind="pubsub-topic" args={{ name: id }} />}
 
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete topic?" confirmText={id}
         warning="This can't be undone. Attached subscriptions are detached, not deleted."

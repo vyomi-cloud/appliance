@@ -21,6 +21,7 @@ import { ErrorAlert, fmtDate, PageHeader } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
+import ResourcePermissionsPanel from "../../kit/ResourcePermissionsPanel.jsx";
 import * as api from "./api.js";
 import Vulnerabilities from "./Vulnerabilities.jsx";
 import { CleanupPolicyDialog, describeCleanupPolicy } from "./CreateRepository.jsx";
@@ -118,6 +119,7 @@ export default function RepositoryDetail({ params }) {
 
       {setup && repo.data && <SetupInstructionsDialog repo={repo.data} project={project} location={location} name={name} onClose={() => setSetup(false)} />}
 
+      {repo.data && <Box sx={{ mt: 3 }}><ResourcePermissionsPanel kind="artifact-repo" args={{ location, name }} /></Box>}
       {push && repo.data && <PushSampleDialog docker={repo.data.format === "DOCKER"} onClose={() => setPush(false)} onSave={async (body) => {
         await api.pushSample(location, name, body); notify.success("Pushed sample " + (repo.data.format === "DOCKER" ? "image" : "package")); setPush(false); pkgs.reload();
       }} />}

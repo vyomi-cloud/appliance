@@ -165,3 +165,7 @@ export async function connectToRds({ proxyName, family, roleArn, secretArn, dbId
   catch (e) { await RDS("DeleteDBProxy", { DBProxyName: proxyName }).catch(() => {}); throw e; }
 }
 export const rdsDeleteProxy = (name) => RDS("DeleteDBProxy", { DBProxyName: name });
+
+/** AddPermission / RemovePermission: the console's "Add permissions" form for the function's resource-based policy. */
+export const addPermission = (name, body) => restJson("POST", `${F}/${enc(name)}/policy`, { body });
+export const removePermission = (name, sid) => restJson("DELETE", `${F}/${enc(name)}/policy/${enc(sid)}`);

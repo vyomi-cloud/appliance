@@ -15,6 +15,7 @@ import { KeyValue, ErrorAlert } from "../../kit/common.jsx";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 const DEFAULT_KEY = { value: "", label: "Use AWS owned key" };
 
@@ -92,26 +93,12 @@ export function PermissionsTab({ bus, reload }) {
   const run = async (fn, ok) => { setBusy(true); try { await fn(); notify.success(ok); setText(null); reload(); } catch (e) { notify.error(e); } finally { setBusy(false); } };
   return (
     <SpaceBetween size="l">
-      <Table variant="container" header={<Header variant="h2" counter={`(${statements.length})`}>Resource-based policy statements</Header>}
-        items={statements} trackBy="Sid" empty={<Box textAlign="center" color="inherit">No policy. Only this account can put events to the bus.</Box>}
-        columnDefinitions={[
-          { id: "sid", header: "Statement ID", cell: (s) => s.Sid },
-          { id: "effect", header: "Effect", cell: (s) => s.Effect },
-          { id: "principal", header: "Principal", cell: (s) => JSON.stringify(s.Principal) },
-          { id: "action", header: "Action", cell: (s) => [].concat(s.Action).join(", ") },
-          { id: "rm", header: "", cell: (s) => <Button variant="inline-link" onClick={() => run(() => api.removePermission({ EventBusName: bus.Name, StatementId: s.Sid }), `Removed statement ${s.Sid}.`)}>Remove</Button> },
-        ]} />
+      <ResourcePolicyTab key={bus.Policy || ""} kind="eventbridge-bus" args={{ name: bus.Name, arn: bus.Arn }} onChanged={reload} />
       <Container header={<Header variant="h2">Allow an account to put events</Header>}>
         <SpaceBetween size="m" direction="horizontal">
           <FormField label="Statement ID"><Input ariaLabel="Statement ID" value={sid} onChange={({ detail }) => setSid(detail.value)} /></FormField>
           <FormField label="Account ID"><Input ariaLabel="Account ID" value={acct} onChange={({ detail }) => setAcct(detail.value)} /></FormField>
           <Box padding={{ top: "xl" }}><Button loading={busy} disabled={!sid || !acct} onClick={() => run(() => api.putPermission({ EventBusName: bus.Name, StatementId: sid, Principal: acct, Action: "events:PutEvents" }), `Allowed account ${acct}.`)}>Add statement</Button></Box>
-        </SpaceBetween>
-      </Container>
-      <Container header={<Header variant="h2">Edit policy document</Header>}>
-        <SpaceBetween size="m">
-          <PolicyField value={text ?? (doc ? JSON.stringify(doc, null, 2) : "")} onChange={setText} />
-          <Box float="left"><Button loading={busy} disabled={text === null || !text.trim()} onClick={() => run(() => api.updateEventBusConfig(bus.Name, { Policy: text }), "Policy saved.")}>Save policy</Button></Box>
         </SpaceBetween>
       </Container>
     </SpaceBetween>

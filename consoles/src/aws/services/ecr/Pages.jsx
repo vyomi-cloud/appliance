@@ -24,6 +24,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, navigate, useRoute } from "../../../common/router.js";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 const MUT = [{ value: "MUTABLE", label: "Mutable" }, { value: "IMMUTABLE", label: "Immutable" }];
 const SAMPLE_LIFECYCLE = JSON.stringify({ rules: [{ rulePriority: 1, description: "Expire untagged images after 14 days", selection: { tagStatus: "untagged", countType: "sinceImagePushed", countUnit: "days", countNumber: 14 }, action: { type: "expire" } }] }, null, 2);
@@ -209,9 +210,7 @@ export function RepositoryDetail() {
           { id: "images", label: "Images", content: <Images name={name} repo={repo} /> },
           { id: "findings", label: "Scan findings", content: <Findings name={name} /> },
           { id: "lifecycle", label: "Lifecycle policy", content: <Lifecycle name={name} /> },
-          { id: "perm", label: "Permissions", content: <PolicyEditor title="Repository policy" description="Resource policy controlling who can pull and push."
-            load={() => api.getRepoPolicy(name)} save={(t) => api.setRepoPolicy(name, t)} remove={() => api.deleteRepoPolicy(name)}
-            example={{ Version: "2012-10-17", Statement: [{ Sid: "AllowPull", Effect: "Allow", Principal: { AWS: "arn:aws:iam::123456789012:root" }, Action: ["ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"] }] }} /> },
+          { id: "perm", label: "Permissions", content: <ResourcePolicyTab kind="ecr-repository" args={{ name }} /> },
           { id: "settings", label: "Settings", content: <RepoSettings repo={repo} reload={r.reload} /> },
         ]} />
       </SpaceBetween>}

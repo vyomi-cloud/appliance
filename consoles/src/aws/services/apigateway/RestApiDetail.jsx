@@ -23,6 +23,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 function Tree({ nodes, byParent, selected, onSelect, depth = 0 }) {
   return (
@@ -150,6 +151,7 @@ export default function RestApiDetail({ params }) {
             {current && <MethodsSection apiId={apiId} resource={current} reload={d.reload} />}
           </SpaceBetween>
         </Grid>
+        <ResourcePolicyTab kind="apigw-rest" args={{ id: apiId, arn: `arn:aws:execute-api:*:*:${apiId}/*` }} />
       </SpaceBetween>
       <DeployModal apiId={apiId} visible={deployOpen} onDismiss={() => setDeployOpen(false)} onDone={d.reload} stages={stages} />
     </ContentLayout>

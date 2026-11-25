@@ -37,6 +37,7 @@ import { ResourceRecommendations } from "../defender/Pages.jsx";
 import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 const ROLE_ASSIGNMENTS = armType("Microsoft.Authorization", "roleAssignments", "2022-04-01");
 const ROLE_DEFINITIONS = armType("Microsoft.Authorization", "roleDefinitions", "2022-04-01");
@@ -102,7 +103,7 @@ export default function FunctionAppBlade({ params }) {
       "environment-variables": () => <EnvironmentVariables a={a} />,
       "scale-and-concurrency": () => <ScaleAndConcurrency a={a} reload={reload} />,
       "locks": () => <Locks a={a} />,
-      "access-control-iam": () => <AccessControl a={a} />,
+      "access-control-iam": () => <ResourceIam a={a} capId="azure.functionapp.iam" />,
       "export-template": () => <SharedExportTemplate id={a.id} name={a.name} resourceGroup={a.resourceGroup} />,
       "activity-log": () => <SharedActivityLog scope={a.id} name={a.name} />,
       "service-connector": () => <ops.ServiceConnector a={a} rg={rg} name={name} cap="azure.functionapp.serviceconnector" />,

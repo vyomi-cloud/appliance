@@ -135,7 +135,7 @@ function Allow({ openGrant }) {
   );
 }
 
-function GrantAccessPanel({ onClose, onSave, usedRoles }) {
+export function GrantAccessPanel({ onClose, onSave, usedRoles, resourceLabel }) {
   const data = usePickerData({ withPrincipals: true });
   const [principals, setPrincipals] = useState([]);
   const [rows, setRows] = useState([{ role: "", condition: null }]);
@@ -151,7 +151,7 @@ function GrantAccessPanel({ onClose, onSave, usedRoles }) {
   return (
     <>
       <Box sx={{ position: "fixed", top: 0, right: 0, bottom: 0, width: { xs: "100%", sm: 620 }, bgcolor: "background.paper", boxShadow: 6, zIndex: 1300, p: 3, overflowY: "auto" }} role="dialog" aria-label="Grant access">
-        <Typography variant="h2" component="h2" sx={{ mb: 2 }}>Grant access to "{getProject()}"</Typography>
+        <Typography variant="h2" component="h2" sx={{ mb: 2 }}>Grant access to "{resourceLabel || getProject()}"</Typography>
         <Typography variant="body2" sx={{ mb: 2 }}>Grant principals access to this resource and add roles to specify what actions the principals can take. Optionally, add conditions to grant access to principals only when a specific criteria is met.</Typography>
         <ErrorAlert error={error} />
         <Section title="Add principals">

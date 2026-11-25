@@ -41,6 +41,7 @@ import { ResourceRecommendations } from "../defender/Pages.jsx";
 import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
 import ResourceCost from "../../kit/ResourceCost.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -129,7 +130,7 @@ export default function CosmosAccountBlade({ params }) {
       diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
-      iam: () => <Iam a={a} />,
+      iam: () => <ResourceIam a={a} capId="azure.cosmos.iam" />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       tags: () => <Tags a={a} reload={reload} />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="cosmos" />,
@@ -277,71 +278,6 @@ const TIMESPANS = { "1h": 1, "6h": 6, "24h": 24, "7d": 24 * 7, "30d": 24 * 30 };
 
 
 // ── Access control (IAM) ─────────────────────────────────────────────────────────────────
-function Iam({ a }) {
-  const sub = useSubscription();
-  const [tab, setTab] = useState("checkaccess");
-  const [gap, setGap] = useState(null);
-  const resPath = api.resourcePath(a.resourceGroup, a.name);
-  const roleAssignments = useAsync(() => api.listRoleAssignments(resPath), [resPath]);
-  const roleDefinitions = useAsync(() => api.listRoleDefinitions(sub.id), [sub.id]);
-  return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control tabs">
-        <Tab value="checkaccess">Check access</Tab>
-        <Tab value="roleassignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="denyassignments">Deny assignments</Tab>
-        <Tab value="classicadmins">Classic administrators</Tab>
-      </TabList>
-      {tab === "checkaccess" && (
-        <div style={{ display: "flex", gap: 24, marginTop: 12 }}>
-          <MyAccess a={a} />
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setGap("Check access")}>Check access</Button></section>
-        </div>
-      )}
-      {tab === "roleassignments" && (
-        <section className="vy-section" style={{ marginTop: 12 }}><h3>Role assignments</h3>
-          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
-            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
-              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
-              { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() },
-              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
-              { key: "condition", label: "Condition", value: () => "None" },
-            ]}
-          />
-        </section>
-      )}
-      {tab === "roles" && (
-        <section className="vy-section" style={{ marginTop: 12 }}><h3>Roles</h3>
-          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
-            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
-              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
-              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
-              { key: "category", label: "Category", value: () => "General" },
-              { key: "details", label: "Details", value: () => "View" },
-            ]}
-          />
-        </section>
-      )}
-      {tab === "denyassignments" && <DenyAssignmentsPanel a={a} />}
-      {tab === "classicadmins" && <ClassicAdminsPanel />}
-      <Dialog open={!!gap} onOpenChange={(_, d) => !d.open && setGap(null)}>
-        <DialogSurface aria-label={gap || "Coming soon"}>
-          <DialogBody>
-            <DialogTitle>{gap}</DialogTitle>
-            <DialogContent><NotSimulated feature={`${gap} evaluation`} /></DialogContent>
-            <DialogActions><Button onClick={() => setGap(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────
 function TagRows({ tags, onChange }) {

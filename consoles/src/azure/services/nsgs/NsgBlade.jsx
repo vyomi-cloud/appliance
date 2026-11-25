@@ -31,6 +31,7 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -67,7 +68,7 @@ export default function NsgBlade({ params }) {
     const a = nsg.data, reload = nsg.reload;
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      iam: () => <AccessControlIam a={a} />,
+      iam: () => <ResourceIam a={a} capId="azure.nsgs.iam" />,
       support: () => <SharedSupportPanel resourceId={a.id} name={a.name} service="nsgs" />,
       tags: () => <Tags a={a} reload={reload} />,
       inbound: () => <RuleList key="inbound" rg={rg} name={name} direction="Inbound" />,
@@ -242,92 +243,6 @@ function TaskDialog({ open, task, onClose, onSave }) {
 // real decision call scoped to this NSG (plus its subscription/resource-group ancestors);
 // Deny assignments and Classic administrators stay honest — core/capabilities/azure/nsgs.json
 // azure.nsgs.iam. ────────────────────────────────────────────────────────────────────────
-function AccessControlIam({ a }) {
-  const [tab, setTab] = useState("check");
-  const [dlg, setDlg] = useState(null);
-  const [principal, setPrincipal] = useState("");
-  const [action, setAction] = useState("Microsoft.Network/networkSecurityGroups/write");
-  const [decision, setDecision] = useState(null);
-  const roleAssignments = useAsync(() => api.listRoleAssignments(a.id), [a.id]);
-  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
-  return (
-    <CapabilityContainer id="azure.nsgs.iam" title="Access control (IAM)">
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
-        <Tab value="check">Check access</Tab>
-        <Tab value="assignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="deny">Deny assignments</Tab>
-        <Tab value="classic">Classic administrators</Tab>
-      </TabList>
-      {tab === "check" && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <MyAccess a={a} />
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button></section>
-        </div>
-      )}
-      <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
-        <DialogSurface aria-label="Access check">
-          <DialogBody>
-            <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent>
-              {dlg === "mine" ? (
-                <NotSimulated feature="Per-identity 'my access' resolution" note="Vyomi has no signed-in identity to resolve — use Check access with a principal id instead." />
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
-                  <Field label="Find">
-                    <Input value={principal} onChange={(_, d) => setPrincipal(d.value)} placeholder="Principal (object) id" aria-label="Principal ID" />
-                  </Field>
-                  <Field label="Action"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
-                  <Button appearance="primary" disabled={!principal} onClick={async () => {
-                    const [r] = await api.checkAccess(a.id, principal, action);
-                    setDecision(r);
-                  }}>Check access</Button>
-                  {decision && (
-                    <section className="vy-section">
-                      <b>{decision.accessDecision}</b>
-                      {decision.roles?.length > 0 && <div>Granted by: {decision.roles.join(", ")}</div>}
-                    </section>
-                  )}
-                </div>
-              )}
-            </DialogContent>
-            <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-      {tab === "assignments" && (
-        <section className="vy-section" style={{ marginTop: 12 }}>
-          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
-            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
-              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
-              { key: "role", label: "Role", value: (r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop() },
-              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
-              { key: "condition", label: "Condition", value: () => "None" },
-            ]}
-          />
-        </section>
-      )}
-      {tab === "roles" && (
-        <section className="vy-section" style={{ marginTop: 12 }}>
-          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
-            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
-              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
-              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
-              { key: "category", label: "Category", value: () => "General" },
-              { key: "details", label: "Details", value: () => "View" },
-            ]}
-          />
-        </section>
-      )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
-    </CapabilityContainer>
-  );
-}
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────
 export function TagRows({ tags, onChange, resource }) {

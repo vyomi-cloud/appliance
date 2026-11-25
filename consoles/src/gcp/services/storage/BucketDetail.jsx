@@ -23,6 +23,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, fmtDuration, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../kit/Capability.jsx";
 import { Link, hashHref } from "../../link.jsx";
+import ResourcePermissionsPanel from "../../kit/ResourcePermissionsPanel.jsx";
 import * as api from "./api.js";
 import InventoryReports from "./InventoryReports.jsx";
 import { EnforcementPanel } from "../iam-admin/Enforcement.jsx";
@@ -500,34 +501,9 @@ function Permissions({ bucket, policy, reload }) {
         <Typography variant="body2"><b>{uniform ? "Uniform" : "Fine-grained"}</b> — {uniform ? "Access is granted only through bucket-level permissions (IAM)." : "Object-level permissions (ACLs) apply in addition to bucket-level permissions (IAM)."}</Typography>
       </Section>
       <Box>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-          <Typography variant="h3" component="h2">Permissions — View by principals</Typography>
-          <CapabilityBadge id="gcp.storage.permissions" />
-          <Box sx={{ flex: 1 }} />
-          <Button startIcon={<AddIcon />} onClick={() => setGrant(true)}>Grant access</Button>
-          <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
-            try {
-              const drop = new Set(sel);
-              const next = (policy.data?.bindings || []).map((b) => ({ ...b, members: b.members.filter((m) => !drop.has(`${m}|${b.role}`)) })).filter((b) => b.members.length);
-              await writePolicy(next); notify.success(`Removed ${sel.length} role binding${sel.length === 1 ? "" : "s"}`); setSel([]);
-            } catch (e) { notify.error(e); }
-          }}>Remove access</Button>
-        </Stack>
-        {policy.error && <ErrorAlert error={policy.error} />}
-        <ResourceTable resourceName="principals" items={rows} rowKey={(r) => r.key} loading={policy.loading} selectable selected={sel} onSelectedChange={setSel} dense
-          filterPlaceholder="Filter principals"
-          columns={[
-            { id: "member", header: "Principal", sortField: "member", cell: (r) => r.member },
-            { id: "role", header: "Role", sortValue: (r) => roleName(r.role), cell: (r) => roleName(r.role) },
-            { id: "roleId", header: "Role ID", cell: (r) => r.role, hidden: true },
-          ]} />
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}><CapabilityBadge id="gcp.storage.permissions" /></Stack>
+        <ResourcePermissionsPanel kind="bucket" args={{ name: bucket.name }} onChanged={reload} />
       </Box>
-      {grant && <GrantDialog onClose={() => setGrant(false)} onSave={async (member, role) => {
-        const bs = (policy.data?.bindings || []).map((b) => ({ ...b, members: [...b.members] }));
-        const hit = bs.find((b) => b.role === role);
-        if (hit) { if (!hit.members.includes(member)) hit.members.push(member); } else bs.push({ role, members: [member] });
-        await writePolicy(bs); notify.success(`Granted ${roleName(role)} to ${member}`);
-      }} />}
     </Stack>
   );
 }

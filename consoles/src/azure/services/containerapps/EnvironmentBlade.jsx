@@ -17,9 +17,10 @@ import Diagnose from "../../kit/Diagnose.jsx";
 import { Essentials, ErrorBar, Glyph, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import { useSubscription } from "../../kit/subscription.js";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 import * as api from "./api.js";
 import * as Tools from "./Tools.jsx";
-import { AccessControlIam, ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
+import { ActivityLog, DiagnosticSettings, ExportTemplate, Locks, MiniTable, Tags } from "./Shared.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -59,7 +60,7 @@ export default function EnvironmentBlade({ params }) {
       logs: () => <Tools.EnvLogs path={resPath} cap="azure.containerapps.environment.tools" />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
       activitylog: () => <ActivityLog resPath={resPath} name={a.name} />,
-      iam: () => <AccessControlIam resPath={resPath} name={a.name} capId="azure.containerapps.iam" />,
+      iam: () => <ResourceIam a={{ id: resPath, name: a.name }} capId="azure.containerapps.iam" />,
       tags: () => <Tags a={a} name={a.name} reload={reload} save={(tags) => api.updateEnvironmentTags(rg, a.name, tags, a)} />,
       daprcomponents: () => <DaprComponents rg={rg} name={a.name} />,
       certificates: () => <Certificates rg={rg} name={a.name} />,
