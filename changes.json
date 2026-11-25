@@ -1,6 +1,17 @@
 {
- "at": "2026-11-25T15:19:17+00:00",
+ "at": "2026-11-25T17:33:35+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "AWS IAM, Identity and Access Management",
+   "kind": "announcement",
+   "key": "feed:aws:97cc2dc60a1f",
+   "title": "AWS IAM extends trusted identity propagation to IAM federation and IAM Roles Anywhere, and simplifies it in IAM Identity Center",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-iam/",
+   "detail": "Trusted identity propagation (TIP) carries the identity of a human user or workload with requests to supported AWS Services. Customers can use that identity in IAM policy conditions for access control and to identify the originating human user or workload in AWS CloudTrail. AWS is expanding TIP to AWS Identity and Access Management (IAM) federation and IAM Roles Anywhere , while simplifying the existing TIP experience in AWS IAM Identity Center. In addition, IAM outbound identity federation now enables customers to request an AWS-signed JSON Web Token (JWT) that includes identity information f",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
