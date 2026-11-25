@@ -5,7 +5,7 @@ Mapped % = share of the catalog slice the request->permission map reproduces (de
 Enforceable = catalog slice exists AND mapped >= 90%. Floor = recorded minimum mapped % (only goes up).
 GCP (see the script header): Mapped % is measured over the service's request surface (methods of its APIs; a method counts when a synthesized request round-trips to its permission). `Catalog reach %` is the strict measure (share of the slice's permissions emitted by some REST method; low because many catalog permissions are console/gcloud/internal-only) and has its own floor. The enforceable bar stays 90%; what changed is what is measured, not the bar.
 
-## AWS: 26/26 services enforceable, 0 without a catalog slice, 4607 catalog permissions
+## AWS: 26/27 services enforceable, 1 without a catalog slice, 4607 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Enforceable |
 |---|---|---:|---:|---:|---|
@@ -32,11 +32,12 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Kinesis (`kinesis`) | kinesis | 60 | 100.0 | 100 | yes |
 | Step Functions (`states`) | states | 39 | 100.0 | 100 | yes |
 | Cost Explorer (`cost-explorer`) | ce | 59 | 100.0 | 100 | yes |
+| Infrastructure Studio (`tfstudio`) | none: Infrastructure Studio is a Vyomi-side authoring tool that issues ordinary AWS API calls (CloudFormation/Terraform-style); it has no IAM permission namespace of its own | 0 | - | 0 | no |
 | Systems Manager (`ssm`) | ssm | 166 | 100.0 | 100 | yes |
 | Security Hub & GuardDuty (`securityhub`) | securityhub | 141 | 100.0 | 100 | yes |
 | AWS Backup (`backup`) | backup | 122 | 100.0 | 100 | yes |
 
-## GCP: 21/29 services enforceable, 0 without a catalog slice, 13815 catalog permissions
+## GCP: 22/30 services enforceable, 0 without a catalog slice, 13893 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Methods mapped | Catalog reach % | Reach floor | Enforceable |
 |---|---|---:|---:|---:|---:|---:|---:|---|
@@ -58,8 +59,9 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | API Gateway (`apigateway`) | apigateway | 64 | 100.0 | 100 | 30/30 | 57.8 | 57 | yes |
 | Secret Manager (`security/secret-manager`) | secretmanager | 40 | 100.0 | 100 | 36/36 | 60.0 | 60 | yes |
 | Cloud KMS (`security/kms`) | cloudkms | 92 | 97.7 | 97 | 85/87 | 70.7 | 70 | yes |
-| IAM & Admin (`iam-admin`) | iam | 3053 | 88.2 | 88 | 127/144 | 19.9 | 19 | no |
+| IAM & Admin (`iam-admin`) | iam | 3053 | 88.2 | 88 | 127/144 | 20.3 | 20 | no |
 | Manage resources (`resource-manager`) | resourcemanager, orgpolicy | 884 | 92.8 | 92 | 128/138 | 7.2 | 7 | yes |
+| Infrastructure Manager (`infra-manager`) | config | 78 | 95.7 | 95 | 45/47 | 66.7 | 66 | yes |
 | Artifact Registry (`artifacts`) | artifactregistry | 78 | 94.2 | 94 | 65/69 | 80.8 | 80 | yes |
 | Cloud Deploy (`clouddeploy`) | clouddeploy | 87 | 100.0 | 100 | 61/61 | 83.9 | 83 | yes |
 | Backup and DR (`backupdr`) | backupdr | 310 | 70.3 | 70 | 64/91 | 36.5 | 36 | no |
@@ -70,7 +72,7 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Monitoring (`monitoring`) | monitoring | 94 | 100.0 | 100 | 56/56 | 59.6 | 59 | yes |
 | Logging (`logs`) | logging | 84 | 96.9 | 96 | 246/254 | 70.2 | 70 | yes |
 
-## AZURE: 26/31 services enforceable, 1 without a catalog slice, 11550 catalog permissions
+## AZURE: 27/32 services enforceable, 1 without a catalog slice, 11575 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Enforceable |
 |---|---|---:|---:|---:|---|
@@ -97,6 +99,7 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Log Analytics workspaces (`loganalytics`) | Microsoft.OperationalInsights | 1038 | 99.7 | 99 | yes |
 | Microsoft Defender for Cloud (`defender`) | Microsoft.Security | 192 | 100.0 | 100 | yes |
 | Microsoft Entra ID (`entra`) | none: Microsoft Entra ID (users, groups, apps) is authorised by Microsoft Graph app roles/Entra roles, not Azure RBAC resource-provider actions; no Azure RBAC permission page covers it | 0 | - | 0 | no |
+| Management groups (`managementgroups`) | Microsoft.Management | 25 | 96.0 | 96 | yes |
 | Subscriptions (`subscriptions`) | Microsoft.Resources, Microsoft.Management | 46 | 95.7 | 95 | yes |
 | Cost Management (`cost`) | Microsoft.CostManagement | 55 | 98.2 | 98 | yes |
 | Azure AI services (`cognitiveservices`) | Microsoft.CognitiveServices | 1697 | 97.1 | 97 | yes |

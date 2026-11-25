@@ -120,7 +120,7 @@ GCP_SUPPORT = "https://cloud.google.com/iam/docs/custom-roles-permissions-suppor
 # now crawls EVERY page of Google's published predefined-roles reference (index = GCP_BASE minus the slash); this list is the floor
 # that must stay a subset (tests assert it) so a registry service can never silently drop out.
 GCP_SLUGS = ["storage", "compute", "container", "cloudsql", "firestore", "redis", "run", "cloudfunctions", "pubsub",
-             "cloudscheduler", "eventarc", "apigateway", "iam", "resourcemanager", "artifactregistry", "clouddeploy", "backupdr",
+             "cloudscheduler", "eventarc", "apigateway", "iam", "resourcemanager", "artifactregistry", "clouddeploy", "config", "backupdr",
              "cloudbuild", "aiplatform", "monitoring", "logging", "cloudkms", "secretmanager", "firebaseauth", "dns", "serviceusage",
              "servicenetworking", "securitycenter", "orgpolicy", "iap", "vpcaccess", "cloudtasks", "bigquery", "workflows",
              # added by WP gcp-coverage: Binary Authorization, Marketplace (consumer procurement + offer catalog), Cloud Hub (Service Health + App Hub)

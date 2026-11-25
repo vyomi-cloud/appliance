@@ -3,22 +3,22 @@
  "enforce_pct": 90.0,
  "totals": {
   "aws": {
-   "services": 26,
+   "services": 27,
    "enforceable": 26,
-   "catalog_none": 0,
+   "catalog_none": 1,
    "permissions": 4607
   },
   "gcp": {
-   "services": 29,
-   "enforceable": 21,
+   "services": 30,
+   "enforceable": 22,
    "catalog_none": 0,
-   "permissions": 13815
+   "permissions": 13893
   },
   "azure": {
-   "services": 31,
-   "enforceable": 26,
+   "services": 32,
+   "enforceable": 27,
    "catalog_none": 1,
-   "permissions": 11550
+   "permissions": 11575
   }
  },
  "services": [
@@ -301,6 +301,17 @@
    "mapped_pct": 100.0,
    "floor": 100,
    "enforceable": true
+  },
+  {
+   "cloud": "aws",
+   "id": "tfstudio",
+   "title": "Infrastructure Studio",
+   "catalog": "none",
+   "reason": "Infrastructure Studio is a Vyomi-side authoring tool that issues ordinary AWS API calls (CloudFormation/Terraform-style); it has no IAM permission namespace of its own",
+   "permissions": 0,
+   "mapped_pct": null,
+   "floor": 0,
+   "enforceable": false
   },
   {
    "cloud": "aws",
@@ -642,8 +653,8 @@
    "mapped_pct": 88.2,
    "floor": 88,
    "enforceable": false,
-   "strict_pct": 19.9,
-   "strict_floor": 19,
+   "strict_pct": 20.3,
+   "strict_floor": 20,
    "surface_methods": 144,
    "surface_mapped": 127
   },
@@ -663,6 +674,22 @@
    "strict_floor": 7,
    "surface_methods": 138,
    "surface_mapped": 128
+  },
+  {
+   "cloud": "gcp",
+   "id": "infra-manager",
+   "title": "Infrastructure Manager",
+   "catalog": [
+    "config"
+   ],
+   "permissions": 78,
+   "mapped_pct": 95.7,
+   "floor": 95,
+   "enforceable": true,
+   "strict_pct": 66.7,
+   "strict_floor": 66,
+   "surface_methods": 47,
+   "surface_mapped": 45
   },
   {
    "cloud": "gcp",
@@ -1107,6 +1134,18 @@
    "mapped_pct": null,
    "floor": 0,
    "enforceable": false
+  },
+  {
+   "cloud": "azure",
+   "id": "managementgroups",
+   "title": "Management groups",
+   "catalog": [
+    "Microsoft.Management"
+   ],
+   "permissions": 25,
+   "mapped_pct": 96.0,
+   "floor": 96,
+   "enforceable": true
   },
   {
    "cloud": "azure",

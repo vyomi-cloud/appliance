@@ -161,6 +161,11 @@
      "backup"
     ],
     "floor": 100
+   },
+   "tfstudio": {
+    "catalog": "none",
+    "reason": "Infrastructure Studio is a Vyomi-side authoring tool that issues ordinary AWS API calls (CloudFormation/Terraform-style); it has no IAM permission namespace of its own",
+    "floor": 0
    }
   },
   "gcp": {
@@ -389,7 +394,7 @@
      "iamcredentials"
     ],
     "floor": 88,
-    "strict_floor": 19
+    "strict_floor": 20
    },
    "resource-manager": {
     "catalog": [
@@ -492,6 +497,16 @@
     ],
     "floor": 96,
     "strict_floor": 70
+   },
+   "infra-manager": {
+    "catalog": [
+     "config"
+    ],
+    "apis": [
+     "config"
+    ],
+    "floor": 95,
+    "strict_floor": 66
    }
   },
   "azure": {
@@ -710,6 +725,12 @@
      "Microsoft.App"
     ],
     "floor": 100
+   },
+   "managementgroups": {
+    "catalog": [
+     "Microsoft.Management"
+    ],
+    "floor": 96
    }
   }
  }
