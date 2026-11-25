@@ -105,15 +105,57 @@ class SdkClient:
         return call
 
 
+class _Creds:
+    """The fixed dummy credentials every Nano call carries (Vyomi does not verify SigV4); enough for SigV4Auth to sign with."""
+    access_key, secret_key, token, method = "test", "test", None, "static"
+
+    def get_frozen_credentials(self):
+        return self
+
+
 class _Session:
     def __init__(self, *a, region_name=None, **k):
         self.region_name = region_name or "us-east-1"
+
+    def get_credentials(self):
+        return _Creds()
 
     def client(self, service_name, region_name=None, **_ignored):
         return SdkClient(service_name, region_name or self.region_name)
 
     def resource(self, *a, **k):
         raise NotImplementedError("boto3.resource is not available here; use boto3.client(...)")
+
+
+def _urlopen(req, data=None, timeout=None, **kw):
+    """urllib.request.urlopen for hosted agents on Nano: ONLY the simulator's own data planes (gateway MCP, runtimes) reachable through the
+    in-process transport; any other URL is refused like a closed network."""
+    import re
+    import urllib.error
+    import urllib.request
+    url = req if isinstance(req, str) else req.full_url
+    d = data if data is not None else (None if isinstance(req, str) else req.data)
+    hdrs = {} if isinstance(req, str) else dict(req.header_items())
+    from urllib.parse import urlsplit
+    path = urlsplit(url).path
+    m = re.search(r"(/gateways/[^/?]+/mcp/?|/runtimes/[^?]+/invocations)$", path)
+    if _TRANSPORT is None or not m:
+        raise urllib.error.URLError("network access is not available in the Nano sandbox (only the simulator's own gateway and runtime endpoints)")
+    status, rh, body = _TRANSPORT((req.get_method() if not isinstance(req, str) else ("POST" if d else "GET")), m.group(1), {}, hdrs, d.encode() if isinstance(d, str) else (d or b""))
+    if status >= 400:
+        raise urllib.error.HTTPError(url, status, "HTTP %d" % status, rh, io.BytesIO(body))
+    r = _Body(body)
+    r.status = r.code = status
+    r.headers = rh
+    return r
+
+
+def install_urlopen() -> None:
+    import urllib.request
+    if getattr(urllib.request.urlopen, "_nano", False):
+        return
+    _urlopen._nano = True
+    urllib.request.urlopen = _urlopen
 
 
 def make_boto3(default_region: str = "us-east-1") -> types.ModuleType:
@@ -134,6 +176,7 @@ def install_boto3(default_region: str = "us-east-1") -> bool:
     if "boto3" in sys.modules or _TRANSPORT is None:
         return "boto3" in sys.modules
     sys.modules["boto3"] = make_boto3(default_region)
+    install_urlopen()
     return True
 
 

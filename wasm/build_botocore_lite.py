@@ -4,9 +4,50 @@
 import io, sys, zipfile
 from pathlib import Path
 
+# A small working AWSRequest: enough for botocore.auth.SigV4Auth to sign a request an agent then sends through the in-process router (no sockets).
+AWSREQUEST_HEAD = """class HeadersDict(dict):
+    def __init__(self, d=None):
+        super().__init__()
+        for k, v in dict(d or {}).items():
+            self[k] = v
+    def __setitem__(self, k, v):
+        super().__setitem__(str(k).lower(), (str(k), v))
+    def __getitem__(self, k):
+        return super().__getitem__(str(k).lower())[1]
+    def __contains__(self, k):
+        return super().__contains__(str(k).lower())
+    def __delitem__(self, k):
+        super().__delitem__(str(k).lower())
+    def get(self, k, d=None):
+        return self[k] if k in self else d
+    def items(self):
+        return [(k, v) for k, v in super().values()]
+    def keys(self):
+        return [k for k, v in super().values()]
+    def values(self):
+        return [v for k, v in super().values()]
+    def __iter__(self):
+        return iter(self.keys())
+    def __len__(self):
+        return super().__len__()
+    def copy(self):
+        return HeadersDict(dict(self.items()))
+
+class AWSRequest:
+    def __init__(self, method=None, url=None, headers=None, data=None, params=None, auth_path=None, stream_output=False):
+        self.method, self.url, self.data, self.params, self.auth_path = method, url, data, params or {}, auth_path
+        self.headers = HeadersDict(headers)
+        self.context = {}
+    @property
+    def body(self):
+        b = self.data
+        return b.encode("utf-8") if isinstance(b, str) else (b if b is not None else b"")
+    def prepare(self):
+        return self
+""".replace("\n", "\n")
 STUBS = {
     "botocore/httpsession.py": "class URLLib3Session:  # Nano: no sockets\n    pass\n\ndef get_cert_path(*a, **k):\n    return None\n\nclass ProxyConfiguration:\n    pass\n",
-    "botocore/awsrequest.py": "class AWSRequest:\n    pass\n\nclass AWSResponse:\n    pass\n\nclass AWSPreparedRequest:\n    pass\n\nclass HeadersDict(dict):\n    pass\n\nclass AWSRequestPreparer:\n    pass\n\ndef create_request_object(*a, **k):\n    raise NotImplementedError\n\ndef prepare_request_dict(*a, **k):\n    raise NotImplementedError\n\ndef _urljoin(a, b, *r):\n    return a.rstrip(\"/\") + \"/\" + str(b).lstrip(\"/\")\n\nclass AWSConnection:\n    pass\n\nclass AWSHTTPConnection:\n    pass\n\nclass AWSHTTPSConnection:\n    pass\n\nclass AWSHTTPConnectionPool:\n    pass\n\nclass AWSHTTPSConnectionPool:\n    pass\n",
+    "botocore/awsrequest.py": AWSREQUEST_HEAD + "\n\nclass AWSResponse:\n    pass\n\nclass AWSPreparedRequest:\n    pass\n\nclass AWSRequestPreparer:\n    pass\n\ndef create_request_object(*a, **k):\n    raise NotImplementedError\n\ndef prepare_request_dict(*a, **k):\n    raise NotImplementedError\n\ndef _urljoin(a, b, *r):\n    return a.rstrip(\"/\") + \"/\" + str(b).lstrip(\"/\")\n\nclass AWSConnection:\n    pass\n\nclass AWSHTTPConnection:\n    pass\n\nclass AWSHTTPSConnection:\n    pass\n\nclass AWSHTTPConnectionPool:\n    pass\n\nclass AWSHTTPSConnectionPool:\n    pass\n",
 }
 KEEP = ("ec2", "s3", "logs", "iam", "lambda", "apigateway", "rds", "secretsmanager", "dynamodb", "sqs", "sns", "events", "kms", "stepfunctions", "ecr", "cloudwatch", "backup")
 # Service models for the Bedrock / AgentCore family come from a NEWER botocore wheel (the 1.35 code wheel predates AgentCore); models are plain JSON,
