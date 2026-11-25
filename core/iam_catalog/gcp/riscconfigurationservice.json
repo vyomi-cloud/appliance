@@ -1,0 +1,16 @@
+{
+"cloud":"gcp",
+"service":"riscconfigurationservice",
+"permissions":{
+"riscconfigurationservice.riscconfigs.createOrUpdate":{
+"stage":"SUPPORTED"
+},
+"riscconfigurationservice.riscconfigs.delete":{
+"stage":"SUPPORTED"
+},
+"riscconfigurationservice.riscconfigs.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

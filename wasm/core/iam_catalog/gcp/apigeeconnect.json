@@ -1,0 +1,44 @@
+{
+"cloud":"gcp",
+"service":"apigeeconnect",
+"permissions":{
+"apigeeconnect.connections.list":{
+"stage":"SUPPORTED"
+},
+"apigeeconnect.endpoints.connect":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/apigeeconnect.Admin":{
+"title":"Apigee Connect Admin",
+"desc":"Admin of Apigee Connect",
+"permissions":[
+"apigeeconnect.connections.list",
+"apigeeconnect.endpoints.connect"
+]
+},
+"roles/apigeeconnect.Agent":{
+"title":"Apigee Connect Agent",
+"desc":"Ability to set up Apigee Connect agent between external clusters and Google.",
+"permissions":[
+"apigeeconnect.endpoints.connect"
+]
+},
+"roles/apigeeconnect.viewer":{
+"title":"Apigeeconnect Viewer",
+"desc":"Viewer role for apigeeconnect",
+"permissions":[
+"apigeeconnect.connections.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

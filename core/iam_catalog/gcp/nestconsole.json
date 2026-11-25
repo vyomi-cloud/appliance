@@ -1,0 +1,118 @@
+{
+"cloud":"gcp",
+"service":"nestconsole",
+"permissions":{
+"nestconsole.smarthomePreviews.update":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeProjects.create":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeProjects.delete":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeProjects.get":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeProjects.update":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeVersions.create":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeVersions.get":{
+"stage":"SUPPORTED"
+},
+"nestconsole.smarthomeVersions.submit":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/nestconsole.admin":{
+"title":"Nestconsole Admin",
+"desc":"Admin role for nestconsole",
+"permissions":[
+"nestconsole.smarthomePreviews.update",
+"nestconsole.smarthomeProjects.create",
+"nestconsole.smarthomeProjects.delete",
+"nestconsole.smarthomeProjects.get",
+"nestconsole.smarthomeProjects.update",
+"nestconsole.smarthomeVersions.create",
+"nestconsole.smarthomeVersions.get",
+"nestconsole.smarthomeVersions.submit",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/nestconsole.editor":{
+"title":"Nestconsole Editor",
+"desc":"Editor role for nestconsole",
+"permissions":[
+"nestconsole.smarthomePreviews.update",
+"nestconsole.smarthomeProjects.get",
+"nestconsole.smarthomeProjects.update",
+"nestconsole.smarthomeVersions.create",
+"nestconsole.smarthomeVersions.get",
+"nestconsole.smarthomeVersions.submit",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/nestconsole.homeDeveloperAdmin":{
+"title":"Google Home Developer Console Admin",
+"desc":"Admin access to Google Home Developer Console resources",
+"permissions":[
+"nestconsole.smarthomePreviews.update",
+"nestconsole.smarthomeProjects.create",
+"nestconsole.smarthomeProjects.delete",
+"nestconsole.smarthomeProjects.get",
+"nestconsole.smarthomeProjects.update",
+"nestconsole.smarthomeVersions.create",
+"nestconsole.smarthomeVersions.get",
+"nestconsole.smarthomeVersions.submit",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/nestconsole.homeDeveloperEditor":{
+"title":"Google Home Developer Console Editor",
+"desc":"Read-Write access to Google Home Developer Console resources",
+"permissions":[
+"nestconsole.smarthomePreviews.update",
+"nestconsole.smarthomeProjects.get",
+"nestconsole.smarthomeProjects.update",
+"nestconsole.smarthomeVersions.create",
+"nestconsole.smarthomeVersions.get",
+"nestconsole.smarthomeVersions.submit",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/nestconsole.homeDeveloperViewer":{
+"title":"Google Home Developer Console Reader",
+"desc":"Read-only access to Google Home Developer Console resources",
+"permissions":[
+"nestconsole.smarthomeProjects.get",
+"nestconsole.smarthomeVersions.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/nestconsole.viewer":{
+"title":"Nestconsole Viewer",
+"desc":"Viewer role for nestconsole",
+"permissions":[
+"nestconsole.smarthomeProjects.get",
+"nestconsole.smarthomeVersions.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

@@ -1,0 +1,18 @@
+{
+"cloud":"gcp",
+"service":"progressiverollout",
+"permissions":{
+"cloudasset.assets.searchAllResources":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/progressiverollout.serviceAgent":{
+"title":"Progressive Rollout Service Agent",
+"desc":"Gives Progressive Rollout the ability to roll out a customer change.",
+"permissions":[
+"cloudasset.assets.searchAllResources"
+]
+}
+}
+}

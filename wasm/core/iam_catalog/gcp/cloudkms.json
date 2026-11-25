@@ -2,98 +2,282 @@
 "cloud":"gcp",
 "service":"cloudkms",
 "permissions":{
-"cloudasset.assets.listCloudkmsCryptoKeys":{},
-"cloudasset.assets.listResource":{},
-"cloudasset.assets.searchAllIamPolicies":{},
-"cloudasset.assets.searchAllResources":{},
-"cloudkms.autokeyConfigs.get":{},
-"cloudkms.autokeyConfigs.update":{},
-"cloudkms.cryptoKeyVersions.create":{},
-"cloudkms.cryptoKeyVersions.delete":{},
-"cloudkms.cryptoKeyVersions.destroy":{},
-"cloudkms.cryptoKeyVersions.get":{},
-"cloudkms.cryptoKeyVersions.list":{},
-"cloudkms.cryptoKeyVersions.managePqcSign":{},
-"cloudkms.cryptoKeyVersions.manageRawAesCbcKeys":{},
-"cloudkms.cryptoKeyVersions.manageRawAesCtrKeys":{},
-"cloudkms.cryptoKeyVersions.manageRawPKCS1Keys":{},
-"cloudkms.cryptoKeyVersions.restore":{},
-"cloudkms.cryptoKeyVersions.trustedImportExport":{},
-"cloudkms.cryptoKeyVersions.update":{},
-"cloudkms.cryptoKeyVersions.useToDecapsulate":{},
-"cloudkms.cryptoKeyVersions.useToDecrypt":{},
-"cloudkms.cryptoKeyVersions.useToDecryptViaDelegation":{},
-"cloudkms.cryptoKeyVersions.useToEncrypt":{},
-"cloudkms.cryptoKeyVersions.useToEncryptViaDelegation":{},
-"cloudkms.cryptoKeyVersions.useToSign":{},
-"cloudkms.cryptoKeyVersions.useToVerify":{},
-"cloudkms.cryptoKeyVersions.viewPublicKey":{},
-"cloudkms.cryptoKeys.create":{},
-"cloudkms.cryptoKeys.delete":{},
-"cloudkms.cryptoKeys.get":{},
-"cloudkms.cryptoKeys.getIamPolicy":{},
-"cloudkms.cryptoKeys.list":{},
-"cloudkms.cryptoKeys.setIamPolicy":{},
-"cloudkms.cryptoKeys.update":{},
-"cloudkms.ekmConfigs.get":{},
-"cloudkms.ekmConfigs.getIamPolicy":{},
-"cloudkms.ekmConfigs.setIamPolicy":{},
-"cloudkms.ekmConfigs.update":{},
-"cloudkms.ekmConnections.create":{},
-"cloudkms.ekmConnections.get":{},
-"cloudkms.ekmConnections.getIamPolicy":{},
-"cloudkms.ekmConnections.list":{},
-"cloudkms.ekmConnections.setIamPolicy":{},
-"cloudkms.ekmConnections.update":{},
-"cloudkms.ekmConnections.use":{},
-"cloudkms.ekmConnections.verifyConnectivity":{},
-"cloudkms.folders.showEffectiveAutokeyConfig":{},
-"cloudkms.importJobs.create":{},
-"cloudkms.importJobs.delete":{},
-"cloudkms.importJobs.get":{},
-"cloudkms.importJobs.getIamPolicy":{},
-"cloudkms.importJobs.list":{},
-"cloudkms.importJobs.setIamPolicy":{},
-"cloudkms.importJobs.useToImport":{},
-"cloudkms.kajPolicyConfigs.get":{},
-"cloudkms.kajPolicyConfigs.update":{},
-"cloudkms.keyHandles.create":{},
-"cloudkms.keyHandles.get":{},
-"cloudkms.keyHandles.list":{},
-"cloudkms.keyRings.create":{},
-"cloudkms.keyRings.createTagBinding":{},
-"cloudkms.keyRings.delete":{},
-"cloudkms.keyRings.deleteTagBinding":{},
-"cloudkms.keyRings.get":{},
-"cloudkms.keyRings.getIamPolicy":{},
-"cloudkms.keyRings.list":{},
-"cloudkms.keyRings.listEffectiveTags":{},
-"cloudkms.keyRings.listTagBindings":{},
-"cloudkms.keyRings.setIamPolicy":{},
-"cloudkms.locations.generateRandomBytes":{},
-"cloudkms.locations.get":{},
-"cloudkms.locations.list":{},
-"cloudkms.locations.optOutKeyDeletionMsa":{},
-"cloudkms.operations.get":{},
-"cloudkms.projects.showEffectiveAutokeyConfig":{},
-"cloudkms.projects.showEffectiveKajEnrollmentConfig":{},
-"cloudkms.projects.showEffectiveKajPolicyConfig":{},
-"cloudkms.protectableResources.list":{},
-"cloudkms.protectedResources.search":{},
-"cloudkms.retiredResources.get":{},
-"cloudkms.retiredResources.list":{},
-"cloudkms.singleTenantHsmInstanceProposals.approve":{},
-"cloudkms.singleTenantHsmInstanceProposals.create":{},
-"cloudkms.singleTenantHsmInstanceProposals.delete":{},
-"cloudkms.singleTenantHsmInstanceProposals.execute":{},
-"cloudkms.singleTenantHsmInstanceProposals.get":{},
-"cloudkms.singleTenantHsmInstanceProposals.list":{},
-"cloudkms.singleTenantHsmInstances.create":{},
-"cloudkms.singleTenantHsmInstances.get":{},
-"cloudkms.singleTenantHsmInstances.list":{},
-"cloudkms.singleTenantHsmInstances.use":{},
-"resourcemanager.projects.get":{},
-"resourcemanager.projects.list":{}
+"cloudasset.assets.listCloudkmsCryptoKeys":{
+"stage":"SUPPORTED"
+},
+"cloudasset.assets.listResource":{
+"stage":"SUPPORTED"
+},
+"cloudasset.assets.searchAllIamPolicies":{
+"stage":"SUPPORTED"
+},
+"cloudasset.assets.searchAllResources":{
+"stage":"SUPPORTED"
+},
+"cloudkms.autokeyConfigs.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.autokeyConfigs.update":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.delete":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.destroy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.managePqcSign":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.manageRawAesCbcKeys":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.manageRawAesCtrKeys":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.manageRawPKCS1Keys":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.restore":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.trustedImportExport":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.update":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToDecapsulate":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToDecrypt":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToDecryptViaDelegation":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToEncrypt":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToEncryptViaDelegation":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToSign":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.useToVerify":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeyVersions.viewPublicKey":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.delete":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.cryptoKeys.update":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConfigs.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConfigs.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConfigs.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConfigs.update":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.update":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.use":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.verifyConnectivity":{
+"stage":"SUPPORTED"
+},
+"cloudkms.folders.showEffectiveAutokeyConfig":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.delete":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.importJobs.useToImport":{
+"stage":"SUPPORTED"
+},
+"cloudkms.kajPolicyConfigs.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.kajPolicyConfigs.update":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyHandles.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyHandles.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyHandles.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.createTagBinding":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.delete":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.deleteTagBinding":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.listEffectiveTags":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.listTagBindings":{
+"stage":"SUPPORTED"
+},
+"cloudkms.keyRings.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.locations.generateRandomBytes":{
+"stage":"SUPPORTED"
+},
+"cloudkms.locations.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.locations.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.locations.optOutKeyDeletionMsa":{
+"stage":"SUPPORTED"
+},
+"cloudkms.operations.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.projects.showEffectiveAutokeyConfig":{
+"stage":"SUPPORTED"
+},
+"cloudkms.projects.showEffectiveKajEnrollmentConfig":{
+"stage":"SUPPORTED"
+},
+"cloudkms.projects.showEffectiveKajPolicyConfig":{
+"stage":"SUPPORTED"
+},
+"cloudkms.protectableResources.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.protectedResources.search":{
+"stage":"SUPPORTED"
+},
+"cloudkms.retiredResources.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.retiredResources.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstanceProposals.approve":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstanceProposals.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstanceProposals.delete":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstanceProposals.execute":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstanceProposals.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstanceProposals.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstances.create":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstances.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstances.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.singleTenantHsmInstances.use":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
 },
 "roles":{
 "roles/cloudkms.admin":{
@@ -177,7 +361,7 @@
 },
 "roles/cloudkms.autokeyAdmin":{
 "title":"Cloud KMS Autokey Admin",
-"desc":"",
+"desc":"Enables management of AutokeyConfig.",
 "permissions":[
 "cloudkms.autokeyConfigs.get",
 "cloudkms.autokeyConfigs.update",
@@ -187,7 +371,7 @@
 },
 "roles/cloudkms.autokeyUser":{
 "title":"Cloud KMS Autokey User",
-"desc":"",
+"desc":"Grants ability to use KeyHandle resources.",
 "permissions":[
 "cloudkms.keyHandles.create",
 "cloudkms.keyHandles.get",
@@ -263,7 +447,7 @@
 },
 "roles/cloudkms.cryptoOperator":{
 "title":"Cloud KMS Crypto Operator",
-"desc":"",
+"desc":"Enables all Crypto Operations.",
 "permissions":[
 "cloudkms.cryptoKeyVersions.useToDecapsulate",
 "cloudkms.cryptoKeyVersions.useToDecrypt",
@@ -279,7 +463,7 @@
 },
 "roles/cloudkms.ekmConnectionsAdmin":{
 "title":"Cloud KMS EkmConnections Admin",
-"desc":"",
+"desc":"Enables management of EkmConnections.",
 "permissions":[
 "cloudkms.ekmConfigs.get",
 "cloudkms.ekmConfigs.update",
@@ -294,7 +478,7 @@
 },
 "roles/cloudkms.encryptionDashboardViewer":{
 "title":"Cloud KMS Encryption Dashboard Viewer",
-"desc":"",
+"desc":"Enables viewing KMS encryption dashboard.",
 "permissions":[
 "cloudkms.cryptoKeys.list",
 "cloudkms.protectableResources.list"
@@ -302,7 +486,7 @@
 },
 "roles/cloudkms.expertPqcSigner":{
 "title":"Cloud KMS Expert PQ Asymmetric Signing Key Manager",
-"desc":"",
+"desc":"Enables PQ asymmetric signing key management.",
 "permissions":[
 "cloudkms.cryptoKeyVersions.managePqcSign",
 "cloudkms.locations.get",
@@ -313,7 +497,7 @@
 },
 "roles/cloudkms.expertRawAesCbc":{
 "title":"Cloud KMS Expert Raw AES-CBC Key Manager",
-"desc":"",
+"desc":"Enables raw AES-CBC keys management.",
 "permissions":[
 "cloudkms.cryptoKeyVersions.manageRawAesCbcKeys",
 "cloudkms.locations.get",
@@ -324,7 +508,7 @@
 },
 "roles/cloudkms.expertRawAesCtr":{
 "title":"Cloud KMS Expert Raw AES-CTR Key Manager",
-"desc":"",
+"desc":"Enables raw AES-CTR keys management.",
 "permissions":[
 "cloudkms.cryptoKeyVersions.manageRawAesCtrKeys",
 "cloudkms.locations.get",
@@ -335,7 +519,7 @@
 },
 "roles/cloudkms.expertRawPKCS1":{
 "title":"Cloud KMS Expert Raw PKCS#1 Key Manager",
-"desc":"",
+"desc":"Enables raw PKCS#1 keys management.",
 "permissions":[
 "cloudkms.cryptoKeyVersions.manageRawPKCS1Keys",
 "cloudkms.locations.get",
@@ -346,7 +530,7 @@
 },
 "roles/cloudkms.hsmSingleTenantExecutor":{
 "title":"Cloud KMS single-tenant HSM Executor",
-"desc":"",
+"desc":"Grants ability to execute SingleTenantHsmInstanceProposal resources.",
 "permissions":[
 "cloudkms.operations.get",
 "cloudkms.singleTenantHsmInstanceProposals.execute",
@@ -358,7 +542,7 @@
 },
 "roles/cloudkms.hsmSingleTenantKeyCreator":{
 "title":"Cloud KMS single-tenant HSM Key Creator",
-"desc":"",
+"desc":"Grants ability to use single-tenant HSM instances to create keys. This role must be combined with another role that grants the ability to create cryptoKeys.",
 "permissions":[
 "cloudkms.singleTenantHsmInstances.get",
 "cloudkms.singleTenantHsmInstances.list",
@@ -367,7 +551,7 @@
 },
 "roles/cloudkms.hsmSingleTenantProposer":{
 "title":"Cloud KMS single-tenant HSM Proposer",
-"desc":"",
+"desc":"Grants ability to create SingleTenantHsmInstances and SingleTenantHsmInstanceProposals.",
 "permissions":[
 "cloudkms.operations.get",
 "cloudkms.singleTenantHsmInstanceProposals.create",
@@ -381,7 +565,7 @@
 },
 "roles/cloudkms.hsmSingleTenantQuorumMember":{
 "title":"Cloud KMS single-tenant HSM Quorum Member",
-"desc":"",
+"desc":"Grants ability to approve SingleTenantHsmInstanceProposal resources.",
 "permissions":[
 "cloudkms.operations.get",
 "cloudkms.singleTenantHsmInstanceProposals.approve",
@@ -393,7 +577,7 @@
 },
 "roles/cloudkms.importer":{
 "title":"Cloud KMS Importer",
-"desc":"",
+"desc":"Enables ImportCryptoKeyVersion, CreateImportJob, ListImportJobs, and GetImportJob operations",
 "permissions":[
 "cloudkms.cryptoKeyVersions.trustedImportExport",
 "cloudkms.importJobs.create",
@@ -407,14 +591,14 @@
 },
 "roles/cloudkms.keyAccessJustificationsEnrollmentConfigViewer":{
 "title":"Key Access Justifications Enrollment Viewer",
-"desc":"",
+"desc":"Grant ability to view Key Access Justification enrollment configs of a project.",
 "permissions":[
 "cloudkms.projects.showEffectiveKajEnrollmentConfig"
 ]
 },
 "roles/cloudkms.keyAccessJustificationsPolicyConfigAdmin":{
 "title":"Key Access Justifications Policy Config Admin",
-"desc":"",
+"desc":"Grant ability to manage Key Access Justifications Policy at parent resource level.",
 "permissions":[
 "cloudkms.kajPolicyConfigs.get",
 "cloudkms.kajPolicyConfigs.update",
@@ -423,7 +607,7 @@
 },
 "roles/cloudkms.orgServiceAgent":{
 "title":"Cloud KMS Organization Service Agent",
-"desc":"",
+"desc":"Gives Cloud KMS organization-level service account access to managed resources.",
 "permissions":[
 "cloudasset.assets.listResource",
 "cloudasset.assets.searchAllIamPolicies",
@@ -432,14 +616,14 @@
 },
 "roles/cloudkms.protectedResourcesViewer":{
 "title":"Cloud KMS Protected Resources Viewer",
-"desc":"",
+"desc":"Enables viewing protected resources.",
 "permissions":[
 "cloudkms.protectedResources.search"
 ]
 },
 "roles/cloudkms.publicKeyViewer":{
 "title":"Cloud KMS CryptoKey Public Key Viewer",
-"desc":"",
+"desc":"Enables GetPublicKey operations",
 "permissions":[
 "cloudkms.cryptoKeyVersions.viewPublicKey",
 "cloudkms.locations.get",
@@ -449,7 +633,7 @@
 },
 "roles/cloudkms.serviceAgent":{
 "title":"Cloud KMS Service Agent",
-"desc":"",
+"desc":"Gives Cloud KMS service account access to managed resources.",
 "permissions":[
 "cloudasset.assets.listCloudkmsCryptoKeys",
 "cloudasset.assets.listResource",
@@ -464,7 +648,7 @@
 },
 "roles/cloudkms.signer":{
 "title":"Cloud KMS CryptoKey Signer",
-"desc":"",
+"desc":"Enables Sign operations",
 "permissions":[
 "cloudkms.cryptoKeyVersions.useToSign",
 "cloudkms.locations.get",
@@ -474,7 +658,7 @@
 },
 "roles/cloudkms.signerVerifier":{
 "title":"Cloud KMS CryptoKey Signer/Verifier",
-"desc":"",
+"desc":"Enables Sign, Verify, and GetPublicKey operations",
 "permissions":[
 "cloudkms.cryptoKeyVersions.useToSign",
 "cloudkms.cryptoKeyVersions.useToVerify",
@@ -486,7 +670,7 @@
 },
 "roles/cloudkms.verifier":{
 "title":"Cloud KMS CryptoKey Verifier",
-"desc":"",
+"desc":"Enables Verify and GetPublicKey operations",
 "permissions":[
 "cloudkms.cryptoKeyVersions.useToVerify",
 "cloudkms.cryptoKeyVersions.viewPublicKey",
@@ -497,7 +681,7 @@
 },
 "roles/cloudkms.viewer":{
 "title":"Cloud KMS Viewer",
-"desc":"",
+"desc":"Enables Get and List operations.",
 "permissions":[
 "cloudkms.autokeyConfigs.get",
 "cloudkms.cryptoKeyVersions.get",
@@ -543,7 +727,7 @@
 },
 "roles/cloudkmskacls.serviceAgent":{
 "title":"Cloud KMS KACLS Service Agent",
-"desc":"",
+"desc":"Grants Cloud KMS KACLS Service Agent access to KMS resource permissions to perform DEK encryption/decryption.",
 "permissions":[
 "cloudkms.cryptoKeyVersions.useToDecrypt",
 "cloudkms.cryptoKeyVersions.useToEncrypt",

@@ -2,79 +2,215 @@
 "cloud":"gcp",
 "service":"firestore",
 "permissions":{
-"appengine.applications.get":{},
-"databasesconsole.locations.get":{},
-"databasesconsole.locations.list":{},
-"databasesconsole.studioQueries.create":{},
-"databasesconsole.studioQueries.delete":{},
-"databasesconsole.studioQueries.get":{},
-"databasesconsole.studioQueries.list":{},
-"databasesconsole.studioQueries.search":{},
-"databasesconsole.studioQueries.update":{},
-"datastore.backupSchedules.create":{},
-"datastore.backupSchedules.delete":{},
-"datastore.backupSchedules.get":{},
-"datastore.backupSchedules.list":{},
-"datastore.backupSchedules.update":{},
-"datastore.backups.delete":{},
-"datastore.backups.get":{},
-"datastore.backups.list":{},
-"datastore.backups.restoreDatabase":{},
-"datastore.databases.bulkDelete":{},
-"datastore.databases.clone":{},
-"datastore.databases.create":{},
-"datastore.databases.createTagBinding":{},
-"datastore.databases.delete":{},
-"datastore.databases.deleteTagBinding":{},
-"datastore.databases.export":{},
-"datastore.databases.get":{},
-"datastore.databases.getMetadata":{},
-"datastore.databases.import":{},
-"datastore.databases.list":{},
-"datastore.databases.listEffectiveTags":{},
-"datastore.databases.listTagBindings":{},
-"datastore.databases.update":{},
-"datastore.entities.allocateIds":{},
-"datastore.entities.create":{},
-"datastore.entities.delete":{},
-"datastore.entities.get":{},
-"datastore.entities.list":{},
-"datastore.entities.update":{},
-"datastore.insights.get":{},
-"datastore.keyVisualizerScans.get":{},
-"datastore.keyVisualizerScans.list":{},
-"datastore.locations.get":{},
-"datastore.locations.list":{},
-"datastore.namespaces.get":{},
-"datastore.namespaces.list":{},
-"datastore.operations.cancel":{},
-"datastore.operations.delete":{},
-"datastore.operations.get":{},
-"datastore.operations.list":{},
-"datastore.schemas.create":{},
-"datastore.schemas.delete":{},
-"datastore.schemas.get":{},
-"datastore.schemas.list":{},
-"datastore.schemas.update":{},
-"datastore.statistics.get":{},
-"datastore.statistics.list":{},
-"datastore.userCreds.create":{},
-"datastore.userCreds.delete":{},
-"datastore.userCreds.get":{},
-"datastore.userCreds.list":{},
-"datastore.userCreds.update":{},
-"resourcemanager.projects.get":{},
-"resourcemanager.projects.list":{},
-"storage.buckets.get":{},
-"storage.objects.create":{},
-"storage.objects.delete":{},
-"storage.objects.get":{},
-"storage.objects.list":{}
+"appengine.applications.get":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.locations.get":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.locations.list":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.studioQueries.create":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.studioQueries.delete":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.studioQueries.get":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.studioQueries.list":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.studioQueries.search":{
+"stage":"SUPPORTED"
+},
+"databasesconsole.studioQueries.update":{
+"stage":"SUPPORTED"
+},
+"datastore.backupSchedules.create":{
+"stage":"SUPPORTED"
+},
+"datastore.backupSchedules.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.backupSchedules.get":{
+"stage":"SUPPORTED"
+},
+"datastore.backupSchedules.list":{
+"stage":"SUPPORTED"
+},
+"datastore.backupSchedules.update":{
+"stage":"SUPPORTED"
+},
+"datastore.backups.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.backups.get":{
+"stage":"SUPPORTED"
+},
+"datastore.backups.list":{
+"stage":"SUPPORTED"
+},
+"datastore.backups.restoreDatabase":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.bulkDelete":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.clone":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.create":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.createTagBinding":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.deleteTagBinding":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.export":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.get":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.getMetadata":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.import":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.list":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.listEffectiveTags":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.listTagBindings":{
+"stage":"SUPPORTED"
+},
+"datastore.databases.update":{
+"stage":"SUPPORTED"
+},
+"datastore.entities.allocateIds":{
+"stage":"SUPPORTED"
+},
+"datastore.entities.create":{
+"stage":"SUPPORTED"
+},
+"datastore.entities.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.entities.get":{
+"stage":"SUPPORTED"
+},
+"datastore.entities.list":{
+"stage":"SUPPORTED"
+},
+"datastore.entities.update":{
+"stage":"SUPPORTED"
+},
+"datastore.insights.get":{
+"stage":"SUPPORTED"
+},
+"datastore.keyVisualizerScans.get":{
+"stage":"SUPPORTED"
+},
+"datastore.keyVisualizerScans.list":{
+"stage":"SUPPORTED"
+},
+"datastore.locations.get":{
+"stage":"SUPPORTED"
+},
+"datastore.locations.list":{
+"stage":"SUPPORTED"
+},
+"datastore.namespaces.get":{
+"stage":"SUPPORTED"
+},
+"datastore.namespaces.list":{
+"stage":"SUPPORTED"
+},
+"datastore.operations.cancel":{
+"stage":"SUPPORTED"
+},
+"datastore.operations.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.operations.get":{
+"stage":"SUPPORTED"
+},
+"datastore.operations.list":{
+"stage":"SUPPORTED"
+},
+"datastore.schemas.create":{
+"stage":"SUPPORTED"
+},
+"datastore.schemas.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.schemas.get":{
+"stage":"SUPPORTED"
+},
+"datastore.schemas.list":{
+"stage":"SUPPORTED"
+},
+"datastore.schemas.update":{
+"stage":"SUPPORTED"
+},
+"datastore.statistics.get":{
+"stage":"SUPPORTED"
+},
+"datastore.statistics.list":{
+"stage":"SUPPORTED"
+},
+"datastore.userCreds.create":{
+"stage":"SUPPORTED"
+},
+"datastore.userCreds.delete":{
+"stage":"SUPPORTED"
+},
+"datastore.userCreds.get":{
+"stage":"SUPPORTED"
+},
+"datastore.userCreds.list":{
+"stage":"SUPPORTED"
+},
+"datastore.userCreds.update":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+},
+"storage.buckets.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.create":{
+"stage":"SUPPORTED"
+},
+"storage.objects.delete":{
+"stage":"SUPPORTED"
+},
+"storage.objects.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.list":{
+"stage":"SUPPORTED"
+}
 },
 "roles":{
 "roles/datastore.admin":{
 "title":"Cloud Datastore Admin",
-"desc":"",
+"desc":"Admin role for Cloud Datastore",
 "permissions":[
 "appengine.applications.get",
 "databasesconsole.locations.get",
@@ -138,7 +274,7 @@
 },
 "roles/datastore.backupSchedulesAdmin":{
 "title":"Cloud Datastore Backup Schedules Admin",
-"desc":"",
+"desc":"Manage backup schedules in Cloud Datastore.",
 "permissions":[
 "datastore.backupSchedules.create",
 "datastore.backupSchedules.delete",
@@ -151,7 +287,7 @@
 },
 "roles/datastore.backupSchedulesViewer":{
 "title":"Cloud Datastore Backup Schedules Viewer",
-"desc":"",
+"desc":"Read access to backup schedules in Cloud Datastore.",
 "permissions":[
 "datastore.backupSchedules.get",
 "datastore.backupSchedules.list"
@@ -159,7 +295,7 @@
 },
 "roles/datastore.backupsAdmin":{
 "title":"Cloud Datastore Backups Admin",
-"desc":"",
+"desc":"Read/Write access to metadata about backups in Cloud Datastore but restore is not allowed.",
 "permissions":[
 "datastore.backups.delete",
 "datastore.backups.get",
@@ -168,7 +304,7 @@
 },
 "roles/datastore.backupsViewer":{
 "title":"Cloud Datastore Backups Viewer",
-"desc":"",
+"desc":"Read access to metadata about backups in Cloud Datastore.",
 "permissions":[
 "datastore.backups.get",
 "datastore.backups.list"
@@ -176,7 +312,7 @@
 },
 "roles/datastore.bulkAdmin":{
 "title":"Cloud Datastore Bulk Admin",
-"desc":"",
+"desc":"Full access to manage bulk operations.",
 "permissions":[
 "datastore.databases.bulkDelete",
 "datastore.databases.getMetadata",
@@ -189,7 +325,7 @@
 },
 "roles/datastore.cloneAdmin":{
 "title":"Cloud Datastore Clone Admin",
-"desc":"",
+"desc":"Clone Cloud Datastore Databases.",
 "permissions":[
 "datastore.databases.clone",
 "datastore.databases.create",
@@ -201,7 +337,7 @@
 },
 "roles/datastore.editor":{
 "title":"Cloud Datastore Editor",
-"desc":"",
+"desc":"Editor role for Cloud Datastore",
 "permissions":[
 "appengine.applications.get",
 "databasesconsole.locations.get",
@@ -284,7 +420,7 @@
 },
 "roles/datastore.keyVisualizerViewer":{
 "title":"Cloud Datastore Key Visualizer Viewer",
-"desc":"",
+"desc":"Full access to Key Visualizer scans.",
 "permissions":[
 "datastore.databases.getMetadata",
 "datastore.keyVisualizerScans.get",
@@ -364,7 +500,7 @@
 },
 "roles/datastore.restoreAdmin":{
 "title":"Cloud Datastore Restore Admin",
-"desc":"",
+"desc":"Restore into Cloud Datastore Databases from Cloud Datastore Backups.",
 "permissions":[
 "datastore.backups.get",
 "datastore.backups.list",
@@ -407,7 +543,7 @@
 },
 "roles/datastore.userCredsAdmin":{
 "title":"Cloud Datastore User Creds Admin",
-"desc":"",
+"desc":"Manage user creds in Cloud Datastore.",
 "permissions":[
 "datastore.databases.getMetadata",
 "datastore.databases.list",
@@ -420,7 +556,7 @@
 },
 "roles/datastore.userCredsViewer":{
 "title":"Cloud Datastore User Creds Viewer",
-"desc":"",
+"desc":"Read access to user creds in Cloud Datastore.",
 "permissions":[
 "datastore.userCreds.get",
 "datastore.userCreds.list"
@@ -464,7 +600,7 @@
 },
 "roles/firestore.serviceAgent":{
 "title":"Firestore Service Agent",
-"desc":"",
+"desc":"Gives Firestore service account access to managed resources.",
 "permissions":[
 "storage.buckets.get",
 "storage.objects.create",

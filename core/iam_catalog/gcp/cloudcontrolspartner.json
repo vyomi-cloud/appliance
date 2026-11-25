@@ -1,0 +1,214 @@
+{
+"cloud":"gcp",
+"service":"cloudcontrolspartner",
+"permissions":{
+"accessapproval.requests.get":{
+"stage":"SUPPORTED"
+},
+"accessapproval.requests.list":{
+"stage":"SUPPORTED"
+},
+"assuredworkloads.violations.get":{
+"stage":"SUPPORTED"
+},
+"assuredworkloads.violations.list":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.accessapprovalrequests.list":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.customers.create":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.customers.delete":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.customers.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.customers.list":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.ekmconnections.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.inspectabilityevents.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.partnerpermissions.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.partners.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.platformcontrols.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.violations.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.violations.list":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.workloads.get":{
+"stage":"SUPPORTED"
+},
+"cloudcontrolspartner.workloads.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.get":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.list":{
+"stage":"SUPPORTED"
+},
+"cloudkms.ekmConnections.verifyConnectivity":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.techCases.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/cloudcontrolspartner.accessApprovalServiceAgent":{
+"title":"Cloud Controls Partner Access Approval Service Agent",
+"desc":"Gives the Partner Console service account access to read Access Approval Requests for workloads associated with a partner.",
+"permissions":[
+"accessapproval.requests.get",
+"accessapproval.requests.list"
+]
+},
+"roles/cloudcontrolspartner.admin":{
+"title":"Cloud Controls Partner Admin",
+"desc":"Full access to Cloud Controls Partner resources.",
+"permissions":[
+"cloudcontrolspartner.accessapprovalrequests.list",
+"cloudcontrolspartner.customers.create",
+"cloudcontrolspartner.customers.delete",
+"cloudcontrolspartner.customers.get",
+"cloudcontrolspartner.customers.list",
+"cloudcontrolspartner.ekmconnections.get",
+"cloudcontrolspartner.inspectabilityevents.get",
+"cloudcontrolspartner.partnerpermissions.get",
+"cloudcontrolspartner.partners.get",
+"cloudcontrolspartner.platformcontrols.get",
+"cloudcontrolspartner.violations.list",
+"cloudcontrolspartner.workloads.list"
+]
+},
+"roles/cloudcontrolspartner.editor":{
+"title":"Cloud Controls Partner Editor",
+"desc":"Editor access to Cloud Controls Partner resources.",
+"permissions":[
+"cloudcontrolspartner.accessapprovalrequests.list",
+"cloudcontrolspartner.customers.create",
+"cloudcontrolspartner.customers.delete",
+"cloudcontrolspartner.customers.get",
+"cloudcontrolspartner.customers.list",
+"cloudcontrolspartner.ekmconnections.get",
+"cloudcontrolspartner.inspectabilityevents.get",
+"cloudcontrolspartner.partnerpermissions.get",
+"cloudcontrolspartner.partners.get",
+"cloudcontrolspartner.platformcontrols.get",
+"cloudcontrolspartner.violations.get",
+"cloudcontrolspartner.violations.list",
+"cloudcontrolspartner.workloads.get",
+"cloudcontrolspartner.workloads.list"
+]
+},
+"roles/cloudcontrolspartner.ekmServiceAgent":{
+"title":"Cloud Controls Partner EKM Service Agent",
+"desc":"Gives Cloud Controls Partner service agent permission to list EKM connections, get EKM connection status, and provide EKM diagnostic information.",
+"permissions":[
+"cloudkms.ekmConnections.get",
+"cloudkms.ekmConnections.getIamPolicy",
+"cloudkms.ekmConnections.list",
+"cloudkms.ekmConnections.verifyConnectivity"
+]
+},
+"roles/cloudcontrolspartner.inspectabilityReader":{
+"title":"Cloud Controls Partner Inspectability Reader",
+"desc":"Readonly access to Cloud Controls Partner inspectability resources.",
+"permissions":[
+"cloudcontrolspartner.customers.get",
+"cloudcontrolspartner.customers.list",
+"cloudcontrolspartner.inspectabilityevents.get",
+"cloudcontrolspartner.platformcontrols.get"
+]
+},
+"roles/cloudcontrolspartner.monitoringReader":{
+"title":"Cloud Controls Partner Monitoring Reader",
+"desc":"Read-only access to Cloud Controls Partner monitoring resources.",
+"permissions":[
+"cloudcontrolspartner.customers.get",
+"cloudcontrolspartner.customers.list",
+"cloudcontrolspartner.violations.get",
+"cloudcontrolspartner.violations.list",
+"cloudcontrolspartner.workloads.get",
+"cloudcontrolspartner.workloads.list"
+]
+},
+"roles/cloudcontrolspartner.monitoringServiceAgent":{
+"title":"Cloud Controls Partner Monitoring Service Agent",
+"desc":"Gives Cloud Controls Partner monitoring service agent permission to view and list Assured Workload violations. The role is assigned to enable partner monitoring capability.",
+"permissions":[
+"assuredworkloads.violations.get",
+"assuredworkloads.violations.list"
+]
+},
+"roles/cloudcontrolspartner.reader":{
+"title":"Cloud Controls Partner Reader",
+"desc":"Read-only access to Cloud Controls Partner resources.",
+"permissions":[
+"cloudcontrolspartner.accessapprovalrequests.list",
+"cloudcontrolspartner.customers.get",
+"cloudcontrolspartner.customers.list",
+"cloudcontrolspartner.ekmconnections.get",
+"cloudcontrolspartner.inspectabilityevents.get",
+"cloudcontrolspartner.partnerpermissions.get",
+"cloudcontrolspartner.partners.get",
+"cloudcontrolspartner.platformcontrols.get",
+"cloudcontrolspartner.violations.get",
+"cloudcontrolspartner.violations.list",
+"cloudcontrolspartner.workloads.get",
+"cloudcontrolspartner.workloads.list"
+]
+},
+"roles/cloudcontrolspartner.supportCaseServiceAgent":{
+"title":"Cloud Controls Partner Support Case Service Agent",
+"desc":"Gives the Partner Console service account access to support cases for workloads associated with a partner.",
+"permissions":[
+"cloudsupport.techCases.get"
+]
+},
+"roles/cloudcontrolspartner.viewer":{
+"title":"Cloudcontrolspartner Viewer",
+"desc":"Viewer role for cloudcontrolspartner",
+"permissions":[
+"cloudcontrolspartner.accessapprovalrequests.list",
+"cloudcontrolspartner.customers.get",
+"cloudcontrolspartner.customers.list",
+"cloudcontrolspartner.ekmconnections.get",
+"cloudcontrolspartner.inspectabilityevents.get",
+"cloudcontrolspartner.partnerpermissions.get",
+"cloudcontrolspartner.partners.get",
+"cloudcontrolspartner.platformcontrols.get",
+"cloudcontrolspartner.violations.get",
+"cloudcontrolspartner.violations.list",
+"cloudcontrolspartner.workloads.get",
+"cloudcontrolspartner.workloads.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

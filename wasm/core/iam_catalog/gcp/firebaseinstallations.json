@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"firebaseinstallations",
+"permissions":{
+"firebaseinstallations.instances.delete":{
+"stage":"TESTING"
+}
+},
+"roles":{}
+}

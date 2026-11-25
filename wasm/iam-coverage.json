@@ -12,7 +12,7 @@
    "services": 29,
    "enforceable": 21,
    "catalog_none": 0,
-   "permissions": 13808
+   "permissions": 13815
   },
   "azure": {
    "services": 31,
@@ -703,12 +703,12 @@
    "catalog": [
     "backupdr"
    ],
-   "permissions": 305,
+   "permissions": 310,
    "mapped_pct": 70.3,
    "floor": 70,
    "enforceable": false,
-   "strict_pct": 37.0,
-   "strict_floor": 37,
+   "strict_pct": 36.5,
+   "strict_floor": 36,
    "surface_methods": 91,
    "surface_mapped": 64
   },
@@ -767,11 +767,11 @@
    "catalog": [
     "aiplatform"
    ],
-   "permissions": 922,
+   "permissions": 924,
    "mapped_pct": 87.1,
    "floor": 87,
    "enforceable": false,
-   "strict_pct": 50.2,
+   "strict_pct": 50.1,
    "strict_floor": 50,
    "surface_methods": 1159,
    "surface_mapped": 1010

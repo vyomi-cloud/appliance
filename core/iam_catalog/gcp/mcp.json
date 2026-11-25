@@ -1,0 +1,35 @@
+{
+"cloud":"gcp",
+"service":"mcp",
+"permissions":{
+"mcp.tools.call":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/mcp.admin":{
+"title":"MCP Admin",
+"desc":"Full access for interacting with Google-managed MCP servers.",
+"permissions":[
+"mcp.tools.call",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/mcp.toolUser":{
+"title":"MCP Tool User",
+"desc":"Gives permission to call tools on any MCP server enabled by the parent project.",
+"permissions":[
+"mcp.tools.call",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

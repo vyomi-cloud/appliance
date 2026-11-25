@@ -1,0 +1,18 @@
+{
+"cloud":"gcp",
+"service":"bigquerycontinuousquery",
+"permissions":{
+"iam.serviceAccounts.getAccessToken":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/bigquerycontinuousquery.serviceAgent":{
+"title":"BigQuery Continuous Query Service Agent",
+"desc":"Gives BigQuery Continuous Query access to the service accounts in the user project.",
+"permissions":[
+"iam.serviceAccounts.getAccessToken"
+]
+}
+}
+}

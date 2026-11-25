@@ -2,38 +2,92 @@
 "cloud":"gcp",
 "service":"cloudtasks",
 "permissions":{
-"cloudtasks.cmekConfig.get":{},
-"cloudtasks.cmekConfig.update":{},
-"cloudtasks.locations.get":{},
-"cloudtasks.locations.list":{},
-"cloudtasks.operations.get":{},
-"cloudtasks.queues.create":{},
-"cloudtasks.queues.delete":{},
-"cloudtasks.queues.get":{},
-"cloudtasks.queues.getIamPolicy":{},
-"cloudtasks.queues.list":{},
-"cloudtasks.queues.pause":{},
-"cloudtasks.queues.purge":{},
-"cloudtasks.queues.resume":{},
-"cloudtasks.queues.setIamPolicy":{},
-"cloudtasks.queues.update":{},
-"cloudtasks.tasks.create":{},
-"cloudtasks.tasks.delete":{},
-"cloudtasks.tasks.fullView":{},
-"cloudtasks.tasks.get":{},
-"cloudtasks.tasks.list":{},
-"cloudtasks.tasks.run":{},
-"iam.serviceAccounts.getAccessToken":{},
-"iam.serviceAccounts.getOpenIdToken":{},
-"logging.logEntries.create":{},
-"monitoring.timeSeries.list":{},
-"resourcemanager.projects.get":{},
-"resourcemanager.projects.list":{}
+"cloudtasks.cmekConfig.get":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.cmekConfig.update":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.locations.get":{
+"stage":"TESTING"
+},
+"cloudtasks.locations.list":{
+"stage":"TESTING"
+},
+"cloudtasks.operations.get":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.create":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.delete":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.get":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.getIamPolicy":{
+"stage":"TESTING"
+},
+"cloudtasks.queues.list":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.pause":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.purge":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.resume":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.queues.setIamPolicy":{
+"stage":"TESTING"
+},
+"cloudtasks.queues.update":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.tasks.create":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.tasks.delete":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.tasks.fullView":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.tasks.get":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.tasks.list":{
+"stage":"SUPPORTED"
+},
+"cloudtasks.tasks.run":{
+"stage":"SUPPORTED"
+},
+"iam.serviceAccounts.getAccessToken":{
+"stage":"SUPPORTED"
+},
+"iam.serviceAccounts.getOpenIdToken":{
+"stage":"SUPPORTED"
+},
+"logging.logEntries.create":{
+"stage":"SUPPORTED"
+},
+"monitoring.timeSeries.list":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
 },
 "roles":{
 "roles/cloudtasks.admin":{
 "title":"Cloud Tasks Admin",
-"desc":"",
+"desc":"Full access to queues and tasks.",
 "permissions":[
 "cloudtasks.cmekConfig.get",
 "cloudtasks.cmekConfig.update",
@@ -63,7 +117,7 @@
 },
 "roles/cloudtasks.editor":{
 "title":"Cloud Tasks Editor",
-"desc":"",
+"desc":"Editor role for cloudtasks",
 "permissions":[
 "cloudtasks.cmekConfig.get",
 "cloudtasks.locations.get",
@@ -90,7 +144,7 @@
 },
 "roles/cloudtasks.queueAdmin":{
 "title":"Cloud Tasks Queue Admin",
-"desc":"",
+"desc":"Admin access to queues.",
 "permissions":[
 "cloudtasks.locations.get",
 "cloudtasks.locations.list",
@@ -110,7 +164,7 @@
 },
 "roles/cloudtasks.serviceAgent":{
 "title":"Cloud Tasks Service Agent",
-"desc":"",
+"desc":"Grants Cloud Tasks Service Account access to manage resources.",
 "permissions":[
 "iam.serviceAccounts.getAccessToken",
 "iam.serviceAccounts.getOpenIdToken",
@@ -119,7 +173,7 @@
 },
 "roles/cloudtasks.taskDeleter":{
 "title":"Cloud Tasks Task Deleter",
-"desc":"",
+"desc":"Access to delete tasks.",
 "permissions":[
 "cloudtasks.tasks.delete",
 "resourcemanager.projects.get",
@@ -128,7 +182,7 @@
 },
 "roles/cloudtasks.viewer":{
 "title":"Cloud Tasks Viewer",
-"desc":"",
+"desc":"Get and list access to tasks, queues, and locations.",
 "permissions":[
 "cloudtasks.cmekConfig.get",
 "cloudtasks.locations.get",

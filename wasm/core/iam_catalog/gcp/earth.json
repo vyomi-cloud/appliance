@@ -1,0 +1,58 @@
+{
+"cloud":"gcp",
+"service":"earth",
+"permissions":{
+"earth.subscriptions.get":{
+"stage":"SUPPORTED"
+},
+"earth.subscriptions.update":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/earth.admin":{
+"title":"Earth Admin",
+"desc":"Admin role for earth",
+"permissions":[
+"earth.subscriptions.get",
+"earth.subscriptions.update",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/earth.subscriptionsAdmin":{
+"title":"Earth Subscriptions Administrator",
+"desc":"Provides access to see and configure Earth subscriptions.",
+"permissions":[
+"earth.subscriptions.get",
+"earth.subscriptions.update",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/earth.subscriptionsViewer":{
+"title":"Earth Subscriptions Viewer",
+"desc":"Provides read-only access to Earth subscriptions.",
+"permissions":[
+"earth.subscriptions.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/earth.viewer":{
+"title":"Earth Viewer",
+"desc":"Viewer role for earth",
+"permissions":[
+"earth.subscriptions.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

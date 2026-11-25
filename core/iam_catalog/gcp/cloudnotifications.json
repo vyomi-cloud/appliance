@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"cloudnotifications",
+"permissions":{
+"cloudnotifications.activities.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

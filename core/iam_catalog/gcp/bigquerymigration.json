@@ -1,0 +1,137 @@
+{
+"cloud":"gcp",
+"service":"bigquerymigration",
+"permissions":{
+"bigquerymigration.subtasks.get":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.subtasks.list":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.translation.translate":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.create":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.delete":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.enableAiOutputTypes":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.enableLineageOutputTypes":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.enableOutputTypePermissions":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.get":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.list":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.orchestrateTask":{
+"stage":"SUPPORTED"
+},
+"bigquerymigration.workflows.update":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+},
+"storage.objects.create":{
+"stage":"SUPPORTED"
+},
+"storage.objects.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/bigquerymigration.admin":{
+"title":"Bigquerymigration Admin",
+"desc":"Admin role for bigquerymigration",
+"permissions":[
+"bigquerymigration.subtasks.get",
+"bigquerymigration.subtasks.list",
+"bigquerymigration.translation.translate",
+"bigquerymigration.workflows.create",
+"bigquerymigration.workflows.delete",
+"bigquerymigration.workflows.enableAiOutputTypes",
+"bigquerymigration.workflows.enableLineageOutputTypes",
+"bigquerymigration.workflows.enableOutputTypePermissions",
+"bigquerymigration.workflows.get",
+"bigquerymigration.workflows.list",
+"bigquerymigration.workflows.orchestrateTask",
+"bigquerymigration.workflows.update",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/bigquerymigration.editor":{
+"title":"MigrationWorkflow Editor",
+"desc":"Editor of EDW migration workflows.",
+"permissions":[
+"bigquerymigration.subtasks.get",
+"bigquerymigration.subtasks.list",
+"bigquerymigration.translation.translate",
+"bigquerymigration.workflows.create",
+"bigquerymigration.workflows.delete",
+"bigquerymigration.workflows.enableAiOutputTypes",
+"bigquerymigration.workflows.enableLineageOutputTypes",
+"bigquerymigration.workflows.enableOutputTypePermissions",
+"bigquerymigration.workflows.get",
+"bigquerymigration.workflows.list",
+"bigquerymigration.workflows.update"
+]
+},
+"roles/bigquerymigration.orchestrator":{
+"title":"Task Orchestrator",
+"desc":"Orchestrator of EDW migration tasks.",
+"permissions":[
+"bigquerymigration.workflows.orchestrateTask",
+"storage.objects.list"
+]
+},
+"roles/bigquerymigration.serviceAgent":{
+"title":"BigQuery Migration Service Agent",
+"desc":"Access required for the BigQuery Migration Service to perform data discovery, metadata registration, and manage data transfers.",
+"permissions":[
+"resourcemanager.projects.get"
+]
+},
+"roles/bigquerymigration.translationUser":{
+"title":"Migration Translation User",
+"desc":"User of EDW migration interactive SQL translation service.",
+"permissions":[
+"bigquerymigration.translation.translate"
+]
+},
+"roles/bigquerymigration.viewer":{
+"title":"MigrationWorkflow Viewer",
+"desc":"Viewer of EDW migration MigrationWorkflow.",
+"permissions":[
+"bigquerymigration.subtasks.get",
+"bigquerymigration.subtasks.list",
+"bigquerymigration.workflows.get",
+"bigquerymigration.workflows.list"
+]
+},
+"roles/bigquerymigration.worker":{
+"title":"Task Worker",
+"desc":"Worker that executes EDW migration subtasks.",
+"permissions":[
+"storage.objects.create",
+"storage.objects.get",
+"storage.objects.list"
+]
+}
+}
+}

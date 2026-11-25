@@ -1,0 +1,114 @@
+{
+"cloud":"gcp",
+"service":"source",
+"permissions":{
+"iam.serviceAccounts.getAccessToken":{
+"stage":"SUPPORTED"
+},
+"pubsub.topics.publish":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+},
+"source.repos.create":{
+"stage":"SUPPORTED"
+},
+"source.repos.delete":{
+"stage":"SUPPORTED"
+},
+"source.repos.get":{
+"stage":"SUPPORTED"
+},
+"source.repos.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"source.repos.getProjectConfig":{
+"stage":"SUPPORTED"
+},
+"source.repos.list":{
+"stage":"SUPPORTED"
+},
+"source.repos.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"source.repos.update":{
+"stage":"NOT_SUPPORTED"
+},
+"source.repos.updateProjectConfig":{
+"stage":"SUPPORTED"
+},
+"source.repos.updateRepoConfig":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/source.admin":{
+"title":"Source Repository Administrator",
+"desc":"Provides permissions to create, update, delete, list, clone, fetch, and browse repositories. Also provides permissions to read and change IAM policies.",
+"permissions":[
+"source.repos.create",
+"source.repos.delete",
+"source.repos.get",
+"source.repos.getIamPolicy",
+"source.repos.getProjectConfig",
+"source.repos.list",
+"source.repos.setIamPolicy",
+"source.repos.update",
+"source.repos.updateProjectConfig",
+"source.repos.updateRepoConfig"
+]
+},
+"roles/source.editor":{
+"title":"Source Repository Editor",
+"desc":"Editor role for Source Repository",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"source.repos.get",
+"source.repos.getIamPolicy",
+"source.repos.list",
+"source.repos.update"
+]
+},
+"roles/source.reader":{
+"title":"Source Repository Reader",
+"desc":"Provides permissions to list, clone, fetch, and browse repositories.",
+"permissions":[
+"source.repos.get",
+"source.repos.list"
+]
+},
+"roles/source.viewer":{
+"title":"Source Repository Viewer",
+"desc":"Viewer role for Source Repository",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"source.repos.get",
+"source.repos.getIamPolicy",
+"source.repos.list"
+]
+},
+"roles/source.writer":{
+"title":"Source Repository Writer",
+"desc":"Provides permissions to list, clone, fetch, browse, and update repositories.",
+"permissions":[
+"source.repos.get",
+"source.repos.list",
+"source.repos.update"
+]
+},
+"roles/sourcerepo.serviceAgent":{
+"title":"Cloud Source Repositories Service Agent",
+"desc":"Allow Cloud Source Repositories to integrate with other Cloud services.",
+"permissions":[
+"iam.serviceAccounts.getAccessToken",
+"pubsub.topics.publish"
+]
+}
+}
+}

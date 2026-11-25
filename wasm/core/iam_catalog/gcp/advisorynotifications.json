@@ -1,0 +1,49 @@
+{
+"cloud":"gcp",
+"service":"advisorynotifications",
+"permissions":{
+"advisorynotifications.notifications.get":{
+"stage":"SUPPORTED"
+},
+"advisorynotifications.notifications.list":{
+"stage":"SUPPORTED"
+},
+"advisorynotifications.settings.get":{
+"stage":"SUPPORTED"
+},
+"advisorynotifications.settings.update":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.organizations.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/advisorynotifications.admin":{
+"title":"Advisory Notifications Admin",
+"desc":"Grants write access to settings in Advisory Notifications",
+"permissions":[
+"advisorynotifications.notifications.get",
+"advisorynotifications.notifications.list",
+"advisorynotifications.settings.get",
+"advisorynotifications.settings.update",
+"resourcemanager.organizations.get",
+"resourcemanager.projects.get"
+]
+},
+"roles/advisorynotifications.viewer":{
+"title":"Advisory Notifications Viewer",
+"desc":"Grants view access in Advisory Notifications",
+"permissions":[
+"advisorynotifications.notifications.get",
+"advisorynotifications.notifications.list",
+"advisorynotifications.settings.get",
+"resourcemanager.organizations.get",
+"resourcemanager.projects.get"
+]
+}
+}
+}

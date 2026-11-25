@@ -87,12 +87,6 @@ def az_providers():
     return sorted(prov)
 
 
-def _az_text(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "vyomi-iam-catalog"})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        return r.read().decode()
-
-
 def gen_azure():
     import re
     want = {p.lower(): p for p in az_providers()}
@@ -121,13 +115,52 @@ def gen_azure():
 
 
 GCP_BASE = "https://cloud.google.com/iam/docs/roles-permissions/"
-# Page slugs of the GCP products in the v4 console registry (consoles/src/gcp/services/registry.js) plus cross-service ones.
+GCP_SUPPORT = "https://cloud.google.com/iam/docs/custom-roles-permissions-support"
+# Page slugs of the GCP products in the v4 console registry (consoles/src/gcp/services/registry.js) plus cross-service ones. The generator
+# now crawls EVERY page of Google's published predefined-roles reference (index = GCP_BASE minus the slash); this list is the floor
+# that must stay a subset (tests assert it) so a registry service can never silently drop out.
 GCP_SLUGS = ["storage", "compute", "container", "cloudsql", "firestore", "redis", "run", "cloudfunctions", "pubsub",
              "cloudscheduler", "eventarc", "apigateway", "iam", "resourcemanager", "artifactregistry", "clouddeploy", "backupdr",
              "cloudbuild", "aiplatform", "monitoring", "logging", "cloudkms", "secretmanager", "firebaseauth", "dns", "serviceusage",
              "servicenetworking", "securitycenter", "orgpolicy", "iap", "vpcaccess", "cloudtasks", "bigquery", "workflows",
              # added by WP gcp-coverage: Binary Authorization, Marketplace (consumer procurement + offer catalog), Cloud Hub (Service Health + App Hub)
              "binaryauthorization", "consumerprocurement", "commerceoffercatalog", "servicehealth", "apphub"]
+# Per-permission stage = the "Custom roles support level" of Google's published permission list (same data the public
+# iam.googleapis.com/v1/permissions:queryTestablePermissions returns as customRolesSupportLevel; absent there == SUPPORTED).
+# Real console labels: SUPPORTED -> "Supported", TESTING -> "Testing", NOT_SUPPORTED -> "Not applicable".
+GCP_STAGES = ("SUPPORTED", "TESTING", "NOT_SUPPORTED")
+
+
+def _az_text(url):
+    """Fetch text; when VYOMI_IAM_SRC_CACHE is set, serve/store pages under that directory (re-runs and review without the network)."""
+    import re
+    cd = os.environ.get("VYOMI_IAM_SRC_CACHE")
+    cp = os.path.join(cd, re.sub(r"[^A-Za-z0-9]+", "_", url)) if cd else None
+    if cp and os.path.exists(cp):
+        return open(cp, encoding="utf-8").read()
+    req = urllib.request.Request(url, headers={"User-Agent": "vyomi-iam-catalog"})
+    with urllib.request.urlopen(req, timeout=90) as r:
+        t = r.read().decode()
+    if cp:
+        os.makedirs(cd, exist_ok=True); open(cp, "w", encoding="utf-8").write(t)
+    return t
+
+
+def gcp_all_slugs():
+    import re
+    t = _az_text(GCP_BASE.rstrip("/"))
+    return sorted(set(re.findall(r'href="/iam/docs/roles-permissions/([a-z0-9-]+)"', t)))
+
+
+def gcp_support_levels():
+    """{permission: SUPPORTED|TESTING|NOT_SUPPORTED} from the published permission list."""
+    import re
+    t = _az_text(GCP_SUPPORT)
+    out = {}
+    for m in re.finditer(r'<td class="column1-class"><code[^>]*>([A-Za-z0-9_.]+)</code></td>\s*<td class="column2-class"><code[^>]*>([A-Z_]+)</code>', t):
+        assert m.group(2) in GCP_STAGES, m.group(0)
+        out[m.group(1)] = m.group(2)
+    return out
 
 
 def gcp_service(slug):
@@ -141,11 +174,12 @@ def gcp_service(slug):
         m = re.search(r'<h4 class="role-title[^"]*" id="([^"]+)"[^>]*>([^<]*)</h4>\s*<p[^>]*>\(<code[^>]*>(roles/[^<]+)</code>\)', row)
         if not m:
             continue
-        d = re.search(r'<span class="role-description custom">\s*<p>\s*(.*?)\s*</p>', row, re.S)
+        # description span is `role-description custom` (Google-written text) or plain `role-description`; may hold several <p>
+        d = re.search(r'<span class="role-description(?: custom)?">(.*?)</span>', row, re.S)
         td = row.split('<td class="role-permissions">', 1)[-1]
         plist = sorted({x for x in re.findall(r"<code[^>]*>([a-z][A-Za-z0-9]*\.[A-Za-z0-9.]*[A-Za-z0-9])</code>", td)})
-        roles[m.group(3)] = {"title": html.unescape(m.group(2)).strip(), "desc": html.unescape(re.sub(r"\s+", " ", re.sub("<[^>]+>", "", d.group(1)))) if d else "",
-                             "permissions": plist}
+        desc = html.unescape(re.sub(r"\s+", " ", re.sub("<[^>]+>", "", re.sub(r"</(p|li|ul)>", " ", d.group(1))))).strip() if d else ""
+        roles[m.group(3)] = {"title": html.unescape(m.group(2)).strip(), "desc": desc, "permissions": plist}
     for r in roles.values():
         for x in r["permissions"]:
             perms.setdefault(x, {})
@@ -154,17 +188,50 @@ def gcp_service(slug):
 
 def gen_gcp():
     out = os.path.join(ROOT, "core", "iam_catalog", "gcp"); os.makedirs(out, exist_ok=True)
-    tp = tr = 0
-    for slug in GCP_SLUGS:
+    slugs = gcp_all_slugs()
+    assert set(GCP_SLUGS) <= set(slugs), set(GCP_SLUGS) - set(slugs)
+    docs = {}
+    for slug in slugs:
         try:
-            doc = gcp_service(slug)
+            docs[slug] = gcp_service(slug)
         except Exception as e:
-            print("  !! no page for", slug, e); continue
+            print("  !! no page for", slug, e)
+    # a role is listed on exactly one shard (its first page, sorted); later pages that re-list it keep only the permission cross-refs
+    seen = set()
+    for slug in sorted(docs):
+        for rid in list(docs[slug]["roles"]):
+            if rid in seen: del docs[slug]["roles"][rid]
+            else: seen.add(rid)
+    levels = gcp_support_levels()
+    # permissions in the published support list that no roles page mentions: home them on the shard that owns their service prefix
+    owner = {}
+    for slug, d in docs.items():
+        for p in d["permissions"]: owner.setdefault(p.split(".")[0], slug)
+    have = {p for d in docs.values() for p in d["permissions"]}
+    orphan = sorted(set(levels) - have)
+    for p in orphan:
+        pre = p.split(".")[0]
+        slug = owner.get(pre) or (pre if pre in docs else None)
+        if slug is None:
+            slug = pre; docs[slug] = {"cloud": "gcp", "service": slug, "permissions": {}, "roles": {}}
+        docs[slug]["permissions"][p] = {}
+    tp = tr = 0
+    for slug, doc in sorted(docs.items()):
+        doc["permissions"] = {p: ({"stage": levels[p]} if p in levels else {}) for p in sorted(doc["permissions"])}
         tp += len(doc["permissions"]); tr += len(doc["roles"])
         with open(os.path.join(out, slug + ".json"), "w") as f:
             json.dump(doc, f, indent=0, separators=(",", ":")); f.write("\n")
-        print(f"  {slug:20} {len(doc['permissions']):5} permissions {len(doc['roles']):4} roles")
-    print("gcp total permissions:", tp, "roles:", tr)
+    for fn in os.listdir(out):                      # drop shards that no longer exist upstream
+        if fn.endswith(".json") and not fn.startswith("_") and fn[:-5] not in docs: os.remove(os.path.join(out, fn))
+    idx = {"cloud": "gcp", "kind": "index", "stages": list(GCP_STAGES),
+           "services": {s: {"permissions": len(d["permissions"]), "roles": len(d["roles"])} for s, d in sorted(docs.items())}}
+    with open(os.path.join(out, "_index.json"), "w") as f:
+        json.dump(idx, f, indent=0, separators=(",", ":")); f.write("\n")
+    allp = {p for d in docs.values() for p in d["permissions"]}
+    from collections import Counter
+    print("gcp shards:", len(docs), "permissions:", len(allp), "(entries", tp, ") roles:", tr,
+          "roles with description:", sum(1 for d in docs.values() for r in d["roles"].values() if r["desc"]),
+          "stages:", dict(Counter(levels.get(p, "(none)") for p in allp)), "orphans homed:", len(orphan))
 
 AZ_ROLES_RAW = "https://raw.githubusercontent.com/MicrosoftDocs/azure-docs/main/articles/role-based-access-control/built-in-roles/"
 AZ_ROLE_CATEGORIES = ["privileged", "general", "compute", "networking", "storage", "web-and-mobile", "containers", "databases", "analytics",
