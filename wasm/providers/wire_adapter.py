@@ -72,3 +72,26 @@ def handle(p: dict) -> dict:
         msg = json.dumps({"__type": "InternalFailure", "message": f"nano /_wire: {type(e).__name__}: {e}"})
         return {"status": 500, "headers": {"content-type": "application/json"},
                 "body_b64": base64.b64encode(msg.encode("utf-8", "replace")).decode()}
+
+
+def transport(method, path, query, headers, body):
+    """The in-process boto3 transport: (method, path, query, headers, body) -> (status, headers, body_bytes) straight into the router, no HTTP."""
+    r = router().handle(str(method).upper(), path, query or {}, headers or {}, body or b"")
+    out = r.get("body") or b""
+    out = out.encode("utf-8") if isinstance(out, str) else bytes(out)
+    return int(r.get("status") or 200), {str(k): str(v) for k, v in (r.get("headers") or {}).items()}, out
+
+
+def register_lambda_sdk():
+    """Give Lambda handlers (core/lambda_core sandbox) and hosted AgentCore agents a boto3 whose calls land in THIS Nano's stores."""
+    try:
+        import os
+        import botocore
+        from core import lambda_sdk
+        lambda_sdk.set_transport(transport, os.path.join(os.path.dirname(botocore.__file__), "data"))
+        return True
+    except Exception:  # botocore-lite not loaded (relay worker): handlers keep the restricted sandbox
+        return False
+
+
+register_lambda_sdk()

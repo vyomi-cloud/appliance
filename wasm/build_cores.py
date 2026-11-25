@@ -86,6 +86,7 @@ CORES = [
     "azure_acr_core.py",                            # v4: Container Registry repository data plane (OCI v2 + ACR v1 REST)
     "azure_graph_ext_core.py", "azure_graph_core.py", "azure_cdn_edge_core.py",                          # v4: Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units)
     "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
+    "lambda_sdk.py",                               # boto3/os/botocore.exceptions a Lambda handler may import in the Nano sandbox (inert without a registered transport)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
     "gateway_common.py", "apigateway_gateway.py", "identity_core.py",  # identity_core: Cognito/WAFv2 wire adapter over moto (Mesh; Nano answers 501 until moto is micropip-loaded)
       # shared cross-cloud gateway primitives + AWS REST (v1) data plane enforcement

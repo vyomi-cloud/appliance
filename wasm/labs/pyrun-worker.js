@@ -44,7 +44,14 @@ def _send(self, request):
     body = request.body
     if body is None: x.send()
     elif isinstance(body, str): x.send(body)
-    else: x.send(to_js(bytes(body)))
+    else:
+        if hasattr(body, "read"):   # S3 put_object / upload streams its body as a file-like (BytesIO, seekable); bytes(BytesIO) is a TypeError
+            pos = body.tell() if hasattr(body, "tell") else None
+            body = body.read()
+            if pos is not None and hasattr(request.body, "seek"):
+                try: request.body.seek(pos)   # leave it rewound so a botocore retry can resend
+                except Exception: pass
+        x.send(to_js(bytes(body)))
     if x.status == 0:
         raise EndpointConnectionError(endpoint_url=url)
     data = bytes(js.Uint8Array.new(x.response).to_py())
