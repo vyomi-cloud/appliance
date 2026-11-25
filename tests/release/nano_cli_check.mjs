@@ -95,7 +95,7 @@ const consoles = {};
 for (const cloud of ["aws", "gcp", "azure"]) {
   const p = await page.context().newPage();
   p.on("pageerror", (e) => console.log(`[${cloud} console pageerror]`, e.message));
-  await p.goto(`${base}/${cloud}-console.html`, { waitUntil: "domcontentloaded" });
+  await p.goto(`${base}/v4/${cloud}/`, { waitUntil: "domcontentloaded" });   // v4 console (the legacy *-console.html pages are removed)
   await p.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller
     && /backend ready/.test((document.getElementById("nano-banner") || {}).textContent || ""),
     null, { timeout: 300000, polling: 500 });

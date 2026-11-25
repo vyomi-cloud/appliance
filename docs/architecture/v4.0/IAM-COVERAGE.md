@@ -32,7 +32,7 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Kinesis (`kinesis`) | kinesis | 60 | 100.0 | 100 | yes |
 | Step Functions (`states`) | states | 39 | 100.0 | 100 | yes |
 | Cost Explorer (`cost-explorer`) | ce | 59 | 100.0 | 100 | yes |
-| Infrastructure Studio (`tfstudio`) | none: Infrastructure Studio is a Vyomi-side authoring tool that issues ordinary AWS API calls (CloudFormation/Terraform-style); it has no IAM permission namespace of its own | 0 | - | 0 | no |
+| Infrastructure Studio (`tfstudio`) | none: Infrastructure Studio is a client-side Terraform import/export workspace: it has no resource-provider actions of its own and every call it makes is authorised under the target service's own IAM actions | 0 | - | 0 | no |
 | Systems Manager (`ssm`) | ssm | 166 | 100.0 | 100 | yes |
 | Security Hub & GuardDuty (`securityhub`) | securityhub | 141 | 100.0 | 100 | yes |
 | AWS Backup (`backup`) | backup | 122 | 100.0 | 100 | yes |

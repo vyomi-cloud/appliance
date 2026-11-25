@@ -164,7 +164,7 @@
    },
    "tfstudio": {
     "catalog": "none",
-    "reason": "Infrastructure Studio is a Vyomi-side authoring tool that issues ordinary AWS API calls (CloudFormation/Terraform-style); it has no IAM permission namespace of its own",
+    "reason": "Infrastructure Studio is a client-side Terraform import/export workspace: it has no resource-provider actions of its own and every call it makes is authorised under the target service's own IAM actions",
     "floor": 0
    }
   },

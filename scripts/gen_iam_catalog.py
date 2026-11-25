@@ -124,7 +124,7 @@ GCP_SLUGS = ["storage", "compute", "container", "cloudsql", "firestore", "redis"
              "cloudbuild", "aiplatform", "monitoring", "logging", "cloudkms", "secretmanager", "firebaseauth", "dns", "serviceusage",
              "servicenetworking", "securitycenter", "orgpolicy", "iap", "vpcaccess", "cloudtasks", "bigquery", "workflows",
              # added by WP gcp-coverage: Binary Authorization, Marketplace (consumer procurement + offer catalog), Cloud Hub (Service Health + App Hub)
-             "binaryauthorization", "consumerprocurement", "commerceoffercatalog", "servicehealth", "apphub"]
+             "binaryauthorization", "consumerprocurement", "commerceoffercatalog", "servicehealth", "apphub", "config"]
 # Per-permission stage = the "Custom roles support level" of Google's published permission list (same data the public
 # iam.googleapis.com/v1/permissions:queryTestablePermissions returns as customRolesSupportLevel; absent there == SUPPORTED).
 # Real console labels: SUPPORTED -> "Supported", TESTING -> "Testing", NOT_SUPPORTED -> "Not applicable".
