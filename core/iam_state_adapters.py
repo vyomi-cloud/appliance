@@ -602,6 +602,7 @@ def _live(cloud, headers, query, space, path=""):
         s = iam_store()
         return aws_state(s), aws_principal(headers, query, s)
     if cloud == "gcp":
+        from core import app_context          # (`space or app_context.STATE` below: was unbound when the caller passed an empty space)
         from core.app_context import gcp_iam_state
         store, project, appliance_stores = None, None, None
         try:

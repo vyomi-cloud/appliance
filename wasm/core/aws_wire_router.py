@@ -1696,7 +1696,7 @@ class AwsWireRouter:
                 if out is not None:
                     self._record_async(svc, method, path, lheaders, bytes(b), _t1, out)
                     return out
-        if svc == "gcp-gateway-invoke" and __import__("sys").platform != "emscripten":
+        if svc in ("gcp-gateway-invoke", "azure-apim-gw") and __import__("sys").platform != "emscripten":
             # the sync gateway engine makes a blocking HTTP call to the backend, which can be this very server (a Cloud Function's
             # /gcf URL): run it off the event loop or the loop waits on itself and the call times out (503 UNAVAILABLE)
             import asyncio as _aio
@@ -2080,6 +2080,14 @@ class AwsWireRouter:
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
+        try:      # IAM analysis APIs (Access Analyzer, Policy Troubleshooter / analyzeIamPolicy, Azure checkAccess / permissions): core/iam_engine/analyze_wire.py
+            from core import iam_analyze_host as _iah
+        except ImportError:   # Nano mounts the engine on demand (wasm/nano-iam-hook.js answers these routes itself before dispatch)
+            _iah = None
+        if _iah is not None:
+            _ia = _iah.pre(method, path, query, lheaders, bytes(body))
+            if _ia is not None:
+                return _ia
         _gx = gcp_wire_ext.pre(self, method, path, query, lheaders, bytes(body))   # Functions v1/v2, Cloud DNS, SCC v1, /gcf HTTPS URL
         if _gx is not None:
             return _gx

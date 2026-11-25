@@ -121,6 +121,11 @@
  "digest": "1862e5b9fa5709f4",
  "engine": [
   "__init__.py",
+  "access_analyzer.py",
+  "analyze_aws.py",
+  "analyze_azure.py",
+  "analyze_gcp.py",
+  "analyze_wire.py",
   "api.py",
   "audit.py",
   "aws_eval.py",
