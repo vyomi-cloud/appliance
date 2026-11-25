@@ -2,6 +2,7 @@ import {launch,SP} from "./lib.mjs"; import fs from "node:fs";
 const PORT=process.env.PORT||8931, MODEL=process.env.MODEL||"", NOGPU=process.env.NOGPU;
 const prof=process.env.PROF||SP+"/profui"; const out=process.env.OUT||SP+"/ev/out/ui-all.json";
 const ctx=await launch(prof); const A=await ctx.newPage();
+if(process.env.CLEAR){ await A.goto(`http://localhost:${PORT}/nano/labs/`); await A.evaluate(async()=>{ for(const d of (await indexedDB.databases())) await new Promise(res=>{const q=indexedDB.deleteDatabase(d.name); q.onsuccess=q.onerror=q.onblocked=()=>res();}); try{ const root=await navigator.storage.getDirectory(); for await (const [n] of root.entries()) await root.removeEntry(n,{recursive:true}); }catch(e){} try{localStorage.clear();sessionStorage.clear();}catch(e){} for(const x of await navigator.serviceWorker.getRegistrations()) await x.unregister(); }); }
 if(NOGPU) await A.addInitScript(()=>{ try{ Object.defineProperty(navigator,"gpu",{get:()=>undefined,configurable:true}); delete Navigator.prototype.gpu; }catch(e){} });
 await A.goto(`http://localhost:${PORT}/nano/v4/aws/`); await A.waitForFunction(()=>typeof globalThis.vyomiLlmStatus==="function",null,{timeout:120000}); await A.waitForTimeout(3000);
 

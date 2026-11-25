@@ -157,7 +157,9 @@ def _extract(typ, text):
                                                   f"(an empty array if none). Output only the JSON array.\n\n{text}"}], max_tokens=256, temperature=0.0)
         v, okj = llm.extract_json(r["text"])
         if okj and isinstance(v, list):
-            return [str(x).strip() for x in v if str(x).strip()]
+            facts = [str(x).strip() for x in v if str(x).strip()]
+            if facts:     # an empty array from a small model is not trusted: fall through to the first-person heuristic below
+                return facts
     except (llm.LlmUnavailable, ValueError, TypeError):
         pass
     facts = []
