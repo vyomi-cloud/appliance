@@ -430,3 +430,4 @@ button.vl-hs:hover{background:rgba(37,99,235,.10);border-color:var(--accent)}.vl
 .vl .vl-disclaimer svg{flex:none;margin-top:2px;fill:none;stroke:#8a5a00;stroke-width:2}.vl .vl-disclaimer b{color:#4a3000}
 .vl .vl-cathead .vl-disclaimer{flex:1 0 100%;max-width:none;margin:2px 0 0;box-sizing:border-box}
 .vl .vl-planchip{display:inline-block;padding:1px 9px;border-radius:5px;background:linear-gradient(90deg,#f5b301,#ffcf40);color:#4a3000;font-weight:800;font-size:12px;letter-spacing:.1em;vertical-align:baseline;box-shadow:0 1px 3px rgba(0,0,0,.18)}
+.vl .vl-modelpick .vl-mlist{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.vl .vl-modelpick .vl-mlist .vl-btn small{opacity:.75;font-weight:400}

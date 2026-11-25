@@ -44,7 +44,14 @@ def _send(self, request):
     body = request.body
     if body is None: x.send()
     elif isinstance(body, str): x.send(body)
-    else: x.send(to_js(bytes(body)))
+    else:
+        if hasattr(body, "read"):   # S3 put_object / upload streams its body as a file-like (BytesIO, seekable); bytes(BytesIO) is a TypeError
+            pos = body.tell() if hasattr(body, "tell") else None
+            body = body.read()
+            if pos is not None and hasattr(request.body, "seek"):
+                try: request.body.seek(pos)   # leave it rewound so a botocore retry can resend
+                except Exception: pass
+        x.send(to_js(bytes(body)))
     if x.status == 0:
         raise EndpointConnectionError(endpoint_url=url)
     data = bytes(js.Uint8Array.new(x.response).to_py())
@@ -55,6 +62,35 @@ def _send(self, request):
     return AWSResponse(url, int(x.status), hdrs, _Raw(data))
 
 hs.URLLib3Session.send = _send
+
+# urllib has no sockets in Pyodide: route urlopen over the same synchronous XHR, so course blocks that call a gateway / Cognito-fronted API with
+# urllib.request (mcp_client, call_with_token, call_without_token) reach the Nano service worker. Same-origin and CORS-allowed URLs only.
+import urllib.request as _ur, urllib.error as _ue
+class _Resp(io.BytesIO):
+    def __init__(self, data, status, url, hdrs):
+        super().__init__(data); self.status = self.code = status; self.url = url; self.headers = hdrs
+    def getcode(self): return self.status
+    def geturl(self): return self.url
+    def info(self): return self.headers
+    def __enter__(self): return self
+    def __exit__(self, *a): self.close()
+def _urlopen(req, data=None, timeout=None, **kw):
+    if isinstance(req, str): req = _ur.Request(req, data=data)
+    elif data is not None: req.data = data
+    x = js.XMLHttpRequest.new(); x.open(req.get_method(), req.full_url, False); x.responseType = "arraybuffer"
+    for k, v in req.header_items():
+        if k.lower() not in ("host", "content-length", "connection", "user-agent", "accept-encoding"): x.setRequestHeader(k, v)
+    d = req.data
+    if d is None: x.send()
+    else: x.send(to_js(d.encode() if isinstance(d, str) else bytes(d)))
+    if x.status == 0: raise _ue.URLError("cannot reach " + req.full_url + " from the browser (only this Nano origin is reachable)")
+    body = bytes(js.Uint8Array.new(x.response).to_py()); hd = {}
+    for line in str(x.getAllResponseHeaders()).strip().splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1); hd[k.strip()] = v.strip()
+    if x.status >= 400: raise _ue.HTTPError(req.full_url, int(x.status), "HTTP " + str(x.status), hd, io.BytesIO(body))
+    return _Resp(body, int(x.status), req.full_url, hd)
+_ur.urlopen = _urlopen
 `;
 let py = null, ready = null;
 async function boot(post) {

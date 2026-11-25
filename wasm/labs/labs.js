@@ -77,7 +77,7 @@
       return el("div", { className: "vl-page" },
         el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." })), cloudTabs,
           (course.plan || []).length ? el("p", { className: "vl-disclaimer" }, icon("M12 8v5M12 16.500v.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", 16),
-            el("span", {}, el("b", { textContent: "Deploying needs a Mesh. " }), "Courses that deploy code run it inside a Mesh, which is included with the ", el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. Without one you can still read every lesson, browse and edit the code, and download the project." + (cloud === "aws" ? " A few " + course.cloud_name + " chapters also deploy in the browser." : ""))) : null),
+            el("span", {}, el("b", { textContent: cloud === "aws" ? "AWS chapters deploy in your browser. " : "Deploying needs a Mesh. " }), (cloud === "aws" ? "On the free Nano edition every step that has an in-browser engine runs here; a step that calls a model asks you to load one (WebGPU browser), and only steps with no engine yet need a Mesh, included with the " : "Courses that deploy code run it inside a Mesh, which is included with the "), el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. You can always read every lesson, browse and edit the code, and download the project.")) : null),
         el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
     }
 
@@ -377,7 +377,7 @@
       });
     }
     function deployPanel(l) {
-      var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : cloud === "aws" ? "in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model" : "inside a Mesh (started for you if it is not running)";
+      var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : cloud === "aws" ? "in this browser (Nano); a step that needs a model asks you to load one, and only steps with no in-browser engine are left for a Mesh" : "inside a Mesh (started for you if it is not running)";
       var supported = true;
       var rows = l.lab.map(function (bk) { return { bk: bk, chip: el("span", { className: "vl-dchip", textContent: bk.run ? "waiting" : "saved on run" }), log: el("pre", { className: "vl-dlog" }) }; });
       var btn = el("button", { type: "button", className: "vl-btn primary sm vl-deploybtn" }, icon("M8 5v14l11-7z", 14), "Deploy this chapter");
@@ -415,38 +415,94 @@
           return pump();
         }).catch(function (e) { out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: "Could not run the deploy: " + e.message }))); btn.disabled = false; btn.textContent = "Deploy again"; });
       }
-      var needsMesh = function () { return !meshRoute() && !hasApi && (cloud !== "aws" || l.lab.some(function (b) { return b.needs_runtime; }) || meshWanted); };
+      /* On Nano (no Mesh, no local runner) the browser runs what it can. Only non-AWS clouds (no browser SDK runner) still need a Mesh up front. */
+      var needsMesh = function () { return !meshRoute() && !hasApi && (cloud !== "aws" || meshWanted); };
       var meshWanted = false;
+      var kernel = function () { try { if (window.parent !== window && window.parent.vyomiEnableWebLLM) return window.parent; } catch (_) {} return window.vyomiEnableWebLLM ? window : null; };
+      /* Why a failed step cannot run in the browser: {kind:"model"} (load a model) or {kind:"mesh", why} (genuinely Mesh-only). */
+      function classify(text) {
+        if (/ModelNotReady|No in-browser model/.test(text)) return { kind: "model" };
+        var m;
+        if (/NotImplementedException|identity services need|not implemented on Nano/i.test(text)) return { kind: "mesh", why: "This service has no in-browser engine yet." };
+        if ((m = /No module named '(langgraph|langchain[\w.]*|torch|numpy|pandas|scipy)'/.exec(text))) return { kind: "mesh", why: "The hosted agent needs the Python package '" + m[1] + "', which could not be loaded in the browser (it needs network access to PyPI, or has no browser build)." };
+        if (/langgraph could not be installed/.test(text)) return { kind: "mesh", why: "langgraph could not be downloaded in this browser (offline?). Reconnect and deploy again, or run this step in a Mesh." };
+        return null;
+      }
+      function modelPicker(note) {   // resolves true once a model is loaded, false if the learner skips
+        return new Promise(function (resolve) {
+          var host = kernel(), box = el("div", { className: "vl-dres warn vl-modelpick" }), list = el("div", { className: "vl-mlist" }), msg = el("p", { className: "vl-muted" });
+          var rec = "qwen2.5-1.5b";
+          var finishPick = function (ok) { box.remove(); resolve(ok); };
+          box.append(el("b", { textContent: "This step needs a language model" }), el("p", { textContent: (note || "") + "Pick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser." }), msg, list);
+          out.append(box); box.scrollIntoView && box.scrollIntoView({ block: "nearest" });
+          var skip = el("button", { type: "button", className: "vl-btn sm", textContent: "Skip, continue without a model" }); skip.onclick = function () { finishPick(false); };
+          if (!host) { msg.textContent = "Open Vyomi Labs from inside a Nano console (Launch a space, then Labs) so a model can be loaded; this page has no model runtime."; list.append(skip); return; }
+          var gpu = navigator.gpu ? navigator.gpu.requestAdapter().then(function (a) { return !!a; }, function () { return false; }) : Promise.resolve(false);
+          gpu.then(function (hasGpu) {
+            if (!hasGpu) { msg.textContent = "No WebGPU in this browser, so no in-browser model can run. Use a recent desktop Chrome or Edge (WebGPU on, graphics acceleration enabled). Steps that call a model stay marked 'needs a model'; every other step still runs."; list.append(skip); return; }
+            msg.textContent = "Qwen2.5 1.5B is the one that follows the course (routing, tool calls, citations). The smaller ones only prove the plumbing: they load fast, but their answers are poor. Needs about 2 GB of free disk and a GPU with enough memory.";
+            (host.vyomiWebLLMModels || []).forEach(function (m) {
+              var small = m.id !== rec, b = el("button", { type: "button", className: "vl-btn sm" + (small ? "" : " primary"), title: small ? "Plumbing only" : "Recommended" });
+              b.append(el("b", { textContent: m.name }), " " + m.size, el("small", { textContent: small ? "  plumbing only" : "  recommended" }));
+              b.onclick = function () {
+                list.querySelectorAll("button").forEach(function (x) { x.disabled = true; });
+                msg.textContent = "Downloading " + m.name + " (" + m.size + "). Keep this tab open...";
+                host.vyomiEnableWebLLM(m.id, function (p) { if (p && p.text) msg.textContent = m.name + ": " + p.text; }).then(function () { finishPick(true); }, function (e) {
+                  var t = String(e && e.message || e), low = /Cache|quota|storage/i.test(t);
+                  msg.textContent = "Could not load " + m.name + ": " + t.slice(0, 220) + (low ? " The browser could not write the model cache; free some disk space (about 2 GB) and try again." : "");
+                  list.querySelectorAll("button").forEach(function (x) { x.disabled = false; });
+                });
+              };
+              list.append(b);
+            });
+            list.append(skip);
+          });
+        });
+      }
+      function modelLoaded() { try { var h = kernel(); return !!(h && h.vyomiLlmStatus && h.vyomiLlmStatus().available); } catch (_) { return false; } }
       btn.onclick = function () {
         if (needsMesh()) { btn.disabled = true; var say = function (t) { out.replaceChildren(el("div", { className: "vl-dstatus", textContent: t })); }; return ensureMesh(say).then(function () { btn.disabled = false; btn.onclick(); }, function (e) { btn.disabled = false; out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: e.message }))); }); }
         var route = meshRoute();
         if (route && window.parent.VyomiMesh.apiFetch) return deployVia(function () { return window.parent.VyomiMesh.apiFetch("/mesh/labs/deploy/" + cloud + "/" + l.id, { method: "POST" }); });   // a Mesh is on: deploy INSIDE the Mesh
         if (hasApi) return deployVia(function () { return fetch("/api/deploy/" + cloud + "/" + l.id, { method: "POST" }); });
-        btn.disabled = true; btn.textContent = "Deploying..."; out.replaceChildren(); var failed = 0, blocked = 0, needModel = false;
+        btn.disabled = true; btn.textContent = "Deploying..."; out.replaceChildren(); var failed = 0, meshOnly = 0, noModel = 0, passed = 0, reasons = [];
+        rows.forEach(function (r) { r.chip.textContent = r.bk.run ? "waiting" : "saved on run"; r.chip.className = "vl-dchip"; r.log.textContent = ""; });
         var files = allFiles(), env = { AWS_ENDPOINT_URL: wireEndpoint(), AWS_DEFAULT_REGION: "us-east-1", AWS_ACCESS_KEY_ID: "test", AWS_SECRET_ACCESS_KEY: "test" };
         var chain = Promise.resolve();
+        function runBlock(r, retried) {
+          r.chip.textContent = "running"; r.chip.className = "vl-dchip run"; var text = "";
+          return runInBrowser(files, r.bk.run, env, route, function (t) { text += t + "\n"; r.log.textContent = text; }).then(function (ok) {
+            var pass = ok && (!r.bk.expect || text.indexOf(r.bk.expect) >= 0);
+            if (pass) { passed++; r.chip.textContent = "passed"; r.chip.className = "vl-dchip ok"; return; }
+            if (!ok || r.bk.expect) r.log.textContent = text + (ok ? "\nExpected to see: " + r.bk.expect : "");
+            var why = classify(text);
+            if (why && why.kind === "model") {
+              if (!retried && !modelLoaded()) { r.chip.textContent = "needs a model"; r.chip.className = "vl-dchip warn"; return modelPicker("").then(function (loaded) { return loaded ? runBlock(r, true) : (noModel++, void 0); }); }
+              noModel++; r.chip.textContent = "needs a model"; r.chip.className = "vl-dchip warn"; return;
+            }
+            if (why && why.kind === "mesh") { meshOnly++; reasons.push(r.bk.title + ": " + why.why); r.chip.textContent = "needs the Mesh"; r.chip.className = "vl-dchip warn"; r.log.textContent = text + "\nMesh only: " + why.why; return; }
+            failed++; r.chip.textContent = "failed"; r.chip.className = "vl-dchip bad";
+          });
+        }
         rows.forEach(function (r) {
           chain = chain.then(function () {
             if (!r.bk.run) { r.chip.textContent = "saved"; r.chip.className = "vl-dchip ok"; return runInBrowser(files, "", env, route, function () {}); }
-            if (r.bk.needs_runtime && !route) { blocked++; r.chip.textContent = "needs the Mesh"; r.chip.className = "vl-dchip warn"; r.log.textContent = "This step runs real function code, which the in-browser simulator does not execute, so it runs inside a Mesh."; return; }
-            r.chip.textContent = "running"; r.chip.className = "vl-dchip run"; var text = "";
-            return runInBrowser(files, r.bk.run, env, route, function (t) { text += t + "\n"; r.log.textContent = text; }).then(function (ok) {
-              var pass = ok && (!r.bk.expect || text.indexOf(r.bk.expect) >= 0);
-              if (!pass) failed++; r.chip.textContent = pass ? "passed" : "failed"; r.chip.className = "vl-dchip " + (pass ? "ok" : "bad");
-              if (!pass && ok) r.log.textContent = text + "\nExpected to see: " + r.bk.expect;
-              if (!pass && /ModelNotReady|No in-browser model/.test(text)) { needModel = true; r.chip.textContent = "needs a model"; r.chip.className = "vl-dchip warn"; }
-            });
+            return runBlock(r, false);
           });
         });
         chain.then(function () {
-          btn.disabled = false; btn.textContent = failed ? "Deploy again" : "Deploy again";
-          var links = (l.setup || []).filter(function (s) { return s.route; });
-          var escalate = (needModel || blocked) && !failed; if (escalate) meshWanted = true;
-          if (!failed && !blocked) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); var st = root.querySelector(".vl-chero .vl-status"); if (st) { st.textContent = store[l.id] === "verified" ? "Verified" : "Deployed"; st.classList.add("done"); } }
-          out.replaceChildren(el("div", { className: "vl-dres " + (failed ? "bad" : blocked ? "warn" : "ok") },
-            needModel ? el("b", { textContent: "A step needs a model, so the deploy continues inside a Mesh. Starting it now..." }) : el("b", { textContent: failed ? failed + " step(s) failed. Open the step log below, fix the cause and deploy again." : blocked ? "Deployed, except steps that need the Mesh." : "Deployed." }),
+          btn.disabled = false; btn.textContent = "Deploy again";
+          var links = (l.setup || []).filter(function (s) { return s.route; }), M = null; try { M = window.parent !== window ? window.parent.VyomiMesh : null; } catch (_) {}
+          var allGood = !failed && !meshOnly && !noModel;
+          if (allGood) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); var st = root.querySelector(".vl-chero .vl-status"); if (st) { st.textContent = store[l.id] === "verified" ? "Verified" : "Deployed"; st.classList.add("done"); } }
+          var parts = [passed + " step(s) ran in your browser"]; if (noModel) parts.push(noModel + " need a model"); if (meshOnly) parts.push(meshOnly + " need a Mesh"); if (failed) parts.push(failed + " failed");
+          out.replaceChildren(el("div", { className: "vl-dres " + (failed ? "bad" : (meshOnly || noModel) ? "warn" : "ok") },
+            el("b", { textContent: allGood ? "Deployed." : parts.join(", ") + "." }),
+            meshOnly ? ul(reasons) : null,
+            noModel ? el("p", { className: "vl-muted", textContent: "Deploy again and pick a model when asked to run the steps that call one." }) : null,
+            failed ? el("p", { className: "vl-muted", textContent: "Open the step log below, fix the cause and deploy again." }) : null,
+            (meshOnly && M && M.sessionStart) ? el("button", { type: "button", className: "vl-btn sm", textContent: "Run this chapter in a Mesh", onclick: function () { meshWanted = true; btn.onclick(); } }) : null,
             (!failed && links.length) ? el("div", { className: "vl-dlinks" }, el("span", { textContent: "See it running in the space: " }), links.map(function (s) { return el("a", { className: "vl-btn", href: consoleUrl(s.route), target: "_blank", rel: "noopener", textContent: s.service || s.title }); })) : null));
-          if (escalate) setTimeout(function () { btn.onclick(); }, 800);   // no to-do list for the learner: continue inside a Mesh
         });
       };
       var panel = el("div", { className: "vl-deploy vl-deploystrip", hidden: true },

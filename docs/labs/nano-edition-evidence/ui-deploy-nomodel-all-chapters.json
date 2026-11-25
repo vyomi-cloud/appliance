@@ -1,0 +1,183 @@
+{
+ "1": {
+  "layer": "1",
+  "events": [],
+  "ms": 14527,
+  "rows": [
+   "1 | Sign users in with Cognito | python cognito_setup.py | passed",
+   "2 | Add a rate-limiting web ACL | python waf.py | passed",
+   "3 | Put an API Gateway in front of the knowledge tool | python api_gateway.py | passed",
+   "4 | Call the API with a token | python call_with_token.py | passed",
+   "5 | Call the API without a token | python call_without_token.py | passed"
+  ],
+  "summary": "Deployed."
+ },
+ "2": {
+  "layer": "2",
+  "events": [],
+  "ms": 8172,
+  "rows": [
+   "1 | Test the input guardrail | python input_guardrail.py | passed",
+   "2 | Read the approver inbox | python inbox_channel.py | passed"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon SNS\nBedrock Guardrails"
+ },
+ "3": {
+  "layer": "3",
+  "events": [],
+  "ms": 8807,
+  "rows": [
+   "1 | Install the one dependency | install.sh | saved",
+   "2 | Write the gateway client | mcp_client.py | saved",
+   "3 | Write the supervisor and the three sub-agents | agents.py | saved",
+   "4 | Write the AgentCore entrypoint | agent_main.py | saved",
+   "5 | Package the agent and create the runtime | python deploy_runtime.py | passed",
+   "6 | Write a small helper to call the agent | ask_agent.py | saved",
+   "7 | Invoke the hosted supervisor from two sessions | python invoke_agent.py | failed",
+   "8 | Stop a session | python stop_session.py | failed"
+  ],
+  "summary": "1 step(s) ran in your browser, 2 failed.\n\nOpen the step log below, fix the cause and deploy again."
+ },
+ "4": {
+  "layer": "4",
+  "events": [],
+  "ms": 10334,
+  "rows": [
+   "1 | Create the gateway and register the tools | python gateway.py | passed",
+   "2 | List the tools over MCP | python mcp_list.py | passed",
+   "3 | Call a tool through the gateway | python mcp_call.py | passed",
+   "4 | Restrict tool use with a Cedar policy | python cedar_policy.py | passed",
+   "5 | Ask the agent again, now through the gateway | python agent_via_gateway.py | failed"
+  ],
+  "summary": "4 step(s) ran in your browser, 1 failed.\n\nOpen the step log below, fix the cause and deploy again."
+ },
+ "5": {
+  "layer": "5",
+  "events": [],
+  "ms": 18976,
+  "rows": [
+   "1 | Create the approver inbox | python approver_inbox.py | passed",
+   "2 | Create the approval state machine | python state_machine.py | passed",
+   "3 | Let the agent ask for a work order | python request_work_order.py | failed",
+   "4 | Approve the request | python approve.py | failed",
+   "5 | Reject a request | python reject.py | passed",
+   "6 | Read the execution history | python history.py | failed"
+  ],
+  "summary": "3 step(s) ran in your browser, 3 failed.\n\nOpen the step log below, fix the cause and deploy again."
+ },
+ "6": {
+  "layer": "6",
+  "events": [],
+  "ms": 8171,
+  "rows": [
+   "1 | Search the knowledge base | python search.py | passed",
+   "2 | Rerank the hits | python rerank.py | passed",
+   "3 | Write the knowledge-search tool | kb_search.py | saved",
+   "4 | Deploy and call the tool | python deploy_kb_search.py | passed"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock Knowledge Bases"
+ },
+ "7": {
+  "layer": "7",
+  "events": [],
+  "ms": 6039,
+  "rows": [
+   "1 | Create the three tables | python tables.py | passed",
+   "2 | Seed the data | python seed.py | passed",
+   "3 | Write the read-only tool | asset_status.py | saved",
+   "4 | Write the approval-request tool | request_approval.py | saved",
+   "5 | Write the work-order tool | create_work_order.py | saved",
+   "6 | Deploy the three Lambda functions | python deploy_tools.py | passed",
+   "7 | Call the read-only tool | python call_tools.py | passed"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon DynamoDB\nAWS Lambda"
+ },
+ "8": {
+  "layer": "8",
+  "events": [],
+  "ms": 6086,
+  "rows": [
+   "1 | Trace an agent run | python trace_agent.py | failed",
+   "2 | List the evaluators | python evaluators.py | passed"
+  ],
+  "summary": "1 step(s) ran in your browser, 1 failed.\n\nOpen the step log below, fix the cause and deploy again."
+ },
+ "9": {
+  "layer": "9",
+  "events": [],
+  "ms": 8215,
+  "rows": [
+   "1 | Create the memory | python memory_create.py | passed",
+   "2 | Write and replay a conversation | python memory_events.py | passed",
+   "3 | Recall long-term records | python memory_recall.py | passed"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock AgentCore Memory"
+ },
+ "10": {
+  "layer": "10",
+  "events": [
+   "skipped"
+  ],
+  "pickerText": "This step needs a language model\n\nPick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser.\n\nQwen2.5 1.5B is the one that follows the course (routing, tool calls, citations). The smaller ones only prove the plumbing: they load fast, but their answers are poor. Needs about 2 GB of free disk and a GPU with enough memory.\n\nSmolLM2 360M\n~0.3 GB\nplumbing only\nQwen2.5 0.5B\n~0.4 GB\nplumbing only\nLlama 3.2 1B\n~0.7 GB\nplumbing only\nQwen2.5 1.5B\n~1 GB\nrecommended\nSkip, continue without a model",
+  "pickerButtons": [
+   "SmolLM2 360M ~0.3 GB plumbing only",
+   "Qwen2.5 0.5B ~0.4 GB plumbing only",
+   "Llama 3.2 1B ~0.7 GB plumbing only",
+   "Qwen2.5 1.5B ~1 GB recommended",
+   "Skip, continue without a model"
+  ],
+  "ms": 8087,
+  "rows": [
+   "1 | Write the model client | models.py | saved",
+   "2 | Try all three calls | python try_models.py | needs a model"
+  ],
+  "summary": "0 step(s) ran in your browser, 1 need a model.\n\nDeploy again and pick a model when asked to run the steps that call one.\n\nSee it running in the space:\nAmazon Bedrock\nAmazon Bedrock"
+ },
+ "11": {
+  "layer": "11",
+  "events": [
+   "skipped"
+  ],
+  "pickerText": "This step needs a language model\n\nPick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser.\n\nQwen2.5 1.5B is the one that follows the course (routing, tool calls, citations). The smaller ones only prove the plumbing: they load fast, but their answers are poor. Needs about 2 GB of free disk and a GPU with enough memory.\n\nSmolLM2 360M\n~0.3 GB\nplumbing only\nQwen2.5 0.5B\n~0.4 GB\nplumbing only\nLlama 3.2 1B\n~0.7 GB\nplumbing only\nQwen2.5 1.5B\n~1 GB\nrecommended\nSkip, continue without a model",
+  "pickerButtons": [
+   "SmolLM2 360M ~0.3 GB plumbing only",
+   "Qwen2.5 0.5B ~0.4 GB plumbing only",
+   "Llama 3.2 1B ~0.7 GB plumbing only",
+   "Qwen2.5 1.5B ~1 GB recommended",
+   "Skip, continue without a model"
+  ],
+  "ms": 10272,
+  "rows": [
+   "1 | Create the guardrail | python guardrail.py | passed",
+   "2 | Filter an answer on the way out | python output_guardrail.py | passed",
+   "3 | Ask the agent for a grounded, cited answer | python grounded_answer.py | failed",
+   "4 | Let the knowledge base generate the answer | python retrieve_and_generate.py | needs a model"
+  ],
+  "summary": "2 step(s) ran in your browser, 1 need a model, 1 failed.\n\nDeploy again and pick a model when asked to run the steps that call one.\n\nOpen the step log below, fix the cause and deploy again."
+ },
+ "12": {
+  "layer": "12",
+  "events": [],
+  "ms": 12089,
+  "rows": [
+   "1 | Upload the documents | python upload_docs.py | passed",
+   "2 | Create the vector store | python vector_store.py | passed",
+   "3 | Create the knowledge base and its data source | python knowledge_base.py | passed",
+   "4 | Ingest the documents | python ingest.py | passed",
+   "5 | Write the re-index function | ingest_docs.py | saved",
+   "6 | Wire the S3 event to the function | python event_driven.py | failed"
+  ],
+  "summary": "4 step(s) ran in your browser, 1 failed.\n\nOpen the step log below, fix the cause and deploy again."
+ },
+ "13": {
+  "layer": "13",
+  "events": [],
+  "ms": 10328,
+  "rows": [
+   "1 | Create a key and protect an approval record | python kms_protect.py | passed",
+   "2 | Turn on CloudTrail | python trail.py | passed",
+   "3 | Audit the approval | python audit.py | failed"
+  ],
+  "summary": "2 step(s) ran in your browser, 1 failed.\n\nOpen the step log below, fix the cause and deploy again."
+ }
+}

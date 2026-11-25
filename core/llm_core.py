@@ -197,8 +197,9 @@ def _no_backend_msg() -> str:
         import js  # noqa: F401  (Pyodide / Nano)
     except ImportError:
         return "No local LLM backend is available on this substrate."
-    return ("No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and "
-            "choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.")
+    return ("No in-browser model is loaded. Pick one and load it: in Vyomi Labs use 'Load a model', or open your console's local-model control "
+            "(Amazon Bedrock > Overview > Local model on AWS, Vertex AI on Google Cloud, Azure OpenAI on Azure). "
+            "It needs a WebGPU browser and is cleared when the page reloads.")
 
 
 def _endpoint() -> str | None:

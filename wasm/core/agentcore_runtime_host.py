@@ -287,6 +287,24 @@ class _Docker:
         subprocess.run(["docker", "rm", "-f", self.cid], capture_output=True)
 
 
+def _ensure_sdk(region):
+    """Nano / Pyodide has no boto3 wheel and no sockets: hosted agent code gets the in-process one (core/lambda_sdk) whose calls land in the same
+    stores. A real boto3 (anything that can import it) is never shadowed."""
+    import importlib.util
+    if "boto3" in sys.modules:
+        return
+    try:
+        if importlib.util.find_spec("boto3") is not None:
+            return
+        try:
+            from core import lambda_sdk
+        except ImportError:
+            import lambda_sdk  # type: ignore
+        lambda_sdk.install_boto3(region)
+    except Exception:
+        pass
+
+
 class _InProc:
     kind = "inproc"
 
@@ -303,6 +321,7 @@ class _InProc:
         os.environ.update(self.env)
         try:
             if self.fn is None:
+                _ensure_sdk(self.env.get("AWS_REGION", "us-east-1"))
                 self.fn = _load_entry(self.dir, self.entry)
             try:
                 payload = json.loads(body) if body else {}

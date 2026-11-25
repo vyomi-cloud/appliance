@@ -25,6 +25,8 @@ from core import kinesis_core
 from core import apigatewayv2_core
 from core import stepfunctions_core
 from . import aws_core_adapter as A   # share MSG / RDB / IAM singletons
+from . import wire_adapter as _wire    # registers the Lambda sandbox's in-process boto3 (core/lambda_sdk)
+_wire.register_lambda_sdk()
 
 # Compute/registry stores. Lambda + API Gateway share ONE namespace so an
 # AWS_PROXY integration reaches the registered functions (the API-GW→Lambda synergy).

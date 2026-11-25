@@ -145,7 +145,7 @@ const CORES = [
   "gcp_compute_core.py", "gcp_inframanager_core.py",   // main-side Nano cores (merged)
   "azure_graph_ext_core.py", "azure_graph_core.py",
   "azure_cdn_edge_core.py",   // Microsoft Graph (Entra ID: users/groups/apps/service principals/domains/admin units) — own data plane, not ARM-delegated
-  "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py",
+  "azure_servicebus_core.py", "azure_servicebus_rules.py", "amqp10.py", "azure_servicebus_amqp.py", "eventbridge_core.py", "eventbridge_schemas_core.py", "scheduler_core.py", "lambda_core.py", "lambda_sdk.py",
   "gateway_common.py", "apigateway_gateway.py", "apigateway_core.py", "apigatewayv2_core.py", "event_bus_engine.py", "apigatewayv2_gateway.py", "vpc_core.py", "vpc_vpn_core.py", "vpc_extras_core.py", "mgn_core.py", "vpc_lattice_core.py", "ec2_ops_core.py", "xray_core.py", "netfw_core.py", "dnsfw_core.py", "kinesis_core.py", "cost_model.py", "cloudwatch_core.py", "azure_sql_core.py", "azure_iam_core.py", "logs_core.py", "ssh_access_core.py", "ssm_core.py", "stepfunctions_core.py", "cloudformation_core.py", "gcp_cloudscheduler_core.py", "gcp_container_core.py", "gcp_redis_core.py", "gcp_vertex_core.py", "gcp_iamcredentials_core.py", "gcp_identityplatform_core.py", "gcp_monitoring_core.py", "azure_cmk_core.py", "azure_sql_security_core.py", "azure_storage_svc_core.py", "azure_sql_ext_core.py", "azure_sql_mirror_core.py", "ec2_gap_core.py", "cloudfront_dist_core.py", "rds_gap_core.py", "apigateway_gap_core.py", "ssm_gap_core.py", "glue_catalog_core.py", "ec2_instance_connect_core.py", "dms_gap_core.py",
   "vpc_lattice_dataplane.py",
   "eventbridge_partner_core.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py", "cloudformation_stacksets_core.py", "cloudformation_registry_core.py",
@@ -414,7 +414,10 @@ builtins._embed_bridge_set = _embed_bridge_set
       model: (globalThis.vyomiWebLLMModels.find((m) => m.mlc === id) || {}).id || id,
       chat: async (reqJson) => {
         const q = JSON.parse(reqJson);
-        const r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false });
+        globalThis.__vyomiLongJobs = (globalThis.__vyomiLongJobs || 0) + 1;   // a hosted agent makes several model calls inside ONE request: keep the SW's 15 s window open
+        let r;
+        try { r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false }); }
+        finally { globalThis.__vyomiLongJobs--; }
         const c = r.choices[0];
         return JSON.stringify({ text: c.message.content || "", input_tokens: r.usage && r.usage.prompt_tokens, output_tokens: r.usage && r.usage.completion_tokens, finish_reason: c.finish_reason === "length" ? "length" : "stop" });
       },
@@ -601,7 +604,7 @@ builtins._embed_bridge_set = _embed_bridge_set
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
     // wllama (imported chat models) may download/load a base GGUF or generate for longer than the SW's 15 s window: tell the SW we are alive.
-    const ka = setInterval(() => { try { const w = globalThis.vyomiWllama && globalThis.vyomiWllama.status(); if (w && (w.busy || w.phase === "downloading" || w.phase === "loading")) port.postMessage({ keepalive: true }); } catch (_) {} }, 4000);
+    const ka = setInterval(() => { try { const w = globalThis.vyomiWllama && globalThis.vyomiWllama.status(); if ((w && (w.busy || w.phase === "downloading" || w.phase === "loading")) || globalThis.__vyomiLongJobs > 0) port.postMessage({ keepalive: true }); } catch (_) {} }, 4000);
     try {
       // Rehydrate from the SHARED snapshot before serving, so this op sees resources
       // created in the OTHER context (the SDK/relay worker) even if a boot-time

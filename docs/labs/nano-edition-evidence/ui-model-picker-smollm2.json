@@ -1,0 +1,26 @@
+{
+ "10": {
+  "layer": "10",
+  "events": [
+   "picked SmolLM2"
+  ],
+  "pickerText": "This step needs a language model\n\nPick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser.\n\nQwen2.5 1.5B is the one that follows the course (routing, tool calls, citations). The smaller ones only prove the plumbing: they load fast, but their answers are poor. Needs about 2 GB of free disk and a GPU with enough memory.\n\nSmolLM2 360M\n~0.3 GB\nplumbing only\nQwen2.5 0.5B\n~0.4 GB\nplumbing only\nLlama 3.2 1B\n~0.7 GB\nplumbing only\nQwen2.5 1.5B\n~1 GB\nrecommended\nSkip, continue without a model",
+  "pickerButtons": [
+   "SmolLM2 360M ~0.3 GB plumbing only",
+   "Qwen2.5 0.5B ~0.4 GB plumbing only",
+   "Llama 3.2 1B ~0.7 GB plumbing only",
+   "Qwen2.5 1.5B ~1 GB recommended",
+   "Skip, continue without a model"
+  ],
+  "ms": 36160,
+  "rows": [
+   "1 | Write the model client | models.py | saved",
+   "2 | Try all three calls | python try_models.py | passed"
+  ],
+  "logs": [
+   "",
+   "chat: The single word response should be \"OK\".\ntools: stop_reason = end_turn\nembed: vector of 768 numbers\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon Bedrock\nAmazon Bedrock"
+ }
+}

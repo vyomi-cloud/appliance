@@ -1,0 +1,18 @@
+{
+ "10": {
+  "layer": "10",
+  "events": [
+   "skipped"
+  ],
+  "pickerText": "This step needs a language model\n\nPick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser.\n\nNo WebGPU in this browser, so no in-browser model can run. Use a recent desktop Chrome or Edge (WebGPU on, graphics acceleration enabled). Steps that call a model stay marked 'needs a model'; every other step still runs.\n\nSkip, continue without a model",
+  "pickerButtons": [
+   "Skip, continue without a model"
+  ],
+  "ms": 8111,
+  "rows": [
+   "1 | Write the model client | models.py | saved",
+   "2 | Try all three calls | python try_models.py | needs a model"
+  ],
+  "summary": "0 step(s) ran in your browser, 1 need a model.\n\nDeploy again and pick a model when asked to run the steps that call one.\n\nSee it running in the space:\nAmazon Bedrock\nAmazon Bedrock"
+ }
+}

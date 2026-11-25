@@ -62,15 +62,20 @@ _SAFE_BUILTINS = {
                  "int", "len", "list", "map", "max", "min", "range", "reversed",
                  "round", "set", "sorted", "str", "sum", "tuple", "zip", "print",
                  "isinstance", "hasattr", "getattr", "repr", "type", "chr", "ord",
-                 "Exception", "ValueError", "KeyError", "TypeError", "IndexError")
+                 "Exception", "ValueError", "KeyError", "TypeError", "IndexError",
+                 # real handlers define small classes, re-raise typed errors, and use bytes/format/iter helpers; none of these reach files, sockets or processes
+                 "object", "super", "property", "staticmethod", "classmethod", "bytes", "bytearray", "frozenset", "divmod", "pow", "iter", "next",
+                 "callable", "format", "slice", "issubclass", "hex", "bin", "oct", "BaseException", "RuntimeError", "AttributeError",
+                 "NotImplementedError", "StopIteration", "LookupError", "ArithmeticError", "ZeroDivisionError", "AssertionError", "TimeoutError")
 }
+_SAFE_BUILTINS["__build_class__"] = __builtins__["__build_class__"] if isinstance(__builtins__, dict) else getattr(__builtins__, "__build_class__")
 
 # Stdlib modules a function may import — pure/computational only. Deliberately
 # EXCLUDES os / sys / subprocess / socket / importlib / ctypes / io / pathlib /
 # shutil / builtins, so a handler cannot reach the filesystem, network or process.
 _SAFE_MODULES = {"json", "math", "datetime", "base64", "re", "random", "uuid",
                  "hashlib", "hmac", "itertools", "functools", "collections",
-                 "string", "decimal", "statistics", "textwrap", "time"}
+                 "string", "decimal", "statistics", "textwrap", "time", "typing", "copy", "operator"}
 
 ACCOUNT_ID = "123456789012"
 REGION = "us-east-1"
@@ -89,6 +94,29 @@ def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
 
 
 _SAFE_BUILTINS["__import__"] = _safe_import
+
+
+def _sandbox_import(fn):
+    """A per-invocation __import__: the pure allow-list above, plus (only when the host registered an in-process transport -- Nano) the
+    sandbox SDK from core/lambda_sdk.py: boto3, botocore.exceptions, a restricted os and urllib.parse. Everything else stays refused."""
+    try:
+        from core import lambda_sdk as _sdk
+    except ImportError:
+        try:
+            import lambda_sdk as _sdk  # type: ignore
+        except ImportError:
+            return _safe_import
+    mods = _sdk.sandbox_modules(fn, REGION)
+    if not mods:
+        return _safe_import
+
+    def _imp(name, globals=None, locals=None, fromlist=(), level=0):
+        if level == 0 and name in mods:
+            return mods[name] if fromlist else mods[name.split(".")[0]]
+        if level == 0 and name.split(".")[0] in mods and name not in mods:
+            raise ImportError(f"module '{name}' is not available in the Lambda sandbox")
+        return _safe_import(name, globals, locals, fromlist, level)
+    return _imp
 
 
 @dataclass
@@ -1429,7 +1457,8 @@ def _sandbox_run(fn, event, context) -> dict:
         logs.append(" ".join(str(x) for x in a))
     safe = dict(_SAFE_BUILTINS)
     safe["print"] = _print
-    sandbox_globals = {"__builtins__": safe, "json": json}
+    safe["__import__"] = _sandbox_import(fn)
+    sandbox_globals = {"__builtins__": safe, "__name__": "lambda_function", "json": json}
     lg = lambda: "\n".join(logs) + ("\n" if logs else "")
     try:
         exec(compile(fn.get("source", ""), f"<lambda:{fn['name']}>", "exec"), sandbox_globals)
