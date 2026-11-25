@@ -1,15 +1,15 @@
 {
- "at": "2026-11-25T01:19:01+00:00",
+ "at": "2026-11-25T02:19:11+00:00",
  "baseline": false,
  "changes": [
   {
    "cloud": "aws",
-   "service": "CloudWatch",
+   "service": "CloudWatch Logs, CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:483954ad5c23",
-   "title": "Amazon SageMaker HyperPod now detects and recovers hung training jobs on Slurm clusters",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-hyperpod-slurm-hung-jobs/",
-   "detail": "Amazon SageMaker HyperPod now supports hung job detection for Slurm-orchestrated clusters, which finds training jobs that have stopped making progress and returns them to the job queue. SageMaker HyperPod helps you provision resilient clusters for training and deploying AI/ML models. Previously, a job that hung on an NCCL timeout, a stalled data pipeline, or a deadlock kept its GPUs while Slurm reported it as running, until you noticed that the job is not making progress. Now, if a training run hangs, HyperPod detects it within minutes from the job's output and GPU activity, or from log patter",
+   "key": "feed:aws:bc1bd57f07bf",
+   "title": "Amazon SageMaker HyperPod now detects Kubernetes issues affecting training",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-hyperpod-k8s-monitoring-agent/",
+   "detail": "Amazon SageMaker HyperPod now detects Kubernetes issues that disrupt training, such as crash-looping device plugins or missing DaemonSets, on clusters orchestrated by Amazon EKS. SageMaker HyperPod is purpose-built infrastructure for AI/ML model development, with built-in fault tolerance and automated cluster recovery. Previously, when a device plugin crash-looped or a taint evicted a job's pods, the job's error rarely named the pod or node, so engineers pieced the cause together from kubectl output and per-rank logs. Now, the new HyperPod Kubernetes Resource Monitoring Agent watches nodes, cr",
    "actionable": false
   }
  ],

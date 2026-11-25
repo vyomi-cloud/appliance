@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-25T02:19:11+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` Amazon SageMaker HyperPod now detects Kubernetes issues affecting training ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-hyperpod-k8s-monitoring-agent/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-25T01:19:01+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,13 +3006,4 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 **2 change(s), 0 actionable.**
 - · `announcement` Google Kubernetes Engine: Feature (November 12, 2026) ([link](https://docs.cloud.google.com/release-notes#November_12_2026))
 - · `announcement` Google Kubernetes Engine: Feature (November 12, 2026) ([link](https://docs.cloud.google.com/release-notes#November_12_2026))
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-13T01:09:57+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 1 actionable.**
-- 🔧 `spec-commit` Azure cognitiveservices: Add CognitiveServices preview API version 2026-11-15-preview (#47363) ([link](https://github.com/Azure/azure-rest-api-specs/commit/c9a473a72ea0fcad30177978498392d62dca74ae))
 
