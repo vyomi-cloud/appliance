@@ -552,7 +552,7 @@ def _deliver_notifications(store: ObjectStore, bucket: str, key: str, event_name
         return
     notifications = bucket_notifications(store, bucket)
     delivered = []
-    if lam is not None:
+    if lam is not None and event_name != "s3:TestEvent":   # real S3 sends the test event to SQS / SNS only, never invokes a Lambda with it
         for rule in notifications.get("cloudFunctionConfigurations", []):
             if rule.get("cloudFunction") and _notification_event_matches(rule, event_name, key):
                 try:
