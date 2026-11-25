@@ -1,6 +1,6 @@
 # Release checks — v4.1.0
 
-Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/45496250675) for tag `v4.1.0`.
+Generated 2026-11-25 17:20 UTC by [Release checks report](https://github.com/vyomi-cloud/appliance/actions/runs/45660374386) for tag `v4.1.0`.
 
 | Package / check | Platform | Result |
 |---|---|---|
@@ -18,7 +18,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi_4.1.0_all.deb | 5s |
+| ✅ | install vyomi_4.1.0_all.deb | 4s |
 | ✅ | package manager reports version 4.1.0 | found '4.1.0' |
 | ✅ | bundled VERSION is 4.1.0 | /usr/share/vyomi/packaging/common/VERSION = 4.1.0 |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -40,7 +40,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker_4.1.0_all.deb | 3s |
+| ✅ | install vyomi-docker_4.1.0_all.deb | 2s |
 | ✅ | package manager reports version 4.1.0 | found '4.1.0' |
 | ✅ | ships docker-compose.cloudlite.yml | /usr/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /usr/bin/vyomi |
@@ -56,7 +56,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.1.0 | exit 0; compose v4.1.0; ==> Vyomi 4.1.0 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.1.0 (SHA256-checked) | exit 0; cached compose v4.1.0 |
-| ✅ | after update, vyomi runs the cached v4.1.0 |   compose   : v4.1.0 (/tmp/tmp.BkZEiNVx7z/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.1.0 |   compose   : v4.1.0 (/tmp/tmp.TmLmJYGUe1/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Removing vyomi-docker (4.1.0) ... |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -105,7 +105,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.1.0 | exit 0; compose v4.1.0; ==> Vyomi 4.1.0 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.1.0 (SHA256-checked) | exit 0; cached compose v4.1.0 |
-| ✅ | after update, vyomi runs the cached v4.1.0 |   compose   : v4.1.0 (/tmp/tmp.3Jt0ZBA3zi/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.1.0 |   compose   : v4.1.0 (/tmp/tmp.6UFpBlpV48/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | uninstall vyomi-docker | Complete! |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
 
@@ -116,7 +116,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi | 17s |
+| ✅ | install vyomi | 10s |
 | ✅ | package manager reports version 4.1.0 | found '4.1.0' |
 | ✅ | bundled VERSION is 4.1.0 | /opt/homebrew/opt/vyomi/libexec/VERSION = 4.1.0 |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -139,7 +139,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 
 | | Check | Detail |
 |---|---|---|
-| ✅ | install vyomi-docker | 5s |
+| ✅ | install vyomi-docker | 3s |
 | ✅ | package manager reports version 4.1.0 | found '4.1.0' |
 | ✅ | ships docker-compose.cloudlite.yml | /opt/homebrew/opt/vyomi-docker/share/vyomi-docker/docker-compose.cloudlite.yml |
 | ✅ | 'vyomi' on PATH | /opt/homebrew/bin/vyomi |
@@ -155,7 +155,7 @@ Generated 2026-11-24 22:16 UTC by [Release checks report](https://github.com/vyo
 | ✅ | vyomi down → docker compose down | exit 0 |
 | ✅ | vyomi update → latest release v4.1.0 | exit 0; compose v4.1.0; ==> Vyomi 4.1.0 is the latest release. |
 | ✅ | vyomi update from v3.0.0 → v4.1.0 (SHA256-checked) | exit 0; cached compose v4.1.0 |
-| ✅ | after update, vyomi runs the cached v4.1.0 |   compose   : v4.1.0 (/var/folders/q2/p1t6rgxj5fj32g1dc7dmd49r0000gn/T/tmp.GMIFqyVBDB/home/.vyomi/docker-compose.cloudlite.yml) |
+| ✅ | after update, vyomi runs the cached v4.1.0 |   compose   : v4.1.0 (/var/folders/q2/p1t6rgxj5fj32g1dc7dmd49r0000gn/T/tmp.1RJ5UckcSR/home/.vyomi/docker-compose.cloudlite.yml) |
 | ✅ | brew test vyomi-docker | [34m==>[0m [1m/opt/homebrew/Cellar/vyomi-docker/4.1.0/bin/vyomi --help[0m |
 | ✅ | uninstall vyomi-docker | Uninstalling /opt/homebrew/Cellar/vyomi-docker/4.1.0... (12 files, 34.1MB) |
 | ✅ | uninstall leaves no package and no 'vyomi' on PATH | package entries: 0; vyomi: none |
@@ -382,23 +382,23 @@ AWS API Gateway, AWS DynamoDB, AWS EC2, AWS EventBridge, AWS IAM, AWS KMS, AWS L
 
 ## SDK checks (Python, Go, Java)
 
-❌ SDK checks: 1475/1478 passed (99.8%)
+❌ SDK checks: 1474/1478 passed (99.7%)
 
 Native-SDK conformance suites (the ones the hourly conformance agent runs) against the published release images, per cloud and language.
 
 | Cloud | Python | Go | Java |
 |---|---|---|---|
-| aws | 157/158 | 353/354 | 338/339 |
+| aws | 156/158 | 353/354 | 338/339 |
 | gcp | 5/5 | 153/153 | 95/95 |
 | azure | 19/19 | 216/216 | 139/139 |
 
 | Failing suite | Passed | Failed |
 |---|---|---|
-| `offline-sdk-python-aws` | 74 | 1 |
+| `offline-sdk-python-aws` | 73 | 2 |
 | `offline-sdk-java-aws-sns` | 72 | 1 |
 | `offline-sdk-go-aws-sns` | 70 | 1 |
 
-<!-- sdk-pass-rate: passed=1475 total=1478 not_run=0 rate=99.8 -->
+<!-- sdk-pass-rate: passed=1474 total=1478 not_run=0 rate=99.7 -->
 
 ---
 Project README: https://github.com/vyomi-cloud/appliance#readme
