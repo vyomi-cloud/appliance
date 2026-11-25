@@ -6,7 +6,8 @@
  *  - MyAccess: the one simulated signed-in principal's access on this resource, evaluated for real
  *    with checkAccess. */
 import { useState } from "react";
-import { Button } from "@fluentui/react-components";
+import { Button, ToolbarButton } from "@fluentui/react-components";
+import { DenyAssignmentDialog } from "./pickers/index.js";
 import { restJson } from "../../common/wire.js";
 import { useAsync } from "../../common/useAsync.js";
 import BrowseGrid from "./BrowseGrid.jsx";
@@ -20,12 +21,13 @@ const SAMPLE = ["Microsoft.Authorization/roleAssignments/write", "Microsoft.Reso
 
 export function DenyAssignmentsPanel({ a }) {
   const { data, loading, error, reload } = useAsync(iam.listRoleAssignments, []);
+  const [add, setAdd] = useState(false);
   const scoped = (data || []).filter((r) => r.properties?.kind === "deny" && iam.scopeCovers(r.properties?.scope, a.id));
   return (
     <div style={{ marginTop: 12 }}>
       <BrowseGrid
         resourceName="deny assignment" rowKey={(r) => r.name} items={scoped} loading={loading} error={error} onRefresh={reload}
-        csvName="deny-assignments.csv"
+        csvName="deny-assignments.csv" extraCommands={<ToolbarButton onClick={() => setAdd(true)}>Add deny assignment</ToolbarButton>}
         columns={[
           { key: "name", label: "Name", value: (r) => r.name },
           { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
@@ -33,7 +35,8 @@ export function DenyAssignmentsPanel({ a }) {
           { key: "scope", label: "Scope", value: (r) => (r.properties?.scope === a.id ? "This resource" : r.properties?.scope) },
         ]}
       />
-      <p className="vy-muted" style={{ fontSize: 12 }}>Deny assignments are created with <code>az role assignment create</code> / the Authorization API (properties.kind = "deny"); the portal itself only lists them, as here.</p>
+      {add && <DenyAssignmentDialog scope={a.id} onClose={() => setAdd(false)} onAdded={reload} />}
+      <p className="vy-muted" style={{ fontSize: 12 }}>The real portal only lists deny assignments; Vyomi also lets you add one (stored with properties.kind = "deny", explicit-deny-wins).</p>
     </div>
   );
 }

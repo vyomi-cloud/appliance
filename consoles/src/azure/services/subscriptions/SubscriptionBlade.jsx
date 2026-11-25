@@ -18,6 +18,9 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { downloadCsv, Essentials, ErrorBar, Glyph, InfoBar, Loading, NotSimulated, NotSimulatedContainer, fmtDate } from "../../kit/common.jsx";
 import { remember } from "../../kit/recent.js";
 import * as api from "./api.js";
+import { AddRoleAssignmentWizard, ActionField, PrincipalField } from "../../kit/pickers/index.js";
+import { Roles as IamRoles } from "../../kit/ResourceIam.jsx";
+import { DenyAssignmentsPanel } from "../../kit/IamExtras.jsx";
 import { EnforcementPanel as IamEnforcementPanel, EffectiveAccess as IamEffectiveAccess, AuditPanel as IamAuditPanel } from "../../kit/IamEnforcement.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
@@ -371,36 +374,14 @@ function AccessControlIam({ id }) {
           </table>
         </CapabilityContainer>
       )}
-      {tab === "roles" && (
-        <CapabilityContainer id="azure.subscriptions.access_control_iam" title="Roles">
-          <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by role name, description, permission, or ID" aria-label="Search by role name, description, permission, or ID" />
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Type</th><th>Category</th><th>Details</th></tr></thead>
-            <tbody>
-              {definitions.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
-                <tr key={r.name}><td>{r.name}</td><td>{r.properties?.description || "--"}</td><td>{r.properties?.type}</td><td>General</td><td>{r.assignmentCount} assignment{r.assignmentCount === 1 ? "" : "s"}</td></tr>
-              ))}
-              {!definitions.loading && !(definitions.data || []).length && <tr><td colSpan={5} className="vy-muted">No roles found.</td></tr>}
-            </tbody>
-          </table>
-        </CapabilityContainer>
-      )}
-      {tab === "deny" && (
-        <CapabilityContainer id="azure.subscriptions.access_control_iam" title="Deny assignments">
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Principal</th><th>Scope</th></tr></thead>
-            <tbody><tr><td colSpan={4} className="vy-muted">No deny assignments found.</td></tr></tbody>
-          </table>
-        </CapabilityContainer>
-      )}
+      {tab === "roles" && <CapabilityContainer id="azure.subscriptions.access_control_iam" title="Roles"><IamRoles a={{ id: `/subscriptions/${id}`, name: "this subscription" }} /></CapabilityContainer>}
+      {tab === "deny" && <CapabilityContainer id="azure.subscriptions.access_control_iam" title="Deny assignments"><DenyAssignmentsPanel a={{ id: `/subscriptions/${id}`, name: "this subscription" }} /></CapabilityContainer>}
       {tab === "classic" && (
         <CapabilityContainer id="azure.subscriptions.access_control_iam" title="Classic administrators">
           <InfoBar>No classic administrators are configured for this subscription.</InfoBar>
         </CapabilityContainer>
       )}
-      <AddRoleAssignmentDialog open={add} onClose={() => setAdd(false)} roles={definitions.data || []}
-        onCreate={async (roleName, principalId) => {
-          await api.putRoleAssignment(id, api.uid(), { properties: { roleName, principalId, principalType: "User" } });
-          assignments.reload();
-        }} />
+      {add && <AddRoleAssignmentWizard scope={`/subscriptions/${id}`} scopeLabel="Subscription | Access control (IAM)" onClose={() => setAdd(false)} onAdded={assignments.reload} />}
       <CheckAccessDialog open={dlg === "mine" || dlg === "check"} mine={dlg === "mine"} onClose={() => setDlg(null)}
         onCheck={(principalId, action) => api.checkAccess(id, principalId, action)} />
       <Dialog open={dlg === "feedback" || dlg === "columns"} onOpenChange={(_, d) => !d.open && setDlg(null)}>
@@ -416,50 +397,10 @@ function AccessControlIam({ id }) {
   );
 }
 
-function AddRoleAssignmentDialog({ open, onClose, onCreate, roles }) {
-  const notify = useNotify();
-  const [roleName, setRoleName] = useState("");
-  const [principalId, setPrincipalId] = useState("");
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { if (open) { setRoleName(roles[0]?.name || ""); setPrincipalId(""); } }, [open, roles]);
-  const go = async () => {
-    setBusy(true);
-    try {
-      await onCreate(roleName, principalId);
-      notify.success(`'${roleName}' was assigned to '${principalId}'.`, "Add role assignment");
-      onClose();
-    } catch (e) { notify.error(e, "Failed to add role assignment"); }
-    finally { setBusy(false); }
-  };
-  return (
-    <Dialog open={open} onOpenChange={(_, d) => !d.open && onClose()}>
-      <DialogSurface aria-label="Add role assignment">
-        <DialogBody>
-          <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>Add role assignment</DialogTitle>
-          <DialogContent>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <Field label="Role" required>
-                <Select value={roleName} onChange={(_, d) => setRoleName(d.value)} aria-label="Role">
-                  {roles.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
-                </Select>
-              </Field>
-              <Field label="Member" required hint="A user, group or service principal name — Vyomi has no directory to search, so type the exact principal ID.">
-                <Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} aria-label="Member" placeholder="e.g. alice@contoso.com" />
-              </Field>
-            </div>
-          </DialogContent>
-          <DialogActions>
-            <Button appearance="primary" disabled={busy || !roleName || !principalId} onClick={go}>Review + assign</Button>
-            <Button onClick={onClose}>Cancel</Button>
-          </DialogActions>
-        </DialogBody>
-      </DialogSurface>
-    </Dialog>
-  );
-}
-
 function CheckAccessDialog({ open, mine, onClose, onCheck }) {
-  const [principalId, setPrincipalId] = useState("");
+  const [principal, setPrincipal] = useState(null);
+  const principalId = principal?.id || "";
+  const setPrincipalId = (id) => setPrincipal(id === CURRENT_USER ? { id, name: CURRENT_USER, type: "User", principalType: "User" } : null);
   const [action, setAction] = useState("Microsoft.Resources/subscriptions/resourceGroups/read");
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -479,12 +420,8 @@ function CheckAccessDialog({ open, mine, onClose, onCheck }) {
           <DialogTitle action={<Button appearance="subtle" icon={<Dismiss20Regular />} aria-label="Close" onClick={onClose} />}>{mine ? "My access" : "Check access"}</DialogTitle>
           <DialogContent>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {!mine && <Field label="Find a user, group or service principal" required>
-                <Input value={principalId} onChange={(_, d) => setPrincipalId(d.value)} aria-label="Find a user, group or service principal" placeholder="e.g. bob@contoso.com" />
-              </Field>}
-              <Field label="Action to check" required hint="An ARM operation ID, e.g. Microsoft.Storage/storageAccounts/write">
-                <Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action to check" />
-              </Field>
+              {!mine && <PrincipalField label="Find a user, group or service principal" value={principal} onChange={setPrincipal} required />}
+              <ActionField label="Action to check" value={action} onChange={setAction} required />
               <Button appearance="primary" disabled={busy || !principalId || !action} onClick={() => run(principalId, action)}>Check access</Button>
               {busy && <Spinner size="tiny" />}
               {result && (

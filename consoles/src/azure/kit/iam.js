@@ -20,3 +20,5 @@ export const scopeCovers = (assignmentScope, resourceId) => {
   return a === "/" || a === r || r.startsWith(a + "/");
 };
 
+export const putRoleDefinition = (name, body) => restJson("PUT", authzPath(`roleDefinitions/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API }, body });
+export const deleteRoleDefinition = (name) => restJson("DELETE", authzPath(`roleDefinitions/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API } });
