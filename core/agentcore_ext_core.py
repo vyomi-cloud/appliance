@@ -169,14 +169,14 @@ def _extract(typ, text):
     return facts
 
 
-def _add_records(m, strat, actor, session, facts):
-    for f in facts:
+def _add_records(m, strat, actor, session, facts, vecs=None):
+    for i, f in enumerate(facts):
         for tmpl in strat["namespaceTemplates"]:
             ns = _fill(tmpl, actor, session, strat["strategyId"])
             if any(r["content"]["text"] == f and ns in r["namespaces"] for r in m["records"]):
                 continue
             m["records"].append({"memoryRecordId": "mem-" + B._rid(36, _LOWER), "content": {"text": f}, "memoryStrategyId": strat["strategyId"],
-                                 "namespaces": [ns], "createdAt": time.time(), "metadata": {}, "_vec": llm.embed(f)["vectors"][0]})
+                                 "namespaces": [ns], "createdAt": time.time(), "metadata": {}, "_vec": vecs[i] if vecs else llm.embed(f)["vectors"][0]})
 
 
 def _create_event(m, p):
@@ -198,13 +198,19 @@ def _create_event(m, p):
           "eventTimestamp": _ts(p.get("eventTimestamp")), "payload": pay, "metadata": p.get("metadata") or {}}
     if p.get("branch"):
         ev["branch"] = p["branch"]
-    m["events"].append(ev)
-    if any(i.get("conversational") for i in pay):          # extraction runs inline (real service: async job)
+    # Extraction runs inline (real service: async job). It may call the model, which on Nano raises NeedAsync and REPLAYS this whole
+    # request once the browser model answers: so every model/embedding call happens BEFORE the first mutation, or the replay would
+    # store the same event again (the event was duplicated 2-3x, so a session replayed 4 events instead of 2).
+    plan = []
+    if any(i.get("conversational") for i in pay):
         text = _convo_text([ev])
         for s in m["strategies"]:
             facts = _extract(s["type"], text)
             if facts:
-                _add_records(m, s, actor, session, facts)
+                plan.append((s, facts, [llm.embed(f)["vectors"][0] for f in facts]))
+    m["events"].append(ev)
+    for s, facts, vecs in plan:
+        _add_records(m, s, actor, session, facts, vecs)
     return ev
 
 
