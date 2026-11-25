@@ -364,3 +364,117 @@ print("roles created with the settled policies:", ", ".join(r["RoleName"] for r 
 print("least privilege per tool verified; denials in the audit log:", len([r for r in iamkit.audit(reader) + iamkit.audit(writer) if r["decision"] == "deny"]))
 ''', run="python iam_tools.py", expect="least privilege per tool verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
     ]
+
+    # ───────────────────────── chapter 5: actions and approval ─────────────────────────
+    LAB[5] += [
+     b("Failure lab: nobody answers, then someone approves too late", "A request left unanswered must not wait forever and must not be approvable later. This block builds the same workflow with a two-second deadline, starts a request and walks away. It asserts the execution ends as `ApprovalExpired`, the ledger says EXPIRED (with the deadline it was given), no work order exists, and a late SendTaskSuccess with the old token is refused.",
+       "expiry.py", r'''
+import json
+import time
+
+import boto3
+from botocore.exceptions import ClientError
+
+from state_machine import ROLE, build_asl
+
+sf, ddb = boto3.client("stepfunctions"), boto3.client("dynamodb")
+arn = sf.create_state_machine(name="work-order-approval-2s", definition=json.dumps(build_asl(2)), roleArn=ROLE, type="STANDARD")["stateMachineArn"]
+rid = "req-expire01"
+ex = sf.start_execution(stateMachineArn=arn, name=rid, input=json.dumps(
+    {"request_id": rid, "asset_id": "EL-3", "summary": "Replace the elevator 3 door sensor", "priority": "P3", "requester": "expiry-test"}))["executionArn"]
+
+row = None
+for _ in range(40):
+    row = ddb.get_item(TableName="approval-ledger", Key={"request_id": {"S": rid}}).get("Item")
+    if row:
+        break
+    time.sleep(0.25)
+assert row and row["status"]["S"] == "PENDING" and int(row["expires_at"]["N"]) > int(row["ts"]["N"]), "the ledger must hold a PENDING row with a deadline"
+token = row["task_token"]["S"]
+print("pending with a deadline: expires_at - ts =", int(row["expires_at"]["N"]) - int(row["ts"]["N"]), "seconds (the lambda default; this run uses 2s in the workflow)")
+
+time.sleep(3)                                             # nobody answers
+for _ in range(40):
+    d = sf.describe_execution(executionArn=ex)
+    if d["status"] != "RUNNING":
+        break
+    time.sleep(0.5)
+assert d["status"] == "FAILED" and d.get("error") == "ApprovalExpired", "execution must end as ApprovalExpired, got %s/%s" % (d["status"], d.get("error"))
+status = ddb.get_item(TableName="approval-ledger", Key={"request_id": {"S": rid}})["Item"]["status"]["S"]
+assert status == "EXPIRED", "ledger must say EXPIRED, got " + status
+print("nobody answered: execution", d["status"], "/", d["error"], "| ledger", status)
+
+try:
+    sf.send_task_success(taskToken=token, output=json.dumps({"decision": "approved"}))
+    raise AssertionError("a late approval must be refused")
+except ClientError as e:
+    print("late approval refused:", e.response["Error"]["Code"])
+mine = [i for i in ddb.scan(TableName="facilities-work-orders")["Items"] if i["requester"]["S"] == "expiry-test"]
+assert not mine, "an expired request must never create a work order"
+print("expiry verified: no work order, request closed")
+''', run="python expiry.py", expect="expiry verified", needs_runtime=True, kind="failure", edition=MESH,
+       nano_note="Needs the Lambda tools to execute and a timer; on Nano the approval chain cannot run yet."),
+     b("Real approver identity and no self-approval", "A string like `duty.manager@example.com` typed into the approval proves nothing. Here the identity is the credential. The smallest form of the callback pattern (publish a task token, wait) runs with two IAM identities: the agent that asks may start the workflow but may NOT call SendTaskSuccess; the duty manager may read the inbox and answer. The audit log records which principal made each decision: that record, not a typed name, is who approved. (The simulator's STS GetCallerIdentity currently returns the account root for any key, so the audit log is the reliable record here.)",
+       "iam_approval.py", r'''
+import json
+import time
+
+import boto3
+from botocore.exceptions import ClientError
+
+import iamkit
+from iamkit import allow
+
+sns, sqs, sf = boto3.client("sns"), boto3.client("sqs"), boto3.client("stepfunctions")
+topic = sns.create_topic(Name="gate-topic")["TopicArn"]
+qurl = sqs.create_queue(QueueName="gate-inbox")["QueueUrl"]
+qarn = sqs.get_queue_attributes(QueueUrl=qurl, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
+sns.subscribe(TopicArn=topic, Protocol="sqs", Endpoint=qarn)
+ASL = {"StartAt": "Ask", "States": {
+    "Ask": {"Type": "Task", "Resource": "arn:aws:states:::sns:publish.waitForTaskToken", "TimeoutSeconds": 120,
+            "Parameters": {"TopicArn": topic, "Message": {"request_id.$": "$.request_id", "token.$": "$$.Task.Token"}},
+            "Catch": [{"ErrorEquals": ["States.Timeout"], "Next": "Expired"}, {"ErrorEquals": ["States.ALL"], "Next": "Rejected"}], "Next": "Approved"},
+    "Approved": {"Type": "Succeed"}, "Expired": {"Type": "Fail", "Error": "ApprovalExpired"}, "Rejected": {"Type": "Fail", "Error": "ApprovalRejected"}}}
+sm = sf.create_state_machine(name="approval-gate", definition=json.dumps(ASL), roleArn="arn:aws:iam::123456789012:role/facilities-role")["stateMachineArn"]
+
+iamkit.enforce("enforce")
+agent = iamkit.principal("facilities-agent", [allow("states:StartExecution", sm), allow(["states:DescribeExecution"], "*")])
+manager = iamkit.principal("duty-manager", [allow(["states:SendTaskSuccess", "states:SendTaskFailure"], "*"), allow(["sqs:ReceiveMessage", "sqs:DeleteMessage"], qarn)])
+
+# The agent asks for approval.
+ex = iamkit.client("stepfunctions", agent).start_execution(stateMachineArn=sm, name="gate-1", input=json.dumps({"request_id": "gate-1"}))["executionArn"]
+msg = None
+for _ in range(20):
+    got = iamkit.client("sqs", manager).receive_message(QueueUrl=qurl, WaitTimeSeconds=1).get("Messages")
+    if got:
+        msg = json.loads(json.loads(got[0]["Body"])["Message"])
+        break
+assert msg and msg["request_id"] == "gate-1", "the approver must find the request in the inbox"
+
+# 1. The agent cannot approve its own request.
+since = iamkit.last_audit_id()
+try:
+    iamkit.client("stepfunctions", agent).send_task_success(taskToken=msg["token"], output="{}")
+    raise AssertionError("self-approval must be refused")
+except ClientError as e:
+    assert e.response["Error"]["Code"] in ("AccessDenied", "AccessDeniedException"), e
+print("agent tried to approve its own request: refused")
+assert sf.describe_execution(executionArn=ex)["status"] == "RUNNING", "a refused approval must leave the request waiting"
+
+# 2. The duty manager approves; the audit log names who.
+iamkit.client("stepfunctions", manager).send_task_success(taskToken=msg["token"], output=json.dumps({"decision": "approved"}))
+for _ in range(20):
+    if sf.describe_execution(executionArn=ex)["status"] != "RUNNING":
+        break
+    time.sleep(0.25)
+assert sf.describe_execution(executionArn=ex)["status"] == "SUCCEEDED"
+decided = [r for r in iamkit.audit(manager, since) if r["action"] == "states:SendTaskSuccess"]
+assert decided and decided[0]["decision"] == "allow", "the audit log must show who sent the approval"
+refusals = [r for r in iamkit.audit(agent, since) if r["action"] == "states:SendTaskSuccess" and r["decision"] == "deny"]
+assert refusals, "the audit log must also show the refused self-approval"
+approver, requester = decided[0]["principal"], refusals[0]["principal"]
+assert approver != requester, "separation of duties: approver and requester must differ"
+print("approved by", approver, "| requested by", requester)
+print("approver identity verified from the audit log")
+''', run="python iam_approval.py", expect="approver identity verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
+    ]
