@@ -8422,6 +8422,14 @@ def _docker_instance_obj(instance: dict):
         cpus = float(instance.get("vcpus") or instance.get("cpus") or 1) or 1.0
     except (TypeError, ValueError):
         cpus = 1.0
+    try:   # Mesh: the container gets the size's real vCPU (capped at the host cores), the same source the pickers list from
+        from core import compute_sizes as _cs, mesh as _mb
+        if _mb.mesh_mode() and not (instance.get("vcpus") or instance.get("cpus")):
+            _mv = _cs.mesh_vcpus(instance.get("instance_type") or instance.get("machine_type") or instance.get("machineType")
+                                 or instance.get("vm_size") or "", _mesh_cloud_of(instance))
+            cpus = _mv or cpus
+    except Exception:
+        pass
     mem = _docker_instance_memory_mb(instance)
     _ssh_port = instance.get("ssh_host_port")
     try:
@@ -13967,6 +13975,9 @@ def _ec2_query_run_instances(params: dict[str, Any]) -> Response:
                              str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "")) or ""), count, _used)
         except _cb._Err as _cexc:
             return _ec2_error_response(_cexc.code, _cexc.message, _cexc.status)
+    from core import compute_sizes as _cs   # Mesh: only sizes a Docker instance on this host can run (EC2's own `Unsupported`, 400)
+    if not _cs.is_allowed("aws", instance_type):
+        return _ec2_error_response("Unsupported", f"Your requested instance type ({instance_type}) is not supported on this substrate. " + _cs.rejection("aws", instance_type), 400)
     try:   # mesh: the real EC2 capacity error, synchronously, before any record exists
         _mesh_capacity_precheck("aws", instance_type, count, str(params.get("Placement.AvailabilityZone", params.get("AvailabilityZone", "-"))))
     except Exception as _bexc:
@@ -15173,6 +15184,12 @@ async def api_gcp_compute_create_instance(project: str, zone: str, request: Requ
     )
     _enforce_quantity_cap("vm")  # tier cap — Free=1 VM/space
     _enforce_size_cap("vm", "gcp", str(getattr(req, "machineType", "") or payload.get("machineType") or ""))
+    from core import compute_sizes as _cs   # Mesh: refuse a machine type this host cannot run (400 INVALID_ARGUMENT)
+    _gmt = str(getattr(req, "machineType", "") or "")
+    if _gmt and not _cs.is_allowed("gcp", _gmt):
+        return JSONResponse(status_code=400, content={"error": {"code": 400, "status": "INVALID_ARGUMENT", "message":
+            f"Invalid value for field 'resource.machineType': '{_gmt}'. " + _cs.rejection("gcp", _gmt),
+            "errors": [{"message": _cs.rejection("gcp", _gmt), "domain": "global", "reason": "invalid"}]}})
     try:
         _mesh_capacity_precheck("gcp", str(getattr(req, "machineType", "") or ""), 1, f"projects/{project}/zones/{zone}")
     except Exception as _bexc:

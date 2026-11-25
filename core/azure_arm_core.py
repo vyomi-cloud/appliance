@@ -1172,8 +1172,27 @@ def _vm_size_entry(name: str, shape: dict) -> dict:
     }
 
 
+def _compute_sizes():
+    try:
+        from core import compute_sizes
+    except ImportError:
+        import compute_sizes                       # type: ignore
+    return compute_sizes
+
+
 def _vm_sizes() -> list:
-    return [_vm_size_entry(name, shape) for name, shape in sorted(instance_catalog.AZURE.items())]
+    cs = _compute_sizes()
+    rows = {r["name"]: r for r in cs.size_table("azure")}     # Nano / Mesh: only what the substrate can run; offline: every size
+    sub = cs.substrate()
+    out = []
+    for name, shape in sorted(instance_catalog.AZURE.items()):
+        if name not in rows:
+            continue
+        e = _vm_size_entry(name, shape)
+        if cs.restricted(sub):
+            e.update({"vyomiSubstrate": sub, "vyomiRunVcpu": rows[name]["run_vcpu"], "vyomiRunMemoryMB": rows[name]["run_mem_mb"]})
+        out.append(e)
+    return out
 
 
 def _ok(body, status=200, headers=None):
@@ -2257,6 +2276,9 @@ class AzureArm:
             blocked = self._policy_block(sub, rg, full_type, payload, names[-1] if names else '', self.state.get(key))
             if blocked:
                 return blocked
+            blocked = self._vm_size_block(full_type, payload)
+            if blocked:
+                return blocked
             blocked = self._quota_block(sub, full_type, key, payload)
             if blocked:
                 return blocked
@@ -2652,6 +2674,19 @@ class AzureArm:
             r = billing_ext.quota_dispatch(self.state, method, sub, namespace, loc, chain[4:], payload, lambda n: usage.get(n, 0), defaults)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         return None
+
+    def _vm_size_block(self, full_type, payload):
+        """Nano / Mesh: a VM size the substrate cannot run is refused with ARM's own SkuNotAvailable (409) instead of creating a VM
+        that silently gets less. Offline appliances are not restricted."""
+        if full_type.lower() != "microsoft.compute/virtualmachines":
+            return None
+        size = ((payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize")
+        cs = _compute_sizes()
+        if not size or cs.is_allowed("azure", size):
+            return None
+        loc = str((payload or {}).get("location") or DEFAULT_LOCATION)
+        return _err(409, "SkuNotAvailable", f"The requested VM size for resource 'Following SKUs have failed for Capacity Restrictions: {size}' "
+                    f"is currently not available in location '{loc}'. " + cs.rejection("azure", size))
 
     def _quota_err(self, label, loc, limit):
         return _err(403, "QuotaExceeded",

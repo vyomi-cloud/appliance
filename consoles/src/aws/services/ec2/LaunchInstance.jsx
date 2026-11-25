@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ContentLayout from "@cloudscape-design/components/content-layout";
 import Header from "@cloudscape-design/components/header";
 import Form from "@cloudscape-design/components/form";
@@ -19,6 +19,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { nanoVmOn } from "../../../common/NanoVmPanel.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -72,6 +73,9 @@ export default function LaunchInstance({ query }) {
   const searchedImages = search ? images.filter((i) => i.name?.toLowerCase().includes(search.toLowerCase())) : images;
   const visibleTypes = allGen ? types : types.filter((t) => t.InstanceType !== "t2.small" && t.InstanceType !== "m4.large");
   const macOs = quickStart === "macOS";
+  const sizeNote = sizesNote(sizeSubstrate(types));
+  // Nano / Mesh list only the sizes they can run: keep the selection on one of them
+  useEffect(() => { if (visibleTypes.length && !visibleTypes.some((t) => t.InstanceType === instanceType)) setInstanceType(visibleTypes[0].InstanceType); }, [cat.data, allGen]);
 
   const build = () => {
     const perms = [];
@@ -160,9 +164,9 @@ export default function LaunchInstance({ query }) {
 
             <Container header={<Header variant="h2">Instance type</Header>}>
               <SpaceBetween size="l">
-                <FormField label="Instance type">
+                <FormField label="Instance type" description={sizeNote || undefined}>
                   <Select selectedOption={opt(instanceType)} onChange={({ detail }) => setInstanceType(detail.selectedOption.value)}
-                    options={visibleTypes.map((t) => opt(t.InstanceType, `${t.InstanceType} (${t.VCpuCount} vCPU, ${(t.MemoryMiB / 1024).toFixed(0)} GiB Memory)`))}
+                    options={visibleTypes.map((t) => opt(t.InstanceType, `${t.InstanceType} (${t.VCpuCount} vCPU, ${+(t.MemoryMiB / 1024).toFixed(2)} GiB Memory)`))}
                     loadingText="Loading instance types" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Instance type" />
                 </FormField>
                 <Checkbox checked={allGen} onChange={({ detail }) => setAllGen(detail.checked)}>All generations</Checkbox>

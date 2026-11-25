@@ -603,6 +603,10 @@ _VM_MEM_MB = {"nano": 256, "micro": 512, "small": 512, "medium": 768, "large": 1
 
 
 def _vm_mem(itype: str) -> int:
+    from core import compute_sizes   # one source: the size's real RAM (capped at 1024) when Nano offers it, else the legacy mapping
+    n = compute_sizes.nano_vm_mem_mb(itype)
+    if n:
+        return n
     t = str(itype or "").lower()
     for k, v in _VM_MEM_MB.items():
         if k in t:
