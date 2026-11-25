@@ -11,6 +11,7 @@ import SearchIcon from "@mui/icons-material/esm/Search.js";
 import ScienceIcon from "@mui/icons-material/esm/Science.js";
 import CableIcon from "@mui/icons-material/esm/Cable.js";
 import Studio from "./Studio.jsx";
+import RagStudio from "./studio/Studio.jsx";
 import { Overview, AgentStudio, AgentGarden, Tutorials, Deployments } from "./AgentPages.jsx";
 import { ModelGarden, ModelDetail } from "./GardenPages.jsx";
 import SchoolIcon from "@mui/icons-material/esm/School.js";
@@ -34,7 +35,7 @@ import { Endpoints, EndpointDetail, Models, Datasets, Training, Pipelines, Batch
 
 const B = "#/vertex-ai";
 const MODEL_PATHS = ["/vertex-ai/model-garden", "/vertex-ai/models", "/vertex-ai/endpoints", "/vertex-ai/batch", "/vertex-ai/datasets", "/vertex-ai/feature-store", "/vertex-ai/experiments", "/vertex-ai/training", "/vertex-ai/tuning", "/vertex-ai/pipelines", "/vertex-ai/evaluation", "/vertex-ai/provisioned-throughput", "/vertex-ai/metadata", "/vertex-ai/monitoring", "/vertex-ai/ray", "/vertex-ai/training-clusters"];
-const AGENT_PATHS = ["/vertex-ai/agent-garden", "/vertex-ai/adk", "/vertex-ai/mcp-servers", "/vertex-ai/rag-engine", "/vertex-ai/vector-search", "/vertex-ai/search", "/vertex-ai/agent-retrieval", "/vertex-ai/app-builder", "/vertex-ai/deployments", "/vertex-ai/memory-bank", "/vertex-ai/sessions", "/vertex-ai/agent-registry", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security", "/vertex-ai/topology"];
+const AGENT_PATHS = ["/vertex-ai/agent-garden", "/vertex-ai/adk", "/vertex-ai/mcp-servers", "/vertex-ai/rag-engine", "/vertex-ai/rag-studio", "/vertex-ai/vector-search", "/vertex-ai/search", "/vertex-ai/agent-retrieval", "/vertex-ai/app-builder", "/vertex-ai/deployments", "/vertex-ai/memory-bank", "/vertex-ai/sessions", "/vertex-ai/agent-registry", "/vertex-ai/policies", "/vertex-ai/gateways", "/vertex-ai/security", "/vertex-ai/topology"];
 const under = (path, list) => list.some((p) => path === p || path.startsWith(p + "/"));
 const TUTORIALS = { text: "Tutorials", href: `${B}/tutorials`, icon: SchoolIcon, pinned: true };
 
@@ -67,7 +68,7 @@ const AGENTS = [
   { button: { text: "New agent", href: `${B}/agent-garden` } },
   { section: "Build", collapsible: true, items: [
     { text: "Agent Garden", href: `${B}/agent-garden`, icon: AgentIcon }, { text: "ADK", href: `${B}/adk`, icon: CodeIcon },
-    { text: "MCP Servers", href: `${B}/mcp-servers`, icon: ExtensionIcon }, { text: "RAG Engine", href: `${B}/rag-engine`, icon: SearchIcon },
+    { text: "MCP Servers", href: `${B}/mcp-servers`, icon: ExtensionIcon }, { text: "RAG Engine", href: `${B}/rag-engine`, icon: SearchIcon }, { text: "RAG Studio", href: `${B}/rag-studio`, icon: ScienceIcon },
     { text: "Vector Search", href: `${B}/vector-search`, icon: SpokeIcon }, { text: "Search", href: `${B}/search`, icon: SearchIcon }, { text: "App Builder", href: `${B}/app-builder`, icon: WidgetsIcon },
     { text: "Agent Retrieval", href: `${B}/agent-retrieval`, icon: AgentIcon }] },
   { section: "Scale", collapsible: true, items: [
@@ -116,6 +117,7 @@ export default {
     { pattern: "/vertex-ai/sessions", component: Sessions },
     { pattern: "/vertex-ai/memory-bank", component: MemoryBank },
     { pattern: "/vertex-ai/rag-engine", component: RagEngine },
+    { pattern: "/vertex-ai/rag-studio", component: RagStudio },
     { pattern: "/vertex-ai/search", component: () => <SearchApps initial="stores" /> },
     { pattern: "/vertex-ai/app-builder", component: () => <SearchApps initial="apps" /> },
     { pattern: "/vertex-ai/agent-retrieval", component: AgentRetrieval },
