@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-25T23:33:46+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**2 change(s), 0 actionable.**
+- · `announcement` AWS Lambda now supports orchestrating MicroVMs with Lambda durable functions  ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-microvm/))
+- · `announcement` Amazon CloudWatch Omni now integrates with PagerDuty ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-omni-pagerduty/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-25T22:33:50+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,12 +3008,3 @@ Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - · `operation-changed` AWS ssm: operation CreateCloudConnector changed
 - · `release` pypi:boto3: 1.44.2 → 1.44.3
 - · `release` pypi:botocore: 1.44.2 → 1.44.3
-
-Sources that failed this run (9): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.google.cloud:google-cloud-pubsub: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
-
-Filed 12 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-13T20:10:17+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-

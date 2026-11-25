@@ -1,16 +1,26 @@
 {
- "at": "2026-11-25T22:33:50+00:00",
+ "at": "2026-11-25T23:33:46+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "azure",
-   "service": "Azure Functions",
-   "kind": "lifecycle",
-   "key": "feed:azure:c72503ee9f75",
-   "title": "Retirement: Support for Java 8, 11 and 17 in Azure Functions ends on September 1, 2027",
-   "link": "https://azure.microsoft.com/updates?id=568586",
-   "detail": "Support for Java 8, 11 and 17 on Azure Functions is ending on September 1, 2027. Your apps that are hosted on Azure Functions will continue to run, but security updates will no longer be available, and we\u2019ll no longer provide customer service for Java 8,",
-   "actionable": true
+   "cloud": "aws",
+   "service": "Amazon SQS, AWS Lambda, EventBridge",
+   "kind": "announcement",
+   "key": "feed:aws:f67cba2a7557",
+   "title": "AWS Lambda now supports orchestrating MicroVMs with Lambda durable functions ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-microvm/",
+   "detail": "Today, AWS announces a developer preview of a new extension for orchestrating Lambda MicroVMs with Lambda durable functions . The extension adds durable operations for running work on MicroVMs and managing their lifecycle. You can use the new operations to build software factories, security scanners, or orchestrate CI/CD jobs that run untrusted or agent-generated code in isolated sandboxes. With Lambda durable functions, you can build resilient, multi-step applications and AI workflows that run for up to one year, with built-in checkpointing and automatic retries. Lambda MicroVMs are a serverl",
+   "actionable": false
+  },
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:a9a4ff13587d",
+   "title": "Amazon CloudWatch Omni now integrates with PagerDuty",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-omni-pagerduty/",
+   "detail": "Amazon CloudWatch Omni alerts can now automatically create PagerDuty incidents, so notifications flow directly into your existing incident management workflows. This reduces mean time to resolution (MTTR) by eliminating manual notification steps and ensuring consistent incident workflows. CloudWatch Omni is a fully managed AI-powered observability experience built on open standards that unifies monitoring for AI agents, applications, and infrastructure. PagerDuty is an incident management platform that routes alerts to the right on-call responders and coordinates their response. When an Omni a",
+   "actionable": false
   }
  ],
  "errors": []
