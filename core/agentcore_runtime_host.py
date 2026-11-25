@@ -303,6 +303,9 @@ def _ensure_sdk(region):
         pass
 
 
+_VPID = [20000]   # virtual pids for in-process sessions: no subprocess exists on Nano, but each session is its own "process" to the agent
+
+
 class _InProc:
     kind = "inproc"
 
@@ -313,10 +316,13 @@ class _InProc:
         self.env = _env(rt, snap, endpoint, sid)
         self.entry, self.sid = entry, sid
         self.fn = None
+        _VPID[0] += 1
+        self.pid = _VPID[0]       # what os.getpid() answers inside this session: distinct per session, stable for its life
 
     def post(self, body, headers):
         old = {k: os.environ.get(k) for k in self.env}
         os.environ.update(self.env)
+        real_getpid, os.getpid = os.getpid, (lambda _p=self.pid: _p)
         try:
             if self.fn is None:
                 _ensure_sdk(self.env.get("AWS_REGION", "us-east-1"))
@@ -332,6 +338,7 @@ class _InProc:
         except Exception as e:
             return 500, {"content-type": "application/json"}, io.BytesIO(json.dumps({"error": f"{type(e).__name__}: {e}"}).encode())
         finally:
+            os.getpid = real_getpid
             for k, v in old.items():
                 if v is None:
                     os.environ.pop(k, None)
