@@ -45,10 +45,13 @@
 
     function load(c) {
       cloud = c; root.dataset.cloud = c; store = lsGet(KEY()); sel = null; inCourse = false;
-      return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }).then(function (d) {
-        course = d;
-        return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; });
-      }).then(function () { render(); });
+      /* Two editions of one course: "mesh" = every chapter step (appliance or Mesh runner), "nano" = only the steps that run in this browser. ?edition=nano|mesh forces one. */
+      var q = (location.search.match(/[?&]edition=(nano|mesh)\b/) || [])[1];
+      return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; }).then(function () {
+        var edition = q || (hasApi || meshRoute() ? "mesh" : "nano");
+        return fetch(base + "data/" + c + (edition === "nano" ? "-nano" : "") + ".json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("no " + edition); return r.json(); })
+          .catch(function () { return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }); });
+      }).then(function (d) { course = d; }).then(function () { render(); });
     }
     function go(id) { sel = id; render(); var s = host.closest ? host : null; window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); }
     function render() { root.replaceChildren(sel === "intro" ? introView() : sel ? chapterView(byId(sel)) : inCourse ? courseView() : catalogView()); }
