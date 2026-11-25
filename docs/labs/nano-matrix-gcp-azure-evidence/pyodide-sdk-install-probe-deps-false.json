@@ -1,0 +1,175 @@
+[
+ {
+  "pkg": "google-genai",
+  "mod": "google.genai",
+  "status": "IMPORT OK",
+  "steps": [
+   "install google-genai deps=False: ok",
+   "auto-installed google-auth",
+   "auto-installed anyio",
+   "auto-installed tenacity",
+   "auto-installed websockets"
+  ]
+ },
+ {
+  "pkg": "google-cloud-firestore",
+  "mod": "google.cloud.firestore",
+  "status": "IMPORT FAIL: ImportError: cannot import name 'runtime_version' from 'google.protobuf' (/lib/python3.12/site-packages/google/protobuf/__init__.py)",
+  "steps": [
+   "install google-cloud-firestore deps=False: ok",
+   "auto-installed google-api-core",
+   "auto-installed proto-plus",
+   "auto-installed google-type"
+  ]
+ },
+ {
+  "pkg": "google-cloud-pubsub",
+  "mod": "google.cloud.pubsub_v1",
+  "status": "IMPORT OK",
+  "steps": [
+   "install google-cloud-pubsub deps=False: ok",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api",
+   "auto-installed google-api"
+  ]
+ },
+ {
+  "pkg": "google-cloud-aiplatform",
+  "mod": "vertexai",
+  "status": "IMPORT FAIL: ImportError: cannot import name 'runtime_version' from 'google.protobuf' (/lib/python3.12/site-packages/google/protobuf/__init__.py)",
+  "steps": [
+   "install google-cloud-aiplatform deps=False: ok",
+   "auto-installed google-rpc"
+  ]
+ },
+ {
+  "pkg": "google-cloud-kms",
+  "mod": "google.cloud.kms",
+  "status": "IMPORT FAIL: ImportError: cannot import name 'runtime_version' from 'google.protobuf' (/lib/python3.12/site-packages/google/protobuf/__init__.py)",
+  "steps": [
+   "install google-cloud-kms deps=False: ok"
+  ]
+ },
+ {
+  "pkg": "google-cloud-storage",
+  "mod": "google.cloud.storage",
+  "status": "IMPORT FAIL: ImportError: cannot import name '_helpers' from 'google.cloud' (unknown location)",
+  "steps": [
+   "install google-cloud-storage deps=False: ok"
+  ]
+ },
+ {
+  "pkg": "google-cloud-functions",
+  "mod": "google.cloud.functions_v2",
+  "status": "IMPORT FAIL: ImportError: cannot import name 'runtime_version' from 'google.protobuf' (/lib/python3.12/site-packages/google/protobuf/__init__.py)",
+  "steps": [
+   "install google-cloud-functions deps=False: ok"
+  ]
+ },
+ {
+  "pkg": "langgraph",
+  "mod": "langgraph.graph",
+  "status": "IMPORT OK",
+  "steps": [
+   "install langgraph deps=False: ok",
+   "auto-installed langchain-core",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils",
+   "auto-installed uuid-utils"
+  ]
+ },
+ {
+  "pkg": "functions-framework",
+  "mod": "functions_framework",
+  "status": "IMPORT OK",
+  "steps": [
+   "install functions-framework deps=False: ok",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents",
+   "auto-installed cloudevents"
+  ]
+ },
+ {
+  "pkg": "azure-keyvault-keys",
+  "mod": "azure.keyvault.keys",
+  "status": "IMPORT OK",
+  "steps": [
+   "install azure-keyvault-keys deps=False: ok",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure",
+   "auto-installed azure"
+  ]
+ },
+ {
+  "pkg": "openai",
+  "mod": "openai",
+  "status": "IMPORT OK",
+  "steps": [
+   "install openai deps=False: ok",
+   "auto-installed httpx2",
+   "auto-installed httpx2-jsfetch",
+   "auto-installed sniffio"
+  ]
+ },
+ {
+  "pkg": "fastapi",
+  "mod": "fastapi",
+  "status": "IMPORT FAIL: ImportError: cannot import name 'sentinel' from 'typing_extensions' (/lib/python3.12/site-packages/typing_extensions.py). Did you mean: '_Sentinel'?",
+  "steps": [
+   "install fastapi deps=False: ok",
+   "auto-installed starlette",
+   "auto-installed annotated-doc"
+  ]
+ },
+ {
+  "pkg": "azure-monitor-opentelemetry-exporter",
+  "mod": "azure.monitor.opentelemetry.exporter",
+  "status": "BLOCKED: no pure-python wheel for module 'opentelemetry' (tried opentelemetry,opentelemetry)",
+  "steps": [
+   "install azure-monitor-opentelemetry-exporter deps=False: ok"
+  ]
+ }
+]

@@ -1,0 +1,379 @@
+{
+ "gcp": [
+  {
+   "chapter": 1,
+   "id": 10,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 2,
+   "id": 3,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 3,
+   "id": 7,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 4,
+   "id": 12,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 5,
+   "id": 6,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "saved on run",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 6,
+   "id": 11,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 7,
+   "id": 9,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 8,
+   "id": 4,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 9,
+   "id": 5,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 10,
+   "id": 1,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 11,
+   "id": 2,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 12,
+   "id": 8,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 13,
+   "id": 13,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  }
+ ],
+ "azure": [
+  {
+   "chapter": 1,
+   "id": 10,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 2,
+   "id": 3,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 3,
+   "id": 7,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 4,
+   "id": 12,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 5,
+   "id": 6,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "saved on run",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 6,
+   "id": 11,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 7,
+   "id": 9,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 8,
+   "id": 4,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 9,
+   "id": 5,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 10,
+   "id": 1,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 11,
+   "id": 2,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 12,
+   "id": 8,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  },
+  {
+   "chapter": 13,
+   "id": 13,
+   "btnText": "Deploy this chapter",
+   "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+   "chips": [
+    "saved on run",
+    "waiting",
+    "waiting",
+    "waiting",
+    "waiting"
+   ]
+  }
+ ]
+}

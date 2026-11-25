@@ -1,0 +1,100 @@
+[
+ {
+  "label": "gcs",
+  "m": "POST",
+  "u": "/storage/v1/b?project=vyomi-project",
+  "status": 200,
+  "head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", "
+ },
+ {
+  "label": "pubsub",
+  "m": "PUT",
+  "u": "/v1/projects/vyomi-project/topics/facilities-doc-events",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/topics/facilities-doc-events\"}"
+ },
+ {
+  "label": "gcs-notify",
+  "m": "POST",
+  "u": "/storage/v1/b/facilities-docs/notificationConfigs",
+  "status": 400,
+  "head": "{\"error\": {\"code\": 400, \"message\": \"Invalid Pub/Sub topic: projects/vyomi-project/topics/facilities-doc-events does not exist or the service account lacks publish permission.\", \"errors\": [{\"domain\": \"global\", \"reason\": \"invalid\", \"message\": \"Invalid Pub/Sub topic: projects/vyomi-project/topics/facil"
+ },
+ {
+  "label": "kms",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings?keyRingId=facilities",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities\", \"createTime\": \"2026-11-25T17:58:12.000000Z\"}"
+ },
+ {
+  "label": "kms",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys?cryptoKeyId=ledger-k",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key\", \"purpose\": \"ENCRYPT_DECRYPT\", \"createTime\": \"2026-11-25T17:58:13.000000Z\", \"versionTemplate\": {\"protectionLevel\": \"SOFTWARE\", \"algorithm\": \"GOOGLE_SYMMETRIC_ENCRYPTION\"}, \"primary\": {\"name\": \"projects/n"
+ },
+ {
+  "label": "kms-aad",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key:encrypt",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key/cryptoKeyVersions/1\", \"ciphertext\": \"VllLMQBpcHJvamVjdHMvbmFuby1wcm9qZWN0L2xvY2F0aW9ucy91cy1jZW50cmFsMS9rZXlSaW5ncy9mYWNpbGl0aWVzL2NyeXB0b0tleXMvbGVkZ2VyLWtleS9jcnlwdG9LZXlWZXJzaW9ucy8xP8V0rkWmRs6HpiMsKby"
+ },
+ {
+  "label": "kms-aad-good",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key:decrypt",
+  "status": 200,
+  "head": "{\"plaintext\": \"aw==\", \"plaintextCrc32c\": \"2855430920\", \"usedPrimary\": true, \"protectionLevel\": \"SOFTWARE\"}"
+ },
+ {
+  "label": "kms-aad-wrong",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key:decrypt",
+  "status": 400,
+  "head": "{\"error\": {\"code\": 400, \"message\": \"Decryption failed: the ciphertext is invalid or the additional_authenticated_data does not match.\", \"status\": \"INVALID_ARGUMENT\"}}"
+ },
+ {
+  "label": "audit-log",
+  "m": "POST",
+  "u": "/v2/entries:list",
+  "status": 200,
+  "head": "{\"entries\": [{\"logName\": \"projects/nano-project/logs/cloudaudit.googleapis.com%2Factivity\", \"resource\": {\"type\": \"audited_resource\", \"labels\": {\"service\": \"cloudkms.googleapis.com\", \"method\": \"google.cloud.kms.v1.KeyManagementService.CreateCryptoKey\"}}, \"severity\": \"NOTICE\", \"timestamp\": \"2026-11-25"
+ },
+ {
+  "label": "audit-methods",
+  "m": "",
+  "u": "",
+  "status": 0,
+  "head": "[\"google.cloud.kms.v1.KeyManagementService.CreateCryptoKey\",\"google.cloud.kms.v1.KeyManagementService.CreateKeyRing\",\"google.pubsub.v1.Publisher.CreateTopic\",\"storage.buckets.create\"]"
+ },
+ {
+  "label": "modelarmor",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/templates?templateId=t1",
+  "status": 200,
+  "head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/t1\", \"createTime\": \"2026-11-25T17:58:13.433000Z\", \"updateTime\": \"2026-11-25T17:58:13.433000Z\", \"labels\": {}, \"filterConfig\": {\"piAndJailbreakFilterSettings\": {\"filterEnforcement\": \"ENABLED\", \"confidenceLevel\": \"MEDIUM_AND_ABOVE\"}}, \"te"
+ },
+ {
+  "label": "modelarmor-sanitize",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/templates/t1:sanitizeUserPrompt",
+  "status": 200,
+  "head": "{\"sanitizationResult\": {\"filterMatchState\": \"MATCH_FOUND\", \"filterResults\": {\"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": \"EXECUTION_SUCCESS\", \"matchState\": \"MATCH_FOUND\", \"confidenceLevel\": \"MEDIUM_AND_ABOVE\"}}}, \"invocationResult\": \"SUCCESS\"}}"
+ },
+ {
+  "label": "pubsub-push-iam",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/subscriptions/x:pull",
+  "status": 404,
+  "head": "{\"error\": {\"code\": 404, \"message\": \"Subscription not found: projects/nano-project/subscriptions/x\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "label": "discoveryengine-op",
+  "m": "GET",
+  "u": "/v1/projects/vyomi-project/locations/global/collections/default_collection/dataStores/ds1/operations",
+  "status": 200,
+  "head": "{\"name\": \"/v1/projects/vyomi-project/locations/global/collections/default_collection/dataStores/ds1/operations/zz\", \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.protobuf.Empty\"}}"
+ }
+]

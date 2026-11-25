@@ -1,0 +1,261 @@
+[
+ {
+  "label": "gcs",
+  "m": "POST",
+  "u": "/storage/v1/b?project=vyomi-project",
+  "status": 200,
+  "head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"sto"
+ },
+ {
+  "label": "gcs",
+  "m": "POST",
+  "u": "/upload/storage/v1/b/facilities-docs/o?uploadType=media&name=docs%2Fboiler-sop.md",
+  "status": 200,
+  "head": "{\"kind\": \"storage#object\", \"id\": \"facilities-docs/docs/boiler-sop.md/1\", \"name\": \"docs/boiler-sop.md\", \"bucket\": \"facilities-docs\", \"generation\": \"1\", \"metageneration\": \"1\", \"contentType\": \"text/markdown\", \"timeCreated\": \"2026-11-25T17:45:47.000Z\", \"updated\": "
+ },
+ {
+  "label": "gcs",
+  "m": "GET",
+  "u": "/storage/v1/b/facilities-docs/o?prefix=docs/",
+  "status": 200,
+  "head": "{\"kind\": \"storage#objects\", \"items\": [{\"kind\": \"storage#object\", \"id\": \"facilities-docs/docs/boiler-sop.md/1\", \"name\": \"docs/boiler-sop.md\", \"bucket\": \"facilities-docs\", \"generation\": \"1\", \"metageneration\": \"1\", \"contentType\": \"text/markdown\", \"timeCreated\": \""
+ },
+ {
+  "label": "rag",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora",
+  "status": 200,
+  "head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/8484077621767917/operations/ce61533120694a82\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:45:47.681000Z\", \"upda"
+ },
+ {
+  "label": "rag",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/8484077621767917/ragFiles:import",
+  "status": 200,
+  "head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/8484077621767917/operations/39f2b2d4193d4ad8\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesOperationMetadata\", \"ragCorpusId\": \"8484077621767917\", \"createT"
+ },
+ {
+  "label": "rag",
+  "m": "GET",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/8484077621767917/ragFiles",
+  "status": 200,
+  "head": "{\"ragFiles\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/8484077621767917/ragFiles/6149551808216311\", \"displayName\": \"boiler-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:45:51.213000Z\", \"updateTime\": \"2026-11-25T17:45:51.2130"
+ },
+ {
+  "label": "rag",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts",
+  "status": 200,
+  "head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# Boiler SOP Check pressure daily. Relief valve test monthly.\", \"distance\": 0.309795, \"score\": 0.690205}]}}"
+ },
+ {
+  "label": "functions",
+  "m": "POST",
+  "u": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl",
+  "status": 200,
+  "head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/c6721f723893-1/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"c6721f723893-1/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "label": "functions",
+  "m": "PUT",
+  "u": "/gcf-upload/gcf-v2-sources-421047385945-us-central1/c6721f723893-1/function-source.zip",
+  "status": 200,
+  "head": ""
+ },
+ {
+  "label": "functions",
+  "m": "POST",
+  "u": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-asset-status",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/operations/e2d31f74-423b-f5c0-0245-6021f3ec49dd\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:45:51.812000Z\", \"endTime\": \"2026-11-25"
+ },
+ {
+  "label": "functions",
+  "m": "GET",
+  "u": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-asset-status",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/functions/facilities-asset-status\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"obj"
+ },
+ {
+  "label": "functions",
+  "m": "POST",
+  "u": "/gcf/vyomi-project/us-central1/facilities-asset-status",
+  "status": 404,
+  "head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-asset-status not found\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "label": "apigw",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/global/apis?apiId=facilities-api",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/global/operations/apigw-fbad08bd64a84f20\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:45:52.143000Z\", \"endTime\": \"2026-11-25T17:45:52.143000Z\""
+ },
+ {
+  "label": "apigw",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/global/apis/facilities-api/configs?apiConfigId=cfg1",
+  "status": 400,
+  "head": "{\"error\": {\"code\": 400, \"message\": \"Cannot parse the OpenAPI document: unexpected list item at line 12.\", \"status\": \"INVALID_ARGUMENT\"}}"
+ },
+ {
+  "label": "apigw-minimal",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/global/apis/facilities-api/configs?apiConfigId=cfg2",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/global/operations/apigw-16e7ba76918c4a1e\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:45:52.355000Z\", \"endTime\": \"2026-11-25T17:45:52.355000Z\""
+ },
+ {
+  "label": "identity",
+  "m": "POST",
+  "u": "/v1/accounts:signUp",
+  "status": 500,
+  "head": "{\"__type\": \"InternalFailure\", \"message\": \"nano /_wire: ImportError: cannot import name 'app_context' from 'core' (/core/__init__.py)\"}"
+ },
+ {
+  "label": "iam",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/serviceAccounts",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/serviceAccounts/agent-sa@nano-project.iam.gserviceaccount.com\", \"projectId\": \"nano-project\", \"uniqueId\": \"327950840928164734539\", \"email\": \"agent-sa@nano-project.iam.gserviceaccount.com\", \"displayName\": \"agent\", \"description\": \""
+ },
+ {
+  "label": "iam",
+  "m": "POST",
+  "u": "/v1/projects/-/serviceAccounts/agent-sa%40vyomi-project.iam.gserviceaccount.com:generateIdToken",
+  "status": 403,
+  "head": "{\"error\": {\"code\": 403, \"message\": \"Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).\", \"status\": \"PERMISSION_DENIED\"}}"
+ },
+ {
+  "label": "agentgw",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/agentGateways?agentGatewayId=facilities-gateway",
+  "status": 200,
+  "head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:45:52.784000Z\", \"vyomiExtens"
+ },
+ {
+  "label": "agentgw",
+  "m": "GET",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway",
+  "status": 200,
+  "head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:45:52.784000Z\", \"vyomiExtens"
+ },
+ {
+  "label": "pubsub",
+  "m": "PUT",
+  "u": "/v1/projects/vyomi-project/topics/t1",
+  "status": 400,
+  "head": "{\"error\": {\"code\": 400, \"message\": \"Invalid [topics] name: (name=projects/nano-project/topics/t1). Topic IDs must be 3-255 characters, start with a letter, contain only letters, numbers and - _ . ~ + %, and not start with 'goog'.\", \"status\": \"INVALID_ARGUMENT\""
+ },
+ {
+  "label": "pubsub",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/topics/t1:publish",
+  "status": 404,
+  "head": "{\"error\": {\"code\": 404, \"message\": \"Topic not found: projects/nano-project/topics/t1\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "label": "pubsub",
+  "m": "PUT",
+  "u": "/v1/projects/vyomi-project/subscriptions/s1",
+  "status": 404,
+  "head": "{\"error\": {\"code\": 404, \"message\": \"Topic not found: projects/nano-project/topics/t1\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "label": "pubsub",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/subscriptions/s1:pull",
+  "status": 404,
+  "head": "{\"error\": {\"code\": 404, \"message\": \"Subscription not found: projects/nano-project/subscriptions/s1\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "label": "firestore",
+  "m": "PATCH",
+  "u": "/v1/projects/vyomi-project/databases/(default)/documents/assets/B-12",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/databases/(default)/documents/assets/B-12\", \"fields\": {\"status\": {\"stringValue\": \"RUNNING\"}}, \"createTime\": \"2026-11-25T17:45:53.473000Z\", \"updateTime\": \"2026-11-25T17:45:53.473000Z\"}"
+ },
+ {
+  "label": "firestore",
+  "m": "GET",
+  "u": "/v1/projects/vyomi-project/databases/(default)/documents/assets/B-12",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/databases/(default)/documents/assets/B-12\", \"fields\": {\"status\": {\"stringValue\": \"RUNNING\"}}, \"createTime\": \"2026-11-25T17:45:53.473000Z\", \"updateTime\": \"2026-11-25T17:45:53.473000Z\"}"
+ },
+ {
+  "label": "kms",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings?keyRingId=kr",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/kr\", \"createTime\": \"2026-11-25T17:45:53.000000Z\"}"
+ },
+ {
+  "label": "kms",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/kr/cryptoKeys?cryptoKeyId=k1",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/kr/cryptoKeys/k1\", \"purpose\": \"ENCRYPT_DECRYPT\", \"createTime\": \"2026-11-25T17:45:53.000000Z\", \"versionTemplate\": {\"protectionLevel\": \"SOFTWARE\", \"algorithm\": \"GOOGLE_SYMMETRIC_ENCRYPTION\"}, \"primar"
+ },
+ {
+  "label": "kms",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/kr/cryptoKeys/k1:encrypt",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/kr/cryptoKeys/k1/cryptoKeyVersions/1\", \"ciphertext\": \"VllLMQBZcHJvamVjdHMvbmFuby1wcm9qZWN0L2xvY2F0aW9ucy91cy1jZW50cmFsMS9rZXlSaW5ncy9rci9jcnlwdG9LZXlzL2sxL2NyeXB0b0tleVZlcnNpb25zLzH+5XLkZKDjcVGIVGP"
+ },
+ {
+  "label": "kms",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/keyRings/kr/cryptoKeys/k1:decrypt",
+  "status": 200,
+  "head": "{\"plaintext\": \"c2VjcmV0\", \"plaintextCrc32c\": \"2956741965\", \"usedPrimary\": true, \"protectionLevel\": \"SOFTWARE\"}"
+ },
+ {
+  "label": "logging",
+  "m": "POST",
+  "u": "/v2/entries:write",
+  "status": 200,
+  "head": "{}"
+ },
+ {
+  "label": "logging",
+  "m": "POST",
+  "u": "/v2/entries:list",
+  "status": 200,
+  "head": "{\"entries\": [{\"logName\": \"projects/nano-project/logs/agent\", \"resource\": {\"type\": \"global\"}, \"textPayload\": \"hello\", \"severity\": \"DEFAULT\", \"receiveTimestamp\": \"2026-11-25T17:45:54.278Z\", \"timestamp\": \"2026-11-25T17:45:54.278Z\", \"insertId\": \"8a6c760ea2a542b7a7"
+ },
+ {
+  "label": "monitoring",
+  "m": "POST",
+  "u": "/v3/projects/vyomi-project/timeSeries",
+  "status": 200,
+  "head": "{}"
+ },
+ {
+  "label": "trace",
+  "m": "POST",
+  "u": "/v2/projects/vyomi-project/traces:batchWrite",
+  "status": 200,
+  "head": "{}"
+ },
+ {
+  "label": "armor",
+  "m": "POST",
+  "u": "/compute/v1/projects/vyomi-project/global/securityPolicies",
+  "status": 200,
+  "head": "{\"kind\": \"compute#operation\", \"id\": \"5000000000000000002\", \"name\": \"operation-1700000000002\", \"operationType\": \"insert\", \"targetLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/securityPolicies/p1\", \"targetId\": \"4000000000000000001\","
+ },
+ {
+  "label": "modelarmor",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/templates?templateId=t1",
+  "status": 400,
+  "head": "{\"error\": {\"code\": 400, \"message\": \"filterConfig is required and must enable at least one filter.\", \"status\": \"INVALID_ARGUMENT\"}}"
+ },
+ {
+  "label": "discoveryengine",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/global/collections/default_collection/dataStores?dataStoreId=ds1",
+  "status": 200,
+  "head": "{\"name\": \"projects/vyomi-project/locations/global/collections/default_collection/dataStores/ds1/operations/b2442fbb697748b4\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:45:55.42"
+ }
+]

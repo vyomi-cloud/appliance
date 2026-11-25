@@ -1,0 +1,1400 @@
+{
+ "gcp": [
+  {
+   "chapter": 1,
+   "file": "install_10.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 1,
+   "file": "gcp.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 1,
+   "file": "models.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 1,
+   "file": "try_models.py",
+   "run": "python try_models.py",
+   "rt": false,
+   "ok": false,
+   "expect": "embed: vectors of",
+   "text": "Loading the AWS SDK for Python (first run only)...\nThe module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 5699
+  },
+  {
+   "chapter": 2,
+   "file": "install_3.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "starter_tools.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "agents.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "try_agent.py",
+   "run": "python try_agent.py",
+   "rt": false,
+   "ok": false,
+   "expect": "route: ['facilities', 'maintenance', 'analytics']",
+   "text": "  File \"try_agent.py\", line 1, in <module>\n    from agents import ask\n  File \"/home/pyodide/agents.py\", line 6, in <module>\n    from langgraph.graph import END, StateGraph\nModuleNotFoundError: No module named 'langgraph'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 2,
+   "file": "agent_engine_app.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "deploy_agent.py",
+   "run": "python deploy_agent.py",
+   "rt": false,
+   "ok": false,
+   "expect": "deployed projects/",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 2,
+   "file": "query_agent.py",
+   "run": "python query_agent.py",
+   "rt": false,
+   "ok": false,
+   "expect": "hosted in a separate process: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 3,
+   "file": "install_7.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "seed.py",
+   "run": "python seed.py",
+   "rt": false,
+   "ok": false,
+   "expect": "seeded work-orders 3",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 3,
+   "file": "asset_status_fn.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "approval_decision_fn.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "create_work_order_fn.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "functions.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "deploy_tools.py",
+   "run": "python deploy_tools.py",
+   "rt": false,
+   "ok": false,
+   "expect": "deployed facilities-create-work-order",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 112
+  },
+  {
+   "chapter": 3,
+   "file": "call_asset_status.py",
+   "run": "python call_asset_status.py",
+   "rt": false,
+   "ok": false,
+   "expect": "found: True | status: RUNNING | open work orders: 1",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 3,
+   "file": "check_write_tool.py",
+   "run": "python check_write_tool.py",
+   "rt": false,
+   "ok": false,
+   "expect": "ledger: EXECUTED",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 4,
+   "file": "install_12.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "docs.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "upload_docs.py",
+   "run": "python upload_docs.py",
+   "rt": false,
+   "ok": false,
+   "expect": "4 documents uploaded to gs://facilities-docs/docs/",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 4,
+   "file": "rag.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "create_kb.py",
+   "run": "python create_kb.py",
+   "rt": false,
+   "ok": false,
+   "expect": "indexed files: 4",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 4,
+   "file": "notify.py",
+   "run": "python notify.py",
+   "rt": false,
+   "ok": false,
+   "expect": "notification: OBJECT_FINALIZE docs/notify-probe.md",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 4,
+   "file": "ingest_docs_fn.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "deploy_pipeline.py",
+   "run": "python deploy_pipeline.py",
+   "rt": false,
+   "ok": false,
+   "expect": "trigger facilities-docs-finalized created",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 4,
+   "file": "test_pipeline.py",
+   "run": "python test_pipeline.py",
+   "rt": false,
+   "ok": false,
+   "expect": "indexed files: 4 -> 5",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 4,
+   "file": "replace_doc.py",
+   "run": "python replace_doc.py",
+   "rt": false,
+   "ok": false,
+   "expect": "original restored serves 30 psi: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 5,
+   "file": "install_6.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 5,
+   "file": "search.py",
+   "run": "python search.py",
+   "rt": false,
+   "ok": false,
+   "expect": "every passage carries text and a gs:// source",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 5,
+   "file": "check_ranking.py",
+   "run": "python check_ranking.py",
+   "rt": false,
+   "ok": false,
+   "expect": "AHU question -> first hit is hvac-maintenance-manual.md",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 5,
+   "file": "kb_search_fn.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 5,
+   "file": "deploy_kb_search.py",
+   "run": "python deploy_kb_search.py",
+   "rt": false,
+   "ok": false,
+   "expect": "kb-search returned 3 cited results",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 6,
+   "file": "install_11.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 6,
+   "file": "guardrail.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 6,
+   "file": "respond.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 6,
+   "file": "try_response.py",
+   "run": "python try_response.py",
+   "rt": false,
+   "ok": false,
+   "expect": "grounded: the answer cites the boiler SOP",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 6,
+   "file": "screen_output.py",
+   "run": "python screen_output.py",
+   "rt": false,
+   "ok": false,
+   "expect": "clean answer passes: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 6,
+   "file": "safe_response.py",
+   "run": "python safe_response.py",
+   "rt": false,
+   "ok": false,
+   "expect": "safe response delivered with its citations",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 6,
+   "file": "grounded_generate.py",
+   "run": "python grounded_generate.py",
+   "rt": false,
+   "ok": false,
+   "expect": "generateContent grounded on the RAG corpus",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 7,
+   "file": "install_9.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 7,
+   "file": "memory.py",
+   "run": "python memory.py",
+   "rt": false,
+   "ok": false,
+   "expect": "memory host: projects/",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 7,
+   "file": "session_demo.py",
+   "run": "python session_demo.py",
+   "rt": false,
+   "ok": false,
+   "expect": "events replayed: 2",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 11
+  },
+  {
+   "chapter": 7,
+   "file": "remember.py",
+   "run": "python remember.py",
+   "rt": false,
+   "ok": false,
+   "expect": "another user's memories: 0",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 7,
+   "file": "generate_memories.py",
+   "run": "python generate_memories.py",
+   "rt": false,
+   "ok": false,
+   "expect": "memories generated from the conversation",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 8,
+   "file": "install_4.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 8,
+   "file": "mcp_server_fn.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 8,
+   "file": "gateway.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 8,
+   "file": "register_tools.py",
+   "run": "python register_tools.py",
+   "rt": false,
+   "ok": false,
+   "expect": "registered: projects/",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 8,
+   "file": "create_gateway.py",
+   "run": "python create_gateway.py",
+   "rt": false,
+   "ok": false,
+   "expect": "attached: ['facilities-tools']",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 8,
+   "file": "use_gateway.py",
+   "run": "python use_gateway.py",
+   "rt": false,
+   "ok": false,
+   "expect": "asset_status via gateway: B-12 RUNNING",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 8,
+   "file": "add_policy.py",
+   "run": "python add_policy.py",
+   "rt": false,
+   "ok": false,
+   "expect": "policy attached to facilities-gateway",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 9,
+   "file": "install_5.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 9,
+   "file": "approval.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 9,
+   "file": "setup_inbox.py",
+   "run": "python setup_inbox.py",
+   "rt": false,
+   "ok": false,
+   "expect": "subscription approver-inbox ready",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 9,
+   "file": "submit_request.py",
+   "run": "python submit_request.py",
+   "rt": false,
+   "ok": false,
+   "expect": "no work order exists before approval",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 9,
+   "file": "approve_request.py",
+   "run": "python approve_request.py",
+   "rt": false,
+   "ok": false,
+   "expect": "| ledger: EXECUTED by duty.manager@example.com | idempotent: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 9,
+   "file": "reject_request.py",
+   "run": "python reject_request.py",
+   "rt": false,
+   "ok": false,
+   "expect": "decision: REJECTED | create refused: True | work orders written: 0",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 10,
+   "file": "install_1.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 10,
+   "file": "signin.py",
+   "run": "python signin.py",
+   "rt": false,
+   "ok": false,
+   "expect": "verified: issuer https://securetoken.google.com/facilities-users | audience facilities-users | email maria.ops@example.com",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 10,
+   "file": "service_account.py",
+   "run": "python service_account.py",
+   "rt": false,
+   "ok": false,
+   "expect": "ID token is a JWT: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 10,
+   "file": "armor.py",
+   "run": "python armor.py",
+   "rt": false,
+   "ok": false,
+   "expect": "policy facilities-armor with 2 rules",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 10,
+   "file": "api_gateway.py",
+   "run": "python api_gateway.py",
+   "rt": false,
+   "ok": false,
+   "expect": "gateway facilities-api-gw ACTIVE",
+   "text": "The module 'pyyaml' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"pyyaml\") in Python, or\n  await pyodide.loadPackage(\"pyyaml\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 10,
+   "file": "call_edge.py",
+   "run": "python call_edge.py",
+   "rt": false,
+   "ok": false,
+   "expect": "unsigned token: 401",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 11,
+   "file": "install_2.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 11,
+   "file": "intake.py",
+   "run": "python intake.py",
+   "rt": false,
+   "ok": false,
+   "expect": "benign question allowed: True | prompt injection allowed: False",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 11,
+   "file": "inbox_check.py",
+   "run": "python inbox_check.py",
+   "rt": false,
+   "ok": false,
+   "expect": "redelivered after ack: False",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 12,
+   "file": "install_8.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 12,
+   "file": "export_trace.py",
+   "run": "python export_trace.py",
+   "rt": false,
+   "ok": false,
+   "expect": "spans exported in trace",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 12,
+   "file": "read_trace.py",
+   "run": "python read_trace.py",
+   "rt": false,
+   "ok": false,
+   "expect": "trace listed by list_traces: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 12,
+   "file": "log_run.py",
+   "run": "python log_run.py",
+   "rt": false,
+   "ok": false,
+   "expect": "trace field ends with the trace id: True",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 4
+  },
+  {
+   "chapter": 12,
+   "file": "metric.py",
+   "run": "python metric.py",
+   "rt": false,
+   "ok": false,
+   "expect": "metric read back:",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 12,
+   "file": "log_grpc.py",
+   "run": "python log_grpc.py",
+   "rt": false,
+   "ok": false,
+   "expect": "gRPC log entry written and read back",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  },
+  {
+   "chapter": 13,
+   "file": "install_13.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 13,
+   "file": "create_key.py",
+   "run": "python create_key.py",
+   "rt": false,
+   "ok": false,
+   "expect": "key: facilities/cryptoKeys/ledger-key with 90-day rotation",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 13,
+   "file": "seal_record.py",
+   "run": "python seal_record.py",
+   "rt": false,
+   "ok": false,
+   "expect": "wrong context refused",
+   "text": "The module 'cryptography' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"cryptography\") in Python, or\n  await pyodide.loadPackage(\"cryptography\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 13,
+   "file": "audit_trail.py",
+   "run": "python audit_trail.py",
+   "rt": false,
+   "ok": false,
+   "expect": "the run is in the audit log",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 3
+  },
+  {
+   "chapter": 13,
+   "file": "ledger_audit.py",
+   "run": "python ledger_audit.py",
+   "rt": false,
+   "ok": false,
+   "expect": "approved by duty.manager@example.com",
+   "text": "The module 'protobuf' is included in the Pyodide distribution, but it is not installed.\nYou can install it by calling:\n  await micropip.install(\"protobuf\") in Python, or\n  await pyodide.loadPackage(\"protobuf\") in JavaScript\nSee https://pyodide.org/en/stable/usage/loading-packages.html for more details.\n",
+   "ms": 2
+  }
+ ],
+ "azure": [
+  {
+   "chapter": 1,
+   "file": "install10.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 1,
+   "file": "azlab.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 1,
+   "file": "create_openai.py",
+   "run": "python create_openai.py",
+   "rt": false,
+   "ok": false,
+   "expect": "deployments: ['chat', 'embed']",
+   "text": "Loading the AWS SDK for Python (first run only)...\n  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"create_openai.py\", line 1, in <module>\n    from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 6969
+  },
+  {
+   "chapter": 1,
+   "file": "models.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 1,
+   "file": "try_models.py",
+   "run": "python try_models.py",
+   "rt": false,
+   "ok": false,
+   "expect": "embed: vector of",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 5
+  },
+  {
+   "chapter": 1,
+   "file": "try_more.py",
+   "run": "python try_more.py",
+   "rt": false,
+   "ok": false,
+   "expect": "unknown deployment -> 404",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"try_more.py\", line 1, in <module>\n    from openai import NotFoundError\nModuleNotFoundError: No module named 'openai'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 2,
+   "file": "install3.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "foundry_agents.py",
+   "run": "python foundry_agents.py",
+   "rt": false,
+   "ok": false,
+   "expect": "agents: ['facilities_analytics', 'facilities_facilities', 'facilities_maintenance', 'facilities_supervisor']",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"foundry_agents.py\", line 2, in <module>\n    from azure.ai.agents import AgentsClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 5
+  },
+  {
+   "chapter": 2,
+   "file": "agent_graph.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "app.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 2,
+   "file": "try_graph.py",
+   "run": "python try_graph.py",
+   "rt": false,
+   "ok": false,
+   "expect": "route: ['facilities', 'maintenance'] | model routed: True",
+   "text": "  File \"try_graph.py\", line 2, in <module>\n    os.environ.setdefault(\"VYOMI_ENDPOINT\", os.environ[\"VYOMI_AZURE_HTTP_ENDPOINT\"])\n                                            ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_HTTP_ENDPOINT'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 2,
+   "file": "deploy_container_app.py",
+   "run": "python deploy_container_app.py",
+   "rt": false,
+   "ok": false,
+   "expect": "container app facilities-supervisor state: Succeeded",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"deploy_container_app.py\", line 5, in <module>\n    from azure.mgmt.appcontainers import ContainerAppsAPIClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 2,
+   "file": "call_container_app.py",
+   "run": "python call_container_app.py",
+   "rt": true,
+   "ok": false,
+   "expect": "s1 turns: 1 -> 2 | s2 turns: 1",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"call_container_app.py\", line 2, in <module>\n    from azure.mgmt.appcontainers import ContainerAppsAPIClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 127
+  },
+  {
+   "chapter": 3,
+   "file": "install7.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "azdata.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "create_search.py",
+   "run": "python create_search.py",
+   "rt": false,
+   "ok": false,
+   "expect": "search service facilities-search ready",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"create_search.py\", line 1, in <module>\n    from azure.mgmt.search import SearchManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 3,
+   "file": "seed.py",
+   "run": "python seed.py",
+   "rt": false,
+   "ok": false,
+   "expect": "created approvalledger (empty)",
+   "text": "  File \"seed.py\", line 1, in <module>\n    from azdata import table\n  File \"/home/pyodide/azdata.py\", line 3, in <module>\n    from azure.data.tables import TableServiceClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 5
+  },
+  {
+   "chapter": 3,
+   "file": "fn_kb_search.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "fn_asset_status.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "fn_approval_decision.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "fn_create_work_order.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 3,
+   "file": "deploy_tools.py",
+   "run": "python deploy_tools.py",
+   "rt": false,
+   "ok": false,
+   "expect": "deployed facilities-tools ['approval-decision', 'asset-status', 'create-work-order', 'kb-search']",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"deploy_tools.py\", line 5, in <module>\n    from azure.mgmt.web import WebSiteManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 3,
+   "file": "call_tools.py",
+   "run": "python call_tools.py",
+   "rt": false,
+   "ok": false,
+   "expect": "found: True | status: RUNNING | work orders: 1",
+   "text": "  File \"call_tools.py\", line 1, in <module>\n    from azdata import call_function, FUNCTION_APP\n  File \"/home/pyodide/azdata.py\", line 3, in <module>\n    from azure.data.tables import TableServiceClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 4,
+   "file": "install12.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "boiler-sop.md",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "elevator-sop.md",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "fire-safety-sop.md",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "hvac-maintenance-manual.md",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "upload_docs.py",
+   "run": "python upload_docs.py",
+   "rt": false,
+   "ok": false,
+   "expect": "read back: # SOP-101 Boiler plant operation",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"upload_docs.py\", line 2, in <module>\n    from azure.mgmt.storage import StorageManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 4,
+   "file": "kb_index.py",
+   "run": "python kb_index.py",
+   "rt": false,
+   "ok": false,
+   "expect": "index facilities-kb fields: ['id', 'source', 'title', 'content', 'content_vector']",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"kb_index.py\", line 1, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 4,
+   "file": "indexer.py",
+   "run": "python indexer.py",
+   "rt": false,
+   "ok": false,
+   "expect": "indexer last run: success | documents: 4",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"indexer.py\", line 2, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 4,
+   "file": "check_search.py",
+   "run": "python check_search.py",
+   "rt": false,
+   "ok": false,
+   "expect": "'boiler pressure' -> boiler-sop.md",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"check_search.py\", line 1, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 4,
+   "file": "fn_ingest_docs.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 4,
+   "file": "deploy_ingest.py",
+   "run": "python deploy_ingest.py",
+   "rt": false,
+   "ok": false,
+   "expect": "event subscription blob-created: Succeeded",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"deploy_ingest.py\", line 5, in <module>\n    from azure.mgmt.eventgrid import EventGridManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 4,
+   "file": "new_doc.py",
+   "run": "python new_doc.py",
+   "rt": false,
+   "ok": false,
+   "expect": "new upload became searchable as: water-leak-sop.md",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"new_doc.py\", line 3, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 12
+  },
+  {
+   "chapter": 5,
+   "file": "install6.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 5,
+   "file": "inspect_index.py",
+   "run": "python inspect_index.py",
+   "rt": false,
+   "ok": false,
+   "expect": "vector dimensions:",
+   "text": "  File \"inspect_index.py\", line 1, in <module>\n    from kb_index import index_client\n  File \"/home/pyodide/kb_index.py\", line 1, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 5,
+   "file": "embed_docs.py",
+   "run": "python embed_docs.py",
+   "rt": false,
+   "ok": false,
+   "expect": "embedded and merged 5 documents",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"embed_docs.py\", line 1, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 5,
+   "file": "kb.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 5,
+   "file": "try_search.py",
+   "run": "python try_search.py",
+   "rt": false,
+   "ok": false,
+   "expect": "vector   what to do when boiler pressure is too high  -> boiler-sop.md\nhybrid   fire alarm evacuation procedure              -> fire-safety-sop.md",
+   "text": "  File \"try_search.py\", line 1, in <module>\n    from kb import kb_search\n  File \"/home/pyodide/kb.py\", line 1, in <module>\n    from azure.core.credentials import AzureKeyCredential\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 6,
+   "file": "install11.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 6,
+   "file": "respond.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 6,
+   "file": "try_respond.py",
+   "run": "python try_respond.py",
+   "rt": false,
+   "ok": false,
+   "expect": "grounded: True",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 6,
+   "file": "guard.py",
+   "run": "python guard.py",
+   "rt": false,
+   "ok": false,
+   "expect": "harmful completion allowed: False",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"guard.py\", line 1, in <module>\n    from azure.ai.contentsafety import ContentSafetyClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 6,
+   "file": "file_search.py",
+   "run": "python file_search.py",
+   "rt": false,
+   "ok": false,
+   "expect": "annotation types: ['file_citation']",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 6,
+   "file": "on_your_data.py",
+   "run": "python on_your_data.py",
+   "rt": false,
+   "ok": false,
+   "expect": "On Your Data citations:",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 7,
+   "file": "install9.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 7,
+   "file": "short_term.py",
+   "run": "python short_term.py",
+   "rt": false,
+   "ok": false,
+   "expect": "thread now holds 3 messages (2 user + 1 assistant)",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 7,
+   "file": "memory.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 7,
+   "file": "try_memory.py",
+   "run": "python try_memory.py",
+   "rt": false,
+   "ok": false,
+   "expect": "new session recalls: prefers floor 3 east wing for inspections",
+   "text": "  File \"/home/pyodide/memory.py\", line 2, in <module>\n    from azdata import table\n  File \"/home/pyodide/azdata.py\", line 3, in <module>\n    from azure.data.tables import TableServiceClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 7,
+   "file": "no_managed_memory.py",
+   "run": "python no_managed_memory.py",
+   "rt": false,
+   "ok": false,
+   "expect": "no managed long-term memory API",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 8,
+   "file": "install4.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 8,
+   "file": "gw.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 8,
+   "file": "create_gateway.py",
+   "run": "python create_gateway.py",
+   "rt": false,
+   "ok": false,
+   "expect": "catalogue: ['asset-status', 'create-work-order', 'kb-search']",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"create_gateway.py\", line 1, in <module>\n    from azure.mgmt.apimanagement.models import SubscriptionCreateParameters\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 8,
+   "file": "call_gateway.py",
+   "run": "python call_gateway.py",
+   "rt": false,
+   "ok": false,
+   "expect": "with the subscription key: 200 | B-12 status: RUNNING",
+   "text": "  File \"call_gateway.py\", line 2, in <module>\n    from gw import url, headers\n  File \"/home/pyodide/gw.py\", line 3, in <module>\n    from azure.mgmt.apimanagement import ApiManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 8,
+   "file": "policies.py",
+   "run": "python policies.py",
+   "rt": false,
+   "ok": false,
+   "expect": "write tool without x-approval-id: 403",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 8,
+   "file": "mcp_server.py",
+   "run": "python mcp_server.py",
+   "rt": false,
+   "ok": false,
+   "expect": "| status: RUNNING",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"mcp_server.py\", line 2, in <module>\n    from azure.mgmt.apimanagement.models import ApiCreateOrUpdateParameter\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 9,
+   "file": "install5.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 9,
+   "file": "create_bus.py",
+   "run": "python create_bus.py",
+   "rt": false,
+   "ok": false,
+   "expect": "subscription approver-inbox",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"create_bus.py\", line 1, in <module>\n    from azure.mgmt.servicebus import ServiceBusManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 9,
+   "file": "approval.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 9,
+   "file": "park_request.py",
+   "run": "python park_request.py",
+   "rt": false,
+   "ok": false,
+   "expect": "ledger status: PENDING\nwork orders requested by maria: 0",
+   "text": "  File \"park_request.py\", line 1, in <module>\n    from approval import request_approval, ledger_row, work_orders\n  File \"/home/pyodide/approval.py\", line 3, in <module>\n    from azure.servicebus import ServiceBusClient, ServiceBusMessage\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 9,
+   "file": "approve_request.py",
+   "run": "python approve_request.py",
+   "rt": false,
+   "ok": false,
+   "expect": "second call idempotent: True | work orders for B-12 from this request: 1",
+   "text": "  File \"approve_request.py\", line 2, in <module>\n    from approval import pull_request, wait_decision, ledger_row, work_orders\n  File \"/home/pyodide/approval.py\", line 3, in <module>\n    from azure.servicebus import ServiceBusClient, ServiceBusMessage\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 5
+  },
+  {
+   "chapter": 9,
+   "file": "reject_request.py",
+   "run": "python reject_request.py",
+   "rt": false,
+   "ok": false,
+   "expect": "decision with a stale ETag refused: 412",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"reject_request.py\", line 1, in <module>\n    from azure.core import MatchConditions\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 10,
+   "file": "install1.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 10,
+   "file": "entra.py",
+   "run": "python entra.py",
+   "rt": false,
+   "ok": false,
+   "expect": "app registration facilities-users client_id:",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 10,
+   "file": "sign_in.py",
+   "run": "python sign_in.py",
+   "rt": false,
+   "ok": false,
+   "expect": "signed in as: maria.ops@facilities.example.com",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"sign_in.py\", line 2, in <module>\n    import jwt\nModuleNotFoundError: No module named 'jwt'\n",
+   "ms": 5
+  },
+  {
+   "chapter": 10,
+   "file": "protect_gateway.py",
+   "run": "python protect_gateway.py",
+   "rt": false,
+   "ok": false,
+   "expect": "application token -> caller seen by the tool is the app id: True",
+   "text": "  File \"/home/pyodide/azlab.py\", line 5, in <module>\n    ENDPOINT = os.environ[\"VYOMI_AZURE_ENDPOINT\"]                          # https://localhost:<port>  (the simulator, TLS with a local CA)\n               ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_ENDPOINT'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 10,
+   "file": "waf.py",
+   "run": "python waf.py",
+   "rt": false,
+   "ok": false,
+   "expect": "Application Gateway WAF policy facilitieswafgw mode: Prevention",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"waf.py\", line 1, in <module>\n    from azure.mgmt.frontdoor import FrontDoorManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 11,
+   "file": "install2.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 11,
+   "file": "screen_input.py",
+   "run": "python screen_input.py",
+   "rt": false,
+   "ok": false,
+   "expect": "benign question flagged: False",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"screen_input.py\", line 1, in <module>\n    from azure.ai.contentsafety import ContentSafetyClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 2
+  },
+  {
+   "chapter": 11,
+   "file": "content_filter.py",
+   "run": "python content_filter.py",
+   "rt": false,
+   "ok": false,
+   "expect": "violent prompt refused: 400 content_filter",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"content_filter.py\", line 1, in <module>\n    from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 11,
+   "file": "inbox.py",
+   "run": "python inbox.py",
+   "rt": false,
+   "ok": false,
+   "expect": "redelivered after complete: 0",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"inbox.py\", line 2, in <module>\n    from azure.mgmt.servicebus import ServiceBusManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 12,
+   "file": "install8.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 12,
+   "file": "create_observability.py",
+   "run": "python create_observability.py",
+   "rt": false,
+   "ok": false,
+   "expect": "application insights facilities-ai ready",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"create_observability.py\", line 2, in <module>\n    from azure.mgmt.applicationinsights import ApplicationInsightsManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  },
+  {
+   "chapter": 12,
+   "file": "full_agent.py",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 12,
+   "file": "run_agent.py",
+   "run": "python run_agent.py",
+   "rt": false,
+   "ok": false,
+   "expect": "approval request parked: True",
+   "text": "  File \"/home/pyodide/full_agent.py\", line 5, in <module>\n    os.environ.setdefault(\"VYOMI_ENDPOINT\", os.environ[\"VYOMI_AZURE_HTTP_ENDPOINT\"])\n                                            ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<frozen os>\", line 685, in __getitem__\nKeyError: 'VYOMI_AZURE_HTTP_ENDPOINT'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 12,
+   "file": "export_telemetry.py",
+   "run": "python export_telemetry.py",
+   "rt": false,
+   "ok": false,
+   "expect": "the metric facilities.tool_calls = 4",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"export_telemetry.py\", line 5, in <module>\n    from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler\nModuleNotFoundError: No module named 'opentelemetry'\n",
+   "ms": 6
+  },
+  {
+   "chapter": 12,
+   "file": "query_telemetry.py",
+   "run": "python query_telemetry.py",
+   "rt": false,
+   "ok": false,
+   "expect": "facilities.tool_calls total: 4",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"query_telemetry.py\", line 4, in <module>\n    from azure.monitor.query import LogsQueryClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 12,
+   "file": "custom_table.py",
+   "run": "python custom_table.py",
+   "rt": false,
+   "ok": false,
+   "expect": "calls per tool: {'asset_status': 2, 'kb_search': 1, 'work_order_stats': 1}",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"custom_table.py\", line 5, in <module>\n    from azure.monitor.query import LogsQueryClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 5
+  },
+  {
+   "chapter": 12,
+   "file": "platform_metrics.py",
+   "run": "python platform_metrics.py",
+   "rt": false,
+   "ok": false,
+   "expect": "platform metrics returned: ['Transactions']",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"platform_metrics.py\", line 1, in <module>\n    from azure.mgmt.monitor import MonitorManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 13,
+   "file": "install13.sh",
+   "run": null,
+   "status": "saved"
+  },
+  {
+   "chapter": 13,
+   "file": "create_vault.py",
+   "run": "python create_vault.py",
+   "rt": false,
+   "ok": false,
+   "expect": "vault facilities-kv created",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"create_vault.py\", line 1, in <module>\n    from azure.mgmt.keyvault import KeyVaultManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 13,
+   "file": "make_key.py",
+   "run": "python make_key.py",
+   "rt": false,
+   "ok": false,
+   "expect": "listed: ['ledger-key']",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"make_key.py\", line 1, in <module>\n    from azure.keyvault.keys import KeyClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 13,
+   "file": "envelope.py",
+   "run": "python envelope.py",
+   "rt": false,
+   "ok": false,
+   "expect": "unwrap + decrypt restores the record: True",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"envelope.py\", line 2, in <module>\n    from azure.keyvault.keys import KeyClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 4
+  },
+  {
+   "chapter": 13,
+   "file": "audit.py",
+   "run": "python audit.py",
+   "rt": false,
+   "ok": false,
+   "expect": "vault create recorded: True | function app create recorded: True",
+   "text": "  File \"<frozen runpy>\", line 98, in _run_module_code\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"audit.py\", line 2, in <module>\n    from azure.mgmt.monitor import MonitorManagementClient\nModuleNotFoundError: No module named 'azure'\n",
+   "ms": 3
+  }
+ ]
+}
