@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-25T01:19:01+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` Amazon SageMaker HyperPod now detects and recovers hung training jobs on Slurm clusters ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-hyperpod-slurm-hung-jobs/))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-25T00:18:53+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,12 +3006,4 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **1 change(s), 1 actionable.**
 - 🔧 `spec-commit` Azure cognitiveservices: Add CognitiveServices preview API version 2026-11-15-preview (#47363) ([link](https://github.com/Azure/azure-rest-api-specs/commit/c9a473a72ea0fcad30177978498392d62dca74ae))
-
-Sources that failed this run (3): maven/software.amazon.awssdk:s3: The read operation timed out; maven/com.azure:azure-security-keyvault-secrets: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out
-
-Filed 1 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-13T00:10:01+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 

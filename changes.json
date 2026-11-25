@@ -1,6 +1,17 @@
 {
- "at": "2026-11-25T00:18:53+00:00",
+ "at": "2026-11-25T01:19:01+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:483954ad5c23",
+   "title": "Amazon SageMaker HyperPod now detects and recovers hung training jobs on Slurm clusters",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-hyperpod-slurm-hung-jobs/",
+   "detail": "Amazon SageMaker HyperPod now supports hung job detection for Slurm-orchestrated clusters, which finds training jobs that have stopped making progress and returns them to the job queue. SageMaker HyperPod helps you provision resilient clusters for training and deploying AI/ML models. Previously, a job that hung on an NCCL timeout, a stalled data pipeline, or a deadlock kept its GPUs while Slurm reported it as running, until you noticed that the job is not making progress. Now, if a training run hangs, HyperPod detects it within minutes from the job's output and GPU activity, or from log patter",
+   "actionable": false
+  }
+ ],
  "errors": []
 }
