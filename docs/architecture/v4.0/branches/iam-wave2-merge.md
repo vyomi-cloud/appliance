@@ -23,3 +23,7 @@ Open issues (carry into 4.1.1 notes)
 - GCP org-policy constraints ~45 curated; ValidatePolicy ~12 codes; Azure PIM has no approval/MFA; assertion signatures not verified.
 - Intermittent: test_iam_aws_gaps anonymous S3 public-bucket e2e failed once in an aggregated run.
 - ci/v4/v4-release-checklist.yml must be moved into .github/workflows by the owner.
+
+## Rebased on trunk 2026-11-26
+Merged origin/v4-on-main (7 commits: release-check fixes, trunk's own tfstudio/infra-manager onboarding). Trunk's versions won for service_map tfstudio/infra-manager, _methods.json and the infra-manager catalog; re-added: azure/managementgroups, backupdr strict_floor 36 (slice gained 5 real permissions), the full GCP catalog generator. Re-verified: IAM pytest 836 passed; script suites 0; UI smokes green (iam-ui 34/34, pickers aws 24/24 gcp azure 13/13, resource tabs, sweep2 37/37, azure-all-services in-scope).
+Also merged: v4/azure-all-services-scope (All services lists only in-scope services).
