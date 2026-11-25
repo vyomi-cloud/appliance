@@ -394,7 +394,7 @@
      "iamcredentials"
     ],
     "floor": 88,
-    "strict_floor": 19
+    "strict_floor": 20
    },
    "resource-manager": {
     "catalog": [
@@ -499,9 +499,14 @@
     "strict_floor": 70
    },
    "infra-manager": {
-    "catalog": "none",
-    "reason": "Infrastructure Manager (config.googleapis.com) permission catalog is not yet onboarded; its actions are not IAM-enforced until a config slice is generated",
-    "floor": 0
+    "catalog": [
+     "config"
+    ],
+    "apis": [
+     "config"
+    ],
+    "floor": 95,
+    "strict_floor": 66
    }
   },
   "azure": {

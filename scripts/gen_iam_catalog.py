@@ -127,7 +127,7 @@ GCP_SLUGS = ["storage", "compute", "container", "cloudsql", "firestore", "redis"
              "cloudbuild", "aiplatform", "monitoring", "logging", "cloudkms", "secretmanager", "firebaseauth", "dns", "serviceusage",
              "servicenetworking", "securitycenter", "orgpolicy", "iap", "vpcaccess", "cloudtasks", "bigquery", "workflows",
              # added by WP gcp-coverage: Binary Authorization, Marketplace (consumer procurement + offer catalog), Cloud Hub (Service Health + App Hub)
-             "binaryauthorization", "consumerprocurement", "commerceoffercatalog", "servicehealth", "apphub"]
+             "binaryauthorization", "consumerprocurement", "commerceoffercatalog", "servicehealth", "apphub", "config"]
 
 
 def gcp_service(slug):

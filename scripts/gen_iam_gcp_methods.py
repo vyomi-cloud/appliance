@@ -22,7 +22,7 @@ APIS = ["storage:v1", "compute:v1", "container:v1", "sqladmin:v1", "sqladmin:v1b
         "cloudbuild:v1", "aiplatform:v1", "monitoring:v3", "logging:v2", "cloudkms:v1", "secretmanager:v1", "dns:v1",
         "cloudtasks:v2", "workflows:v1", "bigquery:v2", "serviceusage:v1", "orgpolicy:v2", "securitycenter:v1",
         "vpcaccess:v1", "servicenetworking:v1", "iap:v1", "identitytoolkit:v1", "iamcredentials:v1", "serviceusage:v1beta1",
-        "binaryauthorization:v1", "apphub:v1"]
+        "binaryauthorization:v1", "apphub:v1", "config:v1"]
 
 # permission-prefix aliases: discovery id prefix -> permission prefixes to try
 PREFIX = {"firestore": ["datastore"], "sql": ["cloudsql"], "sqladmin": ["cloudsql"], "cloudresourcemanager": ["resourcemanager"], "identitytoolkit": ["firebaseauth"],

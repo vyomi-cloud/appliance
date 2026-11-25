@@ -37,7 +37,7 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Security Hub & GuardDuty (`securityhub`) | securityhub | 141 | 100.0 | 100 | yes |
 | AWS Backup (`backup`) | backup | 122 | 100.0 | 100 | yes |
 
-## GCP: 21/30 services enforceable, 1 without a catalog slice, 13808 catalog permissions
+## GCP: 22/30 services enforceable, 0 without a catalog slice, 13886 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Methods mapped | Catalog reach % | Reach floor | Enforceable |
 |---|---|---:|---:|---:|---:|---:|---:|---|
@@ -59,9 +59,9 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | API Gateway (`apigateway`) | apigateway | 64 | 100.0 | 100 | 30/30 | 57.8 | 57 | yes |
 | Secret Manager (`security/secret-manager`) | secretmanager | 40 | 100.0 | 100 | 36/36 | 60.0 | 60 | yes |
 | Cloud KMS (`security/kms`) | cloudkms | 92 | 97.7 | 97 | 85/87 | 70.7 | 70 | yes |
-| IAM & Admin (`iam-admin`) | iam | 3053 | 88.2 | 88 | 127/144 | 19.9 | 19 | no |
+| IAM & Admin (`iam-admin`) | iam | 3053 | 88.2 | 88 | 127/144 | 20.3 | 20 | no |
 | Manage resources (`resource-manager`) | resourcemanager, orgpolicy | 884 | 92.8 | 92 | 128/138 | 7.2 | 7 | yes |
-| Infrastructure Manager (`infra-manager`) | none: Infrastructure Manager (config.googleapis.com) permission catalog is not yet onboarded; its actions are not IAM-enforced until a config slice is generated | 0 | - | 0 | - | - | 0 | no |
+| Infrastructure Manager (`infra-manager`) | config | 78 | 95.7 | 95 | 45/47 | 66.7 | 66 | yes |
 | Artifact Registry (`artifacts`) | artifactregistry | 78 | 94.2 | 94 | 65/69 | 80.8 | 80 | yes |
 | Cloud Deploy (`clouddeploy`) | clouddeploy | 87 | 100.0 | 100 | 61/61 | 83.9 | 83 | yes |
 | Backup and DR (`backupdr`) | backupdr | 305 | 70.3 | 70 | 64/91 | 37.0 | 37 | no |

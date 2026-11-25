@@ -88,6 +88,7 @@
    "cloudtasks",
    "commerceoffercatalog",
    "compute",
+   "config",
    "consumerprocurement",
    "container",
    "dns",
@@ -118,7 +119,7 @@
   "iam_state_nano.py",
   "iam_resource_policies.py"
  ],
- "digest": "1862e5b9fa5709f4",
+ "digest": "f1b6af4e9f9345a5",
  "engine": [
   "__init__.py",
   "api.py",

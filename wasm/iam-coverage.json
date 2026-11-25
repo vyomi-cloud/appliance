@@ -10,9 +10,9 @@
   },
   "gcp": {
    "services": 30,
-   "enforceable": 21,
-   "catalog_none": 1,
-   "permissions": 13808
+   "enforceable": 22,
+   "catalog_none": 0,
+   "permissions": 13886
   },
   "azure": {
    "services": 31,
@@ -653,8 +653,8 @@
    "mapped_pct": 88.2,
    "floor": 88,
    "enforceable": false,
-   "strict_pct": 19.9,
-   "strict_floor": 19,
+   "strict_pct": 20.3,
+   "strict_floor": 20,
    "surface_methods": 144,
    "surface_mapped": 127
   },
@@ -679,16 +679,17 @@
    "cloud": "gcp",
    "id": "infra-manager",
    "title": "Infrastructure Manager",
-   "catalog": "none",
-   "reason": "Infrastructure Manager (config.googleapis.com) permission catalog is not yet onboarded; its actions are not IAM-enforced until a config slice is generated",
-   "permissions": 0,
-   "mapped_pct": null,
-   "floor": 0,
-   "enforceable": false,
-   "strict_pct": null,
-   "strict_floor": 0,
-   "surface_methods": 0,
-   "surface_mapped": 0
+   "catalog": [
+    "config"
+   ],
+   "permissions": 78,
+   "mapped_pct": 95.7,
+   "floor": 95,
+   "enforceable": true,
+   "strict_pct": 66.7,
+   "strict_floor": 66,
+   "surface_methods": 47,
+   "surface_mapped": 45
   },
   {
    "cloud": "gcp",
