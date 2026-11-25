@@ -245,3 +245,122 @@ print("audit trail holds", len([r for r in iamkit.audit(p) if r["decision"] == "
 print("least-privilege model caller verified")
 ''', run="python iam_models.py", expect="least-privilege model caller verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
     ]
+
+    # ───────────────────────── chapter 7: tools ─────────────────────────
+    LAB[7] += [
+     b("Failure lab: hostile input and a replayed approval", "The tools are called with arguments a model wrote, so treat them as hostile. This block throws a SQL-injection string, a wrong type, a missing field and an oversized summary at the tools and asserts each is refused before any data is touched. Then it approves the same request twice and asserts exactly one work order exists: the conditional write makes the second call a harmless replay.",
+       "tool_contract.py", r'''
+import json
+
+import boto3
+
+lam, ddb = boto3.client("lambda"), boto3.client("dynamodb")
+
+
+def call(fn, payload):
+    r = lam.invoke(FunctionName=fn, Payload=json.dumps(payload).encode())
+    return json.loads(r["Payload"].read())
+
+
+# Read tool: bad input never reaches DynamoDB.
+for bad in ("B-12'; DROP TABLE assets;--", "../../etc/passwd", "", None, 12, "b-12", "B-12 " + "x" * 400):
+    out = call("facilities-asset-status", {"asset_id": bad})
+    assert out.get("error") == "invalid_input", "hostile asset_id %r was not refused: %s" % (bad, out)
+assert call("facilities-asset-status", {}).get("error") == "invalid_input"
+print("read tool: 8 hostile or malformed inputs refused")
+assert call("facilities-asset-status", {"asset_id": "B-12"})["found"] is True       # and the good one still works
+
+# Write tool: schema is enforced too.
+base = {"request_id": "req-contract01", "asset_id": "B-12", "summary": "Inspect the boiler PRV", "priority": "P2", "requester": "contract-test"}
+for patch in ({"priority": "URGENT"}, {"summary": "x" * 500}, {"asset_id": "B-12; DELETE"}, {"summary": ""}):
+    out = call("facilities-create-work-order", dict(base, **patch))
+    assert out.get("error") == "invalid_input", "invalid request %r was not refused: %s" % (patch, out)
+print("write tool: 4 invalid requests refused")
+
+# Idempotency: the same approved request twice produces ONE work order.
+first = call("facilities-create-work-order", base)
+second = call("facilities-create-work-order", base)
+rows = [i for i in ddb.scan(TableName="facilities-work-orders")["Items"] if i["requester"]["S"] == "contract-test"]
+assert first["work_order_id"] == second["work_order_id"], "a replay must return the same work order"
+assert first["replayed"] is False and second["replayed"] is True, (first, second)
+assert len(rows) == 1, "expected exactly one work order, found %d" % len(rows)
+print("idempotent: replay returned", second["work_order_id"], "(replayed=True) and the table holds", len(rows), "row")
+print("tool contract verified")
+''', run="python tool_contract.py", expect="tool contract verified", needs_runtime=True, kind="failure",
+       nano_note="Needs the tools to execute as real Lambda functions; on Nano the Lambda sandbox cannot yet run these handlers."),
+     b("Least privilege per tool, from the audit log", "Each tool gets its own identity with the smallest policy that works. The read tool starts with only GetItem on the assets table: run its real handler as that identity, get refused when it scans the work orders, and read the audit log to learn the missing action and resource. Then prove the boundaries: the read tool cannot write, the write tool cannot read assets, and nothing can touch the ledger except the write tool. The same policies are attached to IAM roles for the functions; on real AWS the role is what the function runs as (the simulator's Lambda runner uses the account root, so this proof runs the handler as an IAM user carrying the identical policy).",
+       "iam_tools.py", r'''
+import importlib
+import os
+
+import boto3
+from botocore.exceptions import ClientError
+
+import iamkit
+from iamkit import allow
+
+TABLES = {"ASSETS_TABLE": "facilities-assets", "WORK_ORDERS_TABLE": "facilities-work-orders", "LEDGER_TABLE": "approval-ledger"}
+tbl = lambda name: "arn:aws:dynamodb:us-east-1:123456789012:table/" + name
+iamkit.enforce("enforce")
+
+
+def run_as(p, module, event):
+    """Run the tool's real handler with this principal's credentials."""
+    saved = {k: os.environ.get(k) for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", *TABLES)}
+    os.environ.update(AWS_ACCESS_KEY_ID=p["key"], AWS_SECRET_ACCESS_KEY=p["secret"], **TABLES)
+    boto3.setup_default_session()          # the default session caches credentials: start a fresh one for this identity
+    try:
+        return importlib.import_module(module).handler(event, None)
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        boto3.setup_default_session()
+
+
+# 1. The read tool, starting too thin: GetItem on the assets table only.
+reader = iamkit.principal("tool-asset-status", [allow("dynamodb:GetItem", tbl("facilities-assets"))])
+added = iamkit.settle(reader, lambda: run_as(reader, "asset_status", {"asset_id": "B-12"}))
+fix = sorted((s["Action"][0], s["Resource"].split("/")[-1]) for s in added)
+print("the audit log said the read tool was missing:", fix)
+assert fix == [("dynamodb:Scan", "facilities-work-orders")], "unexpected missing permissions: %s" % fix
+assert run_as(reader, "asset_status", {"asset_id": "B-12"})["found"] is True
+
+# 2. The write tool: put the work order, update the ledger, nothing else.
+writer = iamkit.principal("tool-create-work-order", [allow("dynamodb:PutItem", tbl("facilities-work-orders"))])
+req = {"request_id": "req-iam-0001", "asset_id": "B-12", "summary": "least privilege check", "priority": "P3", "requester": "iam-lab"}
+added = iamkit.settle(writer, lambda: run_as(writer, "create_work_order", req))
+fix = sorted((s["Action"][0], s["Resource"].split("/")[-1]) for s in added)
+print("the audit log said the write tool was missing:", fix)
+assert ("dynamodb:UpdateItem", "approval-ledger") in fix
+
+# 3. The boundaries: each identity is refused everything outside its job.
+def refused(label, call):
+    try:
+        call()
+    except ClientError as e:
+        assert e.response["Error"]["Code"] in ("AccessDenied", "AccessDeniedException"), e
+        print("refused as intended:", label)
+        return
+    raise AssertionError(label + " should have been refused")
+
+
+rd, wr = iamkit.client("dynamodb", reader), iamkit.client("dynamodb", writer)
+refused("read tool writes a work order", lambda: rd.put_item(TableName="facilities-work-orders", Item={"work_order_id": {"S": "WO-EVIL"}}))
+refused("read tool reads the approval ledger", lambda: rd.scan(TableName="approval-ledger"))
+refused("write tool reads the assets", lambda: wr.get_item(TableName="facilities-assets", Key={"asset_id": {"S": "B-12"}}))
+refused("write tool deletes a work order", lambda: wr.delete_item(TableName="facilities-work-orders", Key={"work_order_id": {"S": "WO-000101"}}))
+assert "WO-EVIL" not in [i["work_order_id"]["S"] for i in boto3.client("dynamodb").scan(TableName="facilities-work-orders")["Items"]]
+
+# 4. The same policies as roles the functions run as on real AWS.
+iam = boto3.client("iam")
+trust = '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+for role, p in (("facilities-asset-status-role", reader), ("facilities-create-work-order-role", writer)):
+    try:
+        iam.create_role(RoleName=role, AssumeRolePolicyDocument=trust)
+    except iam.exceptions.EntityAlreadyExistsException:
+        pass
+    iam.put_role_policy(RoleName=role, PolicyName="least-privilege", PolicyDocument=__import__("json").dumps({"Version": "2012-10-17", "Statement": p["statements"]}))
+print("roles created with the settled policies:", ", ".join(r["RoleName"] for r in iam.list_roles()["Roles"] if r["RoleName"].startswith("facilities-")))
+print("least privilege per tool verified; denials in the audit log:", len([r for r in iamkit.audit(reader) + iamkit.audit(writer) if r["decision"] == "deny"]))
+''', run="python iam_tools.py", expect="least privilege per tool verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
+    ]
