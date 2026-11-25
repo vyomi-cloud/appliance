@@ -133,6 +133,19 @@ def test_azure_state_shape_principal_and_roles_need(N):
     assert N.azure_principal({})["type"] == "root"
 
 
+def test_azure_state_console_deny_assignment_is_a_deny_not_an_allow(N):
+    """The console's Add deny assignment PUTs a roleAssignments record with kind=deny + denyActions (Mesh's adapter already maps it)."""
+    sc = "/subscriptions/s1"
+    arm = types.SimpleNamespace(state={"d1": {"id": sc + "/providers/Microsoft.Authorization/roleAssignments/d1", "name": "d1", "_type": "microsoft.authorization/roleassignments",
+        "properties": {"kind": "deny", "principalId": "oid-1", "principalType": "User", "scope": sc, "denyActions": ["Microsoft.Storage/storageAccounts/read"]}}})
+    preload("azure", "_roles")
+    st, _ = N.state_and_principal("azure", {}, "", {"az_arm": arm})
+    assert st["role_assignments"] == []
+    assert st["deny_assignments"] == [{"id": sc + "/providers/Microsoft.Authorization/roleAssignments/d1", "scope": sc, "principals": [{"id": "oid-1", "type": "User"}],
+        "exclude_principals": [], "permissions": [{"actions": ["Microsoft.Storage/storageAccounts/read"], "notActions": [], "dataActions": [], "notDataActions": []}],
+        "is_system_protected": False, "do_not_apply_to_child_scopes": False}]
+
+
 # ---------------------------------------------------------------------------------------------------- full bridge: real map + engine + gate
 class Host:
     def __init__(self, docs):

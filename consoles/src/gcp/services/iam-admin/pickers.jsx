@@ -86,6 +86,7 @@ export function normalizeMember(s) {
   s = String(s || "").trim();
   if (!s) return "";
   if (s === "allUsers" || s === "allAuthenticatedUsers" || MEMBER_RE.test(s)) return s;
+  if (/@[\w.-]*gserviceaccount\.com$/i.test(s)) return `serviceAccount:${s}`;   // a typed service-account email is a serviceAccount member, never a user
   return s.includes("@") ? `user:${s}` : /\./.test(s) ? `domain:${s}` : `user:${s}`;
 }
 export function PrincipalPicker({ value, onChange, options, label = "New principals" }) {

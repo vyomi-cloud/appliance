@@ -1,7 +1,10 @@
 /* Azure RBAC pickers: full-height "blades" that slide over the console like the portal's, plus the member picker's two-pane layout. */
 .vy-blade-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1000; display: flex; justify-content: flex-end; }
 .vy-blade-scrim.vy-l2 { z-index: 1100; }
-.vy-pblade { background: var(--colorNeutralBackground1); height: 100%; display: flex; flex-direction: column; box-shadow: -4px 0 16px rgba(0,0,0,.25); max-width: 100vw; }
+.vy-pblade { background: var(--colorNeutralBackground1); height: calc(100% - 44px); display: flex; flex-direction: column; box-shadow: -4px 0 16px rgba(0,0,0,.25); max-width: 100vw;
+  /* keep the footer buttons (Select / Add / Review + assign) clear of the fixed Vyomi dock (44px, z-index 1600) and, on Nano, the status footer (#nano-foot, 35px) */
+  margin-bottom: 44px; }
+body:has(#nano-foot) .vy-pblade { height: calc(100% - 80px); margin-bottom: 80px; }
 .vy-pblade > header { display: flex; align-items: flex-start; padding: 16px 24px 8px; gap: 12px; }
 .vy-pblade > header h1 { font-size: 24px; font-weight: 600; margin: 0; flex: 1; line-height: 1.2; }
 .vy-pblade > header p { margin: 4px 0 0; font-size: 13px; color: var(--colorNeutralForeground2); font-weight: 400; }

@@ -1,5 +1,5 @@
-/* Policy Troubleshooter — real access check over the native :testIamPermissions verb
- * (the same evaluated-binding-model decision the Allow tab's grants feed). */
+/* Policy Troubleshooter — real access check by the faithful IAM engine (POST /api/iam/gcp/evaluate: allow, deny and CEL conditions per resource),
+ * falling back to the native :testIamPermissions verb. */
 import { useState } from "react";
 import { Alert, Button, FormControlLabel, IconButton, Radio, RadioGroup, Stack, TextField } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -7,10 +7,16 @@ import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { PageHeader, Section } from "../../kit/common.jsx";
 import { getProject } from "../../project.js";
+import { useIamApi } from "../../../common/iamEnforceHooks.js";
+import { normalizeMember } from "./pickers.jsx";
 import * as api from "./api.js";
+
+/* A bare `projects/<id>` is shorthand for the project's full resource name; a full `//service.googleapis.com/...` name is used verbatim. */
+const fullName = (r) => (r.startsWith("//") ? r : `//cloudresourcemanager.googleapis.com/${r.replace(/^\/+/, "")}`);
 
 export default function PolicyTroubleshooter() {
   const notify = useNotify();
+  const iam = useIamApi("gcp");
   const [mode, setMode] = useState("manual");
   const [principal, setPrincipal] = useState("");
   const [pairs, setPairs] = useState([{ resource: `projects/${getProject()}`, permission: "" }]);
@@ -24,9 +30,10 @@ export default function PolicyTroubleshooter() {
     setBusy(true); setResult(null);
     try {
       const outcomes = await Promise.all(pairs.map(async (p) => {
-        const member = /^(user|serviceAccount|group|domain):/.test(principal) ? principal : `user:${principal}`;
-        const r = await api.testIamPermissions([p.permission], member, p.resource);
-        return { ...p, granted: (r.permissions || []).includes(p.permission) };
+        const member = normalizeMember(principal);
+        // The faithful engine (allow + deny + conditions, per resource) decides; the native testIamPermissions verb is the fallback when the engine API is unavailable.
+        try { const d = await iam.evaluate({ principal: { member }, action: p.permission.trim(), resource: fullName(p.resource.trim()) }); return { ...p, granted: !!d.allowed }; }
+        catch (_) { const r = await api.testIamPermissions([p.permission], member, p.resource); return { ...p, granted: (r.permissions || []).includes(p.permission) }; }
       }));
       setResult(outcomes);
     } catch (e) { notify.error(e); } finally { setBusy(false); }

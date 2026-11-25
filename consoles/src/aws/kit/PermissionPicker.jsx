@@ -95,7 +95,7 @@ export function ResourceArnPicker({ service, action, value, onChange, ariaLabel 
   const [type, setType] = useState("");
   const types = cat ? resourceTypesFor(cat, action ? [action] : actionNames(cat)).filter((t) => t !== "*") : [];
   const options = [{ value: "*", label: "All resources (*)" }, ...types.map((t) => ({ value: t, label: t, description: arnTemplate(cat, t) }))];
-  const pick = (t) => { setType(t); onChange(t === "*" ? "*" : arnTemplate(cat, t).replace(/\$\{Partition\}/g, "aws").replace(/\$\{Account\}/g, "000000000000").replace(/\$\{Region\}/g, "us-east-1")); };
+  const pick = (t) => { setType(t); onChange(t === "*" ? "*" : arnTemplate(cat, t).replace(/\$\{Partition\}/g, "aws").replace(/\$\{Account\}/g, "123456789012").replace(/\$\{Region\}/g, "us-east-1")); };
   return (
     <SpaceBetween size="xs">
       <Select ariaLabel="Resource type" placeholder={service ? "Choose a resource type" : "Choose a service first"} disabled={!cat} options={options}

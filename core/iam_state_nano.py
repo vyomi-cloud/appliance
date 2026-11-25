@@ -199,7 +199,13 @@ def azure_state(reg) -> dict:
         p = rec.get("properties") or {}
         if t in _A._AZ_DATA and rec.get("id") and rec.get("name"):     # data-plane names (blob account, OpenAI account, SQL server ...) inherit from the ARM resource
             out["data_scopes"][_A._AZ_DATA[t] % str(rec["name"]).lower()] = rec["id"]
-        if t == _AZ_T[0]:
+        if t == _AZ_T[0] and str(p.get("kind") or "").lower() == "deny":
+            # the console's "Add deny assignment" PUTs a roleAssignments record with kind=deny + denyActions (azure_iam_core's model; checkAccess reads it)
+            out["deny_assignments"].append({"id": rec.get("id") or rec.get("name") or "", "scope": _scope_of(rec),
+                                            "principals": [{"id": p.get("principalId") or "", "type": p.get("principalType") or "User"}], "exclude_principals": [],
+                                            "permissions": [{"actions": list(p.get("denyActions") or []), "notActions": [], "dataActions": [], "notDataActions": []}],
+                                            "is_system_protected": False, "do_not_apply_to_child_scopes": False})
+        elif t == _AZ_T[0]:
             out["role_assignments"].append({"id": rec.get("id") or rec.get("name") or "", "principal_id": p.get("principalId") or "",
                                             "principal_type": p.get("principalType"), "scope": _scope_of(rec),
                                             "role_definition_id": p.get("roleDefinitionId") or p.get("roleName") or "",
