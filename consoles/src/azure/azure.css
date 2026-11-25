@@ -176,3 +176,83 @@ body:has(#nano-foot) .vy-wizard-foot { bottom: 34px; }   /* Nano: the fixed rela
 .vy-fdy-tile { border: 1px solid var(--colorNeutralStroke2); border-radius: 4px; padding: 12px 16px; margin-bottom: 14px; box-shadow: var(--shadow4); }
 .vy-fdy-tile h3 { margin: 0; font-size: 15px; font-weight: 600; }
 .vy-fdy-nodata { display: flex; flex-direction: column; align-items: center; padding: 28px; gap: 4px; font-size: 12px; color: var(--colorNeutralForeground3); } .vy-fdy-nodata b { color: var(--colorNeutralForeground1); font-size: 14px; }
+
+/* ── All services blade (mirrors the real portal's All services) ─────────── */
+.vy-as { padding: 0 0 24px; font-size: 13px; color: #292827; }
+.vy-as button { font: inherit; color: inherit; }
+.vy-as-title { display: flex; align-items: center; padding: 15px 20px 0; height: 32px; }
+.vy-as-title h1 { margin: 0; font-size: 24px; font-weight: 600; line-height: 28px; }
+.vy-as-title h2 { margin: 0; font-size: 24px; font-weight: 400; line-height: 28px; }
+.vy-as-bar { width: 2px; height: 24px; background: #292827; margin: 0 12px; }
+.vy-as-layout { display: flex; margin-top: 15px; align-items: flex-start; }
+.vy-as-cats { width: 260px; flex: none; padding-left: 20px; box-sizing: border-box; display: flex; flex-direction: column; }
+.vy-as-cat { display: block; width: 220px; height: 32px; padding: 0 0 0 10px; text-align: left; border: 0; background: transparent; cursor: pointer; line-height: 32px; }
+.vy-as-cat:hover { background: #f3f2f1; }
+.vy-as-cat.sel { background: #edebe9; }
+.vy-as-cats-title { margin: 0 0 0 8px; width: 212px; padding: 15px 0 5px; font-size: 15px; font-weight: 600; border-bottom: 1px solid #d2d0ce; box-sizing: border-box; height: 39px; margin-bottom: 0; }
+.vy-as-main { flex: 1; min-width: 0; padding-right: 40px; }
+.vy-as-top { display: flex; align-items: center; height: 34px; margin-bottom: 20px; gap: 0; }
+.vy-as-filter { position: relative; width: 156px; height: 24px; border: 1px solid #8a8886; box-sizing: border-box; background: #fff; margin-left: 5px; }
+.vy-as-filter input { width: 100%; height: 22px; border: 0; padding: 0 22px 0 7px; font: inherit; font-size: 13px; background: transparent; color: #292827; outline: none; }
+.vy-as-filter:focus-within { border-color: #0078d4; }
+.vy-as-clear { position: absolute; right: 2px; top: 0; height: 22px; width: 20px; border: 0; background: transparent; cursor: pointer; font-size: 16px; line-height: 20px; }
+.vy-as-info { margin: 0 24px 0 8px; display: inline-flex; color: #605e5c; }
+.vy-as-pill { height: 24px; padding: 0 16px; border: 0; border-radius: 12px; background: #deecf9; margin-right: 10px; cursor: pointer; white-space: nowrap; }
+.vy-as-pill:hover { background: #c7e0f4; }
+.vy-as-pill b { font-weight: 600; }
+.vy-as-detail { margin-left: auto; display: flex; align-items: center; gap: 10px; cursor: pointer; padding-right: 40px; }
+.vy-as-switch { width: 44px; height: 20px; border-radius: 30px; border: 1px solid #605e5c; background: #fff; padding: 0; position: relative; cursor: pointer; }
+.vy-as-switch i { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #605e5c; transition: left .1s; }
+.vy-as-switch.on { background: #0078d4; border-color: #0078d4; }
+.vy-as-switch.on i { left: 27px; background: #fff; }
+.vy-as-featured { list-style: none; margin: 0 0 8px 0; padding: 0; display: flex; }
+.vy-as-featured li { margin: 0 8px 10px 0; }
+.vy-as-featured a { display: flex; flex-direction: column; align-items: center; gap: 8px; width: 100px; height: 100px; box-sizing: border-box; padding: 10px; border: 1px solid transparent; color: #292827; text-decoration: none; text-align: center; }
+.vy-as-featured a:hover { background: #f3f2f1; }
+.vy-as-featured span { display: block; width: 78px; line-height: 17.5px; max-height: 35px; overflow: hidden; }
+.vy-as-sec { margin-bottom: 4px; }
+.vy-as-sec-head { display: flex; align-items: center; height: 25px; margin: 10px 0 16px; }
+.vy-as-sec-title { font-size: 16px; font-weight: 600; margin: 16px 8px 16px 12px; padding: 0; line-height: 19px; }
+.vy-as-sec-link { color: #2d6ccc; text-decoration: none; font-size: 20px; line-height: 24px; margin-left: 10px; }
+.vy-as-sec-count { font-size: 16px; margin-right: 12px; }
+.vy-as-sec-line { flex: 1; height: 1px; background: #d2d0ce; margin-right: 12px; }
+.vy-as-collapse { width: 24px; height: 24px; border: 0; background: transparent; cursor: pointer; margin-right: 4px; display: inline-flex; align-items: center; justify-content: center; }
+.vy-as-grp-desc { margin: 0 12px 16px; line-height: 19px; max-width: 760px; }
+.vy-as-cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 452px); column-gap: 0; justify-content: start; }
+.vy-as-card { margin: 0 40px 16px 10px; min-height: 157px; box-sizing: border-box; border: 1px solid #fff; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12); display: flex; flex-direction: column; }
+.vy-as-card:hover { box-shadow: 0 4px 8px rgba(0,0,0,.18), 0 0 2px rgba(0,0,0,.12); }
+.vy-as-card-head { display: flex; align-items: center; height: 61px; padding: 14px 12px 0; box-sizing: border-box; gap: 12px; }
+.vy-as-card-name { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; color: #292827; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vy-as .vy-as-star { width: 30px; height: 40px; border: 0; background: transparent; color: #2b88d8; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; margin-top: -2px; }
+.vy-as .vy-as-star:hover { background: #f3f2f1; }
+.vy-as-card-body { margin: 0 12px 12px; line-height: 19px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; height: 38px; flex: none; }
+.vy-as-card-foot { display: flex; align-items: center; gap: 12px; padding: 0 12px 14px; margin-top: auto; min-height: 32px; }
+.vy-as-create { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 16px; border: 1px solid #8a8886; border-radius: 2px; color: #323130; text-decoration: none; background: #fff; box-sizing: border-box; }
+.vy-as-create:hover { background: #f3f2f1; }
+.vy-as-view { color: #0078d4; text-decoration: none; }
+.vy-as-view:hover { text-decoration: underline; }
+.vy-as-ns { font-size: 11px; color: #605e5c; border: 1px solid #c8c6c4; border-radius: 2px; padding: 0 5px; }
+.vy-as-tag { margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 0 6px; border: 1px solid; border-radius: 2px; line-height: 16px; }
+.vy-as-tag-preview { color: #7719aa; border-color: #b4a0ff; background: #f6f0fb; }
+.vy-as-tag-partner { color: #ca5010; border-color: #e5a470; background: #fdf4ee; }
+.vy-as-rows { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 40px; }
+.vy-as-rows li a { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 4px 10px; color: #292827; text-decoration: none; }
+.vy-as-rows li a:hover, .vy-as-rows li.active a { background: #edebe9; color: #004578; }
+.vy-as-row-name { flex: 0 1 auto; }
+.vy-as-rows .vy-as-tag { margin-left: 0; }
+.vy-as-results { border-bottom: 2px solid #f3f2f1; padding-bottom: 6px; }
+.vy-as-empty { display: flex; flex-direction: column; align-items: center; gap: 28px; padding: 90px 0 24px; font-size: 16px; font-weight: 300; border-bottom: 2px solid #f3f2f1; }
+.vy-as-empty-art { display: flex; flex-direction: column; gap: 12px; }
+.vy-as-empty-art i { display: block; height: 14px; width: 120px; border-radius: 7px; background: linear-gradient(90deg, #c8c6c4 14px, transparent 14px) , #e1dfdd; }
+
+/* portal menu flyout (hamburger) — mirrors the real portal's left flyout */
+.vy-pm { position: fixed; top: 0; left: 0; bottom: 0; width: 225px; z-index: 150; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.3); overflow: auto; font-size: 13px; color: #000; }
+.vy-pm-top { height: 40px; background: #e8f0fb; display: flex; align-items: center; padding-left: 8px; }
+.vy-pm-top button { width: 40px; height: 40px; border: 0; background: transparent; cursor: pointer; color: #0078d4; display: inline-flex; align-items: center; }
+.vy-pm a.vy-pm-item { display: flex; align-items: center; height: 32px; padding: 0 0 0 10px; color: #000; text-decoration: none; gap: 6px; box-sizing: border-box; min-height: 32px; }
+.vy-pm a.vy-pm-item:hover { background: #f3f2f1; }
+.vy-pm-ic { width: 20px; height: 20px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
+.vy-pm-fav { display: flex; align-items: center; gap: 8px; margin: 12px 0 6px; padding-left: 12px; color: #0078d4; }
+.vy-pm-fav span { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #000; }
+.vy-pm-fav i { flex: 1; height: 1px; background: #d2d0ce; margin-right: 8px; }
+.vy-pm-list { padding-bottom: 20px; }
