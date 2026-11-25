@@ -641,8 +641,9 @@ def _calls_from_value(v, tools):
     """Parsed JSON -> ([calls], text|None, error|None) for the envelope or the usual near-misses small models emit."""
     names = {t["name"]: t for t in tools}
     if isinstance(v, dict) and isinstance(v.get("content"), str) and "tool_calls" not in v and "name" not in v:
-        inner, ok = extract_json(v["content"]) if v["content"].lstrip()[:1] in "{[" else (None, False)
-        salvaged = _only_arguments(inner, tools) if ok else None      # {"content": "{'asset_id': 'B-12'}"}: the arguments, wrapped as an answer
+        inner, ok = extract_json(v["content"]) if "{" in v["content"] else (None, False)
+        # {"content": "{'asset_id': 'B-12'}"} or {"content": "To call tool(s): {'tool_calls': [...]}"}: the call itself, wrapped as an answer
+        salvaged = (inner if isinstance(inner, dict) and isinstance(inner.get("tool_calls"), list) else _only_arguments(inner, tools)) if ok else None
         if not salvaged:
             return [], v["content"], None
         v = salvaged
