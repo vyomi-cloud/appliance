@@ -3,8 +3,8 @@
  * all on the native Cloud IAM / Resource Manager v1 :getIamPolicy / :setIamPolicy wire. */
 import { useState } from "react";
 import {
-  Box, Button, Checkbox, FormControl, FormControlLabel, InputLabel, MenuItem, Radio, RadioGroup,
-  Select, Stack, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup, Typography,
+  Box, Button, Checkbox, Chip, FormControlLabel, IconButton, Radio, RadioGroup,
+  Stack, Tab, Tabs, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
@@ -17,6 +17,11 @@ import { ErrorAlert, fmtDate, NotSimulatedContainer, PageHeader, Section } from 
 import { getProject } from "../../project.js";
 import * as api from "./api.js";
 import { EnforcementPanel } from "./Enforcement.jsx";
+import { ConditionPanel, PrincipalPicker, RolePicker } from "./pickers.jsx";
+import { useCatalog } from "./catalog.js";
+import { useIamApi } from "../../../common/iamEnforceHooks.js";
+import { usePickerData } from "./usePickerData.js";
+import AutoAwesomeIcon from "@mui/icons-material/esm/AutoAwesome.js";
 
 const TABS = [["allow", "Allow"], ["deny", "Deny"], ["recommendations", "Recommendations history"]];
 const TAB_ROUTE = { allow: "#/iam-admin/iam", deny: "#/iam-admin/iam/deny", recommendations: "#/iam-admin/iam/log" };
@@ -44,6 +49,7 @@ function Allow({ openGrant }) {
   const [viewBy, setViewBy] = useState("principals");
   const [sel, setSel] = useState([]);
   const [grant, setGrant] = useState(!!openGrant);
+  useCatalog(useIamApi("gcp")); // fills api.ROLE_TITLES so predefined roles show their real titles
 
   const bindings = pol.data?.bindings || [];
   // "Google-provided role grants": bindings on roles GCP auto-creates for default
@@ -54,9 +60,9 @@ function Allow({ openGrant }) {
 
   const principalRows = visible.flatMap((b) => b.members.map((m) => {
     const info = api.parseMember(m);
-    return { key: `${b.role}|${m}`, role: b.role, member: m, type: info.type, name: info.display.split("@")[0] || info.display };
+    return { key: `${b.role}|${b.condition?.expression || ""}|${m}`, cond: b.condition, role: b.role, member: m, type: info.type, name: info.display.split("@")[0] || info.display };
   }));
-  const roleRows = visible.map((b) => ({ key: b.role, role: b.role, members: b.members }));
+  const roleRows = visible.map((b) => ({ key: `${b.role}|${b.condition?.expression || ""}`, cond: b.condition, role: b.role, members: b.members }));
 
   const writeBindings = async (next, msg) => {
     await api.setIamPolicy({ ...pol.data, bindings: next });
@@ -69,8 +75,8 @@ function Allow({ openGrant }) {
     const drop = new Set(sel);
     const next = bindings
       .map((b) => viewBy === "roles"
-        ? (drop.has(b.role) ? null : b)
-        : { ...b, members: b.members.filter((m) => !drop.has(`${b.role}|${m}`)) })
+        ? (drop.has(`${b.role}|${b.condition?.expression || ""}`) ? null : b)
+        : { ...b, members: b.members.filter((m) => !drop.has(`${b.role}|${b.condition?.expression || ""}|${m}`)) })
       .filter((b) => b && b.members.length);
     await writeBindings(next, `Removed ${sel.length} role binding${sel.length === 1 ? "" : "s"}`);
   };
@@ -98,7 +104,7 @@ function Allow({ openGrant }) {
             { id: "type", header: "Type", sortField: "type", cell: (r) => r.type },
             { id: "principal", header: "Principal", sortField: "member", cell: (r) => r.member },
             { id: "name", header: "Name", sortField: "name", cell: (r) => r.name },
-            { id: "role", header: "Role", sortValue: (r) => api.roleTitle(r.role), cell: (r) => api.roleTitle(r.role) },
+            { id: "role", header: "Role", sortValue: (r) => api.roleTitle(r.role), cell: (r) => api.roleTitle(r.role) + (r.cond ? ` (condition: ${r.cond.title})` : "") },
             { id: "insights", header: "Security insights", cell: () => "–" },
             { id: "inheritance", header: "Inheritance", cell: () => "Direct" },
           ]} />
@@ -106,61 +112,74 @@ function Allow({ openGrant }) {
         <ResourceTable resourceName="roles" items={roleRows} rowKey={(r) => r.key} loading={pol.loading} onRetry={pol.reload}
           selectable selected={sel} onSelectedChange={setSel} filterPlaceholder="Enter property name or value"
           columns={[
-            { id: "role", header: "Role", sortValue: (r) => api.roleTitle(r.role), cell: (r) => api.roleTitle(r.role) },
+            { id: "role", header: "Role", sortValue: (r) => api.roleTitle(r.role), cell: (r) => api.roleTitle(r.role) + (r.cond ? ` (condition: ${r.cond.title})` : "") },
             { id: "members", header: "Principal", wrap: true, cell: (r) => r.members.map((m) => api.parseMember(m).display).join(", ") },
             { id: "insights", header: "Security insights", cell: () => "–" },
             { id: "inheritance", header: "Inheritance", cell: () => "Direct" },
           ]} />
       )}
-      {grant && <GrantAccessPanel onClose={() => setGrant(false)} onSave={async (members, role) => {
+      {grant && <GrantAccessPanel usedRoles={[...new Set(bindings.map((b) => b.role))]} onClose={() => setGrant(false)} onSave={async (members, roleRows) => {
         const bs = bindings.map((b) => ({ ...b, members: [...b.members] }));
-        const hit = bs.find((b) => b.role === role);
-        for (const m of members) { if (hit) { if (!hit.members.includes(m)) hit.members.push(m); } else bs.push({ role, members: [m] }); }
-        await writeBindings(bs, `Granted ${api.roleTitle(role)} to ${members.length} principal${members.length === 1 ? "" : "s"}`);
+        const sameCond = (a, c) => (a?.expression || "") === (c?.expression || "");
+        for (const { role, condition } of roleRows) {
+          let hit = bs.find((b) => b.role === role && sameCond(b.condition, condition));
+          if (!hit) { hit = { role, members: [], ...(condition ? { condition } : {}) }; bs.push(hit); }
+          for (const m of members) if (!hit.members.includes(m)) hit.members.push(m);
+        }
+        const conditional = bs.some((b) => b.condition);
+        await api.setIamPolicy({ ...pol.data, ...(conditional ? { version: 3 } : {}), bindings: bs });
+        notify.success(`Granted ${roleRows.length} role${roleRows.length === 1 ? "" : "s"} to ${members.length} principal${members.length === 1 ? "" : "s"}`);
+        setSel([]); pol.reload();
       }} />}
     </>
   );
 }
 
-const ROLE_CHOICES = Object.entries(api.PREDEFINED_ROLE_TITLES);
-
-function GrantAccessPanel({ onClose, onSave }) {
-  const [principals, setPrincipals] = useState("");
-  const [role, setRole] = useState("roles/viewer");
+function GrantAccessPanel({ onClose, onSave, usedRoles }) {
+  const data = usePickerData({ withPrincipals: true });
+  const [principals, setPrincipals] = useState([]);
+  const [rows, setRows] = useState([{ role: "", condition: null }]);
+  const [condFor, setCondFor] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const members = principals.split(",").map((s) => s.trim()).filter(Boolean)
-    .map((m) => (m === "allUsers" || m === "allAuthenticatedUsers" || /^(user|serviceAccount|group|domain):/.test(m)) ? m : `user:${m}`);
-  const ok = members.length > 0;
+  const ok = principals.length > 0 && rows.every((r) => r.role);
+  const setRow = (i, patch) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const submit = async () => {
     setBusy(true); setError(null);
-    try { await onSave(members, role); onClose(); } catch (e) { setError(e); } finally { setBusy(false); }
+    try { await onSave(principals, rows); onClose(); } catch (e) { setError(e); } finally { setBusy(false); }
   };
   return (
-    <Box sx={{ position: "fixed", top: 0, right: 0, bottom: 0, width: { xs: "100%", sm: 460 }, bgcolor: "background.paper", boxShadow: 6, zIndex: 1300, p: 3, overflowY: "auto" }} role="dialog" aria-label="Grant access">
-      <Typography variant="h2" component="h2" sx={{ mb: 2 }}>Grant access</Typography>
-      <ErrorAlert error={error} />
-      <Section title="Add principals">
-        <TextField fullWidth label="New principals" value={principals} onChange={(e) => setPrincipals(e.target.value)}
-          inputProps={{ "aria-label": "New principals" }} helperText="Comma-separated, e.g. user:dev@example.com, allUsers" />
-      </Section>
-      <Box sx={{ height: 16 }} />
-      <Section title="Assign roles">
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel id="grant-role-l">Select a role</InputLabel>
-          <Select labelId="grant-role-l" label="Select a role" value={role} onChange={(e) => setRole(e.target.value)} inputProps={{ "aria-label": "Select a role" }}>
-            {ROLE_CHOICES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
-          </Select>
-        </FormControl>
-        <Typography variant="body2" sx={{ fontWeight: 500 }}>IAM condition (optional)</Typography>
-        <Button disabled sx={{ mb: 1 }}>Add IAM condition</Button>
-        <Box><Button disabled startIcon={<AddIcon />}>Add another role</Button></Box>
-      </Section>
-      <Stack direction="row" spacing={1} sx={{ mt: 3 }}>
-        <Button variant="contained" disabled={!ok || busy} onClick={submit}>{busy ? "Saving…" : "Save"}</Button>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
-      </Stack>
-    </Box>
+    <>
+      <Box sx={{ position: "fixed", top: 0, right: 0, bottom: 0, width: { xs: "100%", sm: 620 }, bgcolor: "background.paper", boxShadow: 6, zIndex: 1300, p: 3, overflowY: "auto" }} role="dialog" aria-label="Grant access">
+        <Typography variant="h2" component="h2" sx={{ mb: 2 }}>Grant access to "{getProject()}"</Typography>
+        <Typography variant="body2" sx={{ mb: 2 }}>Grant principals access to this resource and add roles to specify what actions the principals can take. Optionally, add conditions to grant access to principals only when a specific criteria is met.</Typography>
+        <ErrorAlert error={error} />
+        <Section title="Add principals">
+          <PrincipalPicker value={principals} onChange={setPrincipals} options={data.principals} />
+        </Section>
+        <Box sx={{ height: 16 }} />
+        <Section title="Assign roles" description="Roles are composed of sets of permissions and determine what the principal can do with this resource.">
+          <Stack spacing={2}>
+            {rows.map((r, i) => (
+              <Stack key={i} direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" rowGap={1} data-testid="grant-role-row">
+                <RolePicker value={r.role} onChange={(role) => setRow(i, { role })} roles={data.roles} usedRoles={usedRoles} loading={data.loading} />
+                {r.condition
+                  ? <Chip label={`Condition: ${r.condition.title}`} onClick={() => setCondFor(i)} onDelete={() => setRow(i, { condition: null })} />
+                  : <Button startIcon={<AddIcon />} disabled={!r.role} onClick={() => setCondFor(i)}>Add IAM condition</Button>}
+                {rows.length > 1 && <IconButton aria-label={`Remove role ${i + 1}`} onClick={() => setRows(rows.filter((_, j) => j !== i))}><DeleteIcon /></IconButton>}
+              </Stack>))}
+            <Box><Button startIcon={<AddIcon />} onClick={() => setRows([...rows, { role: "", condition: null }])}>Add another role</Button></Box>
+            <Box><Button startIcon={<AutoAwesomeIcon />} href="https://cloud.google.com/iam/docs/roles-overview" target="_blank" rel="noreferrer">Help me choose roles</Button></Box>
+          </Stack>
+        </Section>
+        <Stack direction="row" spacing={1} sx={{ mt: 3 }}>
+          <Button variant="contained" disabled={!ok || busy} onClick={submit}>{busy ? "Saving…" : "Save"}</Button>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+        </Stack>
+      </Box>
+      {condFor !== null && <ConditionPanel initial={rows[condFor]?.condition} serviceNames={data.services} onCancel={() => setCondFor(null)}
+        onSave={(c) => { setRow(condFor, { condition: c }); setCondFor(null); }} />}
+    </>
   );
 }
 
@@ -260,7 +279,7 @@ function RecommendationsHistory() {
         columns={[
           { id: "time", header: "Date applied", sortField: "time", cell: (r) => fmtDate(r.time) },
           { id: "action", header: "Action", cell: (r) => r.action === "GRANT" ? "Granted role" : "Removed role" },
-          { id: "role", header: "Role", cell: (r) => api.roleTitle(r.role) },
+          { id: "role", header: "Role", cell: (r) => api.roleTitle(r.role) + (r.cond ? ` (condition: ${r.cond.title})` : "") },
           { id: "member", header: "Principal", cell: (r) => api.parseMember(r.member).display },
         ]} />
     </Section>

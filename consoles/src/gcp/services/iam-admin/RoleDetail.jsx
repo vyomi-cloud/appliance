@@ -2,8 +2,9 @@
  * predefined roles read from the static GET /v1/roles catalog (read-only, as in the
  * real console — predefined roles can't be edited or deleted). */
 import { useState } from "react";
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Stack, TextField } from "@mui/material";
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Stack, TextField, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
+import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import ResourceTable from "../../kit/ResourceTable.jsx";
@@ -11,6 +12,8 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { ErrorAlert, KeyValue, PageHeader, Section } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import { AddPermissionsDialog } from "./pickers.jsx";
+import { usePickerData } from "./usePickerData.js";
 
 export default function RoleDetail({ params }) {
   const name = api.roleFromSlug(params["resource-name"]);
@@ -60,23 +63,31 @@ export default function RoleDetail({ params }) {
 function EditRoleDialog({ role, onClose, onSaved }) {
   const [title, setTitle] = useState(role.title);
   const [description, setDescription] = useState(role.description || "");
+  const [perms, setPerms] = useState(role.includedPermissions || []);
+  const [addOpen, setAddOpen] = useState(false);
+  const data = usePickerData();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   return (
-    <Dialog open onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
+    <Dialog open onClose={busy ? undefined : onClose} maxWidth="md" fullWidth>
       <DialogTitle>Edit role</DialogTitle>
       <DialogContent>
         <ErrorAlert error={error} />
         <Stack spacing={2} sx={{ pt: 1 }}>
           <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <TextField label="Description" multiline minRows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
+          <Stack direction="row" alignItems="center" justifyContent="space-between"><Typography variant="h3" component="h3">Assigned permissions ({perms.length})</Typography><Button onClick={() => setAddOpen(true)}>Add permissions</Button></Stack>
+          <ResourceTable resourceName="permissions" items={perms.map((p) => ({ p }))} rowKey={(x) => x.p} filterPlaceholder="Filter" empty="No rows to display"
+            columns={[{ id: "permission", header: "Permission", sortField: "p", cell: (x) => x.p },
+              { id: "remove", header: "", cell: (x) => <IconButton size="small" aria-label={`Remove ${x.p}`} onClick={() => setPerms(perms.filter((y) => y !== x.p))}><DeleteIcon fontSize="small" /></IconButton> }]} />
         </Stack>
+        <AddPermissionsDialog open={addOpen} catalog={data} existing={perms} onClose={() => setAddOpen(false)} onAdd={(ps) => setPerms([...new Set([...perms, ...ps])])} />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy}>Cancel</Button>
         <Button variant="contained" disabled={busy} onClick={async () => {
           setBusy(true); setError(null);
-          try { await api.patchRole(role.name, { title, description }); onSaved(); onClose(); }
+          try { await api.patchRole(role.name, { title, description, includedPermissions: perms }); onSaved(); onClose(); }
           catch (e) { setError(e); } finally { setBusy(false); }
         }}>{busy ? "Saving…" : "Save"}</Button>
       </DialogActions>
