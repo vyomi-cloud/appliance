@@ -88,7 +88,7 @@ CORES = [
     "eventbridge_core.py", "eventbridge_schemas_core.py", "eventbridge_partner_core.py",                          # v2.6.0 AWS: EventBridge event-bus data plane (rules → SQS delivery)
     "lambda_sdk.py",                               # boto3/os/botocore.exceptions a Lambda handler may import in the Nano sandbox (inert without a registered transport)
     "lambda_core.py",                              # v2.6.0 AWS: Lambda serverless invoke (sandboxed Python runtime)
-    "gateway_common.py", "apigateway_gateway.py", "identity_core.py",  # identity_core: Cognito/WAFv2 wire adapter over moto (Mesh; Nano answers 501 until moto is micropip-loaded)
+    "gateway_common.py", "apigateway_gateway.py", "identity_core.py", "identity_native.py",  # identity_core: Cognito/WAFv2/Cognito-Identity wire adapter (moto on the appliance when installed); identity_native: the pure-Python engine Nano runs
       # shared cross-cloud gateway primitives + AWS REST (v1) data plane enforcement
     "apigateway_core.py",                          # v2.7.0 AWS: API Gateway data plane (routing + MOCK/Lambda-proxy integrations)
     "cost_model.py", "ce_core.py", "vpc_encryption_core.py", "savingsplans_core.py", "ec2_ultraservers_core.py", "cloudfront_keys_core.py", "rds_restore_core.py", "appautoscaling_core.py",                                # list prices -> the space cost-savings metrics (pure data)
