@@ -1,59 +1,9 @@
 {
- "at": "2026-11-25T18:33:42+00:00",
+ "at": "2026-11-25T19:33:44+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:80d380e08044",
-   "title": "Amazon EC2 M8g instances are now available in Israel (Tel Aviv)",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-m8g-instances-telaviv-region/",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) M8g instances are available in the Israel (Tel Aviv) region. These instances are powered by AWS Graviton4 processors and deliver up to 30% better performance compared to AWS Graviton3-based instances. Amazon EC2 M8g instances are built for general-purpose workloads, such as application servers, microservices, gaming servers, midsize data stores, and caching fleets. M8g instances are up to 40% faster for databases, up to 30% faster for web applications, and up to 45% faster for large Java applications than AWS Graviton3-based M7g instanc",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:3e8cdafbf5a1",
-   "title": "Amazon EC2 M9gd instances are now available in Asia Pacific (Seoul)",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-m9gd-asiapacific-seoul/",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) M9gd instances are available in the Asia Pacific (Seoul) region. These instances are powered by AWS Graviton5 processors, the fifth generation of custom-designed CPUs, which deliver the best price performance for a broad range of workloads running on Amazon EC2. M9gd instances deliver up to 25% better compute performance than AWS Graviton4-based M8gd instances. They are up to 30% faster for databases, up to 35% faster for web applications, and up to 35% faster for machine learning. These instances are built on the sixth-generation AWS N",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:485aab29c326",
-   "title": "Amazon EC2 C9gd instances now available in additional regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-c9gd-instances-additional-regions/",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) C9gd instances are available in the Europe (Ireland, Spain) regions. These instances are powered by AWS Graviton5 processors, the fifth generation of custom-designed CPUs, which deliver the best price performance for a broad range of workloads running on Amazon EC2. C9gd instances deliver up to 25% better compute performance than AWS Graviton4-based C8gd instances. They are up to 30% faster for databases, up to 35% faster for web applications, and up to 35% faster for machine learning. These instances are built on the sixth-generation A",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:d3e89e168dcb",
-   "title": "Amazon EC2 C9g instances are now available in additional regions",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-c9g-instances-additional-regions/",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) C9g instances are available in the Asia Pacific (Sydney), Europe (Ireland, Spain), and South America (S\u00e3o Paulo) regions. These instances are powered by AWS Graviton5 processors, the fifth generation of custom-designed CPUs, which deliver the best price performance for a broad range of workloads running on Amazon EC2. C9g instances deliver up to 25% better compute performance than AWS Graviton4-based C8g instances. They are up to 30% faster for databases, up to 35% faster for web applications, and up to 35% faster for machine learning. ",
-   "actionable": false
-  },
-  {
-   "cloud": "aws",
-   "service": "Amazon EC2",
-   "kind": "announcement",
-   "key": "feed:aws:afbbc072e9b0",
-   "title": "Amazon EC2 M9g instances now available in additional regions ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-ec2-m9g-instances-additional-regions/",
-   "detail": "Starting today, Amazon Elastic Compute Cloud (Amazon EC2) M9g instances, powered by AWS Graviton5 processors, are available in US West (N. California), Canada (Central), South America (S\u00e3o Paulo), and Asia Pacific (Seoul) regions. AWS Graviton5 processors are the fifth generation of custom-designed CPUs, delivering the best price performance for memory-intensive workloads running on Amazon EC2. M9g instances deliver up to 25% better performance compared to AWS Graviton4-based M8g instances. They are up to 30% faster for databases. These instances are built on the sixth-generation AWS Nitro Sys",
-   "actionable": false
-  }
- ],
+ "changes": [],
  "errors": [
-  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
+  "maven/com.azure:azure-security-keyvault-secrets: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out"
  ]
 }
