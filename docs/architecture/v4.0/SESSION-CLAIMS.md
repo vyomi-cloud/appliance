@@ -26,3 +26,5 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | claude (rag studio gcp) | v4/rag-studio-gcp | appliance | consoles/src/gcp/services/vertex-ai/studio/**, consoles/src/gcp/services/vertex-ai/index.jsx (RAG Studio nav+route only), core/gcp_agentplatform_core.py (+ wasm/core copy), tests/conformance/test_gcp_rag_studio.py, docs/architecture/v4.0/branches/rag-studio-gcp.md | 2026-11-26 |
 ||||||| 9ad488081
 | claude (rag studio azure) | v4/rag-studio-azure | appliance | consoles/src/azure/services/aisearch/**, core/azure_search_core.py, core/azure_cognitiveservices_core.py (chat on-your-data), tests/conformance/test_azure_rag_studio.py, docs/architecture/v4.0/branches/rag-studio-azure.md | 2026-11-26 |
+||||||| 0e35f9a33
+| claude (Labs: Design the RAG chapter) | v4/labs-design-rag | appliance | vyomilabs/**, wasm/labs/**, courses/vyomi-labs-facilities-agent/**, docs/architecture/v4.0/branches/{labs-design-rag,vyomi-labs}.md | 2026-11-26 |

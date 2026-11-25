@@ -17,5 +17,7 @@ def chat_with_tools(prompt, tools):
             "text": m.content or ""}
 
 
-def embed(text):
-    return aoai().embeddings.create(model=EMBED, input=[text]).data[0].embedding
+def embed(text, dimensions=None):
+    """dimensions: ask for a shorter vector (your RAG design sets this); None keeps the model's own size."""
+    kw = {"dimensions": dimensions} if dimensions else {}
+    return aoai().embeddings.create(model=EMBED, input=[text], **kw).data[0].embedding

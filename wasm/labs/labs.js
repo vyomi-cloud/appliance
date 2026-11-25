@@ -1,5 +1,5 @@
 "use strict";
-/* Vyomi Labs. VyomiLabs.mount(container, {cloud, base, tabs, layer}) renders the guided 13-layer build for one cloud.
+/* Vyomi Labs. VyomiLabs.mount(container, {cloud, base, tabs, layer}) renders the guided layered build for one cloud.
  * Course view: a hero with progress, the full-width reference diagram (click a layer), and the course contents as LMS tiles.
  * Chapter view (a tile or a diagram layer is clicked): the chapter opens full view with a course outline on the left, the lesson in the
  * middle and "where it fits" + page outline on the right. Progress lives in this browser. With the optional local Labs server
@@ -34,6 +34,9 @@
 
   function mount(host, opts) {
     opts = opts || {};
+    /* the layer count is whatever the course data has, never a typed number: adding a chapter must not leave a stale "13" behind */
+    function nLayers() { return course ? course.layers.length : 0; }
+    function nWord(cap) { var w = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"][nLayers()] || String(nLayers()); return cap ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
     var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, store = {};
     var root = el("div", { className: "vl" });
     host.replaceChildren(root);
@@ -69,7 +72,7 @@
           el("div", { className: "vl-eyebrow" }, "Hands-on course · " + course.cloud_name + " · " + course.ai_platform),
           el("h2", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
-          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", "13 layers")), archLink()),
+          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", nLayers() + " layers")), archLink()),
         el("div", { className: "vl-progcard" },
           el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
           el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })),
@@ -81,7 +84,7 @@
         el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
     }
 
-    /* ---------- Start here: the premise (why 13 layers) ---------- */
+    /* ---------- Start here: the premise (why this many layers) ---------- */
     var WHY = { 10: ["Platform lead", "Can we change the model without rewriting the app?", "Every part hard-wires a model; one change breaks them all."],
       3: ["Engineering manager", "What stops it running away, or mixing up two users?", "One giant agent that loops, leaks between users and cannot be tested."],
       7: ["Security", "What exactly is the agent allowed to do?", "Functions with no contract: the model can call anything with any argument."],
@@ -94,7 +97,8 @@
       1: ["IT operations", "Who is calling, and who is flooding us?", "Anonymous callers and one noisy client burning the whole model budget."],
       2: ["Security", "What if the message itself is an attack?", "A single clever sentence rewrites the agent's rules."],
       8: ["Operations", "Why was it slow or wrong last night?", "A chain of calls and a log line that just says error."],
-      13: ["Auditor", "Can we prove what happened, and that nobody altered it?", "Plain-text records and a trail nobody can trust."] };
+      13: ["Auditor", "Can we prove what happened, and that nobody altered it?", "Plain-text records and a trail nobody can trust."],
+      14: ["Knowledge architect", "Was the search designed and tested on real questions, or are these just defaults?", "Chunk sizes and search settings guessed once and never measured against the questions people ask."] };
     /* Scroll spy: highlight the "On this page" link of the section being read. */
     function tocSpy(rootEl) {
       var links = [].slice.call(rootEl.querySelectorAll(".vl-toc a")), secs = links.map(function (a) { return rootEl.querySelector("#" + (a.getAttribute("href") || "").slice(1)); }), vis = {};
@@ -148,16 +152,16 @@
             el("div", { className: "vl-miss" }, el("h4", { textContent: "What it does not" }), el("ul", {}, ["Who is asking, and how many people may ask", "Limits on what the agent is allowed to do", "Answers grounded in the company's documents, with sources", "A human decision before anything changes", "A way to see what happened, or to prove it later"].map(function (t) { return el("li", { textContent: t }); })))))),
         sc("beyond", "Why an enterprise goes beyond the functional scope", el("div", {}, el("p", { textContent: "The simple version meets the functional requirement: it does the task. An enterprise is also accountable for how the task is done, and each of those concerns arrives as a question from someone who has to sign off." }),
           el("div", { className: "vl-reasons" }, [["Risk", "An agent acts, it does not only answer. One bad action can cost more than the system saves."], ["Scale", "Thousands of users share one model budget and must never see each other's data."], ["Accountability", "Auditors and regulators ask who did what, when and why, and expect proof."], ["Change", "Models, documents and people change every week. The system has to absorb it without breaking."]].map(function (r) { return el("div", { className: "vl-reason" }, el("b", { textContent: r[0] }), el("p", { textContent: r[1] })); })))),
-        sc("questions", "Thirteen questions an enterprise asks before going live", el("div", {}, el("p", { textContent: "Before an enterprise lets an agent near real work, thirteen different people ask thirteen different questions. The simple design answers none of them. Each question below is answered by exactly one layer, which is why the architecture has thirteen of them. Select a question to open its chapter." }),
+        sc("questions", nWord(1) + " questions an enterprise asks before going live", el("div", {}, el("p", { textContent: "Before an enterprise lets an agent near real work, " + nWord() + " different people ask " + nWord() + " different questions. The simple design answers none of them. Each question below is answered by exactly one layer, which is why the architecture has " + nWord() + " of them. Select a question to open its chapter." }),
           el("ol", { className: "vl-why" }, L.map(function (l) { var w = WHY[l.id] || ["", "", ""];
             var li = el("li", { style: "--c:" + l.color }, el("span", { className: "vl-wn", textContent: l.order }), el("div", {}, el("span", { className: "vl-wwho", textContent: w[0] + " asks" }), el("span", { className: "vl-wq", textContent: w[1] }), el("small", { textContent: "Without an answer: " + w[2] }), el("span", { className: "vl-wans" }, "Answered by ", el("b", { textContent: "Layer " + l.order + ": " + l.title }))), icon(P.arrow, 14));
             li.onclick = function () { go(l.id); }; return li; })))),
-        sc("arch", "The resulting architecture", el("div", {}, el("p", { textContent: "Answer all thirteen questions and this is the architecture you end up with. It is not a bigger version of the simple design: every part exists because one of those questions needed an answer." }), archFigure("after"),
+        sc("arch", "The resulting architecture", el("div", {}, el("p", { textContent: "Answer all " + nWord() + " questions and this is the architecture you end up with. It is not a bigger version of the simple design: every part exists because one of those questions needed an answer." }), archFigure("after"),
           el("p", { className: "vl-bacap", textContent: "Select the diagram to open it full size." }))),
-        sc("how", "How this course works", el("ol", { className: "vl-tl" }, [["You build the same app all the way through", "One facilities agent, one layer at a time. Chapter 1 gives it a brain; chapter 13 makes it auditable."], ["Every chapter gives you the code and runs it", "Press Deploy and the code goes into your simulator as it is, then a check confirms it works."], ["Nothing is left half-built", "Each chapter ends with a working app, so you can stop anywhere and still have something real."], ["The same story on every cloud", "AWS, Google Cloud and Azure follow the same 13 layers with each cloud's own services."]].map(function (w, i) { return el("li", {}, el("span", { className: "vl-tn", textContent: i + 1 }), el("div", {}, el("b", { textContent: w[0] }), el("p", { textContent: w[1] }))); }))),
-        sc("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, ["The simple design meets the functional need; an enterprise is also accountable for how it is met.", "Each of the 13 layers closes one specific gap and prevents one failure.", "You build one working app, a layer at a time, and every chapter is deployed and checked."].map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
+        sc("how", "How this course works", el("ol", { className: "vl-tl" }, [["You build the same app all the way through", "One facilities agent, one layer at a time. Chapter 1 gives it a brain; chapter " + nLayers() + " makes it auditable."], ["Every chapter gives you the code and runs it", "Press Deploy and the code goes into your simulator as it is, then a check confirms it works."], ["Nothing is left half-built", "Each chapter ends with a working app, so you can stop anywhere and still have something real."], ["The same story on every cloud", "AWS, Google Cloud and Azure follow the same " + nLayers() + " layers with each cloud's own services."]].map(function (w, i) { return el("li", {}, el("span", { className: "vl-tn", textContent: i + 1 }), el("div", {}, el("b", { textContent: w[0] }), el("p", { textContent: w[1] }))); }))),
+        sc("recap", "Recap", el("div", {}, el("ul", { className: "vl-recap" }, ["The simple design meets the functional need; an enterprise is also accountable for how it is met.", "Each of the " + nLayers() + " layers closes one specific gap and prevents one failure.", "You build one working app, a layer at a time, and every chapter is deployed and checked."].map(function (t) { return el("li", {}, icon(P.check, 16), t); })),
           el("button", { type: "button", className: "vl-btn primary lg", onclick: function () { go(first.id); } }, "Start Chapter 1: " + first.title, icon(P.arrow, 16)))));
-      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", "Thirteen questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#vl-i-" + t[0], textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
+      var side = el("aside", { className: "vl-lside" }, el("nav", { className: "vl-toc" }, el("h4", { textContent: "On this page" }), [["story", "The problem"], ["simple", "The simplest architecture"], ["beyond", "Beyond the functional scope"], ["questions", nWord(1) + " questions"], ["arch", "The resulting architecture"], ["how", "How this course works"], ["recap", "Recap"]].map(function (t) { var a = el("a", { href: "#vl-i-" + t[0], textContent: t[1] }); a.onclick = function (e) { e.preventDefault(); var x = root.querySelector("#vl-i-" + t[0]); x && x.scrollIntoView({ behavior: "smooth", block: "start" }); }; return a; })));
       var chip = function (ic, t) { return el("span", { className: "vl-hchip" }, icon(ic, 14), t); };
       var back = el("button", { type: "button", className: "vl-back", onclick: function () { sel = null; render(); } }, icon(P.back, 16), "Course contents");
       var top = el("div", { className: "vl-topbar" }, back, el("span", { className: "vl-crumb", textContent: course.cloud_name + " · Start here" }),
@@ -166,8 +170,8 @@
         el("div", { className: "vl-cicon" }, icon(P.book, 30)),
         el("div", { className: "vl-ctext" },
           el("div", { className: "vl-crumbs2", textContent: course.cloud_name + "  /  Vyomi Labs  /  Start here" }),
-          el("h1", { textContent: "Why an enterprise agent needs 13 layers" }),
-          el("p", { textContent: "The problem, the simplest design that solves it, what that design cannot do, and the 13 questions that lead to the full architecture." }),
+          el("h1", { textContent: "Why an enterprise agent needs " + nLayers() + " layers" }),
+          el("p", { textContent: "The problem, the simplest design that solves it, what that design cannot do, and the " + nLayers() + " questions that lead to the full architecture." }),
           el("div", { className: "vl-cchips" }, chip(P.flag, "Beginner"), chip(P.clock, "~5 min"), chip("M4 6h16M4 12h16M4 18h10", "Lesson and quiz"))),
         el("div", { className: "vl-cside" }, el("span", { className: "vl-status", textContent: "Read first" })));
       var article = el("article", { className: "vl-article vl-ws " + cloud }, hero, el("div", { className: "vl-wsbody single" }, el("div", { className: "vl-lesson", style: "--c:#1a6e66" }, main, side)));
@@ -278,7 +282,7 @@
           el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform),
           el("h1", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
-          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", "13 layers")), archLink(), cloudTabs),
+          el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", nLayers() + " layers")), archLink(), cloudTabs),
         el("div", { className: "vl-progcard" },
           el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
           el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })), cta));
@@ -312,8 +316,8 @@
       var m = function (ic, t) { return el("span", {}, icon(ic, 13), t); };
       var t = el("button", { type: "button", className: "vl-tile intro", style: "--c:#1a6e66" },
         el("span", { className: "vl-thead" }, el("span", { className: "vl-ticon" }, icon(P.book, 20)), el("span", { className: "vl-chno", textContent: "Start here" }), el("span", { className: "vl-state next", textContent: "5 min read" })),
-        el("span", { className: "vl-ttitle", textContent: "Why an enterprise agent needs 13 layers" }),
-        el("span", { className: "vl-outcome", textContent: "The problem, the simplest design that solves it, what it cannot do, and the 13 questions that lead to the full architecture." }),
+        el("span", { className: "vl-ttitle", textContent: "Why an enterprise agent needs " + nLayers() + " layers" }),
+        el("span", { className: "vl-outcome", textContent: "The problem, the simplest design that solves it, what it cannot do, and the " + nLayers() + " questions that lead to the full architecture." }),
         el("span", { className: "vl-tmeta" }, m(P.clock, "~5 min"), m("M4 6h16M4 12h16M4 18h10", "Lesson and quiz")),
         el("span", { className: "vl-tfoot" }, el("span", { className: "vl-cta" }, "Read", icon(P.arrow, 14))));
       t.onclick = function () { go("intro"); }; return t;

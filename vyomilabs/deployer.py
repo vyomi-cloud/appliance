@@ -12,7 +12,7 @@ import sys
 import tempfile
 import threading
 
-ORDER = [10, 3, 7, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
+ORDER = [10, 3, 7, 14, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
 _LOCK = threading.Lock()
 _ENVS = {}      # cloud -> dict(proc, endpoint, env, work, done:set)
 

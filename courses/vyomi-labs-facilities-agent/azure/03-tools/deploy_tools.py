@@ -1,5 +1,6 @@
 import io
 import json
+import os
 import zipfile
 import requests
 from azure.mgmt.web import WebSiteManagementClient
@@ -24,6 +25,9 @@ buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr("host.json", json.dumps({"version": "2.0"}))
     z.writestr("requirements.txt", "azure-functions\nazure-data-tables\nazure-search-documents\n")
+    for extra in ("rag_design.py", "rag-design.json"):        # the kb-search tool reads your RAG design at run time
+        if os.path.exists(extra):
+            z.write(extra)
     for name, path in FUNCTIONS.items():
         z.writestr(f"{name}/__init__.py", open(path).read())
         z.writestr(f"{name}/function.json", json.dumps({"scriptFile": "__init__.py", "bindings": [
