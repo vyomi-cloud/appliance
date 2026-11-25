@@ -264,6 +264,8 @@ def _check(cloud, hr, state, settings, engines, maps, log, bypass):
             if engine is None:
                 raise RuntimeError(f"engine unavailable: {engine_err}")
             ctx = dict(hr.get("context") or {})
+            for k, v in (p.get("context") or {}).items():           # per-permission ABAC attributes (Azure blob: container name, blob path, ...)
+                ctx[k] = dict(ctx.get(k) or {}, **v) if isinstance(v, dict) else v
             if p.get("hint"):
                 ctx["hint"] = p["hint"]             # Azure storage: list vs read, update vs process (SAS permission letters)
             dec = engine.evaluate(_request(cloud, principal, action, resource, ctx, data=bool(p.get("data"))), state)

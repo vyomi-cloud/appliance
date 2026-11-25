@@ -163,6 +163,7 @@ async def _iam_gate_response(request, cloud: str, route=None):
             if acct:
                 hr["headers"]["x-vyomi-data-account"] = acct     # the simulator's /openai/... carries no account in the URL
         if cloud == "aws":
+            hr["context"] = _ad.aws_request_context(hr, getattr(request.client, "host", "") or "", request.url.scheme)
             res = _ad.aws_resolve(hr, settings)      # signed -> the signer; unsigned S3 to an existing bucket -> anonymous; else None (console, static)
             if res is None:
                 return None

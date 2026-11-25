@@ -55,12 +55,13 @@ export function EffectiveAccess({ a }) {
   const api = useIamApi(CLOUD);
   const [principal, setPrincipal] = useState(null);
   const [action, setAction] = useState("");
+  const [isData, setIsData] = useState(false);
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true); setErr(null); setRes(null);
-    try { setRes(await api.evaluate({ principal: { object_id: principal.id, type: principal.principalType }, action, resource: a.id })); }
+    try { setRes(await api.evaluate({ principal: { object_id: principal.id, type: principal.principalType }, action, resource: a.id, data: isData })); }
     catch (e) { setErr(e); } finally { setBusy(false); }
   };
   return (
@@ -68,7 +69,7 @@ export function EffectiveAccess({ a }) {
       <section className="vy-section" style={{ maxWidth: 720 }}><h3>Effective access</h3>
         <p style={{ fontSize: 13 }}>Check whether a principal can perform an action on {a.name}, using the engine that enforces requests (scope inheritance, deny assignments, not-actions, conditions).</p>
         <PrincipalField label="Principal" value={principal} onChange={setPrincipal} required />
-        <ActionField label="Action or data action" value={action} onChange={setAction} required />
+        <ActionField label="Action or data action" value={action} onChange={(v, d) => { setAction(v); setIsData(!!d); }} required />
         <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={!principal || !action || busy} onClick={run}>Check access</Button></div>
       </section>
       {err && <ErrorBar error={err} title="Evaluation failed" />}

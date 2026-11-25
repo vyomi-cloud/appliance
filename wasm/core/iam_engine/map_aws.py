@@ -770,8 +770,40 @@ def _execute_api_required(req):
         PARTITION, req.region, req.account, host_id, stage, req.method, rest), "service": "execute-api", "operation": "Invoke"}]
 
 
+_S3_HDR_KEYS = ("x-amz-acl", "x-amz-server-side-encryption", "x-amz-storage-class", "x-amz-copy-source", "x-amz-metadata-directive",
+                "x-amz-grant-read", "x-amz-grant-write", "x-amz-grant-full-control", "x-amz-server-side-encryption-aws-kms-key-id")
+
+
+def _s3_request_context(http_request):
+    """The S3 condition keys a request carries on its own: s3:prefix / s3:delimiter / s3:max-keys (list query) and the s3:x-amz-* request headers."""
+    from urllib.parse import parse_qsl
+    q = http_request.get("query") or ""
+    qd = dict(parse_qsl(q, keep_blank_values=True)) if isinstance(q, str) else dict(q)
+    ctx = {}
+    for qk, ck in (("prefix", "s3:prefix"), ("delimiter", "s3:delimiter"), ("max-keys", "s3:max-keys")):
+        if qk in qd:
+            ctx[ck] = qd[qk]
+    hdr = {str(k).lower(): v for k, v in (http_request.get("headers") or {}).items()}
+    for h in _S3_HDR_KEYS:
+        if h in hdr:
+            ctx["s3:" + h] = hdr[h]
+    return ctx
+
+
 def required(http_request):
-    """-> list of {"action","resource","service","operation"}; [] when the request is not an AWS API call this module understands."""
+    """-> list of {"action","resource","service","operation"[, "context"]}; [] when the request is not an AWS API call this module understands.
+    S3 entries carry the request-derived condition keys (the gate merges `context` into the evaluation context)."""
+    out = _required(http_request)
+    if out and any(e.get("service") == "s3" for e in out):
+        ctx = _s3_request_context(http_request)
+        if ctx:
+            for e in out:
+                if e.get("service") == "s3":
+                    e["context"] = dict(ctx)
+    return out
+
+
+def _required(http_request):
     req = _build(http_request)
     ident = identify(req)
     if ident is None:

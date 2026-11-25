@@ -347,6 +347,15 @@ def _role_assignments(state, method, scope, rest, payload):
         rec["properties"] = {"roleDefinitionId": props["roleDefinitionId"], "principalId": props["principalId"],
                              "principalType": props.get("principalType", "User"), "scope": scope,
                              "description": props.get("description", ""), "createdOn": rec.get("_created")}
+        bad = _ra_validate(payload)
+        if bad:
+            return bad
+        if props.get("condition"):                  # an ABAC condition is part of the grant: dropping it would widen the assignment
+            rec["properties"]["condition"] = props["condition"]
+            rec["properties"]["conditionVersion"] = props.get("conditionVersion") or "2.0"
+        for k in ("kind", "denyActions", "denyAssignmentName"):      # Vyomi's deny-assignment extension fields ride the same PUT
+            if props.get(k):
+                rec["properties"][k] = props[k]
         state[key] = rec
         return _ok(_view(rec), 201, scope, RA_T, name)
     return _err(405, "MethodNotAllowed", f"{method} not allowed.")

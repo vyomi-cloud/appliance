@@ -21,11 +21,19 @@ function CheckAccess({ a }) {
   const notify = useNotify();
   const [principal, setPrincipal] = useState(null);
   const [action, setAction] = useState("");
+  const [isData, setIsData] = useState(false);       // a picked dataAction is evaluated in the data plane (ARM checkAccess isDataAction)
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const go = async () => {
     setBusy(true);
-    try { setResult(await iam.checkAccess(principal.id, action, a.id)); }
+    try {
+      // ARM checkAccess answers a bare array of decisions; the granting role is the roleAssignment's definition (resolved to its name here)
+      const raw = await iam.checkAccess(principal.id, action, a.id, isData);
+      const d = (Array.isArray(raw) ? raw : raw?.value || [])[0] || {};
+      const rid = (d.roleAssignment?.roleDefinitionId || "").split("/").pop();
+      const role = rid ? (await loadRoles().catch(() => [])).find((r) => r.id === rid || r.name === rid)?.roleName || rid : "";
+      setResult({ decision: d.accessDecision, role, deny: d.denyAssignment?.id });
+    }
     catch (e) { notify.error(e, "Check access failed"); }
     finally { setBusy(false); }
   };
@@ -35,11 +43,11 @@ function CheckAccess({ a }) {
       <section className="vy-section" style={{ maxWidth: 640 }}><h3>Check access</h3>
         <p style={{ fontSize: 13 }}>Evaluated for real against this resource's role assignments by core/azure_iam_core.py (explicit-deny-wins, scope inheritance).</p>
         <PrincipalField label="Find a user, group, or service principal" value={principal} onChange={setPrincipal} required />
-        <ActionField label="Action to check" value={action} onChange={setAction} required />
+        <ActionField label="Action to check" value={action} onChange={(v, d) => { setAction(v); setIsData(!!d); }} required />
         <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={!principal || !action || busy} onClick={go}>Check access</Button></div>
         {result && <div style={{ marginTop: 12 }}>
-          <KV label="Access decision" value={result.value?.[0]?.accessDecision} />
-          <KV label="Granting role(s)" value={result.value?.[0]?.roles?.join(", ") || "--"} />
+          <KV label="Access decision" value={result.decision} />
+          <KV label="Granting role(s)" value={result.role || (result.deny ? `Deny assignment ${result.deny.split("/").pop()}` : "--")} />
         </div>}
       </section>
     </div>
