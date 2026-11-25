@@ -27,6 +27,28 @@ class _Host:
             pass
         return {"store": store, "state": state, "audit": audit, "region": "us-east-1"}
 
+    def azure_arm(self):
+        """The active space's Azure ARM record map (where PIM schedules are stored beside the role assignments)."""
+        try:
+            from core import app_context as ctx
+            from providers import azure_services          # the ARM provider's own record map (the one the evaluator reads), resolved as the azure provider
+            tok = ctx.REQUEST_PROVIDER.set("azure")
+            try:
+                st = azure_services._state
+                return st._target() if hasattr(st, "_target") else st
+            finally:
+                ctx.REQUEST_PROVIDER.reset(tok)
+        except ImportError:
+            from core import nano_registry
+            return nano_registry.get()["az_arm"].state
+
+    def persist(self):
+        try:
+            from core import app_context as ctx
+            ctx.persist_state()
+        except Exception:
+            pass
+
     def state(self, cloud, headers, query, path):
         try:
             from core import iam_state_adapters as ad

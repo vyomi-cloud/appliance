@@ -18,6 +18,12 @@ def _call(r, method, path, headers=None, body=b"", query=None):
 def test_sts_assume_role_and_session_token():
     r = AwsWireRouter()
     h = {"authorization": AUTH % "sts", "content-type": "application/x-www-form-urlencoded"}
+    # AssumeRole now evaluates the role's trust policy (core/iam_engine/sts_trust.py): the role must exist and trust the caller (account root here)
+    trust = json.dumps({"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Principal": {"AWS": f"arn:aws:iam::{r.iam.account_id}:root"},
+                                                                 "Action": "sts:AssumeRole"}]})
+    from urllib.parse import urlencode
+    ih = {"authorization": AUTH % "iam", "content-type": "application/x-www-form-urlencoded"}
+    assert _call(r, "POST", "/", ih, urlencode({"Action": "CreateRole", "Version": "2010-05-08", "RoleName": "demo", "AssumeRolePolicyDocument": trust}).encode())["status"] == 200
     out = _call(r, "POST", "/", h, b"Action=AssumeRole&Version=2011-06-15&RoleArn=arn:aws:iam::123456789012:role/demo&RoleSessionName=s1")
     assert out["status"] == 200
     b = out["body"].decode()

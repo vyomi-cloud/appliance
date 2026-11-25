@@ -32,6 +32,7 @@ import ResourceAnalysis from "./ResourceAnalysis.jsx";
 import UnusedAccess from "./UnusedAccess.jsx";
 import AnalyzerSettings from "./AnalyzerSettings.jsx";
 import Enforcement from "./Enforcement.jsx";
+import EventHistory from "./EventHistory.jsx";
 import EffectiveAccess from "./EffectiveAccess.jsx";
 
 const iamCrumb = { text: "IAM", href: "#/iam" };
@@ -57,6 +58,7 @@ export default {
       { type: "link", text: "Policy simulator", href: "#/iam/policy-simulator" },
       { type: "link", text: "Effective access", href: "#/iam/effective-access" },
       { type: "link", text: "Enforcement", href: "#/iam/enforcement" },
+      { type: "link", text: "Event history", href: "#/iam/event-history" },
       { type: "link", text: "Credential report", href: "#/iam/credential-report" },
     ] },
     { type: "section", text: "Multi-account access", items: [
@@ -100,6 +102,7 @@ export default {
 
     { pattern: "/iam/policy-simulator", component: PolicySimulator, crumbs: () => [iamCrumb, { text: "Policy simulator", href: "#/iam/policy-simulator" }] },
     { pattern: "/iam/effective-access", component: EffectiveAccess, crumbs: () => [iamCrumb, { text: "Effective access", href: "#/iam/effective-access" }] },
+    { pattern: "/iam/event-history", component: EventHistory, crumbs: () => [iamCrumb, { text: "Event history", href: "#/iam/event-history" }] },
     { pattern: "/iam/enforcement", component: Enforcement, crumbs: () => [iamCrumb, { text: "Enforcement", href: "#/iam/enforcement" }] },
     { pattern: "/iam/credential-report", component: CredentialReport, crumbs: () => [iamCrumb, { text: "Credential report", href: "#/iam/credential-report" }] },
     { pattern: "/iam/security-credentials", component: SecurityCredentials, crumbs: () => [iamCrumb, { text: "My security credentials", href: "#/iam/security-credentials" }] },

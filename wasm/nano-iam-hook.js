@@ -98,7 +98,9 @@ export const cloudOf = (req) => routeOf(req).cloud;
 // Cloud Asset analyzeIamPolicy, Azure checkAccess / permissions / filtered role assignments / PIM schedules, and the IAM Query simulate actions.
 const AA_PATH = /^\/(?:analyzer|finding|findingv2|policy\/(?:validation|check-no-new-access|check-access-not-granted|check-no-public-access)|resource\/scan)(?:\/|$)/;
 const GCP_TS = /^\/v[13]\/iam:troubleshoot$/, GCP_AN = /^\/v1\/(?:projects|folders|organizations)\/[^/:]+:analyzeIamPolicy$/;
-const AZ_AUTHZ = /\/providers\/microsoft\.authorization\/(checkaccess|permissions|roleassignments|roleeligibilityschedules|roleeligibilityscheduleinstances|roleassignmentschedules|roleassignmentscheduleinstances)\/?$/i;
+const AZ_AUTHZ = /\/providers\/microsoft\.authorization\/(checkaccess|customrolechecks|permissions|roleassignments|roleeligibilityschedules|roleeligibilityscheduleinstances|roleassignmentschedules|roleassignmentscheduleinstances|roleeligibilityschedulerequests|roleassignmentschedulerequests)\/?$/i;
+// PIM single-resource routes (core/iam_engine/azure_pim.py): PUT a request, GET a request / schedule, POST a request's /cancel
+const AZ_PIM = /\/providers\/microsoft\.authorization\/(roleeligibilityschedulerequests|roleassignmentschedulerequests|roleeligibilityschedules|roleassignmentschedules)\/[^/]+(\/cancel)?\/?$/i;
 const SIM_ACTIONS = /(?:^|&)Action=(?:SimulatePrincipalPolicy|SimulateCustomPolicy|GetContextKeysForPrincipalPolicy|GetContextKeysForCustomPolicy)(?:&|$)/;
 /** -> "analyze" (answer from the engine) | "engine" (IAM Query simulate: mount the engine, then dispatch normally) | null. Cheap and synchronous. */
 export function analysisRoute(req) {
@@ -107,9 +109,14 @@ export function analysisRoute(req) {
   if ((/access-analyzer\/aws4_request/.test(h.authorization || "") || /^access-analyzer\./i.test(h.host || "")) && AA_PATH.test(p)) return "analyze";
   if (m === "POST" && GCP_TS.test(p)) return "analyze";
   if (m === "GET" && GCP_AN.test(p)) return "analyze";
+  if (m === "GET" && /^\/metadata\/identity\/oauth2\/token$/i.test(p)) return "analyze";                                   // managed-identity token (IMDS)
+  if (m === "POST" && /\/oauth2(?:\/v2\.0)?\/token$/i.test(p)) { let t = ""; try { t = atob(req.body_b64 || ""); } catch (_) {} if (/(?:^|&)client_assertion=/.test(t)) return "analyze"; }
+  const pim = AZ_PIM.exec(p);
+  if (pim) { const isReq = /schedulerequests$/i.test(pim[1]); return (m === "GET" || (isReq && (m === "PUT" || (m === "POST" && pim[2])))) ? "analyze" : null; }
   const a = AZ_AUTHZ.exec(p);
   if (a) {
     const res = a[1].toLowerCase();
+    if (res === "customrolechecks") return m === "POST" ? "analyze" : null;
     if (res === "checkaccess") { if (m !== "POST") return null; let t = ""; try { t = atob(req.body_b64 || ""); } catch (_) {} return /"subject"/i.test(t) && /"actions"/i.test(t) ? "analyze" : null; }
     if (res === "roleassignments") return m === "GET" && (q["$filter"] || /[?&]\$filter=/.test(String(req.path))) ? "analyze" : null;
     return m === "GET" ? "analyze" : null;

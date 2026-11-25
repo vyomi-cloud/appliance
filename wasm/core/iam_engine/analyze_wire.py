@@ -23,9 +23,10 @@ import json
 import re
 from urllib.parse import parse_qs
 
-from . import access_analyzer, analyze_azure, analyze_gcp, routing
+from . import access_analyzer, analyze_azure, analyze_gcp, azure_identity, azure_pim, routing
 
 _AUTHZ = re.compile(r"^(?P<scope>.*?)/providers/Microsoft\.Authorization/(?P<res>[A-Za-z]+)/?$", re.I)
+_PIM = re.compile(r"^(?P<scope>.*?)/providers/Microsoft\.Authorization/(?P<res>[A-Za-z]+)/(?P<name>[^/]+)(?:/(?P<verb>cancel))?/?$", re.I)
 _GCP_TS = re.compile(r"^/(v1|v3)/iam:troubleshoot$")
 _GCP_AN = re.compile(r"^/v1/((?:projects|folders|organizations)/[^/:]+):analyzeIamPolicy$")
 
@@ -57,12 +58,22 @@ def match(method, path, query=None, headers=None, body=b""):
     p = routing.strip_wire(str(path or "/").split("?", 1)[0])
     if access_analyzer.matches(method, p, headers):
         return ("aws", "accessanalyzer", p)
+    if azure_identity.match_imds(method, p):                              # managed-identity token (IMDS)
+        return ("azure", "imds", "/")
+    if method == "POST" and re.search(r"/oauth2(?:/v2\.0)?/token$", p) and b"client_assertion=" in bytes(body or b""):
+        return ("azure", "fedtoken", p)                                   # federated-credential exchange (workload identity)
     m = _GCP_TS.match(p)
     if m and method == "POST":
         return ("gcp", "troubleshoot", m.group(1))
     m = _GCP_AN.match(p)
     if m and method == "GET":
         return ("gcp", "analyze", m.group(1))
+    m = _PIM.match(p)
+    if m and azure_pim.kind_of(m.group("res")):          # PIM: requests (PUT / GET / POST .../cancel) and a single schedule (GET)
+        k = azure_pim.kind_of(m.group("res"))
+        if (method == "PUT" and k in (azure_pim.ELIG_REQ, azure_pim.ACT_REQ)) or method == "GET" \
+                or (method == "POST" and m.group("verb") and k in (azure_pim.ELIG_REQ, azure_pim.ACT_REQ)):
+            return ("azure", "pim", m.group("scope") or "/", k, m.group("name"), (m.group("verb") or "").lower())
     m = _AUTHZ.match(p)
     if m:
         res, scope = m.group("res").lower(), m.group("scope") or "/"
@@ -71,6 +82,8 @@ def match(method, path, query=None, headers=None, body=b""):
             b = _json_body(body)
             if b is not None and any(str(k).lower() in ("subject", "resource") for k in b) and any(str(k).lower() == "actions" for k in b):
                 return ("azure", "checkAccess", scope)
+        elif res == "customrolechecks" and method == "POST":
+            return ("azure", "customRoleChecks", scope)
         elif res == "permissions" and method == "GET":
             return ("azure", "permissions", scope)
         elif res == "roleassignments" and method == "GET" and _q1(q, "$filter"):
@@ -81,6 +94,8 @@ def match(method, path, query=None, headers=None, body=b""):
             return ("azure", "roleAssignments", scope)
         elif method == "GET" and analyze_azure.schedule_kind(res):
             return ("azure", "schedules", scope, res)
+        elif azure_pim.kind_of(res) in (azure_pim.ELIG_REQ, azure_pim.ACT_REQ) and method == "GET":
+            return ("azure", "pim", scope, azure_pim.kind_of(res), "", "")
     return None
 
 
@@ -107,6 +122,8 @@ def handle(route, spec, host):
         if m:
             ctx = dict(ctx, region=m.group(1))
         return access_analyzer.dispatch(method, routing.strip_wire(str(path).split("?", 1)[0]), q, bytes(body), ctx)
+    if kind in ("imds", "fedtoken"):
+        return _identity_route(route, spec, host)
     state, principal = host.state(cloud, {str(k).lower(): v for k, v in headers.items()}, spec.get("query") if isinstance(spec.get("query"), str) else "", path)
     if cloud == "gcp":
         try:
@@ -127,10 +144,80 @@ def handle(route, spec, host):
             if not (analyze_azure._ci(analyze_azure._ci(b, "Resource") or {}, "Id")):
                 b = dict(b, Resource={"Id": scope})
             return _json(200, analyze_azure.check_access(b, state, principal))
+        if kind == "customRoleChecks":
+            return _json(200, analyze_azure.check_custom_role(_json_body(body) or {}, state))
         if kind == "permissions":
             return _json(200, analyze_azure.effective_permissions(scope, principal, state))
         if kind == "roleAssignments":
             return _json(200, analyze_azure.role_assignments(scope, _q1(q, "$filter"), state))
-        return _json(200, analyze_azure.schedules(route[3], scope, _q1(q, "$filter"), state))
+        if kind == "pim":
+            try:
+                out = _pim_route(route, body, _q1(q, "$filter"), host, principal, method, state)
+            except azure_pim.PimError as e:
+                _pim_event(spec, e.status, principal, body)
+                raise
+            _pim_event(spec, out["status"], principal, body)
+            return out
+        return _json(200, analyze_azure.schedules(route[3], scope, _q1(q, "$filter"), state, principal))
     except analyze_azure.AzError as e:
         return _aerr(e)
+    except azure_pim.PimError as e:
+        return _aerr(e)
+
+
+def _pim_route(route, body, flt, host, principal, method, state):
+    """PIM requests / schedules over the space's ARM records (host.azure_arm()); see core/iam_engine/azure_pim.py."""
+    scope, kind, name, verb = route[2], route[3], route[4], route[5]
+    arm = host.azure_arm()
+    if arm is None:
+        return _json(501, {"error": {"code": "NotImplemented", "message": "No ARM record store is available for PIM schedules."}})
+    if method == "PUT":
+        b = _json_body(body)
+        if b is None:
+            return _json(400, {"error": {"code": "InvalidRequestContent", "message": "The request content is not valid JSON."}})
+        st, doc = azure_pim.put_request(arm, scope, kind, name, b, principal)
+        getattr(host, "persist", lambda: None)()
+        return _json(st, doc)
+    if method == "POST":                                    # .../cancel: requests are provisioned synchronously, so there is nothing pending
+        azure_pim.get_record(arm, scope, kind, name)
+        return _json(400, {"error": {"code": "RoleAssignmentRequestAlreadyCompleted", "message": "The request is already Provisioned and cannot be cancelled."}})
+    if name:
+        return _json(200, azure_pim.get_record(arm, scope, kind, name))
+    who = None
+    if flt:
+        f_kind, w = analyze_azure.parse_filter(flt.replace("$filter=", ""))
+        who = str((principal or {}).get("object_id") or "") if f_kind == "asTarget" else (w if f_kind == "principalId" else None)
+    return _json(200, {"value": azure_pim.list_records(arm, scope, kind, who=who)})
+
+
+def _identity_route(route, spec, host):
+    arm = host.azure_arm() or {}
+    if route[1] == "imds":
+        st, doc = azure_identity.imds_token(arm, spec.get("query"), spec.get("headers") or {})
+        return _json(st, doc)
+    from urllib.parse import parse_qs
+    form = {k: v[0] for k, v in parse_qs(bytes(spec.get("body") or b"").decode("utf-8", "replace"), keep_blank_values=True).items()}
+    seg = [x for x in route[2].split("/") if x]
+    tid = seg[0] if seg and re.fullmatch(r"[0-9a-fA-F-]{36}", seg[0]) else ""
+    ident = azure_identity.find_identity(arm, client_id=form.get("client_id"))
+    out = azure_identity.federated_exchange(arm, form, tid or (ident or {}).get("tenantId") or azure_identity.TENANT_FALLBACK, "v2.0" in seg)
+    if out is None:
+        return _json(400, {"error": "invalid_client", "error_description": f"AADSTS700016: Application with identifier '{form.get('client_id', '')}' was not found "
+                                                                            "in the directory (federated credentials are supported for user-assigned managed identities)."})
+    return _json(*out)
+
+
+def _pim_event(spec, status, principal, body):
+    """PIM requests are IAM changes: they land in the Activity Log feed with the caller (core/iam_events_core.py)."""
+    if str(spec.get("method", "")).upper() not in ("PUT", "POST"):
+        return
+    try:
+        try:
+            from core import iam_events_core as ev
+        except ImportError:   # pragma: no cover
+            import iam_events_core as ev  # type: ignore
+        who = str((principal or {}).get("object_id") or "")
+        ev.record_azure(spec.get("method"), str(spec.get("path", "")).split("?", 1)[0], status,
+                        {"x-cloudlearn-principal": who} if who and who != "root" else None, body)
+    except Exception:
+        pass

@@ -23,6 +23,7 @@ import { Roles as IamRoles } from "../../kit/ResourceIam.jsx";
 import { DenyAssignmentsPanel } from "../../kit/IamExtras.jsx";
 import { EnforcementPanel as IamEnforcementPanel, EffectiveAccess as IamEffectiveAccess, AuditPanel as IamAuditPanel } from "../../kit/IamEnforcement.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
+import { ActivityPanel as IamActivityPanel, PimPanel as IamPimPanel } from "../../kit/IamActivityPim.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 
 export const MENU = [
@@ -339,7 +340,11 @@ function AccessControlIam({ id }) {
         <Tab value="enforcement">Enforcement</Tab>
         <Tab value="effective">Effective access</Tab>
         <Tab value="audit">Audit</Tab>
+        <Tab value="iamactivity">Activity</Tab>
+        <Tab value="pim">Privileged access</Tab>
       </TabList>
+      {tab === "iamactivity" && <IamActivityPanel />}
+      {tab === "pim" && <IamPimPanel a={{ id: `/subscriptions/${id}`, name: "this subscription" }} />}
       {tab === "enforcement" && <IamEnforcementPanel a={{ id: `/subscriptions/${id}`, name: "this subscription" }} />}
       {tab === "effective" && <IamEffectiveAccess a={{ id: `/subscriptions/${id}`, name: "this subscription" }} />}
       {tab === "audit" && <IamAuditPanel />}

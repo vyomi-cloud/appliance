@@ -18,13 +18,15 @@ from core.iam_engine.types import request as _request
 
 class IamApi:
     def __init__(self, settings_store=None, state_fn=None, catalog_fn=None, inventory_fn=None,
-                 audit_log=None, engines=None, maps=None):
+                 audit_log=None, engines=None, maps=None, trail_fn=None, events_fn=None):
         self.store = settings_store or _modes.MemorySettingsStore()
         self.state_fn = state_fn or (lambda cloud: {})
         self.catalog_fn = catalog_fn or (lambda cloud, service: None)
         self.inventory_fn = inventory_fn or (lambda: None)
         self.log = audit_log if audit_log is not None else _audit.default_log
         self.engines, self.maps = engines, maps
+        self.trail_fn = trail_fn        # () -> [CloudTrail events] (core/cloudtrail_events_core ring), AWS only; None = decisions only
+        self.events_fn = events_fn      # () -> [common event records]; default: core/iam_events_core ring
 
     def handle(self, method, path, query=None, body=None):
         """-> (status, json-able). `path` like /api/iam/aws/enforcement."""
@@ -46,13 +48,61 @@ class IamApi:
             elif what == "audit" and method == "DELETE":
                 self.log.clear()
                 return 200, {"cleared": True}
+            elif what == "events" and method == "GET":
+                return self._events(cloud, query, len(parts) > 4 and parts[4] == "export")
             elif what == "evaluate" and method == "POST":
                 return self._evaluate(cloud, body)
             elif what == "catalog" and method == "GET" and len(parts) >= 5:
                 return self._catalog(cloud, parts[4])
         except ValueError as exc:
             return 400, {"error": str(exc)}
-        return 405 if what in ("enforcement", "audit", "evaluate", "catalog") else 404, {"error": "method or route not supported"}
+        return 405 if what in ("enforcement", "audit", "evaluate", "catalog", "events") else 404, {"error": "method or route not supported"}
+
+    _IAM_SERVICES = {"aws": ("iam", "sts", "access-analyzer", "accessanalyzer", "rolesanywhere", "organizations", "sso", "identitystore", "cognito-identity"),
+                     "gcp": ("iam", "sts", "iamcredentials", "cloudresourcemanager", "cloudidentity", "orgpolicy"),
+                     "azure": ("microsoft.authorization", "microsoft.managedidentity", "microsoft.aad")}
+
+    def _events(self, cloud, query, export=False):
+        """GET /api/iam/<cloud>/events[/export]: IAM management-event history in the cloud's native shape (CloudTrail event / Cloud Audit Logs
+        LogEntry / Activity Log event under `native`) with a common envelope; gate denials are merged as outcome=denied. Filters: name,
+        principal, resource, service, outcome, readOnly, q, start, end, scope=iam|all (default iam), source=all|events|decisions,
+        includeAllowed=true, limit (<=1000, default 100), offset, format=json|csv (export)."""
+        from core import iam_events_core as ev
+        q = dict(query or {})
+        src = str(q.get("source") or "all")
+        rows = []
+        if src in ("all", "events"):
+            if cloud == "aws":
+                try:
+                    rows += [ev.normalize_cloudtrail(e) for e in (self.trail_fn() if self.trail_fn else [])]
+                except Exception:
+                    pass
+            else:
+                rows += [e for e in (self.events_fn() if self.events_fn else ev.snapshot()) if e.get("cloud") == cloud]
+        if src in ("all", "decisions"):
+            allowed = str(q.get("includeAllowed") or "").lower() in ("true", "1")
+            for r in self.log.list(1000, cloud=cloud):
+                if allowed or r.get("decision") in ("deny", "would_deny"):
+                    rows.append(ev.from_decision(r))
+        if str(q.get("scope") or "iam") != "all":
+            keys = self._IAM_SERVICES.get(cloud, ())
+            rows = [r for r in rows if str(r.get("service", "")).lower() in keys or str(r.get("name", "")).lower().split(":")[0] in keys
+                    or any(str(r.get("name", "")).lower().startswith(k + "/") for k in keys)]
+        try:
+            limit = max(1, min(1000, int(q.get("limit", 100))))
+            offset = max(0, int(q.get("offset", 0)))
+        except (TypeError, ValueError):
+            limit, offset = 100, 0
+        page, total = ev.query(rows, q, limit if not export else 10000, 0 if export else offset)
+        if export:
+            if str(q.get("format") or "json").lower() == "csv":
+                return 200, {"contentType": "text/csv", "filename": f"iam-events-{cloud}.csv", "body": ev.export_csv(page)}
+            return 200, {"contentType": "application/json", "filename": f"iam-events-{cloud}.json", "events": page}
+        for r in page:
+            if "native" not in r:
+                r["native"] = ev.to_gcp_audit(r) if cloud == "gcp" else ev.to_azure_activity(r) if cloud == "azure" else r.get("native")
+        return 200, {"events": page, "total": total, "limit": limit, "offset": offset,
+                     "truncated": total > offset + len(page)}
 
     def _evaluate(self, cloud, body):
         if not isinstance(body, dict) or not body.get("action"):

@@ -131,6 +131,8 @@
   "aws_eval.py",
   "aws_routes_data.py",
   "azure_eval.py",
+  "azure_identity.py",
+  "azure_pim.py",
   "azure_sas.py",
   "catalog_loader.py",
   "gate.py",
@@ -141,6 +143,7 @@
   "modes.py",
   "nano_bridge.py",
   "routing.py",
+  "sts_trust.py",
   "types.py"
  ]
 }

@@ -1152,6 +1152,8 @@ def _signed_service(request: Request) -> str:
 # scope above and never hit this table. Mirrors core/aws_wire_router._QUERY_ACTION.
 # Neptune/DocumentDB reuse RDS action names; they default to RDS here.
 _UNSIGNED_QUERY_ACTION = {
+    # STS (AssumeRoleWithWebIdentity / AssumeRoleWithSAML are unsigned calls)
+    "AssumeRole": "sts", "AssumeRoleWithWebIdentity": "sts", "AssumeRoleWithSAML": "sts", "GetCallerIdentity": "sts",
     # RDS
     "CreateDBInstance": "rds", "DescribeDBInstances": "rds", "DeleteDBInstance": "rds",
     "ModifyDBInstance": "rds", "StartDBInstance": "rds", "StopDBInstance": "rds",
@@ -1383,6 +1385,11 @@ def register(app: FastAPI, *, aws_xamz_dispatchers: dict | None = None) -> None:
         if service == "iam":
             return await _srv().api_iam_query(request)
         if service == "sts":
+            # STS trust evaluation + federation (AssumeRole / AssumeRoleWithWebIdentity / AssumeRoleWithSAML): the shared router + engine
+            # (core/iam_engine/sts_trust.py), the same code Nano runs. GetCallerIdentity stays on the legacy handler.
+            _sa = str((await _srv()._ec2_query_params(request)).get("Action", "")).strip()
+            if _sa in ("AssumeRole", "AssumeRoleWithWebIdentity", "AssumeRoleWithSAML"):
+                return await _wi.serve(_wi.appliance_router(), request)
             return await _srv().api_sts_query(request)
         if service == "ec2-instance-connect":
             try:
