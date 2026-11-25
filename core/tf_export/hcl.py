@@ -73,9 +73,18 @@ def _canon(o: Any) -> Any:
     return o
 
 
+class Json(Ref):
+    """A ``jsonencode({...})`` expression that remembers its source object, so real-cloud mode can still interpolate ids inside it."""
+    __slots__ = ("obj",)
+
+    def __init__(self, obj: Any):
+        self.obj = obj
+        super().__init__(f"jsonencode({value(_canon(obj), 1)})")
+
+
 def jsonencode(obj: Any) -> Ref:
     """A JSON document (IAM / bucket policy) as ``jsonencode({...})``: readable and diff-stable."""
-    return Ref(f"jsonencode({value(_canon(obj), 1)})")
+    return Json(obj)
 
 
 def body(attrs: dict[str, Any], blocks: list[tuple[str, dict[str, Any]]] | tuple = (), ind: int = 1) -> list[str]:

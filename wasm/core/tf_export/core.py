@@ -167,6 +167,8 @@ def _interpolate(v, interp: dict[str, str]):
             elif piece:
                 parts.append(piece)
         return hcl.Tpl(parts)
+    if isinstance(v, hcl.Json):
+        return hcl.jsonencode(_interpolate(v.obj, interp))
     if isinstance(v, dict):
         return {k: _interpolate(x, interp) for k, x in v.items()}
     if isinstance(v, (list, tuple)):

@@ -53,3 +53,11 @@ def test_graph_handles_untagged_vpc():
     c.add("aws_vpc", "v", "vpc_10_0_0_0_16", {"cidr_block": "10.0.0.0/16", "tags": None}, file="network.tf")
     g = build_graph(c)
     assert g["groups"][0]["label"] == "vpc_10_0_0_0_16"
+
+
+def test_real_cloud_mode_replaces_account_id_inside_jsonencode_policies():
+    c = Ctx({}, "us-east-1")
+    c.add("aws_iam_policy", "p", "p", {"name": "p", "policy": hcl.jsonencode({"Statement": [{"Principal": {"AWS": "arn:aws:iam::123456789012:root"}}]})}, file="iam.tf")
+    sim, real = render_files(c)["iam.tf"], render_files(c, real_cloud=True)["iam.tf"]
+    assert "123456789012" in sim
+    assert "123456789012" not in real and "${data.aws_caller_identity.current.account_id}" in real
