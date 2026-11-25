@@ -150,6 +150,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"active_tier": DEV_TIER["tier"] or "max", "primary_cloud": DEV_TIER["primary"], "kubernetes_locked": K8S_GATE.ui_verdicts()})
         if self.path.startswith("/_dev/ec2-counters"):
             return self._dev_counters()
+        if u.path.startswith("/_wire/api/iam/") and "/catalog/" in u.path:   # IAM pickers' verbatim catalogs (appliance: routes IamApi; Nano: SW)
+            from core.iam_engine import catalog_loader
+            from core.iam_engine.api import IamApi
+            if catalog_loader._reader is None:
+                catalog_loader.set_reader(catalog_loader.filesystem_reader(str(ROOT / "core" / "iam_catalog")))
+            code, obj = IamApi(catalog_fn=catalog_loader.load).handle(self.command, u.path[len("/_wire"):], dict(parse_qsl(u.query)))
+            return self._json(obj, code)
         if self.path.startswith("/_wire"):
             return self._wire()
         return self._static()

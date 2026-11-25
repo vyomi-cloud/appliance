@@ -200,12 +200,21 @@ def _put_role_definition(store, name: str, body: dict) -> AzureIamResponse:
         actions.extend(p.get("actions") or [])
         not_actions.extend(p.get("notActions") or [])
     role_name = props.get("roleName") or name
+    data_actions, not_data_actions = [], []
+    for p in perms:
+        data_actions.extend(p.get("dataActions") or [])
+        not_data_actions.extend(p.get("notDataActions") or [])
+    prior = _role_defs(store).get(role_name) or {}
+    now = _now()
     _role_defs(store)[role_name] = {
-        "roleName": role_name, "actions": actions, "notActions": not_actions, "custom": True,
+        "roleName": role_name, "actions": actions, "notActions": not_actions, "dataActions": data_actions, "notDataActions": not_data_actions,
+        "custom": True,
         "privileged": bool(props.get("privileged", False)), "directory": bool(props.get("directory", True)),
         "description": props.get("description", ""),
+        "assignableScopes": [str(x) for x in (props.get("assignableScopes") or ["/"])],
+        "createdOn": prior.get("createdOn") or now, "updatedOn": now,
     }
-    return _json(201, {"name": name, "properties": {"roleName": role_name, "type": "CustomRole"}})
+    return _json(201, _role_definition_view(name, _role_defs(store)[role_name], 0))
 
 
 def _role_definition_view(name: str, perms: dict, assignment_count: int) -> dict:
@@ -217,8 +226,10 @@ def _role_definition_view(name: str, perms: dict, assignment_count: int) -> dict
             "type": "CustomRole" if perms.get("custom") else "BuiltInRole",
             "privileged": bool(perms.get("privileged", False)),
             "isDirectoryRole": bool(perms.get("directory", False)),
-            "assignableScopes": ["/"],
-            "permissions": [{"actions": perms.get("actions") or [], "notActions": perms.get("notActions") or []}],
+            "assignableScopes": list(perms.get("assignableScopes") or ["/"]),
+            "permissions": [{"actions": perms.get("actions") or [], "notActions": perms.get("notActions") or [],
+                             "dataActions": perms.get("dataActions") or [], "notDataActions": perms.get("notDataActions") or []}],
+            **({"createdOn": perms["createdOn"], "updatedOn": perms.get("updatedOn", perms["createdOn"])} if perms.get("createdOn") else {}),
         },
         "assignmentCount": assignment_count,
     }
@@ -255,28 +266,81 @@ def _delete_role_definition(store, name: str) -> AzureIamResponse:
     return _json(200, {})
 
 
+SIM_PRINCIPAL = "00000000-0000-0000-0000-000000000000"   # createdBy / updatedBy: the simulator's single built-in caller
+
+
+def _now() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00"
+
+
+def _assignment_view(store, a: dict) -> dict:
+    """ARM shape of one stored assignment (Microsoft.Authorization/roleAssignments, or denyAssignments for kind=deny)."""
+    sub = "00000000-0000-0000-0000-cloudlearn01"
+    deny = a.get("kind") == "deny"
+    scope = a.get("scope") or "/"
+    base = "" if scope == "/" else scope.rstrip("/")
+    coll = "denyAssignments" if deny else "roleAssignments"
+    out = {"id": f"{base or '/subscriptions/' + sub}/providers/Microsoft.Authorization/{coll}/{a['name']}", "name": a["name"],
+           "type": f"Microsoft.Authorization/{coll}"}
+    if deny:
+        out["properties"] = {"denyAssignmentName": a.get("denyAssignmentName") or a["name"], "description": a.get("description", ""), "scope": scope,
+                             "permissions": [{"actions": list(a.get("denyActions") or []), "notActions": [], "dataActions": [], "notDataActions": []}],
+                             "principals": [{"id": a.get("principalId", ""), "type": a.get("principalType") or "User"}], "excludePrincipals": [],
+                             "doNotApplyToChildScopes": False, "isSystemProtected": False, "kind": "deny", "principalId": a.get("principalId", ""),
+                             "denyActions": list(a.get("denyActions") or []),
+                             "createdOn": a.get("createdOn"), "updatedOn": a.get("updatedOn"), "createdBy": a.get("createdBy"), "updatedBy": a.get("updatedBy")}
+        return out
+    props = {"roleDefinitionId": a["roleDefinition"] if "/" in a["roleDefinition"] else
+             f"/subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions/{a['roleDefinition']}",
+             "principalId": a["principalId"], "principalType": a.get("principalType") or "User", "scope": scope,
+             "description": a.get("description", ""), "createdOn": a.get("createdOn"), "updatedOn": a.get("updatedOn"),
+             "createdBy": a.get("createdBy"), "updatedBy": a.get("updatedBy"), "kind": a["kind"], "roleName": a["roleDefinition"] if "/" not in a["roleDefinition"] else None}
+    if a.get("condition"):
+        props["condition"] = a["condition"]
+        props["conditionVersion"] = a.get("conditionVersion") or "2.0"
+    out["properties"] = {k: v for k, v in props.items() if v is not None}
+    return out
+
+
 def _list_role_assignments(store) -> AzureIamResponse:
-    value = [{"name": a["name"],
-             "properties": {"principalId": a["principalId"], "roleDefinitionId": a["roleDefinition"],
-                            "scope": a["scope"], "kind": a["kind"]}}
-            for a in _assignments(store).values()]
-    return _json(200, {"value": value})
+    return _json(200, {"value": [_assignment_view(store, a) for a in _assignments(store).values()]})
+
+
+def _get_role_assignment(store, name: str) -> AzureIamResponse:
+    a = _assignments(store).get(name)
+    if a is None:
+        return _err(404, "RoleAssignmentNotFound", f"The role assignment '{name}' does not exist.")
+    return _json(200, _assignment_view(store, a))
 
 
 def _put_role_assignment(store, name: str, body: dict) -> AzureIamResponse:
     props = body.get("properties") or body
+    cond = props.get("condition")
+    if cond:
+        c = str(cond)
+        if c.count("(") != c.count(")") or not any(t in c for t in ("@Resource", "@Request", "@Principal", "@Environment", "ActionMatches", "SubOperationMatches")):
+            return _err(400, "InvalidCondition", "The condition must reference @Resource, @Request, @Principal or @Environment attributes with balanced parentheses.")
+        if str(props.get("conditionVersion") or "2.0") != "2.0":
+            return _err(400, "InvalidConditionVersion", "conditionVersion must be 2.0.")
+    prior = _assignments(store).get(name) or {}
+    now = _now()
     assignment = {
         "name": name,
         "principalId": props.get("principalId", ""),
+        "principalType": props.get("principalType") or "",
         "roleDefinition": props.get("roleName") or props.get("roleDefinitionId", ""),
         "scope": props.get("scope", "/"),
         "kind": str(props.get("kind", "allow")).lower(),   # "allow" | "deny"
         "denyActions": props.get("denyActions") or [],
+        "description": props.get("description") or "",
+        "condition": cond or None, "conditionVersion": (props.get("conditionVersion") or "2.0") if cond else None,
+        "denyAssignmentName": props.get("denyAssignmentName") or "",
+        "createdOn": prior.get("createdOn") or now, "updatedOn": now,
+        "createdBy": prior.get("createdBy") or SIM_PRINCIPAL, "updatedBy": SIM_PRINCIPAL,
     }
     _assignments(store)[name] = assignment
-    return _json(201, {"name": name, "properties": {"principalId": assignment["principalId"],
-                                                    "roleDefinitionId": assignment["roleDefinition"],
-                                                    "scope": assignment["scope"]}})
+    return _json(200 if prior else 201, _assignment_view(store, assignment))
 
 
 def _delete_role_assignment(store, name: str) -> AzureIamResponse:
@@ -444,6 +508,8 @@ def dispatch(store, method: str, path: str,
         if len(tail) == 1 and method == "GET":
             return _list_role_assignments(store)
         if len(tail) >= 2:
+            if method == "GET":
+                return _get_role_assignment(store, tail[1])
             if method == "PUT":
                 return _put_role_assignment(store, tail[1], payload)
             if method == "DELETE":

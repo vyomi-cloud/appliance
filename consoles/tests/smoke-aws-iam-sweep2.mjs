@@ -24,7 +24,7 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " - " + String(detail).slice(0, 160) : ""}`); };
 
 await mkdir(OUT, { recursive: true });
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch({ channel: "chrome" }).catch(() => pw.chromium.launch());
 const page = await browser.newPage({ viewport: { width: 1440, height: 1300 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
@@ -178,7 +178,7 @@ await page.getByRole("cell", { name: acct.Id }).waitFor({ timeout: 10000 });
 check("Assign delegated administrator -> native ListDelegatedAdministrators", ((await org("ListDelegatedAdministrators", { ServicePrincipal: "iam.amazonaws.com" })).json.DelegatedAdministrators || []).some((a) => a.Id === acct.Id));
 await go("#/iam/account-settings", "Account settings");
 await page.getByText("Centralized root access for member accounts").first().waitFor({ timeout: 15000 });
-check("Account settings: centralized root access is real and shows the delegated admin; only Role manager is a gap", (await body()).includes(ACCT) && (await badges()) === 1);
+check("Account settings: centralized root access is real and shows the delegated admin; no gap badge left (Role manager is real)", (await body()).includes(ACCT) && (await badges()) === 0);
 await shot("iam2-account-settings");
 
 // ── 6. cleanup from the UI side: remove + close
@@ -256,8 +256,14 @@ await iamq("PutUserPolicy", { UserName: SU, PolicyName: "ip", PolicyDocument: JS
 await go("#/iam/policy-simulator", "Policy simulator");
 check("Policy simulator has no Not-simulated badge (arbitrary condition keys are real)", (await badges()) === 0);
 await page.getByRole("button", { name: /Choose a user or role/ }).click();
-await page.getByRole("option", { name: `User: ${SU}` }).click();
-await page.getByRole("textbox", { name: "Action name" }).fill("s3:GetObject");
+await page.getByPlaceholder("Search users and roles").fill(SU);
+await page.getByRole("option", { name: new RegExp(`^\\s*${SU}\\b`) }).first().click();
+await page.getByRole("button", { name: /Choose a service/ }).first().click();
+await page.getByPlaceholder("Search services").fill("S3");
+await page.getByRole("option", { name: "S3", exact: true }).click();
+await page.getByRole("button", { name: /^Action\b/ }).first().click();
+await page.getByPlaceholder("Filter actions").fill("GetObject");
+await page.getByRole("option", { name: /^GetObject\b/ }).first().click();
 await page.getByRole("button", { name: "Add actions" }).click();
 await page.getByRole("button", { name: "Simulate" }).click();
 await page.getByText(/missing context values: aws:SourceIp/).waitFor({ timeout: 10000 });

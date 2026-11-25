@@ -114,6 +114,7 @@ def _flat_role(d):
     if perms is None:
         perms = [{k: p.get(k, []) for k in ("actions", "notActions", "dataActions", "notDataActions")}]
     return {"id": (d.get("name") or d.get("id") or "").split("/")[-1], "roleName": p.get("roleName") or d.get("roleName") or "",
+            "assignable_scopes": list(p.get("assignableScopes") or d.get("assignableScopes") or d.get("assignable_scopes") or []),
             "permissions": [{k: list(x.get(k) or []) for k in ("actions", "notActions", "dataActions", "notDataActions")} for x in perms]}
 
 
@@ -375,6 +376,14 @@ def _active(ra):
     return not (str(ra.get("assignment_type") or "active").lower() == "eligible" and not ra.get("activated"))
 
 
+def _assignable(role, scope, state):
+    """Custom-role assignableScopes: the assignment scope must lie inside one of them ('/' or no list = anywhere, as every built-in)."""
+    asc = role.get("assignable_scopes") or []
+    if not asc or any(str(x).strip() in ("/", "") for x in asc):
+        return True
+    return any(scope_covers(x, scope, state) for x in asc)
+
+
 def _deny_applies(d, req, ids, state, data):
     if not scope_covers(d.get("scope"), req["resource"], state, not d.get("do_not_apply_to_child_scopes")):
         return None
@@ -423,6 +432,8 @@ def _rbac(req, state):
             continue
         role = resolve_role(state, ra.get("role_definition_id"))
         if not role:
+            continue
+        if not _assignable(role, ra.get("scope"), state):      # a custom role only exists inside its assignableScopes
             continue
         hit = role_grants(role, req["action"], data)
         if not hit:

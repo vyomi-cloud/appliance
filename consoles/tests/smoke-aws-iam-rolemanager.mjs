@@ -8,7 +8,7 @@ const WIRE = `${BASE}${process.env.WIRE_PATH || "/_wire"}`;
 const N = Date.now() % 100000, ROLE = `rm-idle-${N}`, KEEP = `rm-keep-${N}`;
 let bad = 0;
 const check = (n, ok, d = "") => { if (!ok) bad++; console.log(`${ok ? "PASS" : "FAIL"} ${n}${d ? " - " + String(d).slice(0, 160) : ""}`); };
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch({ channel: "chrome" }).catch(() => pw.chromium.launch());
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 const errors = []; page.on("pageerror", (e) => errors.push(e.message));
 const auth = `AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/iam/aws4_request, SignedHeaders=host, Signature=0`;

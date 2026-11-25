@@ -492,7 +492,16 @@ def _flat_assignment(rec) -> dict:
     props = rec.get("properties") or {}
     return {"id": rec.get("id") or rec.get("name") or "", "principal_id": props.get("principalId") or rec.get("principalId") or "",
             "principal_type": props.get("principalType") or "", "role_definition_id": props.get("roleDefinitionId") or rec.get("roleDefinition") or "",
-            "scope": _arm_scope(rec), "condition": props.get("condition"), "condition_version": props.get("conditionVersion")}
+            "scope": _arm_scope(rec), "condition": props.get("condition"), "condition_version": props.get("conditionVersion"),
+            "description": props.get("description") or ""}
+
+
+def _flat_deny_from_assignment(rec) -> dict:
+    """Vyomi extension: a roleAssignment PUT with properties.kind == "deny" (+ denyActions) is a deny assignment."""
+    props = rec.get("properties") or {}
+    return {"id": rec.get("id") or rec.get("name") or "", "name": props.get("denyAssignmentName") or rec.get("name") or "", "description": props.get("description") or "",
+            "scope": _arm_scope(rec), "principals": [{"id": props.get("principalId") or "", "type": props.get("principalType") or "User"}],
+            "permissions": [{"actions": list(props.get("denyActions") or [])}]}
 
 
 def _flat_deny(rec) -> dict:
@@ -552,7 +561,10 @@ def azure_state(arm_resources, rbac_store=None, graph=None) -> dict:
         elif t == "microsoft.management/managementgroups/subscriptions" and rec.get("name"):
             out["subscriptions"][str(rec["name"])] = str(rec.get("id") or "").split("/managementGroups/")[-1].split("/")[0] or None
         if t == "microsoft.authorization/roleassignments":
-            out["role_assignments"].append(_flat_assignment(rec))
+            if str((rec.get("properties") or {}).get("kind") or "allow").lower() == "deny":
+                out["deny_assignments"].append(_flat_deny_from_assignment(rec))
+            else:
+                out["role_assignments"].append(_flat_assignment(rec))
         elif t == "microsoft.authorization/roledefinitions":
             if str((rec.get("properties") or {}).get("type") or "CustomRole").lower() != "builtinrole":
                 out["role_definitions"].append(rec)
@@ -573,11 +585,17 @@ def azure_state(arm_resources, rbac_store=None, graph=None) -> dict:
         if not isinstance(a, dict):
             continue
         if a.get("kind") == "deny":
-            out["deny_assignments"].append({"id": a.get("name", ""), "scope": a.get("scope") or "/", "principals": [{"id": a.get("principalId", ""), "type": "User"}],
+            out["deny_assignments"].append({"id": a.get("name", ""), "name": a.get("denyAssignmentName") or a.get("name", ""), "description": a.get("description", ""),
+                                            "scope": a.get("scope") or "/", "principals": [{"id": a.get("principalId", ""), "type": a.get("principalType") or "User"}],
                                             "permissions": [{"actions": list(a.get("denyActions") or [])}]})
         else:
-            out["role_assignments"].append({"id": a.get("name", ""), "principal_id": a.get("principalId", ""),
-                                            "role_definition_id": a.get("roleDefinition", ""), "scope": a.get("scope") or "/"})
+            out["role_assignments"].append({"id": a.get("name", ""), "principal_id": a.get("principalId", ""), "principal_type": a.get("principalType") or "",
+                                            "role_definition_id": a.get("roleDefinition", ""), "scope": a.get("scope") or "/",
+                                            "condition": a.get("condition"), "condition_version": a.get("conditionVersion"), "description": a.get("description", "")})
+    for rn, d in (getattr(rbac_store, "_azure_role_defs", None) or {}).items():      # custom roles of the RBAC core (built-ins come from the catalog)
+        if isinstance(d, dict) and d.get("custom"):
+            out["role_definitions"].append({"name": rn, "properties": {"roleName": d.get("roleName") or rn, "type": "CustomRole", "assignableScopes": list(d.get("assignableScopes") or ["/"]),
+                                                                        "permissions": [{k: list(d.get(k) or []) for k in ("actions", "notActions", "dataActions", "notDataActions")}]}})
     return out
 
 

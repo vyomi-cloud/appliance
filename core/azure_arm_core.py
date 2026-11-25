@@ -4021,6 +4021,15 @@ class AzureArm:
         # systemData.createdAt/lastModifiedAt: real ARM returns this on every resource; the
         # Overview "Created"/"Updated" fields some blades show read it back.
         rec["systemData"] = {"createdAt": rec.get("_created", _now()), "lastModifiedAt": _now()}
+        if full_type.lower() == "microsoft.authorization/roleassignments":
+            # ARM role assignments carry their own audit properties (createdOn/updatedOn/createdBy/updatedBy), kept across updates
+            _rp, _sd = rec["properties"], rec["systemData"]
+            if _aks_old and _aks_old.get("_created"):
+                rec["_created"] = _aks_old["_created"]          # a full PUT rebuilds the record; the assignment keeps its creation time
+            _sd["createdAt"] = _rp["createdOn"] = rec["_created"]
+            _rp["updatedOn"] = _sd["lastModifiedAt"]
+            _rp["createdBy"] = "00000000-0000-0000-0000-000000000000"
+            _rp["updatedBy"] = "00000000-0000-0000-0000-000000000000"
 
         if full_type.lower() == "microsoft.network/networkinterfaces":
             bad = self._nic_ips(key, rec)
