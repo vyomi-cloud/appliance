@@ -670,8 +670,33 @@ async def provider_api_alias_middleware(request, call_next):
     return response
 
 
+_ANALYSIS_HINT = re.compile(r"^/(?:_wire/)?(?:analyzer|finding(?:v2)?|policy/|resource/scan|v[13]/iam:troubleshoot|v1/(?:projects|folders|organizations)/[^/:]+:analyzeIamPolicy)|/providers/Microsoft\.Authorization/",
+                            re.I)
+
+
+async def _iam_analysis_response(request, path: str):
+    """IAM analysis APIs (Access Analyzer REST, Policy Troubleshooter, analyzeIamPolicy, Azure checkAccess / permissions / filtered role
+    assignments / PIM schedules): answered by core/iam_engine over the live state (core/iam_analyze_host.py). Anything else -> None."""
+    if not _ANALYSIS_HINT.search(path):
+        return None
+    try:
+        from core import iam_analyze_host as _iah
+        body = await request.body() if request.method in ("POST", "PUT", "PATCH") else b""
+        qp = request.query_params
+        out = _iah.pre(request.method, path, {k: (qp.getlist(k) if len(qp.getlist(k)) > 1 else qp.get(k)) for k in qp.keys()}, dict(request.headers), body)
+    except Exception:
+        return None
+    if out is None:
+        return None
+    from fastapi.responses import Response
+    return Response(content=out["body"], status_code=out["status"], headers={k: v for k, v in (out.get("headers") or {}).items()})
+
+
 async def _provider_api_alias(request, call_next):
     path = _collapse_doubled_version(request)
+    _analysis = await _iam_analysis_response(request, path)
+    if _analysis is not None:
+        return _analysis
     _gcp_capture_public_base(request)
     if _is_azure_native_path(path):
         provider = "azure"

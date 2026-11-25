@@ -2078,6 +2078,14 @@ class AwsWireRouter:
         body = body if isinstance(body, (bytes, bytearray)) else (body or b"")
         if isinstance(body, str):
             body = body.encode("utf-8")
+        try:      # IAM analysis APIs (Access Analyzer, Policy Troubleshooter / analyzeIamPolicy, Azure checkAccess / permissions): core/iam_engine/analyze_wire.py
+            from core import iam_analyze_host as _iah
+        except ImportError:   # Nano mounts the engine on demand (wasm/nano-iam-hook.js answers these routes itself before dispatch)
+            _iah = None
+        if _iah is not None:
+            _ia = _iah.pre(method, path, query, lheaders, bytes(body))
+            if _ia is not None:
+                return _ia
         _gx = gcp_wire_ext.pre(self, method, path, query, lheaders, bytes(body))   # Functions v1/v2, Cloud DNS, SCC v1, /gcf HTTPS URL
         if _gx is not None:
             return _gx
