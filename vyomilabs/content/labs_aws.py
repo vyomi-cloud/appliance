@@ -997,7 +997,7 @@ assert any("boiler-sop" in x["location"]["s3Location"]["uri"] for x in refs), "t
 
 # ───────────────────────── chapter 9: memory ─────────────────────────
 LAB[9] = [
- b("Create the memory", "An AgentCore Memory holds short-term events (the raw turns of a conversation) and, through a strategy, long-term records the agent can recall in later sessions. The semantic strategy extracts durable facts. Events expire after 30 days.",
+ b("Create the memory", "An AgentCore Memory holds short-term events (the raw turns of a conversation) and, through a strategy, long-term records the agent can recall in later sessions. The semantic strategy extracts durable facts into a namespace per actor (`/facts/{actorId}/`), which is what keeps one user's memory out of another's. Events expire after 30 days.",
    "memory_create.py", r'''
 import time
 
@@ -1005,7 +1005,7 @@ import boto3
 
 ac = boto3.client("bedrock-agentcore-control")
 m = ac.create_memory(name="facilities_memory", eventExpiryDuration=30,
-                     memoryStrategies=[{"semanticMemoryStrategy": {"name": "facts"}}])["memory"]
+                     memoryStrategies=[{"semanticMemoryStrategy": {"name": "facts", "namespaces": ["/facts/{actorId}/"]}}])["memory"]
 for _ in range(30):
     status = ac.get_memory(memoryId=m["id"])["memory"]["status"]
     if status != "CREATING":
@@ -1023,14 +1023,17 @@ ac = boto3.client("bedrock-agentcore-control")
 dp = boto3.client("bedrock-agentcore")
 mid = next(m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory")
 
-for role, text in (("USER", "Boiler B-12 is at 34 psi. What does the SOP say?"),
-                   ("ASSISTANT", "Close the main steam valve, notify the duty engineer and raise a P1 work order [1].")):
-    dp.create_event(memoryId=mid, actorId="maria", sessionId="s1", eventTimestamp=time.time(),
+for actor, session, role, text in (
+        ("maria", "s1", "USER", "I am the duty engineer for site HQ-1. I prefer P1 work orders for any boiler pressure fault."),
+        ("maria", "s1", "ASSISTANT", "Noted, I will raise boiler pressure faults as P1 for you."),
+        ("joe", "s9", "USER", "I work nights at HQ-2 and I always want elevator faults escalated to the vendor.")):
+    dp.create_event(memoryId=mid, actorId=actor, sessionId=session, eventTimestamp=time.time(),
                     payload=[{"conversational": {"content": {"text": text}, "role": role}}])
-print("2 conversational events written")
+print("2 conversational events written for maria, 1 for joe")
 
 events = dp.list_events(memoryId=mid, actorId="maria", sessionId="s1", includePayloads=True)["events"]
 print("replayed", len(events), "events for session s1")
+assert len(events) == 2, "session s1 must replay exactly maria's two turns, not joe's"
 ''', run="python memory_events.py", expect="replayed 2 events"),
  b("Recall long-term records", "RetrieveMemoryRecords searches what the memory strategy extracted for this actor. Extraction runs in the background on real AWS, so a fresh memory may legitimately return zero records for a while.",
    "memory_recall.py", r'''
@@ -1040,8 +1043,24 @@ ac = boto3.client("bedrock-agentcore-control")
 dp = boto3.client("bedrock-agentcore")
 mid = next(m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory")
 
-r = dp.retrieve_memory_records(memoryId=mid, namespace="/facts/maria/", searchCriteria={"searchQuery": "boiler", "topK": 3})
-print("long-term records for maria:", len(r.get("memoryRecordSummaries", [])))
+import time
+time.sleep(1)                       # extraction is asynchronous on real AWS; the simulator finishes within a moment
+
+
+def recall(actor, query="boiler work order preference"):
+    r = dp.retrieve_memory_records(memoryId=mid, namespace="/facts/%s/" % actor, searchCriteria={"searchQuery": query, "topK": 5})
+    return [x["content"]["text"] for x in r.get("memoryRecordSummaries", [])]
+
+
+maria, joe, stranger = recall("maria"), recall("joe"), recall("nobody")
+print("long-term records for maria:", len(maria), "->", maria[:2])
+assert maria and any("P1" in t for t in maria), "maria told the agent she prefers P1 work orders; that fact must be recalled"
+assert joe and not any("P1" in t or "HQ-1" in t for t in joe), "joe's namespace must hold joe's facts only"
+assert stranger == [], "an actor who never spoke must have no memory"
+print("isolation holds: joe sees", len(joe), "of his own record(s), none of maria's; an unknown actor sees", len(stranger))
+mem = ac.get_memory(memoryId=mid)["memory"]
+assert mem.get("eventExpiryDuration") == 30, "events must expire (retention is a requirement, not a default)"
+print("retention: events expire after", mem["eventExpiryDuration"], "days")
 ''', run="python memory_recall.py", expect="long-term records for maria:"),
 ]
 
