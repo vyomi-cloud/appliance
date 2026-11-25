@@ -1,44 +1,27 @@
 {
- "at": "2026-11-25T20:33:49+00:00",
+ "at": "2026-11-25T21:33:50+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "sdk",
-   "service": "pypi:boto3",
-   "kind": "release",
-   "key": "ver:pypi:boto3:1.44.12",
-   "title": "pypi:boto3: 1.44.11 \u2192 1.44.12",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "pypi:botocore",
-   "kind": "release",
-   "key": "ver:pypi:botocore:1.44.12",
-   "title": "pypi:botocore: 1.44.11 \u2192 1.44.12",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "cli:aws",
-   "kind": "release",
-   "key": "ver:cli:aws:2.42.4",
-   "title": "cli:aws: 2.42.3 \u2192 2.42.4",
+   "cloud": "aws",
+   "service": "API Gateway",
+   "kind": "announcement",
+   "key": "feed:aws:852a6bd31332",
+   "title": "AWS IoT Core now uses dedicated IPv6 address ranges for the HTTP rule action",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-iot-core-dedicated-ipv6-ranges/",
+   "detail": "AWS IoT Core can now send traffic to HTTPS endpoints within a dedicated, published IPv6 address range. This launch enables you to configure your HTTPS endpoints to accept requests only from AWS IoT Core and block all other traffic, thereby reducing your endpoint's exposure to public internet. AWS IoT Core is a fully managed service that securely connects IoT devices at scale to the AWS cloud and routes IoT device data to AWS and third-party services. AWS IoT Core's HTTP rule action delivers IoT device data to any HTTPS endpoint, such as your application servers, on-premises systems, or partner",
    "actionable": false
   },
   {
    "cloud": "aws",
-   "service": "Kinesis",
+   "service": "CloudWatch",
    "kind": "announcement",
-   "key": "feed:aws:4b186de24771",
-   "title": "AWS IoT Core now supports custom domain names for the AWS IoT credential provider ",
-   "link": "https://aws.amazon.com/aws-iot-core-custom-domains-credential-provider",
-   "detail": "AWS IoT Core now enables you to use configurable endpoints , including custom domain names, when your devices request temporary credentials from the AWS IoT credential provider to securely call other AWS services. Your devices can now use domains you own for both messaging and credentials, and hence AWS endpoint names need not be hard coded into device firmware. This makes it easier to manage, migrate, and scale your device fleet. The AWS IoT credential provider lets devices exchange their X.509 certificates for temporary credentials from AWS Security Token Service (AWS STS). Devices then use ",
+   "key": "feed:aws:d64b6696a8ca",
+   "title": "AWS IoT Core quotas and usage are now visible in AWS Service Quotas console",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/aws-iot-core-quota-usage-monitoring/",
+   "detail": "AWS IoT Core now publishes its most used service quotas and your current usage against the quotas in AWS Service Quotas console , improving observability and monitoring of API limits and quotas. This launch enables you to monitor your service quota usage, set alarms before you are throttled, and request quota increases ahead of planned growth. AWS IoT Core is a fully managed service that securely connects IoT devices at scale to the AWS cloud and routes IoT device data to AWS and third-party services. As your device fleet grows, your applications depend on quotas for operations, such as connec",
    "actionable": false
   }
  ],
- "errors": [
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out"
- ]
+ "errors": []
 }
