@@ -11,7 +11,7 @@ LAB = {}
 
 LAB[10] = [
  b("Write the model client", "Every other layer imports these three functions, so keep the names. boto3 reads the simulator address from AWS_ENDPOINT_URL, exactly as it would on real AWS.",
-   "models.py", '''
+   "vymodels.py", '''
 import json
 import boto3
 
@@ -48,7 +48,7 @@ def embed(text):
 '''),
  b("Try all three calls", "A chat call, a tool-calling call and an embedding. The tool definition is the one the agents use later.",
    "try_models.py", '''
-from models import chat, chat_with_tools, embed
+from vymodels import chat, chat_with_tools, embed
 
 print("chat:", chat("Reply with the single word OK."))
 
@@ -234,7 +234,7 @@ from langgraph.graph import END, StateGraph
 
 import mcp_client
 
-from models import CHAT_MODEL as MODEL_ID
+from vymodels import CHAT_MODEL as MODEL_ID
 LAMBDAS = {"kb_search": "facilities-kb-search", "asset_status": "facilities-asset-status"}
 GATEWAY = {}
 
@@ -461,6 +461,7 @@ buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     z.write("agent_main.py", "main.py")
     z.write("agents.py", "agents.py")
+    z.write("vymodels.py", "vymodels.py")
     z.write("mcp_client.py", "mcp_client.py")
 s3.put_object(Bucket=BUCKET, Key=KEY, Body=buf.getvalue())
 print("uploaded s3://%s/%s (%d bytes)" % (BUCKET, KEY, len(buf.getvalue())))
@@ -583,7 +584,7 @@ print("collection", c["name"], c["arn"])
    "knowledge_base.py", r'''
 import boto3
 
-from models import EMBED_MODEL
+from vymodels import EMBED_MODEL
 
 REGION = "us-east-1"
 ag = boto3.client("bedrock-agent")
@@ -835,7 +836,7 @@ print("agent answer passes the output guardrail:", check["action"] == "NONE")
 import boto3
 
 from guardrail import ensure_guardrail
-from models import CHAT_MODEL
+from vymodels import CHAT_MODEL
 
 ag = boto3.client("bedrock-agent")
 kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]

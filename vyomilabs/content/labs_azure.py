@@ -1354,7 +1354,7 @@ for name, model in ((CHAT, chat_model), (EMBED, embed_model)):
 print("deployments:", sorted(d.name for d in cs.deployments.list(RG, OPENAI_ACCOUNT)))
 ''', run="python create_openai.py", expect="deployments: ['chat', 'embed']"),
  b("Write the model client", "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a larger hosted model.",
-   "models.py", '''
+   "vymodels.py", '''
 import json
 from azlab import aoai, CHAT, EMBED
 
@@ -1379,7 +1379,7 @@ def embed(text):
 '''),
  b("Try chat, a tool call and an embedding", "A chat turn, a tool-calling turn (the model asks for `asset_status`, your code would run it) and an embedding (a list of numbers: its length depends on the embedding model your simulator hosts). The tool definition is the one the agents use later.",
    "try_models.py", '''
-from models import chat, chat_with_tools, embed
+from vymodels import chat, chat_with_tools, embed
 
 print("chat:", chat("Reply with the single word OK."))
 
@@ -1563,7 +1563,7 @@ from azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, S
                                                    SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,
                                                    VectorSearch, VectorSearchProfile)
 from azdata import search_endpoint, search_key, INDEX
-from models import embed
+from vymodels import embed
 
 DIMS = len(embed("dimension probe"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)
 
