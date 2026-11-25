@@ -820,10 +820,19 @@ if __name__ == "__main__":
     r = search("What should I do when boiler pressure exceeds 30 psi?")
     print("boiler question, top hit:", uri(r[0]), "score", r[0].get("score"))
     print("  text:", r[0]["content"]["text"][:90].replace("\n", " "))
+    assert "boiler-sop" in uri(r[0]), "the boiler question must retrieve the boiler SOP first, got " + uri(r[0])
+    boiler_score = r[0]["score"]
     r = search("AHU-7 supply air temperature drift chilled water valve")
     print("AHU question, top hit:", uri(r[0]))
+    assert "hvac-maintenance-manual" in uri(r[0]), "the AHU question must retrieve the HVAC manual first, got " + uri(r[0])
     r = search("fire alarm evacuation")
+    assert "fire-safety-sop" in uri(r[0]), "the fire question must retrieve the fire SOP first, got " + uri(r[0])
     print("every hit has text and a source:", all(x["content"]["text"] and uri(x) for x in r))
+    assert all(x["content"]["text"] and uri(x) for x in r), "a hit without text or source cannot be cited"
+    # Relevance must mean something: a question the documents cannot answer scores clearly lower than one they can.
+    off = search("What is on the cafeteria lunch menu today?")[0]["score"]
+    assert off < boiler_score, "an unanswerable question scored %.2f, no lower than a good match (%.2f)" % (off, boiler_score)
+    print("unanswerable question scores lower: %.2f < %.2f" % (off, boiler_score))
 ''', run="python search.py", expect="every hit has text and a source: True"),
  b("Rerank the hits", "Vector similarity is a first pass. Rerank re-scores the candidates against the question with a reranking model and keeps the best two.",
    "rerank.py", r'''
@@ -839,7 +848,11 @@ out = boto3.client("bedrock-agent-runtime").rerank(
     sources=[{"type": "INLINE", "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": h["content"]["text"]}}} for h in hits],
     rerankingConfiguration={"type": "BEDROCK_RERANKING_MODEL", "bedrockRerankingConfiguration": {
         "numberOfResults": 2, "modelConfiguration": {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0"}}})
-print("rerank returned", len(out["results"]), "results; best index", out["results"][0]["index"])
+best = hits[out["results"][0]["index"]]["content"]["text"]
+assert len(out["results"]) == 2, "rerank must return the 2 requested results"
+assert "elevator" in best.lower(), "the best reranked passage must be about the elevator, got: " + best[:60]
+assert out["results"][0]["relevanceScore"] >= out["results"][1]["relevanceScore"], "results must be ordered best first"
+print("rerank returned", len(out["results"]), "results; best index", out["results"][0]["index"], "-> the elevator SOP")
 ''', run="python rerank.py", expect="rerank returned 2 results"),
  b("Write the knowledge-search tool", "The agents never call Retrieve themselves; they call this read-only Lambda tool. It accepts a plain event or an API Gateway proxy event (chapter 1 puts it behind an API). The knowledge base id comes from the function's environment.",
    "kb_search.py", r'''
@@ -952,7 +965,11 @@ print("grounded in the boiler SOP:", any("boiler-sop" in c["source"] for c in re
 
 check = boto3.client("bedrock-runtime").apply_guardrail(guardrailIdentifier=ensure_guardrail(), guardrailVersion="DRAFT", source="OUTPUT",
                                                         content=[{"text": {"text": res["answer"]}}])
+assert res["citations"], "an answer with no citations is not grounded"
+assert all(c["source"].startswith("s3://") for c in res["citations"]), "every citation must point at a source document"
+assert res["answer"].strip(), "the agent returned an empty answer"
 print("agent answer passes the output guardrail:", check["action"] == "NONE")
+assert check["action"] == "NONE", "the answer was intervened by the output guardrail"
 ''', run="python grounded_answer.py", expect="grounded in the boiler SOP: True", needs_runtime=True),
  b("Let the knowledge base generate the answer", "RetrieveAndGenerate is the managed alternative: one call retrieves from the knowledge base, generates with the model and returns citation blocks, with the guardrail applied to the generation.",
    "retrieve_and_generate.py", r'''
@@ -969,7 +986,12 @@ r = boto3.client("bedrock-agent-runtime").retrieve_and_generate(
         "knowledgeBaseId": kb, "modelArn": "arn:aws:bedrock:us-east-1::foundation-model/" + CHAT_MODEL,
         "generationConfiguration": {"guardrailConfiguration": {"guardrailId": ensure_guardrail(), "guardrailVersion": "DRAFT"}}}})
 print("answer:", r["output"]["text"][:140].replace("\n", " "))
-print("citation blocks:", len(r["citations"]))
+refs = [ref for c in r["citations"] for ref in c.get("retrievedReferences", [])]
+print("citation blocks:", len(r["citations"]), "| source documents cited:", sorted({x["location"]["s3Location"]["uri"] for x in refs}))
+# A grounded answer cites its sources: no citation means the model answered from memory, which is the failure this chapter exists to prevent.
+assert r["output"]["text"].strip(), "empty answer"
+assert r["citations"] and refs, "RetrieveAndGenerate returned an answer with no citations"
+assert any("boiler-sop" in x["location"]["s3Location"]["uri"] for x in refs), "the boiler question must cite the boiler SOP"
 ''', run="python retrieve_and_generate.py", expect="citation blocks:"),
 ]
 
