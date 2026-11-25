@@ -1,8 +1,8 @@
 {
- "at": "2026-11-25T07:19:06+00:00",
+ "at": "2026-11-25T08:19:09+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
-  "maven/software.amazon.awssdk:dynamodb: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out"
  ]
 }

@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-25T08:19:09+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (1): maven/com.google.cloud:google-cloud-storage: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-25T07:19:06+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,14 +3007,4 @@ Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Sources that failed this run (8): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-13T07:10:02+00:00
-
-Tracking 4268 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-13T06:10:04+00:00
 
