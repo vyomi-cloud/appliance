@@ -130,15 +130,15 @@ await page.getByRole("button", { name: "Attach", exact: true }).click();
 await page.getByRole("cell", { name: ouId }).waitFor({ timeout: 10000 });
 const scpId = (await org("ListPolicies", { Filter: "SERVICE_CONTROL_POLICY" })).json.Policies.find((p) => p.Name === SCP).Id;
 check("Attach -> native ListTargetsForPolicy", ((await org("ListTargetsForPolicy", { PolicyId: scpId })).json.Targets || []).some((t) => t.TargetId === ouId));
-// the OU still has no FullAWSAccess, and this is its only SCP: AWS refuses to detach the last one
+// every target carries FullAWSAccess (as in real AWS), so detaching our SCP is allowed: the OU keeps its default SCP
 await page.getByRole("button", { name: "Detach" }).click();
-await page.getByText(/at least one SCP/i).first().waitFor({ timeout: 10000 });
-check("Detaching the last SCP of a target is refused (ConstraintViolation shown in the UI)", true);
+await page.getByRole("cell", { name: ouId }).waitFor({ state: "detached", timeout: 10000 });
+check("Detaching a non-last SCP works (the OU keeps FullAWSAccess)", !((await org("ListTargetsForPolicy", { PolicyId: scpId })).json.Targets || []).some((t) => t.TargetId === ouId));
 check("SCP detail: the service access report is real now (no gap badge; see smoke-aws-accessreport)", (await badges()) === 0);
 await shot("iam2-scp-detail");
 await org("DetachPolicy", { PolicyId: scpId, TargetId: ouId }).catch(() => {});
 await go("#/iam/service-control-policies", "Service control policies (SCPs)");
-await org("AttachPolicy", { PolicyId: "p-FullAWSAccess", TargetId: ouId });
+await org("AttachPolicy", { PolicyId: "p-FullAWSAccess", TargetId: ouId }).catch(() => {});   // already attached by default
 await org("DetachPolicy", { PolicyId: scpId, TargetId: ouId });
 await go("#/iam/service-control-policies", "Service control policies (SCPs)");
 await page.getByRole("row", { name: new RegExp(SCP) }).getByRole("radio").click({ force: true });
