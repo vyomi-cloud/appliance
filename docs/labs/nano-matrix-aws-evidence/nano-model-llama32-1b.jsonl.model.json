@@ -1,0 +1,13 @@
+{
+ "ok": true,
+ "id": "Llama-3.2-1B-Instruct-q4f16_1-MLC",
+ "ms": 70932,
+ "status": {
+  "available": true,
+  "backend": "webllm",
+  "model": "llama3.2-1b",
+  "endpoint": "in-page",
+  "honest_limit": "Answers come from a small (<1 GB) local model - llama.cpp on the offline appliance, WebLLM on Nano when the browser provides it - so quality is toy-grade; use it to exercise prompts, tool loops, streaming and token accounting.",
+  "roles": {}
+ }
+}

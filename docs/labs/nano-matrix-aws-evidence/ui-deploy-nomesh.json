@@ -1,0 +1,82 @@
+[
+ {
+  "chapter": 1,
+  "result": "A step needs a model, so the deploy continues inside a Mesh. Starting it now...",
+  "chips": [
+   "saved",
+   "needs a model"
+  ],
+  "rows": [
+   "Write the model client",
+   "Try all three calls"
+  ],
+  "panelHead": "Runs every block below in order, exactly as written, in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model, then shows you the resources in the console."
+ },
+ {
+  "chapter": 2,
+  "result": "3 step(s) failed. Open the step log below, fix the cause and deploy again.",
+  "chips": [
+   "saved",
+   "saved",
+   "saved",
+   "saved",
+   "failed",
+   "saved",
+   "failed",
+   "failed"
+  ],
+  "rows": [
+   "Install the one dependency",
+   "Write the gateway client",
+   "Write the supervisor and the three sub-agents",
+   "Write the AgentCore entrypoint",
+   "Package the agent and create the runtime",
+   "Write a small helper to call the agent",
+   "Invoke the hosted supervisor from two sessions",
+   "Stop a session"
+  ],
+  "panelHead": "Runs every block below in order, exactly as written, in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model, then shows you the resources in the console."
+ },
+ {
+  "chapter": 3,
+  "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+  "chips": [
+   "waiting",
+   "waiting",
+   "saved on run",
+   "saved on run",
+   "saved on run",
+   "waiting",
+   "waiting"
+  ],
+  "rows": [
+   "Create the three tables",
+   "Seed the data",
+   "Write the read-only tool",
+   "Write the approval-request tool",
+   "Write the work-order tool",
+   "Deploy the three Lambda functions",
+   "Call the read-only tool"
+  ],
+  "panelHead": "Runs every block below in order, exactly as written, in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model, then shows you the resources in the console."
+ },
+ {
+  "chapter": 10,
+  "result": "The Mesh is not available in this console. Sign in, then deploy again.",
+  "chips": [
+   "waiting",
+   "waiting",
+   "waiting",
+   "waiting",
+   "waiting"
+  ],
+  "rows": [
+   "Sign users in with Cognito",
+   "Add a rate-limiting web ACL",
+   "Put an API Gateway in front of the knowledge tool",
+   "Call the API with a token",
+   "Call the API without a token"
+  ],
+  "panelHead": "Runs every block below in order, exactly as written, in this browser (Nano), continuing inside a Mesh for any step that needs real functions or a model, then shows you the resources in the console."
+ }
+]
