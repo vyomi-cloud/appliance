@@ -111,9 +111,21 @@ async def ensure_agent_deps() -> str:
     return _AGENT_DEPS["error"]
 
 
+def _long_job(delta):
+    """Tell the service worker a slow request (hosted agent: several model calls; first-use package download) is still alive (nano-boot keepalive)."""
+    try:
+        import js
+        js.globalThis.__vyomiLongJobs = int(js.globalThis.__vyomiLongJobs or 0) + delta
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def ahandle(p: dict) -> dict:
     """Async twin of handle(): AwsWireRouter.ahandle (RDS snapshots / Parquet exports
     and the RDS Data API await their engines)."""
+    slow = "/runtimes/" in str(p.get("path") or "") and str(p.get("path") or "").split("?")[0].rstrip("/").endswith("/invocations")
+    if slow:
+        _long_job(1)
     try:
         if "/runtimes/" in str(p.get("path") or "") and str(p.get("path") or "").split("?")[0].rstrip("/").endswith("/invocations"):
             why = await ensure_agent_deps()
@@ -131,6 +143,9 @@ async def ahandle(p: dict) -> dict:
         msg = json.dumps({"__type": "InternalFailure", "message": f"nano /_wire: {type(e).__name__}: {e}"})
         return {"status": 500, "headers": {"content-type": "application/json"},
                 "body_b64": base64.b64encode(msg.encode("utf-8", "replace")).decode()}
+    finally:
+        if slow:
+            _long_job(-1)
 
 
 def handle(p: dict) -> dict:

@@ -414,7 +414,10 @@ builtins._embed_bridge_set = _embed_bridge_set
       model: (globalThis.vyomiWebLLMModels.find((m) => m.mlc === id) || {}).id || id,
       chat: async (reqJson) => {
         const q = JSON.parse(reqJson);
-        const r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false });
+        globalThis.__vyomiLongJobs = (globalThis.__vyomiLongJobs || 0) + 1;   // a hosted agent makes several model calls inside ONE request: keep the SW's 15 s window open
+        let r;
+        try { r = await engine.chat.completions.create({ messages: q.messages, max_tokens: q.max_tokens, temperature: q.temperature, ...(q.stop ? { stop: q.stop } : {}), stream: false }); }
+        finally { globalThis.__vyomiLongJobs--; }
         const c = r.choices[0];
         return JSON.stringify({ text: c.message.content || "", input_tokens: r.usage && r.usage.prompt_tokens, output_tokens: r.usage && r.usage.completion_tokens, finish_reason: c.finish_reason === "length" ? "length" : "stop" });
       },
@@ -601,7 +604,7 @@ builtins._embed_bridge_set = _embed_bridge_set
     if (!ev.data || ev.data.type !== "vyomi-dispatch") return;
     const port = ev.ports[0];
     // wllama (imported chat models) may download/load a base GGUF or generate for longer than the SW's 15 s window: tell the SW we are alive.
-    const ka = setInterval(() => { try { const w = globalThis.vyomiWllama && globalThis.vyomiWllama.status(); if (w && (w.busy || w.phase === "downloading" || w.phase === "loading")) port.postMessage({ keepalive: true }); } catch (_) {} }, 4000);
+    const ka = setInterval(() => { try { const w = globalThis.vyomiWllama && globalThis.vyomiWllama.status(); if ((w && (w.busy || w.phase === "downloading" || w.phase === "loading")) || globalThis.__vyomiLongJobs > 0) port.postMessage({ keepalive: true }); } catch (_) {} }, 4000);
     try {
       // Rehydrate from the SHARED snapshot before serving, so this op sees resources
       // created in the OTHER context (the SDK/relay worker) even if a boot-time
