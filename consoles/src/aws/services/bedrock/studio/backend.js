@@ -45,6 +45,7 @@ export async function openLive() {
   const api = {
     mode: inspectOk ? "live" : "live-limited", label: inspectOk ? `Live: ${KB_NAME} (${id})` : `Live (limited, no inspect API): ${KB_NAME}`, kb, hasInspect: inspectOk,
     async listKbs() { return list; },
+    async listCorpora() { return list; },
     async getDataSource() { return ds ? B("GET", `/knowledgebases/${id}/datasources/${ds.dataSourceId}`).then((r) => r.dataSource) : null; },
     async applyDesign(a) {
       if (!ds) throw new Error("facilities-kb has no data source to apply the design to");
