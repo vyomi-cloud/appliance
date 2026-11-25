@@ -1,0 +1,35 @@
+import { open, check, BASE, SHOTS } from "../lib.mjs";
+const { browser, page, errs } = await open();
+await page.goto(`${BASE}/v4/azure/#/storage/vfy-rg/vfysa/iam`);
+await page.getByRole("tab", { name: "Check access" }).waitFor({ timeout: 30000 });
+const posts=[]; page.on("request",(r)=>{ if(r.method()==="POST"&&/checkAccess|api\/iam/.test(r.url())) posts.push(r.url().slice(BASE.length)+" "+(r.postData()||"").slice(0,260)); });
+async function run(tab, who, action, data) {
+  await page.getByRole("tab", { name: tab }).click();
+  await page.getByRole("button", { name: /Select principal|Change/ }).first().click();
+  await page.getByLabel(`Select ${who}`).check();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await page.getByRole("button", { name: /Select action|Change/ }).last().click();
+  await page.getByLabel("Search for a resource provider").fill("Microsoft.Stor");
+  await page.getByTestId("provider-Microsoft.Storage").click();
+  await page.getByTestId("permission-list").waitFor();
+  if (data) await page.getByRole("tab", { name: /Data actions/ }).click();
+  await page.getByLabel("Search for an action").fill(action.split("/").slice(-2).join("/"));
+  await page.getByLabel(action, { exact: true }).check();
+  await page.getByRole("button", { name: /^(Add|Select)$/ }).last().click();
+  await page.getByRole("button", { name: "Check access" }).last().click();
+  await page.waitForTimeout(1200);
+  const t = await page.locator("main, body").first().innerText();
+  await page.screenshot({ path: `${SHOTS}/az-z2-${tab.replace(/ /g,"")}-${action.split("/").pop()}.png` });
+  return t;
+}
+const BR="Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read", BW="Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write";
+const dec = (t) => (t.match(/Access decision\s*(\S+)/)||["",""])[1];
+const t1 = await run("Check access", "Vfy Blobber", BR, true);
+check("Azure Check access: blobs/read data action -> Allowed (Storage Blob Data Reader)", dec(t1)==="Allowed" && /Storage Blob Data Reader/.test(t1), dec(t1));
+await page.goto(`${BASE}/v4/azure/#/storage/vfy-rg/vfysa/iam`); await page.reload();
+await page.getByRole("tab", { name: "Check access" }).waitFor({ timeout: 30000 });
+const t2 = await run("Check access", "Vfy Blobber", BW, true);
+check("Azure Check access: blobs/write data action -> NotAllowed", dec(t2)==="NotAllowed", dec(t2));
+console.log(posts.join("\n"));
+console.log(errs);
+await browser.close();

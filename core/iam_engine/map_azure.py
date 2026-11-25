@@ -158,7 +158,35 @@ def _data_target(host, path, headers=None):
     return None, None, path
 
 
+_BL = "Microsoft.Storage/storageAccounts/blobServices/containers"
+
+
 def _blob(method, path, q, h, acct):
+    """Blob data-plane permissions, each carrying the ABAC attribute context the request determines (role-assignment conditions reference
+    @Resource[...containers:name], ...blobs:path, @Request[...blobs:prefix|snapshot|versionId|encryptionScopeName] and @Environment)."""
+    out = _blob_perms(method, path, q, h, acct)
+    parts = [s for s in path.split("/") if s]
+    if acct and parts and parts[0] == acct and "." not in (h or ""):
+        parts = parts[1:]
+    if not parts or not out:
+        return out
+    hdr = {str(k).lower(): v for k, v in (h or {}).items()} if isinstance(h, dict) else {}
+    qq = q if isinstance(q, dict) else {}
+    res = {_BL + ":name": parts[0]}
+    if len(parts) > 1:
+        res[_BL + "/blobs:path"] = "/".join(parts[1:])
+    req = {}
+    for src, key in (("prefix", "prefix"), ("snapshot", "snapshot"), ("versionid", "versionId")):
+        if qq.get(src):
+            req[_BL + "/blobs:" + key] = qq[src]
+    if hdr.get("x-ms-encryption-scope"):
+        req[_BL + "/blobs:encryptionScopeName"] = hdr["x-ms-encryption-scope"]
+    for e in out:
+        e["context"] = {"resource": res, "request": req}
+    return out
+
+
+def _blob_perms(method, path, q, h, acct):
     parts = [s for s in path.split("/") if s]
     if acct and parts and parts[0] == acct and "." not in (h or ""):
         parts = parts[1:]

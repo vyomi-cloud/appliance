@@ -1,5 +1,5 @@
-/* Policy Troubleshooter — real access check over the native :testIamPermissions verb
- * (the same evaluated-binding-model decision the Allow tab's grants feed). */
+/* Policy Troubleshooter — the native policytroubleshooter v3 `iam:troubleshoot` call: the same faithful engine that enforces requests
+ * (hierarchy inheritance, IAM conditions evaluated against the named resource, deny policies, PAB). */
 import { useState } from "react";
 import { Alert, Button, FormControlLabel, IconButton, Radio, RadioGroup, Stack, TextField } from "@mui/material";
 import AddIcon from "@mui/icons-material/esm/Add.js";
@@ -8,6 +8,13 @@ import { useNotify } from "../../../common/notify.jsx";
 import { PageHeader, Section } from "../../kit/common.jsx";
 import { getProject } from "../../project.js";
 import * as api from "./api.js";
+
+/* `projects/_/buckets/b/...` -> //storage.googleapis.com/...; `projects/p` and other CRM resources -> //cloudresourcemanager.googleapis.com/...; `//host/...` as typed. */
+const fullResourceName = (r) => {
+  const t = r.trim();
+  if (t.startsWith("//")) return t;
+  return t.startsWith("projects/_/buckets/") || t.startsWith("buckets/") ? `//storage.googleapis.com/${t.replace(/^buckets\//, "projects/_/buckets/")}` : `//cloudresourcemanager.googleapis.com/${t}`;
+};
 
 export default function PolicyTroubleshooter() {
   const notify = useNotify();
@@ -25,8 +32,8 @@ export default function PolicyTroubleshooter() {
     try {
       const outcomes = await Promise.all(pairs.map(async (p) => {
         const member = /^(user|serviceAccount|group|domain):/.test(principal) ? principal : `user:${principal}`;
-        const r = await api.testIamPermissions([p.permission], member, p.resource);
-        return { ...p, granted: (r.permissions || []).includes(p.permission) };
+        const r = await api.troubleshoot(member, fullResourceName(p.resource), p.permission);
+        return { ...p, granted: r.overallAccessState === "CAN_ACCESS", state: r.overallAccessState };
       }));
       setResult(outcomes);
     } catch (e) { notify.error(e); } finally { setBusy(false); }
@@ -46,7 +53,7 @@ export default function PolicyTroubleshooter() {
         {pairs.map((p, i) => (
           <Stack key={i} direction="row" spacing={1} sx={{ mb: 2 }} alignItems="flex-start">
             <TextField label={`Resource ${i + 1}`} value={p.resource} onChange={(e) => setPair(i, "resource", e.target.value)} sx={{ flex: 1 }}
-              helperText="e.g. projects/my-project" />
+              helperText="e.g. projects/my-project, projects/_/buckets/my-bucket/objects/key or //storage.googleapis.com/..." />
             <TextField label={`Permission ${i + 1}`} value={p.permission} onChange={(e) => setPair(i, "permission", e.target.value)} sx={{ flex: 1 }}
               helperText="e.g. storage.objects.get" />
             {pairs.length > 1 && <IconButton aria-label={`Remove pair ${i + 1}`} onClick={() => setPairs(pairs.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>}
@@ -63,7 +70,7 @@ export default function PolicyTroubleshooter() {
           <Stack spacing={1}>
             {result.map((r, i) => (
               <Alert key={i} severity={r.granted ? "success" : "error"}>
-                {r.granted ? "Granted" : "Denied"}: <code>{r.permission}</code> on <code>{r.resource}</code>
+                {r.granted ? "Granted" : "Denied"}: <code>{r.permission}</code> on <code>{r.resource}</code>{r.state ? ` (${r.state})` : ""}
               </Alert>
             ))}
           </Stack>

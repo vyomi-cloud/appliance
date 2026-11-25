@@ -26,7 +26,7 @@ export function ActionField({ label = "Action", value, onChange, required }) {
         {value ? <code data-testid="action-value" style={{ overflowWrap: "anywhere" }}>{value}</code> : <span className="vy-muted">No action selected</span>}
         <Button size="small" onClick={() => setOpen(true)}>{value ? "Change" : "Select action"}</Button>
       </div>
-      {open && <PermissionPicker single onClose={() => setOpen(false)} onAdd={(s) => { onChange(s.actions[0] || s.data[0]); setOpen(false); }} />}
+      {open && <PermissionPicker single onClose={() => setOpen(false)} onAdd={(s) => { onChange(s.actions[0] || s.data[0], !s.actions[0] && !!s.data[0]); setOpen(false); }} />}
     </Field>
   );
 }

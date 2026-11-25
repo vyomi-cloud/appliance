@@ -190,3 +190,12 @@ def test_catalog_roundtrip_coverage(capsys):
             bad.append(a)
     print("Azure catalog round-trip: %d / %d (%.1f%%)" % (ok, tot, 100.0 * ok / tot))
     assert ok / tot > 0.95, bad[:10]
+
+
+def test_blob_permissions_carry_abac_attribute_context():
+    from core.iam_engine import map_azure
+    BL = "Microsoft.Storage/storageAccounts/blobServices/containers"
+    r = map_azure.required("GET", "/azure-data/blob/acct/logs/dir/b1.txt")
+    assert r and r[0]["context"]["resource"] == {BL + ":name": "logs", BL + "/blobs:path": "dir/b1.txt"}
+    lst = map_azure.required("GET", "/azure-data/blob/acct/logs?restype=container&comp=list&prefix=dir/")
+    assert lst[0]["context"]["resource"] == {BL + ":name": "logs"} and lst[0]["context"]["request"] == {BL + "/blobs:prefix": "dir/"}

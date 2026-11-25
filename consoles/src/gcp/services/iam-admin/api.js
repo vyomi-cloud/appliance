@@ -15,6 +15,9 @@ export const getIamPolicy = (resource = projectResource()) => restJson("POST", `
 export const setIamPolicy = (policy, resource = projectResource()) => restJson("POST", `/v1/${resource}:setIamPolicy`, { body: { policy } });
 export const testIamPermissions = (permissions, member, resource = projectResource()) =>
   restJson("POST", `/v1/${resource}:testIamPermissions`, { body: { permissions, member } });
+// Policy Troubleshooter v3 (the faithful engine: allow + deny + PAB, hierarchy inheritance and IAM conditions evaluated for the named resource).
+export const troubleshoot = (principal, fullResourceName, permission) =>
+  restJson("POST", "/v3/iam:troubleshoot", { body: { accessTuple: { principal, fullResourceName, permission } } });
 export async function listPolicyActivity() {
   const r = await restJson("GET", `/v1/projects/${getProject()}/policyActivity`);
   return r.activity || [];

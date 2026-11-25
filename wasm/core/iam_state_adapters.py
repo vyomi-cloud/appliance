@@ -20,6 +20,23 @@ def http_request_from(request, body: bytes = b"", principal=None) -> dict:
             "host": request.headers.get("host", ""), "body": body, "principal": principal}
 
 
+def aws_request_context(hr, client_ip="", scheme="http") -> dict:
+    """The request-wide AWS condition keys a signed call carries: aws:SourceIp, aws:SecureTransport, aws:UserAgent, aws:RequestedRegion
+    (the signing region, from the SigV4 credential scope)."""
+    hdr = hr.get("headers") or {}
+    proto = (_h(hdr, "x-forwarded-proto") or scheme or "http").split(",")[0].strip().lower()
+    ctx = {"aws:SecureTransport": "true" if proto == "https" else "false"}
+    ip = (_h(hdr, "x-forwarded-for") or client_ip or "").split(",")[0].strip()
+    if ip:
+        ctx["aws:SourceIp"] = ip
+    if _h(hdr, "user-agent"):
+        ctx["aws:UserAgent"] = _h(hdr, "user-agent")
+    m = re.search(r"Credential=[^/]+/\d+/([^/]+)/", _h(hdr, "authorization"))
+    if m:
+        ctx["aws:RequestedRegion"] = m.group(1)
+    return ctx
+
+
 def _h(headers, name):
     for k, v in (headers or {}).items():
         if str(k).lower() == name:

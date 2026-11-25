@@ -61,7 +61,8 @@ class IamApi:
             engine = _gate._engine(cloud, self.engines)
         except Exception as exc:
             return 501, {"error": f"{cloud} engine not available: {exc}"}
-        req = _request(cloud, body.get("principal") or {}, body["action"], body.get("resource") or "*", body.get("context"))
+        req = _request(cloud, body.get("principal") or {}, body["action"], body.get("resource") or "*", body.get("context"),
+                       data=bool(body.get("data")))
         pr = body.get("principal") or {}
         if cloud in ("gcp", "azure") and pr.get("type") == "root":
             # Same rule as the gate (core/middleware.py): GCP/Azure have no root, the simulator's unidentified caller is the project /
