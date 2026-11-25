@@ -852,10 +852,8 @@ if __name__ == "__main__":
     assert "fire-safety-sop" in uri(r[0]), "the fire question must retrieve the fire SOP first, got " + uri(r[0])
     print("every hit has text and a source:", all(x["content"]["text"] and uri(x) for x in r))
     assert all(x["content"]["text"] and uri(x) for x in r), "a hit without text or source cannot be cited"
-    # Relevance must mean something: a question the documents cannot answer scores clearly lower than one they can.
-    off = search("What is on the cafeteria lunch menu today?")[0]["score"]
-    assert off < boiler_score, "an unanswerable question scored %.2f, no lower than a good match (%.2f)" % (off, boiler_score)
-    print("unanswerable question scores lower: %.2f < %.2f" % (off, boiler_score))
+    # Scores are RELATIVE to the other chunks in this index (the best hit is always near 1.0), so they cannot say "no answer exists".
+    # Chapter 11 adds the evidence gate that decides when to refuse.
 ''', run="python search.py", expect="every hit has text and a source: True"),
  b("Rerank the hits", "Vector similarity is a first pass. Rerank re-scores the candidates against the question with a reranking model and keeps the best two.",
    "rerank.py", r'''
