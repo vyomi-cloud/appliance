@@ -367,6 +367,8 @@ def _iam_pytest(root: Path, cid: str, scope: str, names):
     if missing:
         return R(cid, scope, FAIL, f"IAM test files missing: {', '.join(missing)}")
     env = dict(os.environ, PYTHONPATH=f"{root}:{root}/core", CLOUDLEARN_TIER_ENFORCE="0")
+    if run([sys.executable, "-c", "import pytest"], root, 60)[0] != 0:   # the CI job has no pytest: install it here rather than fail the check
+        run([sys.executable, "-m", "pip", "install", "-q", "pytest"], root, 300)
     rc, out = run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *files], root, timeout=900, env=env)
     last = (out.strip().splitlines() or [""])[-1][:160]
     return R(cid, scope, PASS, last) if rc == 0 else R(cid, scope, FAIL, f"IAM tests failed: {last}")

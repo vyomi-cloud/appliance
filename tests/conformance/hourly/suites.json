@@ -274,6 +274,7 @@
     },
     {
       "id": "nano-ui-crawl",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
@@ -338,6 +339,7 @@
     },
     {
       "id": "offline-request-metrics",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "core",
@@ -346,6 +348,7 @@
     },
     {
       "id": "nano-ui-azure-metrics",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -354,6 +357,7 @@
     },
     {
       "id": "offline-ui-azure-metrics",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
@@ -370,6 +374,7 @@
     },
     {
       "id": "nano-ui-aws-metrics",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -378,6 +383,7 @@
     },
     {
       "id": "offline-ui-aws-metrics",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -386,6 +392,7 @@
     },
     {
       "id": "nano-ui-aws-api",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -394,6 +401,7 @@
     },
     {
       "id": "nano-ui-aws-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -402,6 +410,7 @@
     },
     {
       "id": "nano-ui-gcp-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -410,6 +419,7 @@
     },
     {
       "id": "nano-ui-gcp-activity-detail",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -418,6 +428,7 @@
     },
     {
       "id": "nano-ui-gcp-grid-defaults",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -426,6 +437,7 @@
     },
     {
       "id": "nano-ui-gcp-pubsub-subscriptions",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -434,6 +446,7 @@
     },
     {
       "id": "nano-ui-gcp-firestore-usage",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -442,6 +455,7 @@
     },
     {
       "id": "nano-ui-gcp-metrics-counts",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -450,6 +464,7 @@
     },
     {
       "id": "offline-ui-gcp-pubsub-subscriptions",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -458,6 +473,7 @@
     },
     {
       "id": "offline-ui-gcp-activity-detail",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -466,6 +482,7 @@
     },
     {
       "id": "offline-ui-gcp-grid-defaults",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -474,6 +491,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-apigw-lists",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -482,6 +500,7 @@
     },
     {
       "id": "nano-ui-aws-compute-reload",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -490,6 +509,7 @@
     },
     {
       "id": "nano-ui-azure-savings",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -498,6 +518,7 @@
     },
     {
       "id": "nano-ui-aws-compute-savings",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -506,6 +527,7 @@
     },
     {
       "id": "nano-ui-aws-ec2-detail-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -514,6 +536,7 @@
     },
     {
       "id": "offline-ui-aws-ec2-detail-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -538,6 +561,7 @@
     },
     {
       "id": "nano-ui-aws-real-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -546,6 +570,7 @@
     },
     {
       "id": "offline-ui-aws-real-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -554,6 +579,7 @@
     },
     {
       "id": "offline-ui-aws-sqs-dlq-tab",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -562,6 +588,7 @@
     },
     {
       "id": "nano-ui-aws-sqs-dlq-tab",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -570,6 +597,7 @@
     },
     {
       "id": "nano-ui-aws-rds-connectivity-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -578,6 +606,7 @@
     },
     {
       "id": "offline-ui-aws-rds-connectivity-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -586,6 +615,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-details-tab",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -594,6 +624,7 @@
     },
     {
       "id": "offline-ui-aws-vpc-details-tab",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -602,6 +633,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-sg-iam-cells",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -610,6 +642,7 @@
     },
     {
       "id": "offline-ui-aws-vpc-sg-iam-cells",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -772,6 +805,7 @@
     },
     {
       "id": "nano-ui-azure-dp-detail",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -780,6 +814,7 @@
     },
     {
       "id": "nano-ui-azure-rail-last",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -788,6 +823,7 @@
     },
     {
       "id": "nano-ui-azure-rg-nav",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -796,6 +832,7 @@
     },
     {
       "id": "offline-ui-azure-rg-nav",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
@@ -804,6 +841,7 @@
     },
     {
       "id": "nano-ui-azure-keyvault-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -812,6 +850,7 @@
     },
     {
       "id": "nano-ui-gcp-pubsub-grid",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -820,6 +859,7 @@
     },
     {
       "id": "offline-ui-gcp-pubsub-grid",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -860,6 +900,7 @@
     },
     {
       "id": "nano-ui-azure-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -868,6 +909,7 @@
     },
     {
       "id": "nano-ui-azure-dp",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -876,6 +918,7 @@
     },
     {
       "id": "nano-ui-azure-home",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -884,6 +927,7 @@
     },
     {
       "id": "nano-ui-budget-savings",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
@@ -892,6 +936,7 @@
     },
     {
       "id": "nano-ui-reload-backend",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -900,6 +945,7 @@
     },
     {
       "id": "nano-ui-azure-storage-console",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -934,6 +980,7 @@
     },
     {
       "id": "nano-ui-aws-elbv2",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -968,6 +1015,7 @@
     },
     {
       "id": "nano-ui-aws-logs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1002,6 +1050,7 @@
     },
     {
       "id": "nano-ui-aws-ssm",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1036,6 +1085,7 @@
     },
     {
       "id": "nano-ui-aws-event-delivery",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1044,6 +1094,7 @@
     },
     {
       "id": "nano-ui-gcp-eventarc-delivery",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1068,6 +1119,7 @@
     },
     {
       "id": "nano-ui-aws-stepfunctions",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1158,6 +1210,7 @@
     },
     {
       "id": "nano-ui-gcp-cloudscheduler",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1166,6 +1219,7 @@
     },
     {
       "id": "nano-ui-gcp-scheduler-pubsub",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1200,6 +1254,7 @@
     },
     {
       "id": "nano-ui-gcp-container",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1234,6 +1289,7 @@
     },
     {
       "id": "nano-ui-gcp-iamcredentials",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1268,6 +1324,7 @@
     },
     {
       "id": "nano-ui-gcp-redis",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1302,6 +1359,7 @@
     },
     {
       "id": "nano-ui-azure-app",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1336,6 +1394,7 @@
     },
     {
       "id": "nano-ui-azure-appconfiguration",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1370,6 +1429,7 @@
     },
     {
       "id": "nano-ui-azure-cognitiveservices",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1404,6 +1464,7 @@
     },
     {
       "id": "nano-ui-azure-dns",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1438,6 +1499,7 @@
     },
     {
       "id": "nano-ui-azure-monitor",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1472,6 +1534,7 @@
     },
     {
       "id": "nano-ui-azure-operationalinsights",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1480,6 +1543,7 @@
     },
     {
       "id": "nano-ui-aws-lambda-row",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1488,6 +1552,7 @@
     },
     {
       "id": "nano-ui-aws-ec2-row",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1496,6 +1561,7 @@
     },
     {
       "id": "nano-ui-aws-apigw-row",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1504,6 +1570,7 @@
     },
     {
       "id": "nano-ui-aws-detail-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1512,6 +1579,7 @@
     },
     {
       "id": "offline-ui-aws-detail-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -1520,6 +1588,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-row",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1528,6 +1597,7 @@
     },
     {
       "id": "nano-ui-aws-eventbridge-row",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1536,6 +1606,7 @@
     },
     {
       "id": "nano-ui-aws-settings-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1544,6 +1615,7 @@
     },
     {
       "id": "nano-ui-aws-iam-detail",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1552,6 +1624,7 @@
     },
     {
       "id": "nano-ui-gcp-create-defaults",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1560,6 +1633,7 @@
     },
     {
       "id": "offline-ui-gcp-create-defaults",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -1576,6 +1650,7 @@
     },
     {
       "id": "nano-ui-azure-nsg-roledef-create",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1584,6 +1659,7 @@
     },
     {
       "id": "nano-ui-azure-tags-tab",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1592,6 +1668,7 @@
     },
     {
       "id": "nano-ui-azure-nsg-rules",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1724,6 +1801,7 @@
     },
     {
       "id": "nano-post-create-aws-ec2-ssh",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1732,6 +1810,7 @@
     },
     {
       "id": "nano-post-create-gcp-gce-ssh",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1740,6 +1819,7 @@
     },
     {
       "id": "nano-post-create-azure-vm-ssh",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1756,6 +1836,7 @@
     },
     {
       "id": "nano-ui-aws-kinesis",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1790,6 +1871,7 @@
     },
     {
       "id": "nano-ui-aws-apigatewayv2",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1824,6 +1906,7 @@
     },
     {
       "id": "nano-ui-aws-cloudwatch",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1866,6 +1949,7 @@
     },
     {
       "id": "nano-ui-aws-sns",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1874,6 +1958,7 @@
     },
     {
       "id": "nano-ui-gcp-artifactregistry",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1882,6 +1967,7 @@
     },
     {
       "id": "nano-ui-gcp-apigw-monitoring-tabs",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1925,6 +2011,7 @@
     },
     {
       "id": "nano-ui-gcp-monitoring",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1933,6 +2020,7 @@
     },
     {
       "id": "nano-ui-aws-secrets-created",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1941,6 +2029,7 @@
     },
     {
       "id": "nano-ui-azure-resource-group-detail",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1949,6 +2038,7 @@
     },
     {
       "id": "offline-ui-azure-resource-group-detail",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
@@ -1957,6 +2047,7 @@
     },
     {
       "id": "nano-ui-azure-apim-appinsights",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1965,6 +2056,7 @@
     },
     {
       "id": "offline-ui-azure-apim-appinsights",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
@@ -1981,6 +2073,7 @@
     },
     {
       "id": "nano-sweepA-azure",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -2125,6 +2218,7 @@
     },
     {
       "id": "nano-ui-drawer",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
@@ -2149,6 +2243,7 @@
     },
     {
       "id": "nano-ui-gcp-properties",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -2157,6 +2252,7 @@
     },
     {
       "id": "offline-ui-gcp-properties",
+      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -2220,7 +2316,7 @@
     {"id": "aws-iam-list-member-shape-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_iam_list_member_shape_core.py", "timeout": 120},
     {"id": "nightly-aws-v4-roundtrip", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 2400},
     {"id": "nightly-aws-tunnel-recovery", "target": "offline", "cloud": "aws", "kind": "api", "pending": "written (aws-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/aws-tunnel-recovery.py", "timeout": 900},
-    {"id": "nano-ui-aws-rds-persist", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-rds-persist.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-rds-persist", "target": "nano", "cloud": "aws", "kind": "ui", "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-rds-persist.mjs", "timeout": 600},
     {"id": "aws-nano-registry-pglite-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_nano_registry_pglite_core.py", "timeout": 120},
     {"id": "offline-api-apigateway-v1-gateway", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},
     {"id": "nano-api-apigateway-v1-gateway", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},

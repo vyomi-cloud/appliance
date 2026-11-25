@@ -11,8 +11,8 @@
 class VyomiTunnel < Formula
   desc "Local reverse-tunnel to reach the in-browser Vyomi-Nano cloud sim from any SDK/CLI"
   homepage "https://vyomi.cloud"
-  url "https://registry.npmjs.org/vyomi-tunnel/-/vyomi-tunnel-1.3.2.tgz"
-  sha256 "5bde91efe4bc0a2898de1b0f21e662c4934c1a70586842993bd2c118512be5cf"
+  url "https://registry.npmjs.org/vyomi-tunnel/-/vyomi-tunnel-1.4.0.tgz"
+  sha256 "1a3e69e75005b00afa11bee9d20aff5edff993dc64a058e8355391f0ae61d797"
   license "MIT"
 
   depends_on "node"
