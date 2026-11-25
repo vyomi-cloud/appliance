@@ -104,6 +104,21 @@ def run():
     _check("intent present", json.loads(m["context"]["intent"]) == ["What is the boiler pressure rule?"])
     bad = dict(chat, data_sources=[dict(chat["data_sources"][0], parameters=dict(chat["data_sources"][0]["parameters"], index_name="nope"))])
     _check("unknown index -> 400", h("POST", f"{cog}/openai/deployments/chat/chat/completions", bad, v="2024-10-21")["status"] == 400)
+    import threading
+    ixrec = svc["_indexes"]["chunks"]; fails = []
+    def hammer():          # concurrent trace + search (the console fires them together); the shared FTS5 connection must not crash
+        try:
+            for _ in range(25):
+                sc.search(ixrec, {"search": "boiler pressure valve", "top": 3}); sc.inspect_index(ixrec, "retrieve-trace", "POST", {"search": "water leak"}, {})
+        except Exception as e:  # noqa: BLE001
+            fails.append(e)
+    ths = [threading.Thread(target=hammer) for _ in range(8)]
+    [t.start() for t in ths]; [t.join() for t in ths]
+    _check("concurrent searches do not crash the shared BM25 index", not fails)
+    import time, random
+    rnd = random.Random(1); rows = [{} for _ in range(30)]; t0 = time.time()
+    sc._project2d(rows, [[rnd.random() for _ in range(1536)] for _ in rows])
+    _check("2-D projection of 30 x 1536-dim vectors is fast", time.time() - t0 < 3 and all(len(r["projection2d"]) == 2 for r in rows))
     print("OK")
 
 

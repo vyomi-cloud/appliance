@@ -1194,7 +1194,7 @@ def _first(idx, pred):
 
 
 def _project2d(rows, vecs):
-    """2-D PCA projection (power iteration, pure Python): same maths as core/bedrock_agents_core._project2d."""
+    """2-D PCA projection (power iteration, pure Python): same maths as core/bedrock_agents_core._project2d, with an O(n*d) deflation step."""
     n = len(vecs)
     if n < 2:
         for r in rows:
@@ -1212,7 +1212,8 @@ def _project2d(rows, vecs):
             norm = sum(a * a for a in nw) ** 0.5 or 1.0
             w = [a / norm for a in nw]
         comps.append(w)
-        X = [[x[j] - sum(x[m] * w[m] for m in range(d)) * w[j] for j in range(d)] for x in X]
+        dots = [sum(x[m] * w[m] for m in range(d)) for x in X]      # deflate: O(n*d), not O(n*d^2) (1536-dim embeddings)
+        X = [[x[j] - dots[i] * w[j] for j in range(d)] for i, x in enumerate(X)]
     for i, r in enumerate(rows):
         c = [v - m for v, m in zip(vecs[i], mean)]
         r["projection2d"] = [round(sum(c[j] * comps[k][j] for j in range(d)), 6) for k in range(2)]
@@ -1227,7 +1228,7 @@ def inspect_index(index_rec, what, method, payload, query):
     keyf = next(f["name"] for f in idx["fields"] if f["key"])
     strs = [f["name"] for f in idx["fields"] if f["type"] == "Edm.String" and not f["key"]]
     textf = next((n for n in ("chunk", "content", "text") if n in strs), strs[0] if strs else keyf)
-    urif = next((n for n in ("parent_id", "title", "metadata_storage_path", "source") if any(f["name"] == n for f in idx["fields"])), None)
+    urif = next((n for n in ("title", "metadata_storage_name", "metadata_storage_path", "source", "parent_id") if any(f["name"] == n for f in idx["fields"])), None)
     if what == "chunks":
         if method != "GET":
             return _err(405, "MethodNotAllowed", "GET only.")

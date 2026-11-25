@@ -20,6 +20,7 @@ import math
 import os
 import re
 import sqlite3
+import threading
 import zipfile
 
 try:
@@ -47,6 +48,9 @@ def fts5_available() -> bool:
         return False
 
 
+_LOCK = threading.RLock()
+
+
 class TextIndex:
     """BM25 index over a list of texts; ``search(query)`` -> {doc_position: score} for docs containing at least one query term."""
 
@@ -69,7 +73,8 @@ class TextIndex:
         if self.db is not None:
             q = " OR ".join('"' + t + '"' for t in terms)
             try:
-                rows = self.db.execute("select rowid, bm25(d) from d where d match ? ", (q,)).fetchall()
+                with _LOCK:      # one shared in-memory connection (check_same_thread=False): concurrent queries segfault sqlite
+                    rows = self.db.execute("select rowid, bm25(d) from d where d match ? ", (q,)).fetchall()
             except sqlite3.Error:
                 return {}
             return {rid - 1: max(-sc, 1e-3) for rid, sc in rows}      # FTS5 bm25() is lower-is-better (negative)
@@ -92,12 +97,13 @@ _CACHE: dict = {}
 
 def text_index(texts) -> TextIndex:
     key = hash(tuple(texts))
-    ti = _CACHE.get(key)
-    if ti is None:
-        if len(_CACHE) > 24:
-            _CACHE.clear()
-        ti = _CACHE[key] = TextIndex(texts)
-    return ti
+    with _LOCK:      # a concurrent request must not clear the cache (closing its connection) while another thread queries it
+        ti = _CACHE.get(key)
+        if ti is None:
+            if len(_CACHE) > 24:
+                _CACHE.clear()
+            ti = _CACHE[key] = TextIndex(texts)
+        return ti
 
 
 def bm25(texts, query) -> dict:

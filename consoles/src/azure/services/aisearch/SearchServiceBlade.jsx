@@ -15,11 +15,13 @@ import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { remember, forget, setInactive, isNotFound } from "../../kit/recent.js";
 import * as api from "./api.js";
+import Studio from "./studio/Studio.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
   { id: "activitylog", label: "Activity log" },
   { group: "Search management", items: [{ id: "indexes", label: "Indexes" }, { id: "indexers", label: "Indexers" }, { id: "datasources", label: "Data sources" }, { id: "skillsets", label: "Skillsets" }] },
+  { group: "RAG", items: [{ id: "ragstudio", label: "RAG Studio" }] },
   { group: "Settings", items: [{ id: "keys", label: "Keys" }] },
 ];
 const LABEL = Object.fromEntries(MENU.flatMap((m) => (m.group ? m.items : [m])).map((i) => [i.id, i.label]));
@@ -51,6 +53,7 @@ export default function SearchServiceBlade({ params }) {
       indexers: () => <Indexers a={a} />,
       datasources: () => <DataSources a={a} />,
       skillsets: () => <Skillsets a={a} />,
+      ragstudio: () => <Studio a={a} />,
       keys: () => <Keys a={a} />,
     }[panel]?.() || <InfoBar>Unknown panel.</InfoBar>;
     const cap = CAP[panel];
