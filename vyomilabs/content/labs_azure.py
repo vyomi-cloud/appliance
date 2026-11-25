@@ -3,9 +3,16 @@ vyomilabs/labrun.py executes these blocks in order against a clean local Azure s
 The model is the repo's deterministic test stub (tools/llm_stub), not a large hosted model: calls and shapes are identical, replies are fixed and short."""
 
 
-def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False):
-    """needs_runtime: the block needs real function / container execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox."""
-    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime)
+BOTH = ["nano", "mesh"]
+MESH = ["mesh"]
+
+
+def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False, edition=None, nano_note=None, kind="build", needs_appliance=False):
+    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox.
+    needs_appliance: needs the full appliance (labrun only runs it with --endpoint). edition: ["nano","mesh"] (default) or ["mesh"] for the paid Mesh course only.
+    nano_note: why a block is not on Nano or what a Nano learner should expect. kind: build | harden | iam | failure | ship."""
+    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime,
+                edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
 LAB = {}
@@ -1773,3 +1780,9 @@ print("control-plane events:", len(events) > 0, "| vault create recorded:", "Mic
 print("events for resource group", RG + ":", len(list(log.list(filter=f"eventTimestamp ge '{since}' and resourceGroupName eq '{RG}'"))) > 0)
 ''', run="python audit.py", expect="vault create recorded: True | function app create recorded: True"),
 ]
+
+
+# Enterprise additions (hardening, failure labs, key rotation, tamper evidence, the ship-it capstone) live in labs_azure_ent.py and are appended here.
+from .labs_azure_ent import extend  # noqa: E402
+
+extend(LAB, b)

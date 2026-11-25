@@ -3,9 +3,16 @@ vyomilabs/labrun.py executes these blocks in order against a clean simulator (py
 so what the guide shows is what has actually run. Model replies in verification come from the repo's deterministic test stub (tools/llm_stub), not a real model."""
 
 
-def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False):
-    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox."""
-    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime)
+BOTH = ["nano", "mesh"]
+MESH = ["mesh"]
+
+
+def b(title, text, file, code, run=None, expect=None, lang="python", needs_runtime=False, edition=None, nano_note=None, kind="build", needs_appliance=False):
+    """needs_runtime: the block needs real function execution (appliance or Mesh); the local in-process simulator only runs a restricted sandbox.
+    needs_appliance: needs the full appliance (labrun only runs it with --endpoint). edition: ["nano","mesh"] (default) or ["mesh"] for the paid Mesh course only.
+    nano_note: why a block is not on Nano or what a Nano learner should expect. kind: build | harden | iam | failure | ship."""
+    return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime,
+                edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
 LAB = {}
@@ -1799,3 +1806,9 @@ assert done, "no executed request"
 print("executed:", done[0]["request_id"], "approved by", done[0]["approver"], "-> work order", done[0]["work_order_id"])
 ''', run="python ledger_audit.py", expect="approved by duty.manager@example.com"),
 ]
+
+
+# Enterprise additions (hardening, failure labs, key rotation, tamper evidence, the ship-it capstone) live in labs_gcp_ent.py and are appended here.
+from .labs_gcp_ent import extend  # noqa: E402
+
+extend(LAB, b)
