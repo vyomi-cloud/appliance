@@ -1,10 +1,19 @@
 /* GCP IAM catalog client: loads the verbatim per-service catalog slices (GET /api/iam/gcp/catalog/<svc>, served by Mesh and
  * answered in the browser on Nano), and merges them into one role list + one permission list for the pickers.
- * The catalog carries no per-permission launch status, so every permission is reported "Supported" (never invented). */
+ * Per-permission status comes from the catalog's `stage` (Google's published custom-roles support level): SUPPORTED -> "Supported",
+ * TESTING -> "Testing", NOT_SUPPORTED -> "Not applicable"; a permission with no published level stays "Supported" (the API's default). */
 import { useEffect, useState } from "react";
 import { ROLE_TITLES } from "./api.js";
 
 export const CATALOG_SERVICES = ["aiplatform","apigateway","apphub","artifactregistry","backupdr","bigquery","binaryauthorization","cloudbuild","clouddeploy","cloudfunctions","cloudkms","cloudscheduler","cloudsql","cloudtasks","commerceoffercatalog","compute","consumerprocurement","container","dns","eventarc","firebaseauth","firestore","iam","iap","logging","monitoring","orgpolicy","pubsub","redis","resourcemanager","run","secretmanager","securitycenter","servicehealth","servicenetworking","serviceusage","storage","vpcaccess","workflows"];
+
+const STATUS = { SUPPORTED: "Supported", TESTING: "Testing", NOT_SUPPORTED: "Not applicable" };
+// Fetch with bounded concurrency (the full catalog is ~360 shards).
+async function pool(items, n, fn) {
+  const out = new Array(items.length); let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k]); } }));
+  return out;
+}
 
 // Basic roles are not in the per-service slices' titles consistently; give them stable titles/descriptions.
 const BASIC = {
@@ -19,11 +28,14 @@ let cache = null;
 export function loadCatalog(iamApi) {
   if (cache) return cache;
   cache = (async () => {
-    const slices = await Promise.all(CATALOG_SERVICES.map((s) => iamApi.catalog(s).catch(() => null)));
-    const roles = new Map(); const perms = new Set();
+    // `_index` lists every shard (generated with the catalog); fall back to the built-in list when it is unavailable.
+    const idx = await iamApi.catalog("_index").catch(() => null);
+    const names = idx && idx.services ? Object.keys(idx.services) : CATALOG_SERVICES;
+    const slices = await pool(names, 12, (s) => iamApi.catalog(s).catch(() => null));
+    const roles = new Map(); const perms = new Map();
     for (const c of slices) {
       if (!c) continue;
-      for (const p of Object.keys(c.permissions || {})) perms.add(p);
+      for (const [p, v] of Object.entries(c.permissions || {})) { if (!perms.has(p) || (v && v.stage)) perms.set(p, (v && v.stage) || perms.get(p) || ""); }
       for (const [id, r] of Object.entries(c.roles || {})) if (!roles.has(id)) roles.set(id, { id, title: r.title || id, desc: r.desc || "", permissions: r.permissions || [], product: roleProduct(id) });
     }
     for (const [id, [title, desc]] of Object.entries(BASIC)) {
@@ -31,7 +43,7 @@ export function loadCatalog(iamApi) {
       roles.set(id, { ...r, id, title, desc: r.desc || desc, product: "basic" });
     }
     for (const r of roles.values()) ROLE_TITLES[r.id] = r.title;
-    const permissions = [...perms].sort().map((name) => ({ name, service: name.split(".")[0], status: "Supported" }));
+    const permissions = [...perms.keys()].sort().map((name) => ({ name, service: name.split(".")[0], status: STATUS[perms.get(name)] || "Supported" }));
     return { roles: [...roles.values()].sort((a, b) => a.title.localeCompare(b.title)), permissions, loaded: slices.filter(Boolean).length };
   })();
   cache.catch(() => { cache = null; });

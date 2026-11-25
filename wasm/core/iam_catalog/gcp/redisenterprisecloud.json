@@ -1,0 +1,17 @@
+{
+"cloud":"gcp",
+"service":"redisenterprisecloud",
+"permissions":{
+"gcp.redisenterprise.com_databases.create":{},
+"gcp.redisenterprise.com_databases.delete":{},
+"gcp.redisenterprise.com_databases.get":{},
+"gcp.redisenterprise.com_databases.list":{},
+"gcp.redisenterprise.com_databases.update":{},
+"gcp.redisenterprise.com_subscriptions.create":{},
+"gcp.redisenterprise.com_subscriptions.delete":{},
+"gcp.redisenterprise.com_subscriptions.get":{},
+"gcp.redisenterprise.com_subscriptions.list":{},
+"gcp.redisenterprise.com_subscriptions.update":{}
+},
+"roles":{}
+}

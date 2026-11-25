@@ -1,0 +1,13 @@
+{
+"cloud":"gcp",
+"service":"firebaseanalytics",
+"permissions":{
+"firebaseanalytics.resources.googleAnalyticsEdit":{
+"stage":"SUPPORTED"
+},
+"firebaseanalytics.resources.googleAnalyticsReadAndAnalyze":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

@@ -1,0 +1,34 @@
+{
+"cloud":"gcp",
+"service":"resourcesettings",
+"permissions":{
+"resourcesettings.settings.get":{
+"stage":"SUPPORTED"
+},
+"resourcesettings.settings.list":{
+"stage":"SUPPORTED"
+},
+"resourcesettings.settings.update":{
+"stage":"NOT_SUPPORTED"
+}
+},
+"roles":{
+"roles/resourcesettings.admin":{
+"title":"Resource Settings Administrator",
+"desc":"Provides admin capabilities to set Resource Setting Values on resources.",
+"permissions":[
+"resourcesettings.settings.get",
+"resourcesettings.settings.list",
+"resourcesettings.settings.update"
+]
+},
+"roles/resourcesettings.viewer":{
+"title":"Resource Settings Viewer",
+"desc":"Provides capabilities to view Resource Settings and Resource Setting Values on resources.",
+"permissions":[
+"resourcesettings.settings.get",
+"resourcesettings.settings.list"
+]
+}
+}
+}

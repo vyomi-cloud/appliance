@@ -1,0 +1,16 @@
+{
+"cloud":"gcp",
+"service":"policyanalyzer",
+"permissions":{
+"policyanalyzer.resourceAuthorizationActivities.query":{
+"stage":"SUPPORTED"
+},
+"policyanalyzer.serviceAccountKeyLastAuthenticationActivities.query":{
+"stage":"SUPPORTED"
+},
+"policyanalyzer.serviceAccountLastAuthenticationActivities.query":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

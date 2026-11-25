@@ -36,7 +36,7 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Security Hub & GuardDuty (`securityhub`) | securityhub | 141 | 100.0 | 100 | yes |
 | AWS Backup (`backup`) | backup | 122 | 100.0 | 100 | yes |
 
-## GCP: 21/29 services enforceable, 0 without a catalog slice, 13808 catalog permissions
+## GCP: 21/29 services enforceable, 0 without a catalog slice, 13815 catalog permissions
 
 | Service | Catalog slice | Permissions | Mapped % | Floor | Methods mapped | Catalog reach % | Reach floor | Enforceable |
 |---|---|---:|---:|---:|---:|---:|---:|---|
@@ -62,11 +62,11 @@ GCP (see the script header): Mapped % is measured over the service's request sur
 | Manage resources (`resource-manager`) | resourcemanager, orgpolicy | 884 | 92.8 | 92 | 128/138 | 7.2 | 7 | yes |
 | Artifact Registry (`artifacts`) | artifactregistry | 78 | 94.2 | 94 | 65/69 | 80.8 | 80 | yes |
 | Cloud Deploy (`clouddeploy`) | clouddeploy | 87 | 100.0 | 100 | 61/61 | 83.9 | 83 | yes |
-| Backup and DR (`backupdr`) | backupdr | 305 | 70.3 | 70 | 64/91 | 37.0 | 37 | no |
+| Backup and DR (`backupdr`) | backupdr | 310 | 70.3 | 70 | 64/91 | 36.5 | 36 | no |
 | Cloud Build (`cloudbuild`) | cloudbuild | 158 | 93.0 | 93 | 53/57 | 60.1 | 60 | yes |
 | Binary Authorization (`security/binauthz`) | binaryauthorization | 38 | 100.0 | 100 | 21/21 | 55.3 | 55 | yes |
 | Security Command Center (`security/scc`) | securitycenter | 1080 | 83.7 | 83 | 144/172 | 15.6 | 15 | no |
-| Agent Platform (`vertex-ai`) | aiplatform | 922 | 87.1 | 87 | 1010/1159 | 50.2 | 50 | no |
+| Agent Platform (`vertex-ai`) | aiplatform | 924 | 87.1 | 87 | 1010/1159 | 50.1 | 50 | no |
 | Monitoring (`monitoring`) | monitoring | 94 | 100.0 | 100 | 56/56 | 59.6 | 59 | yes |
 | Logging (`logs`) | logging | 84 | 96.9 | 96 | 246/254 | 70.2 | 70 | yes |
 

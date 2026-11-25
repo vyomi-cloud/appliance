@@ -1,0 +1,26 @@
+{
+"cloud":"gcp",
+"service":"endpointsportal",
+"permissions":{
+"servicemanagement.services.get":{
+"stage":"SUPPORTED"
+},
+"servicemanagement.services.list":{
+"stage":"SUPPORTED"
+},
+"source.repos.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/endpointsportal.serviceAgent":{
+"title":"Endpoints Portal Service Agent",
+"desc":"Can access information about Endpoints services for consumer portal management, and can read Source Repositories for consumer portal custom content.",
+"permissions":[
+"servicemanagement.services.get",
+"servicemanagement.services.list",
+"source.repos.get"
+]
+}
+}
+}

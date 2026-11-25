@@ -1,0 +1,6 @@
+{
+"cloud":"gcp",
+"service":"identityplatform",
+"permissions":{},
+"roles":{}
+}

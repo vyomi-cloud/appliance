@@ -431,7 +431,7 @@
      "backupdr"
     ],
     "floor": 70,
-    "strict_floor": 37
+    "strict_floor": 36
    },
    "cloudbuild": {
     "catalog": [

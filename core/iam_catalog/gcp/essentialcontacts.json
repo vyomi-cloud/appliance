@@ -1,0 +1,46 @@
+{
+"cloud":"gcp",
+"service":"essentialcontacts",
+"permissions":{
+"essentialcontacts.contacts.create":{
+"stage":"SUPPORTED"
+},
+"essentialcontacts.contacts.delete":{
+"stage":"SUPPORTED"
+},
+"essentialcontacts.contacts.get":{
+"stage":"SUPPORTED"
+},
+"essentialcontacts.contacts.list":{
+"stage":"SUPPORTED"
+},
+"essentialcontacts.contacts.send":{
+"stage":"SUPPORTED"
+},
+"essentialcontacts.contacts.update":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/essentialcontacts.admin":{
+"title":"Essential Contacts Admin",
+"desc":"Full access to all essential contacts",
+"permissions":[
+"essentialcontacts.contacts.create",
+"essentialcontacts.contacts.delete",
+"essentialcontacts.contacts.get",
+"essentialcontacts.contacts.list",
+"essentialcontacts.contacts.send",
+"essentialcontacts.contacts.update"
+]
+},
+"roles/essentialcontacts.viewer":{
+"title":"Essential Contacts Viewer",
+"desc":"Viewer for all essential contacts",
+"permissions":[
+"essentialcontacts.contacts.get",
+"essentialcontacts.contacts.list"
+]
+}
+}
+}

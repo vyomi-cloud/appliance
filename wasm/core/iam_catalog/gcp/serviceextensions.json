@@ -1,0 +1,31 @@
+{
+"cloud":"gcp",
+"service":"serviceextensions",
+"permissions":{
+"artifactregistry.files.download":{
+"stage":"SUPPORTED"
+},
+"artifactregistry.repositories.downloadArtifacts":{
+"stage":"SUPPORTED"
+},
+"serviceextensions.callouts.invoke":{
+"stage":"TESTING"
+},
+"serviceextensions.locations.get":{
+"stage":"TESTING"
+},
+"serviceextensions.locations.list":{
+"stage":"TESTING"
+}
+},
+"roles":{
+"roles/networkactions.serviceAgent":{
+"title":"Network Actions Service Agent",
+"desc":"Gives Network Actions service account access to read required resources.",
+"permissions":[
+"artifactregistry.files.download",
+"artifactregistry.repositories.downloadArtifacts"
+]
+}
+}
+}

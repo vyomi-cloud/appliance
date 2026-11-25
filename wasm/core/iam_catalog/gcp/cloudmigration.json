@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"cloudmigration",
+"permissions":{
+"cloudmigration.velostrataendpoints.connect":{
+"stage":"NOT_SUPPORTED"
+}
+},
+"roles":{}
+}

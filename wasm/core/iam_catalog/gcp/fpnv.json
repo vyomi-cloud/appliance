@@ -1,0 +1,16 @@
+{
+"cloud":"gcp",
+"service":"fpnv",
+"permissions":{
+"fpnv.phoneNumberTokens.fetchDigitalCredentialPayload":{
+"stage":"SUPPORTED"
+},
+"fpnv.phoneNumberTokens.generateTestNumberToken":{
+"stage":"SUPPORTED"
+},
+"fpnv.phoneNumberTokens.mintPhoneNumberToken":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

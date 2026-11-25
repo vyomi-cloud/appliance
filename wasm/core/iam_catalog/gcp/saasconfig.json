@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"saasconfig",
+"permissions":{
+"saasconfig.featureFlagsConfigs.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}
