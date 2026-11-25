@@ -1484,20 +1484,30 @@ kms, s3 = boto3.client("kms"), boto3.client("s3")
 key = kms.create_key(Description="facilities ledger key")["KeyMetadata"]["KeyId"]
 kms.create_alias(AliasName="alias/facilities-ledger", TargetKeyId=key)
 kms.enable_key_rotation(KeyId=key)
-print("key", key, "with alias and rotation:", kms.get_key_rotation_status(KeyId=key)["KeyRotationEnabled"])
+assert kms.get_key_rotation_status(KeyId=key)["KeyRotationEnabled"], "rotation must be on"
+print("key", key, "with alias and rotation: True")
 
-record = {"work_order": "WO-000104", "approved_by": "duty.manager@example.com"}
+# The record says WHAT was approved. WHO approved is not typed in: it comes from the audit trail (below), so it cannot be forged by the writer.
+record = {"work_order": "WO-000104", "request_id": "req-demo-0001", "decision": "approved"}
 blob = kms.encrypt(KeyId=key, Plaintext=json.dumps(record).encode(), EncryptionContext={"table": "approval-ledger"})["CiphertextBlob"]
-print("ciphertext hides the approver:", b"duty.manager" not in blob)
+assert b"WO-000104" not in blob, "the ciphertext must not contain the plaintext"
+print("ciphertext hides the work order:", True)
 back = json.loads(kms.decrypt(CiphertextBlob=blob, EncryptionContext={"table": "approval-ledger"})["Plaintext"])
+assert back == record
 print("decrypt with the right context:", back["work_order"])
 try:
     kms.decrypt(CiphertextBlob=blob, EncryptionContext={"table": "wrong"})
-    print("wrong context was accepted: this is a bug")
+    raise AssertionError("a wrong encryption context was accepted")
 except kms.exceptions.InvalidCiphertextException:
     print("wrong context refused")
 
-s3.put_object(Bucket="facilities-docs", Key="audit/approval-record.json", Body=json.dumps(record).encode(), ServerSideEncryption="aws:kms", SSEKMSKeyId=key)
+# Encrypt at rest by DEFAULT: every object written to the bucket is protected with the key, with no per-request flag a developer can forget.
+# (This simulator reflects the bucket-default configuration; a per-request ServerSideEncryption header is accepted but reported as AES256.)
+s3.put_bucket_encryption(Bucket="facilities-docs", ServerSideEncryptionConfiguration={"Rules": [
+    {"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "aws:kms", "KMSMasterKeyID": key}, "BucketKeyEnabled": True}]})
+s3.put_object(Bucket="facilities-docs", Key="audit/approval-record.json", Body=json.dumps(record).encode())
+head = s3.head_object(Bucket="facilities-docs", Key="audit/approval-record.json")
+assert head.get("ServerSideEncryption") == "aws:kms" and key in head.get("SSEKMSKeyId", ""), "the object must inherit SSE-KMS from the bucket, got %s" % head.get("ServerSideEncryption")
 print("SSE-KMS object written")
 ''', run="python kms_protect.py", expect="SSE-KMS object written"),
  b("Turn on CloudTrail", "A trail records API calls (who did what, when) into the audit prefix of the bucket. Turn it on before the approvals you want recorded.",
@@ -1525,8 +1535,16 @@ for _ in range(10):
     time.sleep(0.5)
 print("CloudTrail saw:", sorted(names))
 rows = [{k: list(v.values())[0] for k, v in i.items()} for i in ddb.scan(TableName="approval-ledger")["Items"]]
-print("ledger statuses:", sorted({r["status"] for r in rows}), "| executed:", [r.get("work_order_id") for r in rows if r["status"] == "EXECUTED"])
-print("approval is fully audited:", "StartExecution" in names and any(r["status"] == "EXECUTED" for r in rows))
+executed = [r for r in rows if r["status"] == "EXECUTED"]
+print("ledger statuses:", sorted({r["status"] for r in rows}), "| executed:", [r.get("work_order_id") for r in executed])
+if not executed or "StartExecution" not in names:
+    raise SystemExit("missing prerequisite: chapter 5 must have run 'Let the agent ask for a work order' and 'Approve the request' first "
+                     "(CloudTrail has StartExecution: %s, ledger has an EXECUTED request: %s)" % ("StartExecution" in names, bool(executed)))
+assert "SendTaskSuccess" in names, "the approval itself (SendTaskSuccess) must be in the trail, not only the start"
+# Every executed request must trace back to a ledger decision AND a work order that exists.
+wos = {i["work_order_id"]["S"] for i in ddb.scan(TableName="facilities-work-orders")["Items"]}
+assert all(r["work_order_id"] in wos for r in executed), "an EXECUTED request points at a work order that does not exist"
+print("approval is fully audited:", True)
 ''', run="python audit.py", expect="approval is fully audited: True", needs_runtime=True),
 ]
 

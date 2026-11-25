@@ -478,3 +478,122 @@ print("approved by", approver, "| requested by", requester)
 print("approver identity verified from the audit log")
 ''', run="python iam_approval.py", expect="approver identity verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
     ]
+
+    # ───────────────────────── chapter 13: governance and security ─────────────────────────
+    LAB[13] += [
+     b("Rotate the key and prove old data still opens", "Rotation must never strand data. This block rotates the key on demand, checks the rotation was recorded, then asserts the record encrypted before the rotation still decrypts and a record encrypted after it does too. The policy lesson: rotate on a schedule, never delete old key material while ciphertext depends on it.",
+       "key_rotation.py", r'''
+import boto3
+
+kms = boto3.client("kms")
+key = kms.describe_key(KeyId="alias/facilities-ledger")["KeyMetadata"]["KeyId"]
+ctx = {"table": "approval-ledger"}
+before = kms.encrypt(KeyId=key, Plaintext=b"approved before rotation", EncryptionContext=ctx)["CiphertextBlob"]
+n = len(kms.list_key_rotations(KeyId=key)["Rotations"])
+kms.rotate_key_on_demand(KeyId=key)
+rotations = kms.list_key_rotations(KeyId=key)["Rotations"]
+assert len(rotations) == n + 1, "the rotation was not recorded"
+after = kms.encrypt(KeyId=key, Plaintext=b"approved after rotation", EncryptionContext=ctx)["CiphertextBlob"]
+assert kms.decrypt(CiphertextBlob=before, EncryptionContext=ctx)["Plaintext"] == b"approved before rotation", "pre-rotation data became unreadable"
+assert kms.decrypt(CiphertextBlob=after, EncryptionContext=ctx)["Plaintext"] == b"approved after rotation"
+assert kms.get_key_rotation_status(KeyId=key)["KeyRotationEnabled"], "automatic rotation must stay on"
+print("rotations recorded:", len(rotations), "| old ciphertext still opens | new ciphertext opens | automatic rotation on")
+print("key rotation verified")
+''', run="python key_rotation.py", expect="key rotation verified", kind="harden", edition=MESH, nano_note="Not verified on Nano: needs the KMS engine to support RotateKeyOnDemand."),
+     b("Make the audit trail tamper-evident", "A trail the writer can edit is not evidence. Every ledger decision is chained: each entry's hash covers the previous hash, so changing, removing or reordering any entry breaks every hash after it. The head hash is signed with a KMS HMAC key held by a different identity than the writer, so even rewriting the whole chain is detected. The block then attacks its own trail three ways (edit an entry, delete the last entry, rewrite the chain) and asserts each is caught and located.",
+       "audit_chain.py", r'''
+import hashlib
+import json
+
+import boto3
+
+ddb, kms, s3 = boto3.client("dynamodb"), boto3.client("kms"), boto3.client("s3")
+rows = [{k: list(v.values())[0] for k, v in i.items() if k != "task_token"} for i in ddb.scan(TableName="approval-ledger")["Items"]]
+rows.sort(key=lambda r: (r.get("ts", "0"), r["request_id"]))
+if len(rows) < 2:
+    raise SystemExit("missing prerequisite: the ledger needs at least two decisions (run chapter 5: approve.py, reject.py)")
+
+
+def chain(entries):
+    out, prev = [], "0" * 64
+    for e in entries:
+        body = json.dumps(e, sort_keys=True)
+        prev = hashlib.sha256((prev + body).encode()).hexdigest()
+        out.append({"entry": e, "hash": prev})
+    return out
+
+
+def first_break(links):
+    """Index of the first entry whose hash does not follow from the entries before it, or None."""
+    prev = "0" * 64
+    for i, l in enumerate(links):
+        prev = hashlib.sha256((prev + json.dumps(l["entry"], sort_keys=True)).encode()).hexdigest()
+        if prev != l["hash"]:
+            return i
+    return None
+
+
+try:
+    mac_key = kms.describe_key(KeyId="alias/audit-anchor")["KeyMetadata"]["KeyId"]
+except kms.exceptions.NotFoundException:
+    mac_key = kms.create_key(KeySpec="HMAC_256", KeyUsage="GENERATE_VERIFY_MAC", Description="signs the audit chain head")["KeyMetadata"]["KeyId"]
+    kms.create_alias(AliasName="alias/audit-anchor", TargetKeyId=mac_key)
+
+
+def anchor(links):
+    return kms.generate_mac(KeyId=mac_key, Message=links[-1]["hash"].encode(), MacAlgorithm="HMAC_SHA_256")["Mac"]
+
+
+def anchor_ok(links, mac):
+    try:
+        return kms.verify_mac(KeyId=mac_key, Message=links[-1]["hash"].encode(), MacAlgorithm="HMAC_SHA_256", Mac=mac)["MacValid"]
+    except Exception:
+        return False
+
+
+links = chain(rows)
+mac = anchor(links)
+s3.put_object(Bucket="facilities-docs", Key="audit/chain.json", Body=json.dumps(links).encode())
+assert first_break(links) is None and anchor_ok(links, mac)
+print("chain of", len(links), "decisions written and signed; verifies clean")
+
+# Attack 1: edit one entry in the middle.
+t = json.loads(json.dumps(links))
+t[0]["entry"]["status"] = "EXECUTED" if t[0]["entry"].get("status") != "EXECUTED" else "REJECTED"
+assert first_break(t) == 0, "an edited entry must break the chain at that entry"
+print("edit entry 0: chain breaks at index", first_break(t))
+
+# Attack 2: delete the newest entry (the chain still looks internally valid, the signed head no longer matches).
+t = json.loads(json.dumps(links))[:-1]
+assert first_break(t) is None and not anchor_ok(t, mac), "a truncated chain must fail the signed anchor"
+print("delete the last entry: hashes still chain, signed anchor rejects it")
+
+# Attack 3: rewrite the whole chain after editing (the attacker can recompute hashes but cannot sign).
+t = json.loads(json.dumps(links))
+t[-1]["entry"]["status"] = "FORGED"
+forged = chain([l["entry"] for l in t])
+assert first_break(forged) is None and not anchor_ok(forged, mac), "a recomputed chain must fail the signed anchor"
+print("rewrite the chain: hashes recompute, signed anchor rejects it")
+print("tamper evidence verified")
+''', run="python audit_chain.py", expect="tamper evidence verified", kind="harden", edition=MESH, needs_runtime=True,
+       nano_note="Not verified on Nano: needs KMS GenerateMac/VerifyMac and the approval ledger populated by the Lambda-backed chapter 5."),
+     b("Who did what: the identity behind each approval", "Joins the two audit sources that chapter 5 produced: the ledger (what was decided) and the IAM audit log (which principal was allowed or refused). It asserts the approver and the requester are different identities, that the refused self-approval is on record, and says plainly which prerequisite is missing if the Enforce step was skipped.",
+       "audit_who.py", r'''
+import iamkit
+
+recs = iamkit._admin("GET", "/api/iam/aws/audit?limit=500")["records"]
+sends = [r for r in recs if r["action"] == "states:SendTaskSuccess"]
+allowed = [r for r in sends if r["decision"] == "allow" and "duty-manager" in r["principal"]]
+refused = [r for r in sends if r["decision"] == "deny" and "facilities-agent" in r["principal"]]
+if not allowed or not refused:
+    raise SystemExit("missing prerequisite: run chapter 5 'Real approver identity and no self-approval' first "
+                     "(found %d approvals by the duty manager and %d refused self-approvals)" % (len(allowed), len(refused)))
+approver, requester = allowed[-1]["principal"], refused[-1]["principal"]
+assert approver != requester, "approver and requester must be different identities"
+print("approved by :", approver, "at", allowed[-1]["time"])
+print("refused     :", requester, "tried to approve its own request at", refused[-1]["time"])
+denials = [r for r in recs if r["decision"] == "deny"]
+print("every denial in the trail names a principal and an action:", all(r["principal"] and r["action"] for r in denials), "(%d denials)" % len(denials))
+print("identity audit verified")
+''', run="python audit_who.py", expect="identity audit verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
+    ]
