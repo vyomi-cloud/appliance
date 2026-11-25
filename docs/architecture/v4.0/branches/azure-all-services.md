@@ -22,3 +22,6 @@ Azure console "All services" rebuilt to mirror the real portal's All services bl
 - Card Create menus (dropdown items such as Application gateway > Application gateway / Application gateway for containers) open the service's list/create page instead of a dropdown.
 - Catalog reflects the signed-in tenant's view captured 2026-11-25; the real list changes over time.
 - The Detail-view-off (compact list) layout was not captured from the real portal (the toggle did not respond to the automated click); ours uses the same row style the real filter-results view uses.
+
+## Scope update (2026-11-26, v4/azure-all-services-scope)
+Owner: the All services list shows only the services in scope. A catalog entry is listed only when the registry simulates it (`entry(name).simulated`): this applies to the All view, category views, filter results, favorites (and the hamburger favorites), the featured row, and the left category list (a category with nothing in scope is hidden). The "Not simulated" cards are gone; a deep link `#/allservices/<slug>` still opens the honest not-simulated page. The captured real-portal catalog (services/allServicesCatalog.js) is kept as the source of names/descriptions/order.

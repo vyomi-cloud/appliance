@@ -24,7 +24,7 @@ export default function PortalMenu({ onClose }) {
         <a className="vy-pm-item" href="#/allservices"><span className="vy-pm-ic" style={{ color: "#57a300" }}><TextBulletListLtr20Regular /></span><span>All services</span></a>
         <div className="vy-pm-fav"><span style={{ color: "#0078d4", fontSize: 14, fontWeight: 400, textTransform: "none" }}>★</span><span>Favorites</span><i /></div>
         <div className="vy-pm-list">
-          {favs.map((n) => { const e = entry(n); return (
+          {favs.filter((n) => entry(n).simulated).map((n) => { const e = entry(n); return (
             <a key={n} className="vy-pm-item" href={e.href}><span className="vy-pm-ic"><Glyph id={e.icon} size={20} /></span><span>{n}</span></a>
           ); })}
         </div>

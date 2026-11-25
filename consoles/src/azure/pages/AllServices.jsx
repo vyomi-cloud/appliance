@@ -2,7 +2,8 @@
  * Recents / Categories), "Filter services", Service providers + Release Status filters, Detail view toggle,
  * the featured row, per-category groups of service cards with a favorite star, Create and View.
  * Names, descriptions and ordering come from the captured real catalog (services/allServicesCatalog.js);
- * entries Vyomi does not simulate stay listed and open an honest "not simulated" page. */
+ * Only services Vyomi simulates are listed; the rest of the real portal's catalog is out of scope and hidden.
+ * (A deep link to an unsimulated service still opens an honest "not simulated" page.) */
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown16Regular, ChevronUp16Regular, Info16Regular, Star20Filled, Star20Regular } from "@fluentui/react-icons";
 import { Menu, MenuItemRadio, MenuList, MenuPopover, MenuTrigger } from "@fluentui/react-components";
@@ -98,6 +99,8 @@ function NotSimulatedService({ name }) {
   );
 }
 
+const catHasScope = (id) => (ALL_VIEW[id] || []).some((n) => entry(n).simulated) || (GROUPS[id] || []).some((g) => (g.k === "l" && entry(g.n).simulated) || g.i.some((n) => entry(n).simulated));
+
 export default function AllServices() {
   const route = useRoute();
   const k8s = useK8sLock("azure");
@@ -114,7 +117,9 @@ export default function AllServices() {
   useEffect(() => { try { localStorage.setItem("vyomi.v4.azure.allservices.detail", detail ? "1" : "0"); } catch {} }, [detail]);
   useEffect(() => { setActive(0); }, [f, cat, provider, status]);
 
+  // Only services Vyomi simulates are listed (the real portal's other ~290 are out of scope).
   const pass = (n) => {
+    if (!entry(n).simulated) return false;
     const t = entry(n).tag;
     if (provider === "Microsoft" && t === "PARTNER") return false;
     if (provider === "Partner" && t !== "PARTNER") return false;
@@ -160,7 +165,7 @@ export default function AllServices() {
       ? <ul className="vy-as-rows">{xs.map((r) => <li key={r.href} className="vy-as-row"><a href={r.href}>{r.icon ? <Glyph id={r.icon} size={20} /> : null}<span className="vy-as-row-name">{r.name || r.title || r.href}</span></a></li>)}</ul>
       : <div className="vy-as-empty"><div>No recent services or resources in this session.</div></div>;
   } else if (cat === "All") {
-    body = CAT_LIST.map(([id, title]) => {
+    body = CAT_LIST.filter(([id]) => catHasScope(id)).map(([id, title]) => {
       const names = (ALL_VIEW[id] || []).filter(pass);
       if (!names.length) return null;
       const open = !closed[id];
@@ -174,7 +179,7 @@ export default function AllServices() {
   } else {
     body = (GROUPS[cat] || []).map((g, gi) => {
       const names = g.i.filter(pass);
-      if (!names.length && g.k !== "l") return null;
+      if (!names.length && !(g.k === "l" && entry(g.n).simulated)) return null;
       return (
         <section key={gi} className="vy-as-sec vy-as-grp">
           <SectionHead title={g.n} link={g.k === "l"} star={g.k === "l"} favs={favs} />
@@ -195,7 +200,7 @@ export default function AllServices() {
         <nav className="vy-as-cats" aria-label="Service categories">
           {["All", "Favorites", "Recents"].map((c) => <button key={c} type="button" className={`vy-as-cat${cat === c ? " sel" : ""}`} aria-current={cat === c} onClick={() => nav(c)}>{c}</button>)}
           <div className="vy-as-cats-title">Categories</div>
-          {CAT_LIST.map(([id, title]) => <button key={id} type="button" data-category={id} className={`vy-as-cat${cat === id ? " sel" : ""}`} aria-current={cat === id} onClick={() => nav(id)}>{title}</button>)}
+          {CAT_LIST.filter(([id]) => catHasScope(id)).map(([id, title]) => <button key={id} type="button" data-category={id} className={`vy-as-cat${cat === id ? " sel" : ""}`} aria-current={cat === id} onClick={() => nav(id)}>{title}</button>)}
         </nav>
         <main className="vy-as-main">
           <div className="vy-as-top">
@@ -221,7 +226,7 @@ export default function AllServices() {
           </div>
           {!f && cat === "All" && (
             <ul className="vy-as-featured">
-              {FEATURED_TILES.map((t) => { const e = entry(t.name); return (
+              {FEATURED_TILES.filter((t) => entry(t.name).simulated).map((t) => { const e = entry(t.name); return (
                 <li key={t.name}><a href={e.href}><Glyph id={e.icon} size={32} /><span>{t.label}</span></a></li>
               ); })}
             </ul>

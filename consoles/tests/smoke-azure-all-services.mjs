@@ -19,7 +19,8 @@ check("left list: All, Favorites, Recents then Categories", JSON.stringify(cats.
 check("18 real portal categories in order", JSON.stringify(cats.slice(3)) === JSON.stringify(["AI + machine learning", "Analytics", "Compute", "Containers", "Databases", "DevOps", "General", "Hybrid + multicloud", "Identity", "Integration", "Internet of Things", "Management and governance", "Migration", "Monitor", "Networking", "Security", "Storage", "Web & Mobile"]), cats.length);
 check("Categories heading", (await page.locator(".vy-as-cats-title").innerText()) === "Categories");
 const heads = await page.locator(".vy-as-sec-title").allInnerTexts();
-check("All view headings with counts", heads[0] === "AI + machine learning" && (await page.locator(".vy-as-sec-count").first().innerText()) === "(20)" && (await page.locator(".vy-as-sec-count").nth(2).innerText()) === "(33)", heads.slice(0, 3));
+check("All view headings with counts (only in-scope services)", heads[0] === "AI + machine learning" && /^\(\d+\)$/.test(await page.locator(".vy-as-sec-count").first().innerText()), heads.slice(0, 3));
+check("only in-scope services listed: no 'Not simulated' cards", (await page.locator(".vy-as-ns").count()) === 0 && (await page.locator(".vy-as-card").count()) > 0, await page.locator(".vy-as-card").count());
 check("featured row (Entra ID, VMs, App Services, Storage, Cost)", (await page.locator(".vy-as-featured li").count()) === 5);
 check("detail view cards have Create/View + star", (await page.locator(".vy-as-card").first().locator(".vy-as-star").count()) === 1 && (await page.locator(".vy-as-card").first().locator(".vy-as-view").count()) === 1);
 
@@ -66,9 +67,9 @@ await page.locator('.vy-as-card[data-service="Virtual machines"] .vy-as-view').c
 await page.waitForFunction(() => location.hash === "#/vms");
 check("View on Virtual machines opens the VMs blade", true);
 await page.goto(UI + "#/allservices?cat=Compute"); await page.locator(".vy-as-cats").waitFor();
-await page.locator('.vy-as-card[data-service="Batch accounts"] .vy-as-view').click();
-await page.locator("text=does not simulate").waitFor({ timeout: 8000 });
-check("unsimulated service opens an honest not-simulated page", true);
+check("out-of-scope service (Batch accounts) is not listed in Compute", (await page.locator('.vy-as-card[data-service="Batch accounts"]').count()) === 0);
+await page.locator('.vy-as-filter input').fill("Batch accounts");
+check("filtering for an out-of-scope service finds nothing", (await page.locator("text=no results matching").count()) === 1);
 check("no page errors", errors.length === 0, errors.join(" | "));
 await browser.close();
 console.log(bad ? `\n${bad} FAILED` : "\nALL PASS");
