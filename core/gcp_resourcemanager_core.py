@@ -461,9 +461,7 @@ def _undelete_folder(store, name) -> RmResponse:
 
 
 def _move_project(store, project_id, body) -> RmResponse:
-    p = store.projects.get(project_id)
-    if p is None:
-        return _err(404, f"Project {project_id} not found.", "NOT_FOUND")
+    p = _get_or_create_project(store, project_id)       # like GetProject: the space's project materialises on first use
     dest_d, perr = _norm_parent(store, body.get("destinationParent"))
     if perr:
         return perr
@@ -477,9 +475,7 @@ def _move_project(store, project_id, body) -> RmResponse:
 
 
 def _resolve_ancestry(store, project_id) -> RmResponse:
-    p = store.projects.get(project_id)
-    if p is None:
-        return _err(404, f"Project {project_id} not found.", "NOT_FOUND")
+    p = _get_or_create_project(store, project_id)
     chain = [{"resourceId": {"type": "project", "id": project_id}}]
     cur = _parent_str(p.get("parent"))
     while cur.startswith("folders/") and cur in store.folders:
@@ -1047,6 +1043,13 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
             return _delete_contact(store, name)
         return _err(400, f"Unsupported method {method} on contact", "INVALID_ARGUMENT")
 
+    # ---- Org Policy v2 on every hierarchy level: {organizations|folders|projects}/{id}/{constraints|policies[/{constraint}][:getEffectivePolicy]} ----
+    if len(segs) >= 3 and segs[0] in ("organizations", "folders", "projects") and (
+            segs[2] == "constraints"
+            or (segs[2] == "policies" and (segs[0] != "projects" or method == "PATCH" or ":" in "/".join(segs[3:])))):
+        r = _orgpolicy(store, method, segs, query, _body())
+        if r is not None:
+            return r
     # ---- org policies: projects/{p}/policies[/{constraint}] ----
     if len(segs) == 3 and segs[0] == "projects" and segs[2] in ("policies:simulate", "simulations"):
         parent = f"projects/{segs[1]}"
@@ -1218,3 +1221,86 @@ def dispatch(store: ResourceManagerStore, method: str, path: str,
         return _err(400, f"Unsupported method {method} on project", "INVALID_ARGUMENT")
 
     return _err(404, f"Unknown path: {path}", "NOT_FOUND")
+
+
+# ── Org Policy v2 additions (constraints catalog, effective policy, PATCH, dry-run spec) over every hierarchy level ──
+def _orgpolicy(store, method, segs, query, body):
+    from core import gcp_orgpolicy_core as op
+    parent = f"{segs[0]}/{segs[1]}"
+    if segs[0] == "folders" and parent not in store.folders:
+        return _err(404, f"Folder {parent} not found.", "NOT_FOUND")
+    if segs[0] == "organizations":
+        get_or_create_default_org(store)
+        if parent not in store.organizations:
+            return _err(404, f"Organization {parent} not found.", "NOT_FOUND")
+    if segs[2] == "constraints":
+        if method != "GET" or len(segs) != 3:
+            return _err(400, f"Unsupported method {method} on constraints", "INVALID_ARGUMENT")
+        return _json(200, {"constraints": op.list_constraints(parent)})
+    last = "/".join(segs[3:])
+    verb = ""
+    if ":" in last:
+        last, verb = last.rsplit(":", 1)
+    if verb == "getEffectivePolicy" and method == "GET":
+        if op.get_constraint(last) is None:
+            return _err(404, f"Constraint constraints/{op.cid(last)} not found.", "NOT_FOUND")
+        return _json(200, op.effective_policy_doc(store, parent, last))
+    if verb == "check" and method == "POST":           # Vyomi extension: what this policy does to one value (real spec vs dry run)
+        return _json(200, op.check(store, parent, last, body.get("value")))
+    if segs[2] != "policies" or verb:
+        return None
+    if len(segs) == 3:
+        if method == "GET":
+            return _list_org_policies(store, parent)
+        if method == "POST":
+            pid = str(query.get("policyId", "")).strip() or op.cid((body.get("name") or "").rsplit("/policies/", 1)[-1])
+            return _create_orgpolicy_v2(store, parent, pid, body, op)
+        return _err(400, f"Unsupported method {method} on policies", "INVALID_ARGUMENT")
+    name = f"{parent}/policies/{last}"
+    key = next((k for k in (name, f"{parent}/policies/constraints/{op.cid(last)}") if k in store.org_policies), name)
+    if method == "GET":
+        return _get_org_policy(store, key)
+    if method == "DELETE":
+        return _delete_org_policy(store, key)
+    if method == "PATCH":
+        if key not in store.org_policies:
+            return _err(404, f"Policy {key} not found.", "NOT_FOUND")
+        pol = store.org_policies[key]
+        for f in ("spec", "dryRunSpec"):
+            if f in body:
+                if body[f] is None:
+                    pol.pop(f, None)
+                else:
+                    pol[f] = _spec_checked(body[f])
+        pol["etag"] = base64.b64encode(uuid.uuid4().bytes[:8]).decode()
+        return _json(200, dict(pol))
+    return _err(400, f"Unsupported method {method} on policy", "INVALID_ARGUMENT")
+
+
+def _spec_checked(spec):
+    spec = dict(spec or {})
+    spec["updateTime"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+    return spec
+
+
+def _create_orgpolicy_v2(store, parent, policy_id, body, op):
+    if not policy_id:
+        return _err(400, "policyId is required.", "INVALID_ARGUMENT")
+    if op.get_constraint(policy_id) is None:
+        return _err(400, f"Constraint constraints/{op.cid(policy_id)} does not exist.", "INVALID_ARGUMENT")
+    name = f"{parent}/policies/{policy_id}"
+    if name in store.org_policies or f"{parent}/policies/constraints/{op.cid(policy_id)}" in store.org_policies:
+        return _err(409, f"Policy {name} already exists.", "ALREADY_EXISTS")
+    c = op.get_constraint(policy_id)
+    for f in ("spec", "dryRunSpec"):
+        for rule in ((body.get(f) or {}).get("rules") or []):
+            has_bool = "enforce" in rule
+            if has_bool != ("booleanConstraint" in c):
+                return _err(400, f"Rule shape does not match the {'boolean' if 'booleanConstraint' in c else 'list'} constraint {c['name']}.", "INVALID_ARGUMENT")
+    pol = {"name": name, "etag": base64.b64encode(uuid.uuid4().bytes[:8]).decode()}
+    if body.get("spec") or not body.get("dryRunSpec"):
+        pol["spec"] = _spec_checked(body.get("spec") or {"rules": [{"enforce": True}] if "booleanConstraint" in c else []})
+    if body.get("dryRunSpec"):
+        pol["dryRunSpec"] = _spec_checked(body["dryRunSpec"])
+    store.org_policies[name] = pol
+    return _json(200, dict(pol))

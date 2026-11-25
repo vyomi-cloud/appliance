@@ -191,12 +191,18 @@ def _scope_of(rec):
 
 def azure_state(reg) -> dict:
     arm = reg.get("az_arm")
-    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "groups": {}, "data_scopes": {}}
+    out = {"cloud": "azure", "role_assignments": [], "role_definitions": [], "deny_assignments": [], "groups": {}, "data_scopes": {},
+           "management_groups": {}, "subscriptions": {}}
     for rec in list((getattr(arm, "state", None) or {}).values()):
         if not isinstance(rec, dict):
             continue
         t = str(rec.get("_type") or rec.get("type") or "").lower()
         p = rec.get("properties") or {}
+        if t == "microsoft.management/managementgroups" and rec.get("name"):          # management groups (core/azure_mgmt_groups_core.py)
+            par = (((p.get("details") or {}).get("parent") or {}).get("id") or "").rsplit("/", 1)[-1]
+            out["management_groups"][str(rec["name"])] = par or None
+        elif t == "microsoft.management/managementgroups/subscriptions" and rec.get("name"):
+            out["subscriptions"][str(rec["name"])] = str(rec.get("id") or "").split("/managementGroups/")[-1].split("/")[0] or None
         if t in _A._AZ_DATA and rec.get("id") and rec.get("name"):     # data-plane names (blob account, OpenAI account, SQL server ...) inherit from the ARM resource
             out["data_scopes"][_A._AZ_DATA[t] % str(rec["name"]).lower()] = rec["id"]
         if t == _AZ_T[0]:

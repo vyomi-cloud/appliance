@@ -333,6 +333,18 @@ def _dispatch_service(service: str, method: str, path: str, query: dict, headers
         resp = s3_object_core.dispatch(r.s3, method, path, query, headers, body)
         return {"status": resp.status, "headers": dict(resp.headers or {}), "body": resp.body or b""}
     if service == "gcs":
+        try:    # Organization Policy request gate (core/gcp_orgpolicy_core.py): the org-policy store is the one the /v2 policies wire writes
+            from core import gcp_orgpolicy_core as _orgp
+            _nr = new_services_router() or r
+            try:
+                _jb = _json.loads(body) if body[:1] == b"{" else {}
+            except Exception:
+                _jb = {}
+            _orgp.request_gate(getattr(_nr, "gcp_rm", None), method, path, query or {}, _jb)
+        except _orgp.Violation as _v:
+            return _orgp.violation_response(_v)
+        except Exception:
+            pass
         resp = gcp_storage_core.dispatch(r.gcs, method, path, query, headers, body)
         hdrs = dict(resp.headers or {})
         if resp.media_type and not any(k.lower() == "content-type" for k in hdrs):
@@ -824,7 +836,7 @@ def _dispatch_messaging(service: str, r: AwsWireRouter, method: str, path: str, 
 
 _NEW_SERVICES_ROUTER: AwsWireRouter | None = None
 # net-new paths whose state lives in the Azure space (REQUEST_PROVIDER="azure")
-_AZURE_SPACE_PREFIXES = ("/azure-sql", "/kv", "/labels", "/revisions", "/snapshots", "/locks")
+_AZURE_SPACE_PREFIXES = ("/azure-sql", "/kv", "/labels", "/revisions", "/snapshots", "/locks", "/providers/Microsoft.Management")
 
 
 def new_services_router() -> AwsWireRouter | None:
@@ -1116,11 +1128,11 @@ def mount_new_services(app, router: AwsWireRouter | None = None) -> None:
 
     methods = ["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]
     for prefix in ("/2015-03-31/functions", "/restapis", "/v2/apis", "/v2/domainnames", "/v2/vpclinks", "/v2/tags", "/azure-sql",
-                   "/providers/Microsoft.Authorization",
+                   "/providers/Microsoft.Authorization", "/providers/Microsoft.Management",
                    # GCP IAM custom roles, Workload Identity Federation, Org Policy v2 — the
                    # cores Nano serves (the offline legacy GCP IAM never had these: 404)
                    "/v1/projects/{project}/roles", "/v1/projects/{project}/locations/global/workloadIdentityPools",
-                   "/v2/projects/{project}/policies",
+                   "/v2/projects/{project}/policies", "/v2/projects/{project}/constraints", "/v2/organizations", "/v2/folders",
                    # Backup for GKE (gkebackup backupPlans / backups) on the shared GKE core
                    "/v1/projects/{project}/locations/{location}/backupPlans",
                    # Azure App Configuration data plane ({store}.azconfig.io; store = x-vyomi-store)
