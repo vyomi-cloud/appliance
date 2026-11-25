@@ -347,6 +347,7 @@ def call(gateway_id, method, params=None):
  b("Write the supervisor and the three sub-agents", "One LangGraph StateGraph: the supervisor plans a route, then the Facilities agent (knowledge search), Maintenance agent (asset lookup and, for write requests, a human-approval workflow) and Analytics agent (work-order statistics) run in order, and the supervisor synthesises a cited answer. Tools come from the gateway when it exists, otherwise from the Lambda functions, otherwise the agent reports the tool as unavailable instead of failing. That is why you can deploy and test this chapter before the tools exist: chapters 7, 6, 4 and 5 light the tools up one by one.",
    "agents.py", r'''
 import json
+import os
 import re
 import time
 import uuid
@@ -374,6 +375,24 @@ class S(TypedDict, total=False):
     llm_used: bool
     tools: list
     spans: list
+    steps: int
+    stopped: str
+
+
+def guarded(fn):
+    """Step budget and kill switch: every agent node counts as a step, and over budget the graph stops cleanly instead of running on.
+    The limit belongs to the runtime (an environment variable), not to the caller, so a user cannot raise it."""
+    def run(st):
+        limit = int(os.environ.get("AGENT_MAX_STEPS", "12"))
+        if st.get("stopped"):
+            return st
+        st["steps"] = st.get("steps", 0) + 1
+        if st["steps"] > limit:
+            st["stopped"] = "step_budget"
+            st["answer"] = "I stopped because this request needed more than %d steps." % limit
+            return st
+        return fn(st)
+    return run
 
 
 def converse(system, text, max_tokens=300):
@@ -529,7 +548,7 @@ def build():
 
     g = StateGraph(S)
     for n, f in [("supervisor", supervisor), ("facilities", facilities), ("maintenance", maintenance), ("analytics", analytics), ("synth", synth)]:
-        g.add_node(n, f)
+        g.add_node(n, guarded(f))
     g.set_entry_point("supervisor")
 
     def nxt(after):
@@ -559,7 +578,7 @@ import agents
 def handler(payload, context):
     payload = payload if isinstance(payload, dict) else {"prompt": str(payload)}
     st = agents.ask(payload.get("prompt") or payload.get("question", ""), payload.get("user", "anonymous"))
-    res = {k: st.get(k) for k in ("answer", "route", "citations", "analytics", "approval", "llm_used", "tools", "spans")}
+    res = {k: st.get(k) for k in ("answer", "route", "citations", "analytics", "approval", "llm_used", "tools", "spans", "steps", "stopped")}
     res.update(response=st.get("answer"), sessionId=getattr(context, "session_id", None), pid=os.getpid())
     return res
 '''),
@@ -629,6 +648,8 @@ from ask_agent import ask
 
 a = ask("facilities-session-" + "a" * 20)
 print("hosted in another process:", a["pid"] != os.getpid())
+assert a["pid"] != os.getpid(), "the agent must run inside the runtime, not in this script"
+assert a["route"] and a["answer"].strip() and a["spans"], "the agent must route, answer and emit spans"
 print("route:", a["route"])
 print("spans:", ", ".join(s["name"] for s in a["spans"] if s["kind"] == "agent"))
 print("tools:", [(t["tool"], t["via"]) for t in a["tools"]])
@@ -638,6 +659,8 @@ b = ask("facilities-session-" + "b" * 20)
 a2 = ask("facilities-session-" + "a" * 20)
 print("different sessions use different processes:", a["pid"] != b["pid"])
 print("the same session reuses its process:", a["pid"] == a2["pid"])
+assert a["pid"] != b["pid"], "two sessions must not share a process (isolation)"
+assert a["pid"] == a2["pid"], "one session must keep its process (state)"
 ''', run="python invoke_agent.py", expect="the same session reuses its process: True"),
  b("Stop a session", "StopRuntimeSession ends that session's agent process immediately (otherwise it idles out). The next call with that session id starts a fresh process.",
    "stop_session.py", r'''

@@ -1132,3 +1132,94 @@ print("cost control verified")
 ''', run="python cost_meter.py", expect="cost control verified", kind="harden", edition=MESH,
        nano_note="Not verified on Nano: needs CloudWatch metrics with dimensions and alarms in the Nano engine."),
     ]
+
+    # ───────────────────────── chapter 3: agent runtime ─────────────────────────
+    LAB[3] += [
+     b("Failure lab: a runaway agent hits its step budget", "An agent that loops, or a question engineered to make it call every tool, must stop. The step limit is an environment variable of the runtime (so a caller cannot raise it). The block lowers the budget to two steps, asks the full question in a fresh session, and asserts the run stops with `step_budget`, does not start an approval or reach any tool it had no budget for, and says so in plain language; then it restores the limit and asserts the same question completes normally.",
+       "runaway.py", r'''
+import time
+
+import boto3
+
+from ask_agent import ARN, ask
+
+ac = boto3.client("bedrock-agentcore-control")
+rid = ARN.split("/")[-1]
+rt = ac.get_agent_runtime(agentRuntimeId=rid)
+
+
+def set_limit(n):
+    ac.update_agent_runtime(agentRuntimeId=rid, agentRuntimeArtifact=rt["agentRuntimeArtifact"], roleArn=rt["roleArn"],
+                            networkConfiguration=rt["networkConfiguration"],
+                            environmentVariables=dict(rt.get("environmentVariables") or {}, AGENT_MAX_STEPS=str(n)))
+    for _ in range(60):                                  # an update takes the runtime through UPDATING: wait for READY before the next call
+        if ac.get_agent_runtime(agentRuntimeId=rid)["status"] == "READY":
+            return
+        time.sleep(0.5)
+    raise AssertionError("runtime did not return to READY")
+
+
+try:
+    set_limit(2)
+    r = ask("facilities-session-" + "r" * 20)
+    assert r["stopped"] == "step_budget" and r["steps"] == 3, "the run must stop at the budget, got stopped=%s steps=%s" % (r["stopped"], r["steps"])
+    assert "stopped" in r["answer"].lower() and not r["approval"], "a stopped run must say so and must not start an approval"
+    assert not [t for t in r["tools"] if t["tool"] == "create_work_order"], "a stopped run must not reach the write tool"
+    print("budget of 2 steps: stopped after", r["steps"] - 1, "steps ->", r["answer"])
+finally:
+    set_limit(12)
+ok = ask("facilities-session-" + "s" * 20)
+assert not ok["stopped"] and ok["steps"] >= 4 and ok["answer"].strip(), "with the normal budget the same question must complete"
+print("normal budget: completed in", ok["steps"], "steps without stopping")
+print("runaway protection verified")
+''', run="python runaway.py", expect="runaway protection verified", needs_runtime=True, kind="failure", edition=MESH,
+       nano_note="Needs the AgentCore runtime to run your agent code; not available on Nano yet."),
+     b("Least privilege for the agent's role", "The runtime role is the agent's whole blast radius. Settle it from the audit log by running what the agent really does as that identity: call the model, retrieve from the knowledge base, ask the approval workflow, and check it may run the two read tools (a dry-run invoke, so nothing executes). Then assert the dangerous neighbours are refused: the write tool, deleting a work order, reading the approval ledger directly, and calling the approval API as the approver.",
+       "iam_runtime.py", r'''
+import json
+
+import boto3
+from botocore.exceptions import ClientError
+
+import iamkit
+import vymodels
+from iamkit import allow
+
+ag = boto3.client("bedrock-agent")
+kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+fn = lambda name: "arn:aws:lambda:us-east-1:123456789012:function:" + name
+iamkit.enforce("enforce")
+role = iamkit.principal("facilities-runtime-role", [allow("bedrock:InvokeModel", "arn:aws:bedrock:us-east-1::foundation-model/" + vymodels.CHAT_MODEL)])
+
+
+def what_the_agent_does():
+    iamkit.client("bedrock-runtime", role).converse(modelId=vymodels.CHAT_MODEL, messages=[{"role": "user", "content": [{"text": "ok"}]}])
+    iamkit.client("bedrock-agent-runtime", role).retrieve(knowledgeBaseId=kb, retrievalQuery={"text": "boiler"})
+    for tool in ("facilities-asset-status", "facilities-kb-search"):
+        iamkit.client("lambda", role).invoke(FunctionName=tool, InvocationType="DryRun")      # permission check only: nothing executes
+
+
+added = iamkit.settle(role, what_the_agent_does)
+granted = sorted(a for s in added for a in s["Action"])
+print("the audit log taught the policy:", granted)
+assert any(a.startswith("bedrock:Retrieve") for a in granted) and "lambda:InvokeFunction" in granted
+
+# Narrow means narrow: scope the Lambda grant to the two read tools and prove the write tool is outside it.
+role["statements"] = [st for st in role["statements"] if "lambda:InvokeFunction" not in st["Action"]]
+iamkit.grant(role, [allow("lambda:InvokeFunction", [fn("facilities-asset-status"), fn("facilities-kb-search")])])
+since = iamkit.last_audit_id()
+for label, call in (
+        ("invoke the write tool", lambda: iamkit.client("lambda", role).invoke(FunctionName="facilities-create-work-order", InvocationType="DryRun")),
+        ("delete a work order", lambda: iamkit.client("dynamodb", role).delete_item(TableName="facilities-work-orders", Key={"work_order_id": {"S": "WO-000101"}})),
+        ("read the approval ledger", lambda: iamkit.client("dynamodb", role).scan(TableName="approval-ledger")),
+        ("approve its own request", lambda: iamkit.client("stepfunctions", role).send_task_success(taskToken="x", output="{}"))):
+    try:
+        call()
+        raise AssertionError(label + " must be refused")
+    except ClientError as e:
+        assert e.response["Error"]["Code"] in ("AccessDenied", "AccessDeniedException"), (label, e)
+        print("refused as intended:", label)
+assert len(iamkit.denied(role, since)) == 4
+print("agent role verified: %d allowed actions, 4 dangerous ones refused and on the audit trail" % len({a for s in role["statements"] for a in s["Action"]}))
+''', run="python iam_runtime.py", expect="agent role verified", needs_appliance=True, kind="iam", edition=MESH, nano_note=N_IAM),
+    ]
