@@ -24,7 +24,7 @@ import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, IMAGES_NOTE } from "../../../common/computeSizes.js";
 
 const opt = (v) => ({ value: v, label: v });
 
@@ -173,7 +173,7 @@ export function CreateLaunchTemplate() {
             <FormField label="Source template"><Select selectedOption={{ value: "", label: "Don't use a source template" }} options={[{ value: "", label: "Don't use a source template" }]} ariaLabel="Source template" /></FormField>
           </Container>
           <Container header={<Header variant="h2">Application and OS Images (Amazon Machine Image)</Header>}>
-            <FormField label="Amazon Machine Image (AMI)">
+            <FormField label="Amazon Machine Image (AMI)" description={(cat.data?.images || []).some((i) => i.vyomiSubstrate === "nano") ? IMAGES_NOTE : undefined}>
               <Select selectedOption={amiId ? opt(amiId) : { value: "", label: "Don't include in launch template" }} onChange={({ detail }) => setAmiId(detail.selectedOption.value)}
                 options={[{ value: "", label: "Don't include in launch template" }, ...(cat.data?.images || []).map((i) => ({ value: i.imageId, label: `${i.name} (${i.imageId})` }))]} ariaLabel="Amazon Machine Image (AMI)" />
             </FormField>

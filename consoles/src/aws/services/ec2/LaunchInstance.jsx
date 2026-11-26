@@ -19,7 +19,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { nanoVmOn } from "../../../common/NanoVmPanel.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
-import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE } from "../../../common/computeSizes.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -68,11 +68,13 @@ export default function LaunchInstance({ query }) {
 
   const images = cat.data?.images || [];
   const types = cat.data?.types || [];
-  const quickImage = images.find((i) => i.name?.startsWith(quickStart));
+  const nano = onNano(types) || images.some((i) => i.vyomiSubstrate === "nano");   // Nano: only what the in-browser VM can boot (Alpine, i386)
+  const quickChoice = nano ? NANO_IMAGES.aws.quickStart : quickStart;
+  const quickImage = images.find((i) => i.name?.startsWith(quickChoice));
   const effectiveAmiId = amiId || quickImage?.imageId || "";
   const searchedImages = search ? images.filter((i) => i.name?.toLowerCase().includes(search.toLowerCase())) : images;
   const visibleTypes = allGen ? types : types.filter((t) => t.InstanceType !== "t2.small" && t.InstanceType !== "m4.large");
-  const macOs = quickStart === "macOS";
+  const macOs = quickChoice === "macOS";
   const sizeNote = sizesNote(sizeSubstrate(types));
   // Nano / Mesh list only the sizes they can run: keep the selection on one of them
   useEffect(() => { if (visibleTypes.length && !visibleTypes.some((t) => t.InstanceType === instanceType)) setInstanceType(visibleTypes[0].InstanceType); }, [cat.data, allGen]);
@@ -142,13 +144,14 @@ export default function LaunchInstance({ query }) {
 
             <Container header={<Header variant="h2">Application and OS Images (Amazon Machine Image)</Header>}>
               <SpaceBetween size="l">
-                <FormField label="Search our full catalog including 1000s of application and OS images">
-                  <Input placeholder="Search our full catalog including 1000s of application and OS images" ariaLabel="Search our full catalog including 1000s of application and OS images"
+                {nano && <Box variant="small" color="text-body-secondary" data-testid="compute-images-note">{IMAGES_NOTE}</Box>}
+                <FormField label={nano ? "Search the images available on Nano" : "Search our full catalog including 1000s of application and OS images"}>
+                  <Input placeholder={nano ? "Search the images available on Nano" : "Search our full catalog including 1000s of application and OS images"} ariaLabel={nano ? "Search the images available on Nano" : "Search our full catalog including 1000s of application and OS images"}
                     value={search} onChange={({ detail }) => setSearch(detail.value)} type="search" />
                 </FormField>
                 <FormField label="Quick Start">
-                  <RadioGroup value={quickStart} onChange={({ detail }) => { setQuickStart(detail.value); setAmiId(""); }}
-                    items={["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"].map((v) => ({ value: v, label: v }))} />
+                  <RadioGroup value={quickChoice} onChange={({ detail }) => { setQuickStart(detail.value); setAmiId(""); }}
+                    items={(nano ? [NANO_IMAGES.aws.quickStart] : ["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"]).map((v) => ({ value: v, label: v }))} />
                 </FormField>
                 {macOs && <Alert type="info">macOS requires a Dedicated Host, which Vyomi doesn't model — pick another Quick Start option to launch.</Alert>}
                 <FormField label="Amazon Machine Image (AMI)" description="Free tier eligible">
@@ -157,7 +160,8 @@ export default function LaunchInstance({ query }) {
                     options={searchedImages.map((i) => opt(i.imageId, `${i.name} (${i.imageId})`))} loadingText="Loading AMIs" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Amazon Machine Image (AMI)" />
                 </FormField>
                 <FormField label="Architecture">
-                  <Select selectedOption={opt(arch, arch)} onChange={({ detail }) => setArch(detail.selectedOption.value)} options={[opt("64-bit (x86)"), opt("64-bit (Arm)")]} ariaLabel="Architecture" />
+                  <Select selectedOption={nano ? opt(NANO_IMAGES.aws.arch) : opt(arch, arch)} onChange={({ detail }) => setArch(detail.selectedOption.value)}
+                    options={nano ? [opt(NANO_IMAGES.aws.arch)] : [opt("64-bit (x86)"), opt("64-bit (Arm)")]} ariaLabel="Architecture" />
                 </FormField>
               </SpaceBetween>
             </Container>

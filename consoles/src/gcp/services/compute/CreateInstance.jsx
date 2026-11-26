@@ -14,7 +14,7 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE } from "../../../common/computeSizes.js";
 import { getProject } from "../../project.js";
 import ScrollTable from "../../kit/ScrollTable.jsx";
 
@@ -93,13 +93,16 @@ export default function CreateInstance() {
   useEffect(() => { if (series.length && !series.some((m) => m.name === machineType)) setMachineType(series[0].name); }, [family, machineTypes]);
 
   const nameErr = touched ? api.validResourceName(name) : null;
+  const nano = onNano(machineTypes);                                   // Nano: the in-browser VM boots one image (Alpine, 32-bit x86)
+  const osImages = nano ? [NANO_IMAGES.gcp.os] : api.OS_IMAGES;
+  useEffect(() => { if (nano) setOsIdx(0); }, [nano]);
 
   const submit = async (ev) => {
     ev.preventDefault();
     setTouched(true);
     if (api.validResourceName(name)) return;
     setBusy(true); setError(null);
-    const [osProject, osFamily] = api.OS_IMAGES[osIdx];
+    const [osProject, osFamily] = osImages[osIdx] || osImages[0];
     const tagItems = [...(httpTag ? ["http-server"] : []), ...(httpsTag ? ["https-server"] : []), ...(lbHealth ? ["lb-health-check"] : []), ...netTags];
     const metaItems = [...metadata.filter((m) => m.key), ...(startupScript ? [{ key: "startup-script", value: startupScript }] : []),
       ...(manageAccess && sshKeys.length ? [{ key: "ssh-keys", value: sshKeys.map((k) => `${k.user}:${k.key}`).join("\n") }] : []),
@@ -203,15 +206,15 @@ export default function CreateInstance() {
 
       <Step n={2} title="OS and storage">
         <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>Operating system and storage</Typography>
-        <Sub title="Boot disk">
+        <Sub title="Boot disk" help={nano ? <span data-testid="compute-images-note">{IMAGES_NOTE}</span> : undefined}>
           <Stack useFlexGap direction="row" spacing={2} flexWrap="wrap">
             <FormControl sx={{ minWidth: 220 }}>
               <InputLabel id="os-l">Operating system</InputLabel>
               <Select labelId="os-l" label="Operating system" value={osIdx} onChange={(e) => setOsIdx(Number(e.target.value))}>
-                {api.OS_IMAGES.map(([, , name], i) => <MenuItem key={i} value={i}>{name}</MenuItem>)}
+                {osImages.map(([, , name], i) => <MenuItem key={i} value={i}>{name}</MenuItem>)}
               </Select>
             </FormControl>
-            <TextField label="Version" value={api.OS_IMAGES[osIdx][3]} slotProps={{ input: { readOnly: true } }} sx={{ minWidth: 260 }} />
+            <TextField label="Version" value={(osImages[osIdx] || osImages[0])[3]} slotProps={{ input: { readOnly: true } }} sx={{ minWidth: 260 }} />
             <FormControl sx={{ minWidth: 220 }}>
               <InputLabel id="bdt-l">Boot disk type</InputLabel>
               <Select labelId="bdt-l" label="Boot disk type" value={diskType} onChange={(e) => setDiskType(e.target.value)}>

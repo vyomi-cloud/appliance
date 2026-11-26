@@ -2701,8 +2701,14 @@ class AzureArm:
         that silently gets less. Offline appliances are not restricted."""
         if full_type.lower() != "microsoft.compute/virtualmachines":
             return None
-        size = ((payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize")
+        props = (payload or {}).get("properties") or {}
         cs = _compute_sizes()
+        ref = (props.get("storageProfile") or {}).get("imageReference")
+        if ref and not cs.azure_image_allowed(ref):      # Nano boots one guest image (Alpine, 32-bit x86)
+            img = ":".join(str(ref.get(k) or "") for k in ("publisher", "offer", "sku", "version"))
+            return _err(400, "PlatformImageNotFound", f"The platform image '{img}' is not available. Verify that all fields in the storage profile are correct. "
+                        + cs.image_rejection("azure", img))
+        size = props.get("hardwareProfile", {}).get("vmSize")
         if not size or cs.is_allowed("azure", size):
             return None
         loc = str((payload or {}).get("location") or DEFAULT_LOCATION)

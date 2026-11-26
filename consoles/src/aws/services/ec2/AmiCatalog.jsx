@@ -9,6 +9,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ProductBrowser } from "../../kit/MarketplaceBrowser.jsx";
 import * as mp from "../../kit/marketplaceApi.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
+import { IMAGES_NOTE } from "../../../common/computeSizes.js";
 import * as api from "./api.js";
 
 export default function AmiCatalog() {
@@ -37,7 +38,7 @@ export default function AmiCatalog() {
   );
 
   return (
-    <ContentLayout header={<Header variant="h1">AMI Catalog</Header>}>
+    <ContentLayout header={<Header variant="h1" description={images.some((i) => i.vyomiSubstrate === "nano") ? IMAGES_NOTE : undefined}>AMI Catalog</Header>}>
       <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
         { id: "quickstart", label: `Quickstart AMIs (${quickstart.length})`, content: amiTable(quickstart) },
         { id: "mine", label: `My AMIs (${mine.length})`, content: amiTable(mine) },

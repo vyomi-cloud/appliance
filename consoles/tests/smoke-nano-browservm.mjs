@@ -49,7 +49,7 @@ A.azure = {
     await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}?api-version=2021-04-01`, "PUT", { location: "eastus" });
     const r = await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=2023-09-01`, "PUT",
       { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, osProfile: { computerName: VM, adminUsername: "azureuser", linuxConfiguration: { disablePasswordAuthentication: true } },
-        storageProfile: { imageReference: { publisher: "Canonical", offer: "ubuntu-24_04-lts", sku: "server", version: "latest" }, osDisk: { createOption: "FromImage", osType: "Linux" } } } });
+        storageProfile: { imageReference: { publisher: "vyomi", offer: "alpine-nano", sku: "3.21-i386", version: "latest" }, osDisk: { createOption: "FromImage", osType: "Linux" } } } });
     if (r.status >= 300) throw new Error("create VM failed: " + r.text);
     this.rg = RG; return VM;
   },
@@ -65,7 +65,7 @@ A.gcp = {
     await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
     const project = "nano-project";   // Nano's one project (core/gcp_project.NANO_PROJECT)
     const name = `vm-${Date.now() % 100000}`, zone = "us-central1-a";
-    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: "e2-medium", disks: [{ boot: true, initializeParams: { diskSizeGb: "10" } }] });
+    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: "e2-micro", disks: [{ boot: true, initializeParams: { diskSizeGb: "10", sourceImage: "projects/vyomi-nano-cloud/global/images/family/alpine-3-21-i386" } }] });
     if (r.status >= 300) throw new Error("create instance failed: " + r.text);
     this.zone = zone; return name;
   },

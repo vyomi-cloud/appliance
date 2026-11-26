@@ -325,6 +325,7 @@ def insert_instance(store, project, zone, payload):
             dname = ip.get("diskName") or "%s" % name
             dfull = "projects/%s/zones/%s/disks/%s" % (project, zone, dname)
             _si_ = ip.get("sourceImage") or ""
+            _nano_image_block(store, project, _si_)
             _m = re.match(r"^(?:https://[^/]+/compute/[^/]+/)?(?:projects/%s/)?global/images/([^/]+)$" % re.escape(project), _si_)
             if _m and "projects/%s/global/images/%s" % (project, _m.group(1)) not in store.images:
                 raise _E(404, "NOT_FOUND", "The resource 'projects/%s/global/images/%s' was not found" % (project, _m.group(1)))
@@ -603,7 +604,7 @@ def set_ssh_keys(store, project, zone, name, payload):
     return _operation(store, project, zone, "setMetadata", name, _selflink(full))
 
 
-_IMAGE_OS = {"debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12"), "debian-11": ("Debian GNU/Linux 11 (bullseye)", "debian", "11"),
+_IMAGE_OS = {"alpine-3-21": ("Alpine Linux 3.21", "alpine", "3.21"), "debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12"), "debian-11": ("Debian GNU/Linux 11 (bullseye)", "debian", "11"),
              "ubuntu-2404": ("Ubuntu 24.04 LTS", "ubuntu", "24.04"), "ubuntu-2204": ("Ubuntu 22.04 LTS", "ubuntu", "22.04"),
              "rocky-linux-9": ("Rocky Linux 9", "rocky", "9"), "cos": ("Container-Optimized OS", "cos", "stable")}
 
@@ -991,6 +992,8 @@ def insert_instance_template(store, project, payload):
     mt_name = _last(props.get("machineType") or "e2-medium")
     if mt_name not in MACHINE_SHAPES:
         raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'machineType': %r." % mt_name)
+    for _d in props.get("disks") or []:
+        _nano_image_block(store, project, (_d.get("initializeParams") or {}).get("sourceImage") or "")
     now = _ts()
     tpl = {
         "id": _next_id(store), "name": name, "kind": "compute#instanceTemplate",
@@ -1530,11 +1533,36 @@ def _public_image(project, family, name, desc):
     full = "projects/%s/global/images/%s" % (project, name)
     return {"kind": "compute#image", "id": str(zlib.crc32(full.encode()) * 1000003), "creationTimestamp": "2024-11-12T00:00:00.000-08:00",
             "name": name, "description": desc, "sourceType": "RAW", "status": "READY", "archiveSizeBytes": "4000000000",
-            "diskSizeGb": "10", "family": family, "selfLink": _selflink(full), "labelFingerprint": "42WmSpB8rSM="}
+            "diskSizeGb": "10", "family": family, "selfLink": _selflink(full), "labelFingerprint": "42WmSpB8rSM=",
+            **({"vyomiSubstrate": "nano"} if project == "vyomi-nano-cloud" else {})}
+
+
+def _public_images_map():
+    """Google's public image projects; Nano offers only the one guest its in-browser VM boots (core/compute_sizes.py NANO_IMAGES)."""
+    from core import compute_sizes as _cs
+    if not _cs.images_restricted():
+        return PUBLIC_IMAGES
+    a = _cs.NANO_IMAGES["gcp"]
+    return {a["project"]: [(a["family"], a["name"], a["description"])]}
+
+
+def _nano_image_block(store, project, src):
+    """Nano: a boot image the in-browser VM cannot run is a not-found, like any image that does not exist (404 NOT_FOUND)."""
+    from core import compute_sizes as _cs
+    if not src or not _cs.images_restricted():
+        return
+    m = re.search(r"(?:^|/)projects/([^/]+)/global/images/(.+)$", src)
+    prj, rest = m.groups() if m else (project, src)
+    a = _cs.NANO_IMAGES["gcp"]
+    if prj == a["project"] and rest.split("/")[-1] in (a["family"], a["name"]):
+        return
+    if prj == project and "projects/%s/global/images/%s" % (project, rest) in store.images:
+        return          # a customer image made in this project (from a Nano disk)
+    raise _E(404, "NOT_FOUND", "The resource 'projects/%s/global/images/%s' was not found. %s" % (prj, rest, _cs.image_rejection("gcp", rest.split("/")[-1])))
 
 
 def public_images(project):
-    return [_public_image(project, f, n, d) for f, n, d in PUBLIC_IMAGES.get(project, [])]
+    return [_public_image(project, f, n, d) for f, n, d in _public_images_map().get(project, [])]
 
 
 def _global(store, method, project, rest, verb, payload):
@@ -1543,7 +1571,7 @@ def _global(store, method, project, rest, verb, payload):
     coll, rest2 = rest[0], rest[1:]
     if coll == "imageJobs" and method == "GET" and not rest2:
         return _json(200, {"kind": "vyomi#imageJobList", "items": list_image_jobs(store, project)})
-    if coll == "images" and project in PUBLIC_IMAGES and method == "GET":
+    if coll == "images" and project in _public_images_map() and method == "GET":
         pub = public_images(project)
         if not rest2:
             return _json(200, {"kind": "compute#imageList", "items": pub})

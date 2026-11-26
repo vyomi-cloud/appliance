@@ -2523,12 +2523,28 @@ def _ensure_default_network(m: dict) -> tuple[str, str, str]:
     return vpc_id, subnet_id, default_sg
 
 
+def _nano_images() -> bool:
+    from core import compute_sizes as _cs
+    return _cs.images_restricted()
+
+
+def _nano_ami_spec() -> dict:
+    from core import compute_sizes as _cs
+    a = _cs.NANO_IMAGES["aws"]
+    return {"name": a["name"], "arch": a["arch"], "platform": a["platform"]}
+
+
+def _ami_id_for(spec: dict) -> str:
+    return "ami-" + uuid.uuid5(uuid.NAMESPACE_URL, "vyomi/quickstart-ami/" + spec["name"] + "/" + spec["arch"]).hex[:17]
+
+
 def _seed_amis(m: dict) -> None:
     # Re-seed if the flag survived but the images did not (a half-restored model made RunInstances raise StopIteration).
-    if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()):
+    nano = _nano_images()
+    if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()) and (not nano or _ami_id_for(_nano_ami_spec()) in m["images"]):
         return
     m["seeded_amis"] = True
-    for spec in _QUICKSTART_AMIS:
+    for spec in ([_nano_ami_spec()] if nano else _QUICKSTART_AMIS):
         # STABLE ids (like a real region's quickstart AMIs): a store that is re-created (Nano reload, worker restart, a model
         # restored without its images) must hand out the SAME ids, or a launch form that listed AMIs earlier gets
         # InvalidAMIID.NotFound on RunInstances.
@@ -2547,7 +2563,14 @@ def _seed_amis(m: dict) -> None:
 
 def _default_ami_id(m: dict) -> str:
     _seed_amis(m)
+    if _nano_images():          # the in-browser VM boots one guest: Alpine (see core/compute_sizes.py NANO_IMAGES)
+        return _ami_id_for(_nano_ami_spec())
     return next(i["id"] for i in m["images"].values() if i["name"].startswith("Amazon Linux"))
+
+
+def _image_runs(image: dict) -> bool:
+    """Nano boots 32-bit x86 only: an AMI is runnable when it is i386. Everything else (Mesh / offline) runs as before."""
+    return (not _nano_images()) or str(image.get("architecture")) == "i386"
 
 
 def _taggable_collections(m: dict) -> list:
@@ -2742,6 +2765,10 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
     image = m["images"].get(image_id)
     if image is None:
         raise VpcError("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist.")
+    if not _image_runs(image):
+        from core import compute_sizes as _cs
+        raise VpcError("Unsupported", f"The architecture '{image.get('architecture')}' of the specified AMI ({image_id}) is not supported on this substrate. "
+                       + _cs.image_rejection("aws", image_id), 400)
     _check_allowed_images(m, image)
     vpc_id, default_subnet, default_sg = _ensure_default_network(m)
     subnet_id = str(params.get("SubnetId") or params.get("NetworkInterface.1.SubnetId") or default_subnet)
@@ -3215,12 +3242,15 @@ def _describe_images(store, params):
     ids = [v for k, v in params.items() if k.startswith("ImageId.")]
     owners = [v for k, v in params.items() if k.startswith("Owner.")]
     rows = list(m["images"].values())
-    if ids:
+    if ids:     # a named image still describes (an existing instance may reference one); only the listing is restricted
         _require_ids(ids, rows, "InvalidAMIID.NotFound", "image")
         rows = [i for i in rows if i["id"] in ids]
+    else:
+        rows = [i for i in rows if _image_runs(i)]      # Nano: only the images the in-browser VM can boot
     if owners:
         rows = [i for i in rows if ("self" in owners and i["owner_id"] == OWNER_ID) or i["owner_id"] in owners]
-    items = "".join(_image_xml(i) for i in rows)
+    mark = "<vyomiSubstrate>nano</vyomiSubstrate>" if _nano_images() else ""
+    items = "".join(_image_xml(i)[:-len("</item>")] + mark + "</item>" for i in rows)
     return _envelope("DescribeImages", f"<imagesSet>{items}</imagesSet>")
 
 
@@ -4070,6 +4100,8 @@ def _describe_instance_types(store, params):
     types = [v for k, v in params.items() if k.startswith("InstanceType.")]
     ok = _cs.allowed_names("aws")          # None on an unrestricted appliance; the Nano / Mesh runnable set otherwise
     rows = {k: v for k, v in _INSTANCE_TYPES.items() if (not types or k in types) and (ok is None or k in ok)}
+    if _nano_images():      # the in-browser guest is 32-bit x86 (i386)
+        rows = {k: dict(v, arch=list(v["arch"]) + ["i386"]) for k, v in rows.items()}
     mark = f"<vyomiSubstrate>{_cs.substrate()}</vyomiSubstrate>" if ok is not None else ""
     return _envelope("DescribeInstanceTypes", f"<instanceTypeSet>{''.join(_instance_type_xml(k, v, mark) for k, v in rows.items())}</instanceTypeSet>")
 
