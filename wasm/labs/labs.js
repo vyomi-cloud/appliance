@@ -368,7 +368,7 @@
     var worker = null, seq = 0, pend = {};
     function getWorker() {
       if (worker) return worker;
-      worker = new Worker(base + "pyrun-worker.js", { type: "module" });
+      worker = new Worker(base + "pyrun-worker.js?v=2", { type: "module" });
       worker.onmessage = function (e) { var p = pend[e.data.id]; if (!p) return; if (e.data.type === "log") p.log(e.data.text); else { delete pend[e.data.id]; p.done(e.data.ok); } };
       worker.onerror = function (e) { Object.keys(pend).forEach(function (k) { pend[k].log("Runner error: " + (e.message || "failed to load")); pend[k].done(false); delete pend[k]; }); worker = null; };
       return worker;

@@ -49,3 +49,8 @@ A first run of chapter 4 failed on a wrong assertion in `try_memory.py` (not the
 - The retrieval threshold was tuned on a small set. The holdout is 8 questions: a small sample.
 - Model downloads (about 1 GB) and the embedding model (CDN) need the network once.
 - Llama 3.2 1B shard downloads fail in headless Chrome without a Node-side fetch workaround; see the logs.
+
+## Landing fix (2026-11-26): first Deploy no longer waits on PyPI
+The Labs runner (`wasm/labs/pyrun-worker.js`) installed boto3/botocore from live PyPI through micropip; a slow `pypi.org/pypi/boto3/json` left "A model in your browser" stuck on its first step with no error.
+It now installs pinned wheels shipped in `wasm/pylib/` (boto3 1.35.99, botocore 1.35.99, s3transfer 0.10.4, jmespath 1.0.1; +13 MB) and falls back to PyPI only if they fail, and uses the same-origin Pyodide when `pyodide-source.json` says `local`.
+Verified in headless Chrome with the Nano service worker: chapter 2 reaches "protocol_test passed" and then the model picker.

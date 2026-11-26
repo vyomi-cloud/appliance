@@ -1,7 +1,10 @@
 /* Browser Python runner for Vyomi Labs (module worker). Loads Pyodide + the AWS SDK for Python and runs a lab block against the in-browser Nano backend.
  * Same-origin, so the Nano service worker answers the SDK's calls exactly as it answers the console's. Messages in: {id, files:{name:code}, run:"python x.py", env:{}}.
  * Messages out: {id, type:"log"|"done", text|ok}. */
-const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.26.2/full/";
+let PYODIDE = PYODIDE_CDN;   // the same-origin runtime when this Nano ships one (wasm/pyodide-source.json says so), else the CDN
+/* The AWS SDK is installed from wheels shipped next to the Nano (wasm/pylib/), not from PyPI: a slow or blocked PyPI used to leave the first Deploy "stuck" with no error. PyPI stays the fallback. */
+const SDK_WHEELS = ["jmespath-1.0.1-py3-none-any.whl", "botocore-1.35.99-py3-none-any.whl", "s3transfer-0.10.4-py3-none-any.whl", "boto3-1.35.99-py3-none-any.whl"];
 
 /* Browser transport for the AWS SDK: botocore's own connection class cannot run in a browser, so its send() is replaced by a synchronous XHR (allowed in workers).
  * The URL/headers are routed like the console does: local = the Nano service worker answers; mesh = the request goes to the Mesh (all of it when a Mesh-homed
@@ -95,11 +98,13 @@ _ur.urlopen = _urlopen
 let py = null, ready = null;
 const seen = {};
 async function boot(post) {
+  try { const src = await (await fetch(new URL("../pyodide-source.json", import.meta.url), { cache: "no-store" })).json(); if (src && src.local) PYODIDE = new URL("../vendor/pyodide/", import.meta.url).href; } catch (_) {}
   const { loadPyodide } = await import(PYODIDE + "pyodide.mjs");
   py = await loadPyodide({ indexURL: PYODIDE });
-  post("Loading the AWS SDK for Python (first run only)...");
+  post("Loading the AWS SDK for Python (first run only, about 13 MB)...");
   await py.loadPackage(["micropip", "ssl", "urllib3", "six", "python-dateutil", "requests"]);
-  await py.runPythonAsync("import micropip\nawait micropip.install(['jmespath','botocore','boto3','s3transfer'], deps=False)");
+  py.globals.set("_whl", py.toPy(SDK_WHEELS.map((w) => new URL("../pylib/" + w, import.meta.url).href)));
+  await py.runPythonAsync("import micropip\ntry:\n    await micropip.install(list(_whl), deps=False)\nexcept Exception as _e:\n    print('same-origin SDK wheels unavailable (%s); trying PyPI' % _e)\n    await micropip.install(['jmespath','botocore','boto3','s3transfer'], deps=False)");
   await py.runPythonAsync(SHIM);
 }
 self.onmessage = async (ev) => {
