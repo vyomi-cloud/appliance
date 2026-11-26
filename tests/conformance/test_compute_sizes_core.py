@@ -86,8 +86,14 @@ def run() -> int:
             _env(sub)
             s = types.SimpleNamespace()
             listed, body = _aws_types(s)
-            _check(f"{sub}: DescribeInstanceTypes == the table", sorted(listed) == sorted(n for n in _names("aws", sub) if n in vpc._INSTANCE_TYPES))
-            _check(f"{sub}: no big type listed", not any(t in listed for t in ("m5.2xlarge", "r5.xlarge", "m5.xlarge", "c5.xlarge")))
+            if sub == "nano":      # Nano LISTS every type and flags what its VM cannot run (disabled in the console, not removed)
+                flags = dict(re.findall(r"<instanceType>([^<]+)</instanceType>(?:(?!<instanceType>).)*?<vyomiRunnable>(\w+)</vyomiRunnable>", body, re.S))
+                _check("nano: DescribeInstanceTypes lists the full catalog", sorted(listed) == sorted(vpc._INSTANCE_TYPES))
+                _check("nano: runnable flag == the table", sorted(k for k, v in flags.items() if v == "true") == sorted(n for n in _names("aws", sub) if n in vpc._INSTANCE_TYPES)
+                       and flags["m5.2xlarge"] == "false")
+            else:
+                _check(f"{sub}: DescribeInstanceTypes == the table", sorted(listed) == sorted(n for n in _names("aws", sub) if n in vpc._INSTANCE_TYPES))
+                _check(f"{sub}: no big type listed", not any(t in listed for t in ("m5.2xlarge", "r5.xlarge", "m5.xlarge", "c5.xlarge")))
             _check(f"{sub}: substrate marker", f"<vyomiSubstrate>{sub}</vyomiSubstrate>" in body)
             bad = _run(s, "m5.2xlarge")
             _check(f"{sub}: RunInstances m5.2xlarge refused", bad.status == 400 and "<Code>Unsupported</Code>" in bad.body)
@@ -101,9 +107,14 @@ def run() -> int:
             _env(sub)
             st = gce.ComputeStore()
             r = gce.dispatch(st, "GET", "/compute/v1/projects/p/zones/us-central1-a/machineTypes", {}, {}, b"")
-            got = [m["name"] for m in json.loads(r.body)["items"]]
-            _check(f"{sub}: machineTypes.list == the table", got == _names("gcp", sub) or sorted(got) == sorted(_names("gcp", sub)))
-            _check(f"{sub}: machineTypes.get big type 404", gce.dispatch(st, "GET", "/compute/v1/projects/p/zones/us-central1-a/machineTypes/" + bad, {}, {}, b"").status == 404)
+            items = json.loads(r.body)["items"]
+            if sub == "nano":      # listed in full, flagged
+                got = [m["name"] for m in items if m["vyomiRunnable"]]
+                _check("nano: machineTypes.list lists the full catalog, runnable flagged", sorted(got) == sorted(_names("gcp", sub)) and len(items) > len(got) and any(m["name"] == bad for m in items if not m["vyomiRunnable"]))
+            else:
+                got = [m["name"] for m in items]
+                _check(f"{sub}: machineTypes.list == the table", got == _names("gcp", sub) or sorted(got) == sorted(_names("gcp", sub)))
+                _check(f"{sub}: machineTypes.get big type 404", gce.dispatch(st, "GET", "/compute/v1/projects/p/zones/us-central1-a/machineTypes/" + bad, {}, {}, b"").status == 404)
             _check(f"{sub}: insert {good} ok", _gce_post(st, good).status == 200)
             rb = _gce_post(st, bad)
             e = json.loads(rb.body)["error"]
@@ -122,8 +133,13 @@ def run() -> int:
             a = AzureArm()
             _azure(a, "PUT", rgid("rg"), {"location": "eastus"})
             r = _azure(a, "GET", SP + "/providers/Microsoft.Compute/locations/eastus/vmSizes")
-            got = [v["name"] for v in r["body"]["value"]]
-            _check(f"{sub}: vmSizes == the table", sorted(got) == sorted(_names("azure", sub)))
+            vals = r["body"]["value"]
+            if sub == "nano":
+                got = [v["name"] for v in vals if v["vyomiRunnable"]]
+                _check("nano: vmSizes lists the full catalog, runnable flagged", sorted(got) == sorted(_names("azure", sub)) and len(vals) > len(got))
+            else:
+                got = [v["name"] for v in vals]
+                _check(f"{sub}: vmSizes == the table", sorted(got) == sorted(_names("azure", sub)))
             vm = lambda n, s_: _azure(a, "PUT", rgid("rg") + "/providers/Microsoft.Compute/virtualMachines/" + n,
                                       {"location": "eastus", "properties": {"hardwareProfile": {"vmSize": s_}}})
             _check(f"{sub}: PUT {good} ok", vm("ok", good)["status"] in (200, 201))

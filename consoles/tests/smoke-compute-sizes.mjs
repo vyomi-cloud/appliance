@@ -36,7 +36,8 @@ for (const [sub, base] of Object.entries(SUBS)) {
   await page.getByText("All generations").first().click();          // the console hides t2.small / m4.large until this is ticked
   await page.getByLabel("Instance type").first().click();
   await page.waitForTimeout(400);
-  let opts = names([...new Set(await page.getByRole("option").allInnerTexts())].map((s) => s.split("\n")[0]));
+  const enabledOpts = async () => (await page.getByRole("option").evaluateAll((els) => els.filter((e) => e.getAttribute("aria-disabled") !== "true" && !e.disabled).map((e) => e.innerText)));
+  let opts = names([...new Set(await enabledOpts())].map((s) => s.split("\n")[0]));
   check(`[${sub}] aws picker lists exactly the runnable sizes`, same(opts, AWS[sub]), opts.join(","));
   check(`[${sub}] aws picker hides big sizes`, !BIG.aws.some((t) => opts.includes(t)), opts.join(","));
   await page.getByRole("option").filter({ hasText: "t3.micro (" }).first().click();
@@ -59,7 +60,7 @@ for (const [sub, base] of Object.entries(SUBS)) {
       await radio.first().check();
       await page.getByLabel("Machine type").first().click();
       await page.waitForTimeout(250);
-      for (const l of await page.getByRole("option").allInnerTexts()) seen.add(l.split(" ")[0]);
+      for (const l of await enabledOpts()) seen.add(l.split(" ")[0]);
       await page.keyboard.press("Escape");
     }
   }
@@ -76,7 +77,7 @@ for (const [sub, base] of Object.entries(SUBS)) {
   await page.goto(`${base}/v4/azure/#/vms/create`);
   await page.getByTestId("compute-sizes-note").first().waitFor({ timeout: 20000 }).catch(() => {});
   check(`[${sub}] azure note`, (await page.getByTestId("compute-sizes-note").allInnerTexts()).some((t) => t.startsWith(NOTE[sub])));
-  const az = names(await page.locator("#vm-size option").allInnerTexts());
+  const az = names(await page.locator("#vm-size option:not([disabled])").allInnerTexts());
   check(`[${sub}] azure picker lists exactly the runnable sizes`, same(az, AZ[sub]), az.join(","));
   check(`[${sub}] azure picker hides big sizes`, !BIG.azure.some((t) => az.includes(t)));
   const sel = await page.locator("#vm-size").inputValue();

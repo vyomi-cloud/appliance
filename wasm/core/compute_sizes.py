@@ -112,6 +112,47 @@ def size_table(cloud: str, sub: str | None = None) -> list[dict]:
     return sorted(out, key=lambda r: (r["mem_mb"], r["vcpu"], r["name"]))
 
 
+# ── images (OS / architecture) ──────────────────────────────────────────────────────────────────────────────────────
+# The in-browser VM boots ONE guest whatever image the cloud record names: Alpine Linux 3.21 on a 32-bit x86 kernel
+# (wasm/vm/build-image.sh: linux-virt i386 + rootfs.cpio.gz; wasm/vm/vm-worker.js: v86). So on Nano the only image each cloud can
+# honestly offer is that guest, named per cloud's own conventions. Mesh / offline keep their full catalogs.
+NANO_GUEST = {"os": "Alpine Linux 3.21", "bits": 32, "arch": "i386", "engine": "v86", "vcpu": 1,
+              "code": "wasm/vm/build-image.sh (image), wasm/vm/vm-worker.js (engine), wasm/vm/nano-vm-host.js (runtime facts)"}
+NANO_IMAGES = {
+    "aws": {"name": "Alpine Linux 3.21 (i386) - Vyomi Nano", "arch": "i386", "platform": ""},
+    "gcp": {"project": "vyomi-nano-cloud", "family": "alpine-3-21-i386", "name": "alpine-3-21-i386-nano",
+            "description": "Alpine Linux 3.21 (32-bit x86), the guest every Vyomi Nano in-browser VM runs"},
+    "azure": {"publisher": "vyomi", "offer": "alpine-nano", "sku": "3.21-i386", "version": "latest",
+              "display": "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano"},
+}
+
+
+def images_restricted() -> bool:
+    """Only Nano restricts images (Mesh runs real per-cloud-ish Docker images and keeps the catalog; offline is unrestricted)."""
+    return substrate() == "nano"
+
+
+def image_rejection(cloud: str, what: str) -> str:
+    return (f"The image '{what}' cannot run on {label('nano')}: it boots only {NANO_GUEST['os']} (32-bit x86, i386) inside your browser. "
+            f"Launch a Mesh for the full image catalog.")
+
+
+def azure_image_allowed(ref: dict | None) -> bool:
+    """True when an imageReference is the Nano guest (or absent / not an image-from-marketplace reference)."""
+    if not images_restricted() or not ref:
+        return True
+    if ref.get("id") or ref.get("sharedGalleryImageId") or ref.get("communityGalleryImageId"):
+        return True                                 # a customer image (made from a Nano VM) is not a marketplace reference
+    a = NANO_IMAGES["azure"]
+    return all(str(ref.get(k) or "").lower() == a[k] for k in ("publisher", "offer", "sku"))
+
+
+def lists_all(sub: str | None = None) -> bool:
+    """Nano still LISTS every size / image (the console shows the whole catalog); what it cannot run is flagged `vyomiRunnable: false`
+    so the pickers grey it out. Mesh lists only what it can run; offline is unrestricted."""
+    return (sub or substrate()) == "nano"
+
+
 def restricted(sub: str | None = None) -> bool:
     return (sub or substrate()) not in _OFF
 
@@ -151,7 +192,7 @@ def mesh_vcpus(name: str, cloud: str) -> float | None:
 
 
 def export() -> dict:
-    return {"nano": {**NANO, "sizes": {c: size_table(c, "nano") for c in _CATALOG}},
+    return {"nano": {**NANO, "guest": NANO_GUEST, "images": NANO_IMAGES, "sizes": {c: size_table(c, "nano") for c in _CATALOG}},
             "mesh": {**MESH, "limits": mesh_limits(), "sizes": {c: size_table(c, "mesh") for c in _CATALOG}}}
 
 

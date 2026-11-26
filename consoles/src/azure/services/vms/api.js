@@ -161,7 +161,7 @@ export function toVmBody(f) {
         ...(f.authType === "Password" ? { adminPassword: f.password } : { linuxConfiguration: { disablePasswordAuthentication: true, ssh: { publicKeys: [{ path: `/home/${f.adminUsername}/.ssh/authorized_keys`, keyData: f.sshKey || "ssh-ed25519 AAAA...generated-by-vyomi" }] } } }),
       },
       storageProfile: {
-        imageReference: { publisher: "Canonical", offer: "0001-com-ubuntu-server-jammy", sku: "22_04-lts", version: "latest" },
+        imageReference: f.imageReference || { publisher: "Canonical", offer: "0001-com-ubuntu-server-jammy", sku: "22_04-lts", version: "latest" },
         osDisk: { osType: "Linux", createOption: "FromImage", diskSizeGB: 30, managedDisk: { storageAccountType: f.osDiskType } },
         dataDisks: [],
       },

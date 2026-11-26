@@ -14,7 +14,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { fmtDate, PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 
 function CreateDialog({ open, onClose, onCreated }) {
   const notify = useNotify();
@@ -27,11 +27,14 @@ function CreateDialog({ open, onClose, onCreated }) {
   const [diskSize, setDiskSize] = useState(10);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const nano = onNano(machineTypes);                                   // Nano: the in-browser VM boots one image (Alpine, 32-bit x86)
+  const osImages = nano ? [NANO_IMAGES.gcp.os, ...api.OS_IMAGES] : api.OS_IMAGES;      // Nano: Alpine first and selected, the rest greyed out
+  const osOff = (i) => nano && i > 0;
 
   useEffect(() => {
     if (!open) return;
     setName(""); setTouched(false); setError(null); setMachineType("e2-medium"); setOsIdx(0); setDiskType("pd-balanced"); setDiskSize(10);
-    api.listMachineTypes(api.DEFAULT_ZONE).then((mts) => { setMachineTypes(mts); if (mts.length && !mts.some((m) => m.name === "e2-medium")) setMachineType(mts[0].name); }).catch(() => setMachineTypes([]));
+    api.listMachineTypes(api.DEFAULT_ZONE).then((mts) => { setMachineTypes(mts); const ok = mts.filter(runnableRow); if (ok.length && !ok.some((m) => m.name === "e2-medium")) setMachineType(ok[0].name); }).catch(() => setMachineTypes([]));
   }, [open]);
 
   const nameErr = touched ? api.validResourceName(name) : null;
@@ -40,7 +43,7 @@ function CreateDialog({ open, onClose, onCreated }) {
     setTouched(true);
     if (api.validResourceName(name)) return;
     setBusy(true); setError(null);
-    const [osProject, osFamily] = api.OS_IMAGES[osIdx];
+    const [osProject, osFamily] = osImages[osIdx] || osImages[0];
     try {
       await api.insertInstanceTemplate({
         name,
@@ -69,15 +72,16 @@ function CreateDialog({ open, onClose, onCreated }) {
           <FormControl fullWidth>
             <InputLabel id="it-mt-l">Machine type</InputLabel>
             <Select labelId="it-mt-l" label="Machine type" value={machineType} onChange={(e) => setMachineType(e.target.value)}>
-              {machineTypes.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {+(m.memoryMb / 1024).toFixed(2)} GB memory)</MenuItem>)}
+              {machineTypes.map((m) => <MenuItem key={m.name} value={m.name} disabled={!runnableRow(m)} title={runnableRow(m) ? undefined : NANO_REASON}>{m.name} ({m.guestCpus} vCPU, {+(m.memoryMb / 1024).toFixed(2)} GB memory){runnableRow(m) ? "" : ` (${NANO_REASON})`}</MenuItem>)}
             </Select>
           </FormControl>
           <FormControl fullWidth>
             <InputLabel id="it-os-l">Boot disk — Operating system</InputLabel>
-            <Select labelId="it-os-l" label="Boot disk — Operating system" value={osIdx} onChange={(e) => setOsIdx(e.target.value)}>
-              {api.OS_IMAGES.map(([, , , label], i) => <MenuItem key={i} value={i}>{label}</MenuItem>)}
+            <Select labelId="it-os-l" label="Boot disk — Operating system" value={nano ? 0 : osIdx} onChange={(e) => setOsIdx(e.target.value)}>
+              {osImages.map(([, , , label], i) => <MenuItem key={i} value={i} disabled={osOff(i)} title={osOff(i) ? NANO_REASON : undefined}>{label}{osOff(i) ? ` (${NANO_REASON})` : ""}</MenuItem>)}
             </Select>
           </FormControl>
+          {nano && <Typography variant="body2" color="text.secondary" data-testid="compute-images-note">{IMAGES_NOTE}</Typography>}
           <Stack direction="row" spacing={2}>
             <FormControl fullWidth>
               <InputLabel id="it-dt-l">Boot disk type</InputLabel>

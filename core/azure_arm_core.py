@@ -1186,11 +1186,15 @@ def _vm_sizes() -> list:
     sub = cs.substrate()
     out = []
     for name, shape in sorted(instance_catalog.AZURE.items()):
-        if name not in rows:
+        if name not in rows and not cs.lists_all(sub):       # Mesh lists only what it can run; Nano lists all, flagged
             continue
         e = _vm_size_entry(name, shape)
         if cs.restricted(sub):
-            e.update({"vyomiSubstrate": sub, "vyomiRunVcpu": rows[name]["run_vcpu"], "vyomiRunMemoryMB": rows[name]["run_mem_mb"]})
+            e.update({"vyomiSubstrate": sub})
+            if name in rows:
+                e.update({"vyomiRunVcpu": rows[name]["run_vcpu"], "vyomiRunMemoryMB": rows[name]["run_mem_mb"]})
+            if cs.lists_all(sub):
+                e["vyomiRunnable"] = name in rows
         out.append(e)
     return out
 
@@ -2701,8 +2705,14 @@ class AzureArm:
         that silently gets less. Offline appliances are not restricted."""
         if full_type.lower() != "microsoft.compute/virtualmachines":
             return None
-        size = ((payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize")
+        props = (payload or {}).get("properties") or {}
         cs = _compute_sizes()
+        ref = (props.get("storageProfile") or {}).get("imageReference")
+        if ref and not cs.azure_image_allowed(ref):      # Nano boots one guest image (Alpine, 32-bit x86)
+            img = ":".join(str(ref.get(k) or "") for k in ("publisher", "offer", "sku", "version"))
+            return _err(400, "PlatformImageNotFound", f"The platform image '{img}' is not available. Verify that all fields in the storage profile are correct. "
+                        + cs.image_rejection("azure", img))
+        size = props.get("hardwareProfile", {}).get("vmSize")
         if not size or cs.is_allowed("azure", size):
             return None
         loc = str((payload or {}).get("location") or DEFAULT_LOCATION)
