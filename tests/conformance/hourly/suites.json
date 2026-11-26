@@ -410,52 +410,48 @@
     },
     {
       "id": "nano-ui-gcp-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-functional-tabs.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=sqlsubs node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-activity-detail",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "real v4 gap, not retired: the v4 Home > Activity feed reads /api/cloudsim/events, but resources created through /_wire (what the v4 console and gcloud/SDKs use) record NO cloudsim events (probe: empty feed after a topic + network create), so the 'every event has a Detail' intent cannot hold. Runs with CHECKS=events (currently failing); remove pending once wire mutations record events",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-activity-detail.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=events node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-grid-defaults",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-grid-defaults.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=grid node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-pubsub-subscriptions",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-pubsub-subscriptions.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=subscriptions node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-firestore-usage",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-firestore-usage.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=firestore node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-metrics-counts",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the v3 detail-tab Metrics count fetchers (_recordFieldCount for VPC subnets, API configs, Eventarc filters) do not exist in the v4 console; the related-collection views are asserted by nightly-gcp-v4-roundtrip (apigateway API config create/list, eventarc trigger detail) and nano-ui-gcp-grid-defaults",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -464,7 +460,7 @@
     },
     {
       "id": "offline-ui-gcp-pubsub-subscriptions",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the offline appliance serves no v4 console (server.py has no /v4 or /console/gcp route; the 4.0 UI target is Nano, wasm/v4); the same intent runs on the wire in nano-ui-gcp-pubsub-subscriptions",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -473,7 +469,7 @@
     },
     {
       "id": "offline-ui-gcp-activity-detail",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the offline appliance serves no v4 console (server.py has no /v4 or /console/gcp route; the 4.0 UI target is Nano, wasm/v4); the same intent runs on the wire in nano-ui-gcp-activity-detail (pending, see its reason)",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -482,7 +478,7 @@
     },
     {
       "id": "offline-ui-gcp-grid-defaults",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the offline appliance serves no v4 console (server.py has no /v4 or /console/gcp route; the 4.0 UI target is Nano, wasm/v4); the same intent runs on the wire in nano-ui-gcp-grid-defaults",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -850,16 +846,15 @@
     },
     {
       "id": "nano-ui-gcp-pubsub-grid",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-pubsub-grid.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm GRID_ONLY=pubsub CHECKS=grid node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "offline-ui-gcp-pubsub-grid",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the offline appliance serves no v4 console (server.py has no /v4 or /console/gcp route; the 4.0 UI target is Nano, wasm/v4); the same intent runs on the wire in nano-ui-gcp-pubsub-grid",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -1094,7 +1089,7 @@
     },
     {
       "id": "nano-ui-gcp-eventarc-delivery",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nightly-gcp-v4-roundtrip (eventarc: UI create/list/delete round-trip, trigger detail page, a real storage object upload fires the trigger and the delivery is recorded natively and listed in the UI)",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1210,20 +1205,18 @@
     },
     {
       "id": "nano-ui-gcp-cloudscheduler",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-cloudscheduler.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=scheduler node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-scheduler-pubsub",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-gcp-scheduler-pubsub.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=schedpubsub node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 300
     },
     {
@@ -1254,11 +1247,10 @@
     },
     {
       "id": "nano-ui-gcp-container",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-container.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=gke node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
@@ -1289,11 +1281,10 @@
     },
     {
       "id": "nano-ui-gcp-iamcredentials",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-iamcredentials.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=iamcreds node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
@@ -1324,11 +1315,10 @@
     },
     {
       "id": "nano-ui-gcp-redis",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-redis.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=redis node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
@@ -1624,7 +1614,7 @@
     },
     {
       "id": "nano-ui-gcp-create-defaults",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nightly-gcp-v4-roundtrip step A (every service is created through its real v4 create form and the native GET must see it) plus nano-ui-gcp-grid-defaults (default-created rows have real values in every column)",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1633,7 +1623,7 @@
     },
     {
       "id": "offline-ui-gcp-create-defaults",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the offline appliance serves no v4 console (server.py has no /v4 or /console/gcp route; the 4.0 UI target is Nano, wasm/v4); the same intent runs on the wire in nightly-gcp-v4-roundtrip step A and nano-ui-gcp-grid-defaults",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -1810,7 +1800,7 @@
     },
     {
       "id": "nano-post-create-gcp-gce-ssh",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "not retargetable without infrastructure: the probe needs a real vyomi-tunnel >= 1.1.0 (RELAY_HTTP) and the in-browser v86 VM host (wasm/vm/nano-vm-host.js) to ssh through; the v3 script drove the removed gcp-console.html Connect tab and has not been ported to the v4 VM Connect UI. The offline twin offline-post-create-gcp-gce-ssh stays live",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -1958,20 +1948,18 @@
     },
     {
       "id": "nano-ui-gcp-artifactregistry",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-artifactregistry.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=artifactregistry node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-gcp-apigw-monitoring-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-apigw-monitoring-tabs.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=apigw,alerting node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 300
     },
     {
@@ -2011,11 +1999,10 @@
     },
     {
       "id": "nano-ui-gcp-monitoring",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-gcp-monitoring.mjs",
+      "cmd": "NANO_DIR=$PWD/wasm CHECKS=alerting node wasm/ui-tests/validate-gcp-v4-intents.mjs",
       "timeout": 600
     },
     {
@@ -2243,7 +2230,7 @@
     },
     {
       "id": "nano-ui-gcp-properties",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the v3 generic detail-tab Properties editor (custom properties grid, Add property, Last modified line on Labels/Properties) does not exist in the v4 GCP console (no such component under consoles/src/gcp); v4 detail pages show native resource fields only",
       "target": "nano",
       "cloud": "gcp",
       "kind": "ui",
@@ -2252,7 +2239,7 @@
     },
     {
       "id": "offline-ui-gcp-properties",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: the offline appliance serves no v4 console (server.py has no /v4 or /console/gcp route; the 4.0 UI target is Nano, wasm/v4); the same intent runs on the wire in nothing: the Properties editor itself is gone, see nano-ui-gcp-properties",
       "target": "offline",
       "cloud": "gcp",
       "kind": "ui",
@@ -2290,7 +2277,7 @@
     {"id": "nano-sw-issue-501", "target": "nano", "cloud": "all", "kind": "core", "cmd": "node tests/conformance/test_nano_sw_issue_501.mjs", "timeout": 120},
     {"id": "nightly-gcp-validation", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "node tests/conformance/nightly/gcp-validation.mjs", "timeout": 300},
     {"id": "nightly-gcp-gateway-eventbus-real", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "SIM_URL={ENDPOINT} PROJECT=vyomi-project node tests/conformance/nightly/gcp-gateway-eventbus-real.mjs", "timeout": 300},
-    {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
+    {"id": "nightly-gcp-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip (the v4 console replacement for this deleted v3-console script)", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node tests/conformance/nightly/gcp-roundtrip.mjs", "timeout": 900},
     {"id": "offline-api-gcp-apigateway-core", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
     {"id": "offline-api-gcp-apigateway-gateway", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_gcp_apigateway_gateway.py", "timeout": 120},
     {"id": "nano-api-gcp-apigateway-gateway", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_apigateway_gateway.py", "timeout": 120},
@@ -2306,7 +2293,7 @@
     {"id": "nano-api-gcp-apigateway-core", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_gcp_apigateway_core.py", "timeout": 120},
     {"id": "nightly-gcp-v4-roundtrip", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-v4-roundtrip.mjs", "timeout": 900},
     {"id": "nightly-gcp-compute-vertex-bidi", "target": "nano", "cloud": "gcp", "kind": "ui", "cmd": "node tests/conformance/nightly/gcp-compute-vertex-bidi.mjs", "timeout": 1200},
-    {"id": "nightly-gcp-tunnel-recovery", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "written (gcp-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/gcp-tunnel-recovery.py", "timeout": 900},
+    {"id": "nightly-gcp-tunnel-recovery", "target": "offline", "cloud": "gcp", "kind": "api", "pending": "written (gcp-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6); a real Mesh Codespace and tunnel cannot be run from this agent", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/gcp-tunnel-recovery.py", "timeout": 900},
     {"id": "aws-vpc-describe-unknown-ids-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_vpc_describe_unknown_ids_core.py", "timeout": 120},
     {"id": "aws-dynamodb-wire-timestamps-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_dynamodb_wire_timestamps_core.py", "timeout": 120},
     {"id": "aws-lambda-invocation-count-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_lambda_invocation_count_core.py", "timeout": 120},
@@ -2324,18 +2311,18 @@
     {"id": "gcp-event-bus-engine-core", "target": "offline", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_event_bus_engine.py", "timeout": 180},
     {"id": "gcp-event-bus-engine-nano-core", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_event_bus_engine.py", "timeout": 180},
     {"id": "gcp-eventarc-nano-http-bridge", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_eventarc_nano_http.py", "timeout": 120},
-    {"id": "nano-ui-gateway-eventarc-portal-e2e", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "console + service-worker and SharedWorker gateway/Eventarc e2e (wasm/relay/e2e-gateway-portal.mjs) needs the portal serving the vendored Nano bundle and a signed-in cl_session cookie; run by hand against a portal on a COPY of the DB until the CI stack can start one", "cmd": "PORTAL=$PORTAL COOKIE=$COOKIE MODE=sw WS_PKG=$PWD/relay-deps/ws node wasm/relay/e2e-gateway-portal.mjs", "timeout": 900},
-    {"id": "nano-core-hosted-gw-egress-live", "target": "nano", "cloud": "gcp", "kind": "core", "pending": "hosted /gw-egress policy against the real worker.js needs `wrangler dev` (wasm/relay/test-worker-gw-live.mjs); wrangler is not in the CI tooling set, so it is run by hand; the mock-based test-gw-egress.mjs covers the same policy in CI", "cmd": "WS_PKG=$PWD/relay-deps/ws node wasm/relay/test-worker-gw-live.mjs", "timeout": 300},
+    {"id": "nano-ui-gateway-eventarc-portal-e2e", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "live script already targets the v4 console (/nano/v4/gcp/); kept pending only for infrastructure: it needs the portal serving the vendored Nano bundle plus a signed-in cl_session cookie, run by hand against a portal on a COPY of the DB (not run here: :8099 is off limits)", "cmd": "PORTAL=$PORTAL COOKIE=$COOKIE MODE=sw WS_PKG=$PWD/relay-deps/ws node wasm/relay/e2e-gateway-portal.mjs", "timeout": 900},
+    {"id": "nano-core-hosted-gw-egress-live", "target": "nano", "cloud": "gcp", "kind": "core", "pending": "live script, not a v3-console suite; kept pending only for infrastructure: needs `wrangler dev` (workerd) running the real worker.js plus outbound internet to example.com; wrangler is not installed on this machine", "cmd": "WS_PKG=$PWD/relay-deps/ws node wasm/relay/test-worker-gw-live.mjs", "timeout": 300},
     {"id": "bidi-aws-cli-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "CLI<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
     {"id": "bidi-aws-sdk-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "SDK<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
     {"id": "bidi-aws-api-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "API<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
     {"id": "crawl-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "generic crawler step: click toolbar/row actions, flip toggles, open dropdowns, flag any that error/do nothing", "cmd": "true", "timeout": 60},
     {"id": "validation-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "UI form validation: invalid input refused with field-level real-cloud wording, no stack traces/[object Object]", "cmd": "true", "timeout": 60},
-    {"id": "bidi-gcp-cli-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "CLI<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "bidi-gcp-sdk-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "SDK<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "bidi-gcp-api-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "API<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "crawl-gcp-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "generic crawler step: click toolbar/row actions, flip toggles, open dropdowns, flag any that error/do nothing", "cmd": "true", "timeout": 60},
-    {"id": "validation-gcp-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "UI form validation: invalid input refused with field-level real-cloud wording, no stack traces/[object Object]", "cmd": "true", "timeout": 60},
+    {"id": "bidi-gcp-cli-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip (UI <-> native wire create/list/delete both ways for 17 GCP services; gcloud, the SDKs and the v4 console share that one wire) and nightly-gcp-compute-vertex-bidi", "cmd": "true", "timeout": 60},
+    {"id": "bidi-gcp-sdk-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip and nightly-gcp-compute-vertex-bidi (the native REST wire is exactly what the Google client libraries call); the native-SDK conformance suites offline-sdk-go-gcp / offline-sdk-java-gcp cover the SDK side", "cmd": "true", "timeout": 60},
+    {"id": "bidi-gcp-api-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip (UI <-> native REST API both ways) and nightly-gcp-compute-vertex-bidi", "cmd": "true", "timeout": 60},
+    {"id": "crawl-gcp-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "placeholder (cmd true) kept pending: the generic click-everything crawler is the cloud=all suite nano-ui-crawl, which is itself pending until ui_crawler.mjs (absent from the trunk) is rebuilt for the v4 consoles, outside the gcp-only scope; wire the gcp shard there, not here. The offline appliance has no browser console", "cmd": "true", "timeout": 60},
+    {"id": "validation-gcp-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: wire-level validation (real Google-shaped 4xx, no stack traces / undefined / [object Object]) is covered by nightly-gcp-validation; the v4 console's own create forms are exercised by nightly-gcp-v4-roundtrip step A", "cmd": "true", "timeout": 60},
     {"id": "bidi-azure-cli-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "CLI<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
     {"id": "bidi-azure-sdk-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "SDK<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
     {"id": "bidi-azure-api-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "API<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},

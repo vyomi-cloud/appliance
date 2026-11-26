@@ -28,3 +28,4 @@ Rule: docs/architecture/v4.0/V4-BRANCH-ARCHITECTURE.md (section 5.2).
 | claude (rag studio azure) | v4/rag-studio-azure | appliance | consoles/src/azure/services/aisearch/**, core/azure_search_core.py, core/azure_cognitiveservices_core.py (chat on-your-data), tests/conformance/test_azure_rag_studio.py, docs/architecture/v4.0/branches/rag-studio-azure.md | 2026-11-26 |
 ||||||| 0e35f9a33
 | claude (Labs: Design the RAG chapter) | v4/labs-design-rag | appliance | vyomilabs/**, wasm/labs/**, courses/vyomi-labs-facilities-agent/**, docs/architecture/v4.0/branches/{labs-design-rag,vyomi-labs}.md | 2026-11-26 |
+| claude (suites retarget GCP) | v4/suites-retarget-gcp | appliance | tests/conformance/hourly/suites.json (cloud=gcp lines only), wasm/ui-tests/validate-gcp-v4-intents.mjs, docs/architecture/v4.0/branches/suites-retarget-gcp.md | 2026-11-26 |
