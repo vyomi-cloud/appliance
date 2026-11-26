@@ -1,3 +1,15 @@
+### Upstream watch — 2026-11-26T00:34:02+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**4 change(s), 0 actionable.**
+- · `announcement` [In preview] Public Preview: ECMP Nexthop  ([link](https://azure.microsoft.com/updates?id=582326))
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.74.1 → v1.74.2
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/s3: v1.116.0 → v1.116.1
+- · `release` go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.53.0 → v1.53.1
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-25T23:33:46+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3010,3 @@ Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 - 🔧 `operation-added` AWS ec2: new operation DescribeNetworkingFlexCostAllocationPolicies
 - 🔧 `operation-added` AWS ec2: new operation DescribeNetworkingFlexCostAllocationPolicyAssociations
 - 🔧 `operation-added` AWS ec2: new operation DisassociateNetworkingFlexCostAllocationPolicy
-- 🔧 `operation-added` AWS ec2: new operation GetNetworkingFlexCostAllocationPolicyVersions
-- 🔧 `operation-added` AWS ec2: new operation ModifyNetworkingFlexCostAllocationPolicy
-- 🔧 `operation-changed` AWS lambda: operation CreateFunction changed
-- 🔧 `operation-changed` AWS lambda: operation PublishVersion changed
-- 🔧 `operation-changed` AWS lambda: operation UpdateFunctionCode changed
-- 🔧 `operation-changed` AWS lambda: operation UpdateFunctionConfiguration changed
-- · `operation-changed` AWS lambda: operation GetFunctionConfiguration changed
-- · `operation-changed` AWS ssm: operation CreateCloudConnector changed
-- · `release` pypi:boto3: 1.44.2 → 1.44.3
-- · `release` pypi:botocore: 1.44.2 → 1.44.3

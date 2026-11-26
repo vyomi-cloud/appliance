@@ -1,25 +1,39 @@
 {
- "at": "2026-11-25T23:33:46+00:00",
+ "at": "2026-11-26T00:34:02+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "aws",
-   "service": "Amazon SQS, AWS Lambda, EventBridge",
-   "kind": "announcement",
-   "key": "feed:aws:f67cba2a7557",
-   "title": "AWS Lambda now supports orchestrating MicroVMs with Lambda durable functions ",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/lambda-durable-microvm/",
-   "detail": "Today, AWS announces a developer preview of a new extension for orchestrating Lambda MicroVMs with Lambda durable functions . The extension adds durable operations for running work on MicroVMs and managing their lifecycle. You can use the new operations to build software factories, security scanners, or orchestrate CI/CD jobs that run untrusted or agent-generated code in isolated sandboxes. With Lambda durable functions, you can build resilient, multi-step applications and AI workflows that run for up to one year, with built-in checkpointing and automatic retries. Lambda MicroVMs are a serverl",
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.116.1",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.116.0 \u2192 v1.116.1",
    "actionable": false
   },
   {
-   "cloud": "aws",
-   "service": "CloudWatch",
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.74.2",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.74.1 \u2192 v1.74.2",
+   "actionable": false
+  },
+  {
+   "cloud": "sdk",
+   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
+   "kind": "release",
+   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.53.1",
+   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.53.0 \u2192 v1.53.1",
+   "actionable": false
+  },
+  {
+   "cloud": "azure",
+   "service": "Virtual Network",
    "kind": "announcement",
-   "key": "feed:aws:a9a4ff13587d",
-   "title": "Amazon CloudWatch Omni now integrates with PagerDuty",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-omni-pagerduty/",
-   "detail": "Amazon CloudWatch Omni alerts can now automatically create PagerDuty incidents, so notifications flow directly into your existing incident management workflows. This reduces mean time to resolution (MTTR) by eliminating manual notification steps and ensuring consistent incident workflows. CloudWatch Omni is a fully managed AI-powered observability experience built on open standards that unifies monitoring for AI agents, applications, and infrastructure. PagerDuty is an incident management platform that routes alerts to the right on-call responders and coordinates their response. When an Omni a",
+   "key": "feed:azure:fbb241bfa24b",
+   "title": "[In preview] Public Preview: ECMP Nexthop ",
+   "link": "https://azure.microsoft.com/updates?id=582326",
+   "detail": "Equal-Cost Multi-Path (ECMP) routing for Azure Virtual Network is now available in public preview, enabling customers to distribute traffic across multiple network appliances using a single user-defined route (UDR). Customers can configure 2 to 16 next-h",
    "actionable": false
   }
  ],
