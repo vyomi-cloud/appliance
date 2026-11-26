@@ -16,6 +16,13 @@ chosen values to real body paths just like Azure's wizard.
 """
 from __future__ import annotations
 
+try:                                    # Windows VM images: disabled, not removed (core/compute_sizes.WINDOWS_IMAGES_ENABLED)
+    from core import compute_sizes as _cs_win
+except ImportError:                     # pragma: no cover - flat import layout
+    import compute_sizes as _cs_win     # type: ignore
+_WIN_OFF = not _cs_win.WINDOWS_IMAGES_ENABLED
+_WIN_REASON = _cs_win.WINDOWS_IMAGES_REASON
+
 
 # ---------- shared helpers (same shape as core/azure_wizards) ----------
 
@@ -84,7 +91,7 @@ _EC2_WIZARD = {
                     {"value": "ubuntu24", "label": "Ubuntu Server 24.04 LTS"},
                     {"value": "ubuntu22", "label": "Ubuntu Server 22.04 LTS"},
                     {"value": "rhel9",    "label": "Red Hat Enterprise Linux 9"},
-                    {"value": "windows2022","label": "Windows Server 2022"},
+                    {"value": "windows2022","label": "Windows Server 2022", "disabled": _WIN_OFF, "disabled_reason": _WIN_REASON},
                  ]},
                 {"name": "architecture", "label": "Architecture", "type": "select",
                  "default": "x86_64", "options": [

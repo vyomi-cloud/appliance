@@ -2770,6 +2770,9 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
         raise VpcError("Unsupported", f"The architecture '{image.get('architecture')}' of the specified AMI ({image_id}) is not supported on this substrate. "
                        + _cs.image_rejection("aws", image_id), 400)
     _check_allowed_images(m, image)
+    from core import compute_sizes as _cs
+    if _cs.windows_blocked(image.get("platform") == "windows" or "windows" in str(image.get("name", "")).lower()):
+        raise VpcError("UnsupportedOperation", f"The image '{image_id}' is a Windows image. " + _cs.windows_rejection())
     vpc_id, default_subnet, default_sg = _ensure_default_network(m)
     subnet_id = str(params.get("SubnetId") or params.get("NetworkInterface.1.SubnetId") or default_subnet)
     subnet = m["subnets"].get(subnet_id)

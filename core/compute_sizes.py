@@ -194,6 +194,24 @@ def export() -> dict:
             "mesh": {**MESH, "limits": mesh_limits(), "sizes": {c: size_table(c, "mesh") for c in _CATALOG}}}
 
 
+# ── Windows VM images (owner decision 2026-11-26): DISABLED, not removed ─────────────────────────────────────────
+# Windows images cannot run on Mesh (Linux Docker containers, no verified KVM) nor on Nano (v86 Alpine only).  They stay in
+# every catalog / wizard / console option list, shown disabled with WINDOWS_IMAGES_REASON; launching one is refused with a
+# cloud-native 400 instead of silently starting a Linux guest.  Re-enable: flip WINDOWS_IMAGES_ENABLED to True here and
+# in consoles/src/common/windowsImages.js.  Docs: docs/architecture/v4.0/branches/disable-windows-images.md
+WINDOWS_IMAGES_ENABLED = False
+WINDOWS_IMAGES_REASON = "Windows images are not supported yet."
+
+
+def windows_blocked(is_windows) -> bool:
+    """True when a launch/create request for a Windows image must be refused."""
+    return bool(is_windows) and not WINDOWS_IMAGES_ENABLED
+
+
+def windows_rejection(what: str = "Windows images") -> str:
+    return f"{what} are not supported yet: Vyomi runs Linux guests only (Windows VM images need a hypervisor this substrate does not have)."
+
+
 if __name__ == "__main__":
     import json
     print(json.dumps(export(), indent=2))

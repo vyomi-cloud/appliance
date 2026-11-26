@@ -14,6 +14,7 @@ import { Glyph } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
+import { WINDOWS_IMAGES_ENABLED, WINDOWS_IMAGES_REASON } from "../../../common/windowsImages.js";
 import { TagRows } from "./VmBlade.jsx";
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,13}[a-zA-Z0-9]$/;
@@ -113,7 +114,7 @@ export default function CreateVirtualMachine() {
         <FormRow label="Image" required htmlFor="vm-image">
           {nano
             ? <Select id="vm-image" value={NANO_IMAGES.azure.display} aria-label="Image"><option>{NANO_IMAGES.azure.display}</option>{["Ubuntu Server 24.04 LTS - x64 Gen2", "Windows Server 2022 Datacenter", "Debian 12"].map((o) => <option key={o} disabled title={NANO_REASON}>{o} ({NANO_REASON})</option>)}</Select>
-            : <Select id="vm-image" value={f.image} onChange={set("image")} aria-label="Image"><option>Ubuntu Server 24.04 LTS - x64 Gen2</option><option>Windows Server 2022 Datacenter</option><option>Debian 12</option></Select>}
+            : <Select id="vm-image" value={f.image} onChange={set("image")} aria-label="Image"><option>Ubuntu Server 24.04 LTS - x64 Gen2</option><option disabled={!WINDOWS_IMAGES_ENABLED} title={WINDOWS_IMAGES_REASON}>{`Windows Server 2022 Datacenter${WINDOWS_IMAGES_ENABLED ? "" : " (not supported yet)"}`}</option><option>Debian 12</option></Select>}
         </FormRow>
         {nano && <FormRow label=""><span data-testid="compute-images-note" style={{ fontSize: 12, opacity: 0.75 }}>{IMAGES_NOTE}</span></FormRow>}
         <FormRow label="VM architecture"><RadioGroup layout="horizontal" value={f.architecture} onChange={set("architecture")} aria-label="VM architecture"><Radio value="Arm64" label="Arm64" disabled={nano} title={nano ? NANO_REASON : undefined} /><Radio value="x64" label="x64" /></RadioGroup></FormRow>

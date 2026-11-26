@@ -20,6 +20,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import { nanoVmOn } from "../../../common/NanoVmPanel.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
 import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
+import { WINDOWS_IMAGES_REASON, windowsDisabled } from "../../../common/windowsImages.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -152,13 +153,14 @@ export default function LaunchInstance({ query }) {
                 </FormField>
                 <FormField label="Quick Start">
                   <RadioGroup value={quickChoice} onChange={({ detail }) => { setQuickStart(detail.value); setAmiId(""); }}
-                    items={(nano ? [NANO_IMAGES.aws.quickStart] : []).concat(["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"]).map((v) => ({ value: v, label: v, ...(nano && v !== NANO_IMAGES.aws.quickStart ? { disabled: true, description: NANO_REASON } : {}) }))} />
+                    items={(nano ? [NANO_IMAGES.aws.quickStart] : []).concat(["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"]).map((v) => ({ value: v, label: v, ...(windowsDisabled(v) ? { disabled: true, description: WINDOWS_IMAGES_REASON } : nano && v !== NANO_IMAGES.aws.quickStart ? { disabled: true, description: NANO_REASON } : {}) }))} />
                 </FormField>
+                {windowsDisabled(images.find((i) => i.imageId === effectiveAmiId)) && <Alert type="warning">{WINDOWS_IMAGES_REASON} Pick another Quick Start option to launch.</Alert>}
                 {macOs && <Alert type="info">macOS requires a Dedicated Host, which Vyomi doesn't model — pick another Quick Start option to launch.</Alert>}
                 <FormField label="Amazon Machine Image (AMI)" description="Free tier eligible">
                   <Select selectedOption={effectiveAmiId ? opt(effectiveAmiId, images.find((i) => i.imageId === effectiveAmiId)?.name || effectiveAmiId) : null}
                     onChange={({ detail }) => setAmiId(detail.selectedOption.value)}
-                    options={searchedImages.map((i) => ({ ...opt(i.imageId, `${i.name} (${i.imageId})`), ...(runnableRow(i) ? {} : { disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }) }))} loadingText="Loading AMIs" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Amazon Machine Image (AMI)" />
+                    options={searchedImages.map((i) => ({ ...opt(i.imageId, `${i.name} (${i.imageId})`), ...(windowsDisabled(i) ? { disabled: true, description: WINDOWS_IMAGES_REASON } : runnableRow(i) ? {} : { disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }) }))} loadingText="Loading AMIs" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Amazon Machine Image (AMI)" />
                 </FormField>
                 <FormField label="Architecture">
                   <Select selectedOption={nano ? opt(NANO_IMAGES.aws.arch) : opt(arch, arch)} onChange={({ detail }) => setArch(detail.selectedOption.value)}
@@ -270,7 +272,7 @@ export default function LaunchInstance({ query }) {
               <Button formAction="none" href={href("ec2", "instances")} onFollow={follow}>Cancel</Button>
               <Button formAction="none" onClick={() => setPreview(true)}>Preview code</Button>
             </SpaceBetween>
-            <Button variant="primary" loading={busy} disabled={!effectiveAmiId || macOs} onClick={submit}>Launch instance</Button>
+            <Button variant="primary" loading={busy} disabled={!effectiveAmiId || macOs || windowsDisabled(images.find((i) => i.imageId === effectiveAmiId))} onClick={submit}>Launch instance</Button>
           </SpaceBetween>
         </Container>
       </Grid>

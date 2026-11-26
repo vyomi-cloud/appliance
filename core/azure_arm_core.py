@@ -2251,6 +2251,10 @@ class AzureArm:
                 bad = vmdisks.validate_password(payload)
                 if bad:
                     return bad
+                if key not in self.state:        # existing VMs keep working; only NEW Windows creates are refused
+                    bad = vmdisks.reject_windows(payload)
+                    if bad:
+                        return bad
             bad = ext_engine.validate_write(self.state, rid, full_type, payload)
             if bad:
                 return {"status": bad["status"], "headers": {}, "body": bad["body"]}

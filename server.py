@@ -13091,6 +13091,9 @@ def api_ec2_create_instance(req: EC2InstanceRequest, *, auto_start: bool = True,
         if sg not in vpc_state["security_groups"] and sg not in _core_m.get("sgs", {}):
             raise HTTPException(404, detail=f"NoSuchSecurityGroup:{sg}")
     profile = _ami_profile(req.ami)
+    from core import compute_sizes as _cs_win
+    if _cs_win.windows_blocked(str(profile.get("os_family") or "").lower() == "windows"):
+        raise HTTPException(400, detail="UnsupportedOperation: " + _cs_win.windows_rejection())
     requested_backend = (req.runtime_backend or "").strip().lower()
     supported_backends = _ec2_profile_supported_backends(profile)
     if requested_backend and requested_backend not in supported_backends:
@@ -14486,6 +14489,9 @@ def _gcp_compute_create_instance_instance(project: str, zone: str, payload: dict
     machine_type_ref = str(payload.get("machineType") or payload.get("instance_type") or "e2-micro")
     boot_disk_type_ref = str(payload.get("bootDiskType") or payload.get("boot_disk_type") or "pd-balanced")
     profile = _ami_profile(_gcp_resource_name(source_image_ref, "sim-ubuntu-22.04"))
+    from core import compute_sizes as _cs_win
+    if _cs_win.windows_blocked(str(profile.get("os_family") or "").lower() == "windows" or "windows" in source_image_ref.lower()):
+        raise HTTPException(400, detail="INVALID_ARGUMENT: " + _cs_win.windows_rejection())
     trusted_host_os = _resolved_host_os()
     try:
         runtime_backend = _ec2_choose_runtime_backend(
