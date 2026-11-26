@@ -45,6 +45,7 @@
     "needs": [],
     "names": {}
    },
+   "requires": [],
    "checks": [
     "catalogue lists models",
     "generateContent answers",
@@ -369,6 +370,9 @@
      "engine": "facilities_supervisor"
     }
    },
+   "requires": [
+    10
+   ],
    "checks": [
     "engine facilities_supervisor exists",
     "query returns an answer",
@@ -530,7 +534,7 @@
      "text": "Looks the engine up by its display name and sends one question. The check that matters is the process id: the agent runs in the engine's own process, not in yours.",
      "file": "query_agent.py",
      "lang": "python",
-     "code": "import os\n\nimport gcp\n\nclient = gcp.vertex_client(\"v1beta1\")\nlisted = next(e for e in client.agent_engines.list() if e.api_resource.display_name == \"facilities_supervisor\")\nengine = client.agent_engines.get(name=listed.api_resource.name)     # get() returns the engine with its registered query method attached\nout = engine.query(prompt=\"Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\", user=\"maria\")\nprint(\"hosted in a separate process:\", out[\"pid\"] != os.getpid())\nprint(\"route:\", out[\"route\"])\nprint(\"spans:\", [s[\"name\"] for s in out[\"spans\"]])\n",
+     "code": "import os\n\nimport gcp\n\nclient = gcp.vertex_client(\"v1beta1\")\nlisted = next((e for e in client.agent_engines.list() if e.api_resource.display_name == \"facilities_supervisor\"), None)\nif listed is None:\n    raise SystemExit(\"the agent runtime 'facilities_supervisor' was not found. Deploy the chapter 'Agent Runtime' first (its Deploy this chapter button), then run this step again.\")\nengine = client.agent_engines.get(name=listed.api_resource.name)     # get() returns the engine with its registered query method attached\nout = engine.query(prompt=\"Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\", user=\"maria\")\nprint(\"hosted in a separate process:\", out[\"pid\"] != os.getpid())\nprint(\"route:\", out[\"route\"])\nprint(\"spans:\", [s[\"name\"] for s in out[\"spans\"]])\n",
      "run": "python query_agent.py",
      "expect": "hosted in a separate process: True",
      "needs_runtime": false,
@@ -742,6 +746,9 @@
      "mcp": "facilities-tools"
     }
    },
+   "requires": [
+    10
+   ],
    "checks": [
     "five functions exist",
     "asset-status returns a seeded asset",
@@ -1190,6 +1197,9 @@
      "design": "rag-design.json"
     }
    },
+   "requires": [
+    10
+   ],
    "checks": [
     "rag-design.json is saved next to your code",
     "show_design.py prints design OK",
@@ -1510,6 +1520,11 @@
      "docs_topic": "facilities-doc-events"
     }
    },
+   "requires": [
+    10,
+    7,
+    14
+   ],
    "checks": [
     "documents in the bucket",
     "corpus facilities-kb exists",
@@ -2006,6 +2021,12 @@
      "corpus": "facilities-kb"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12
+   ],
    "checks": [
     "boiler SOP ranks first",
     "HVAC manual ranks first",
@@ -2338,6 +2359,13 @@
      "armor": "facilities-guardrail"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "answer cites retrieved documents",
     "sensitive data flagged in output",
@@ -2703,6 +2731,14 @@
      "memory": "facilities_memory"
     }
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "engine exists",
     "session events round-trip",
@@ -3036,6 +3072,13 @@
      "policy": "facilities-read-only-tools"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "gateway ACTIVE",
     "tools/list shows tools",
@@ -3181,7 +3224,7 @@
      "text": "The tool catalogue and a tool call, both through the gateway's MCP endpoint: tools/list returns the catalogue (each tool name is prefixed with the MCP server name), tools/call runs asset_status for boiler B-12.",
      "file": "use_gateway.py",
      "lang": "python",
-     "code": "import json\nimport time\n\nimport gateway\n\nurl = gateway.api(\"GET\", gateway.BASE + f\"/agentGateways/{gateway.GATEWAY}\")[\"mcpEndpoint\"]\nnames = set()\nfor _ in range(20):\n    names = {t[\"name\"] for t in gateway.mcp(url, \"tools/list\")[\"tools\"]}\n    if names:\n        break\n    time.sleep(0.5)\nprint(\"catalogue:\", sorted(names))\nstatus_tool = next(n for n in names if n.endswith(\"asset_status\"))\nres = gateway.mcp(url, \"tools/call\", {\"name\": status_tool, \"arguments\": {\"asset_id\": \"B-12\"}})\nassert not res.get(\"isError\"), res\nout = json.loads(res[\"content\"][0][\"text\"])\nprint(\"asset_status via gateway:\", out[\"asset\"][\"asset_id\"], out[\"asset\"][\"status\"])\n",
+     "code": "import json\nimport time\n\nimport gateway\n\nurl = gateway.api(\"GET\", gateway.BASE + f\"/agentGateways/{gateway.GATEWAY}\")[\"mcpEndpoint\"]\nnames = set()\nfor _ in range(20):\n    names = {t[\"name\"] for t in gateway.mcp(url, \"tools/list\")[\"tools\"]}\n    if names:\n        break\n    time.sleep(0.5)\nprint(\"catalogue:\", sorted(names))\nstatus_tool = next((n for n in names if n.endswith(\"asset_status\")), None)\nif status_tool is None:\n    raise SystemExit(\"the 'asset_status' tool was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.\")\nres = gateway.mcp(url, \"tools/call\", {\"name\": status_tool, \"arguments\": {\"asset_id\": \"B-12\"}})\nassert not res.get(\"isError\"), res\nout = json.loads(res[\"content\"][0][\"text\"])\nprint(\"asset_status via gateway:\", out[\"asset\"][\"asset_id\"], out[\"asset\"][\"status\"])\n",
      "run": "python use_gateway.py",
      "expect": "asset_status via gateway: B-12 RUNNING",
      "needs_runtime": false,
@@ -3413,6 +3456,14 @@
      "ledger": "approval-ledger"
     }
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "request parks as PENDING",
     "nothing written before approval",
@@ -3836,6 +3887,13 @@
      "service_account": "agent-sa"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "sign-in returns an ID token that verifies",
     "security policy exists",
@@ -4189,6 +4247,16 @@
      "inbox": "approver-inbox"
     }
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6,
+    11,
+    5
+   ],
    "checks": [
     "template exists",
     "normal question allowed",
@@ -4505,6 +4573,14 @@
     ],
     "names": {}
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "trace readable",
     "structured log with trace id",
@@ -4901,6 +4977,17 @@
      "key": "ledger-key"
     }
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6,
+    11,
+    5,
+    2
+   ],
    "checks": [
     "key with rotation",
     "wrong AAD refused",

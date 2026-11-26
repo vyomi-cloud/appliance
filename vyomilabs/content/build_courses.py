@@ -10,6 +10,7 @@ from .narrative import NARR
 from .build_diagrams import COL, ICON, LAYER_COLOR, hotspots
 from .setup_steps import STEPS
 import importlib
+import re
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "wasm", "labs", "data")
 ORDER = [10, 3, 7, 14, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
@@ -235,6 +236,37 @@ def _ops(cloud, docs, lab):
         out += picked
     return out
 
+
+def _requires(cloud, lid):
+    """Chapters whose resources this chapter builds on, in build order: the chapters it consumes (SHARED needs) plus the chapters that provide
+    a file it imports (mcp_client.py, ask_agent.py, ...), closed transitively and limited to chapters earlier in ORDER. The Deploy runners
+    (browser, Mesh, labrun) deploy these first when they are not deployed yet."""
+    try:
+        lab = importlib.import_module(f"vyomilabs.content.labs_{cloud}").LAB
+    except ModuleNotFoundError:
+        return []
+    pos = {c: i for i, c in enumerate(ORDER)}
+    provider = {}
+    for c in sorted(lab, key=lambda c: pos[c]):
+        for blk in lab[c]:
+            provider.setdefault(blk["file"][:-3] if blk["file"].endswith(".py") else None, c)
+    imp = re.compile(r"^\s*(?:from|import)\s+([A-Za-z_]\w*)", re.M)
+
+    def edges(c):
+        out = set(SHARED[c][4])
+        for blk in lab.get(c, []):
+            for mod in imp.findall(blk.get("code") or ""):
+                if mod in provider and provider[mod] != c:
+                    out.add(provider[mod])
+        return out
+    seen, todo = set(), [lid]
+    while todo:
+        for d in edges(todo.pop()):
+            if d != lid and d not in seen and pos[d] < pos[lid]:
+                seen.add(d)
+                todo.append(d)
+    return [c for c in ORDER if c in seen]
+
 LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 14: "layers", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
 
 def _lab(cloud, lid, edition="mesh"):
@@ -385,7 +417,7 @@ def build():
                 d = per[lid]
                 full, lab = _lab(cloud, lid, "mesh"), _lab(cloud, lid, edition)
                 layers.append(dict(id=lid, order=n, title=t, short=short, objective=obj, learn=learn, services=d["services"], build=d["build"],
-                                   contract=dict(needs=deps, names=d["names"]), checks=d["checks"], simplified=d["simplified"], native=d.get("native"),
+                                   contract=dict(needs=deps, names=d["names"]), requires=_requires(cloud, lid), checks=d["checks"], simplified=d["simplified"], native=d.get("native"),
                                    reference="examples/enterprise-facilities-agent/facilities/" + ("components/" + d["ref"] if cloud == "aws" else d["ref"]),
                                    code=dict(lang=d["code"][0], text=d["code"][1]) if d.get("code") else None, checker=lid in CHECKERS.get(cloud, set()), hotspot=list(HOT[lid]),
                                    level=META[lid][0], minutes=META[lid][1] + (0 if edition == "nano" else 4 * sum(1 for b in full if b["edition"] == ["mesh"])),

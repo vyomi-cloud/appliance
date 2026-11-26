@@ -16,15 +16,24 @@ def main(argv=None):
     skip = set()
     if "--skip" in argv:       # comma-separated block files to save but not run (e.g. blocks a given endpoint cannot execute)
         i = argv.index("--skip"); skip = set(argv[i + 1].split(",")); del argv[i:i + 2]
+    no_prereqs = "--no-prereqs" in argv     # run exactly the chapters named (the old behaviour)
+    argv = [a for a in argv if a != "--no-prereqs"]
     cloud, layers = argv[0], [int(x) for x in argv[1:]]
+    from vyomilabs import prereqs
+    plan, seen = [], set()      # a chapter's prerequisites (resources it consumes, files it imports) are deployed first, once, like the Deploy button does
+    for lid in layers:
+        for need in ([] if no_prereqs else prereqs.requires(cloud, lid)) + [lid]:
+            if need not in seen:
+                seen.add(need)
+                plan.append((need, need != lid))
     import importlib
     endpoint, env = importlib.import_module(f"vyomilabs.labenv_{cloud}").start(endpoint_arg)
     lab = importlib.import_module(f"vyomilabs.content.labs_{cloud}").LAB
     work = tempfile.mkdtemp(prefix="vy-labrun-")
     env = dict(env, PYTHONPATH=work)
     bad = 0
-    for lid in layers:
-        print(f"== chapter {lid}")
+    for lid, is_prereq in plan:
+        print(f"== chapter {lid}" + (" (prerequisite)" if is_prereq else ""))
         for blk in lab[lid]:
             with open(os.path.join(work, blk["file"]), "w") as f:
                 f.write(blk["code"])

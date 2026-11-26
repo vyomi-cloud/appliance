@@ -427,7 +427,9 @@ import time
 import boto3
 
 sf, ddb = boto3.client("stepfunctions"), boto3.client("dynamodb")
-sm = next(s for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval")["stateMachineArn"]
+sm = next((s["stateMachineArn"] for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval"), None)
+if sm is None:
+    raise SystemExit("the state machine 'work-order-approval' was not found. Deploy the chapter 'Actions and Approval' first (its Deploy this chapter button), then run this step again.")
 
 
 def start(rid, priority):
@@ -654,7 +656,9 @@ import time
 import boto3
 
 ag, rt, s3 = boto3.client("bedrock-agent"), boto3.client("bedrock-agent-runtime"), boto3.client("s3")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 ds = ag.list_data_sources(knowledgeBaseId=kb)["dataSourceSummaries"][0]["dataSourceId"]
 
 
@@ -803,7 +807,9 @@ import vymodels
 
 STOP = set("what when where which who whom whose how why does did the and for are was were with that this from have has had will shall should would could into than then them they their there about above below your you our not but can may might must any all out off over under again further once only own same too very just also".split())
 ag, rt = boto3.client("bedrock-agent"), boto3.client("bedrock-agent-runtime")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 
 
 def content_words(text):
@@ -846,7 +852,9 @@ import boto3
 from screen import screen
 
 ag, rt, s3 = boto3.client("bedrock-agent"), boto3.client("bedrock-agent-runtime"), boto3.client("s3")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 ds = ag.list_data_sources(knowledgeBaseId=kb)["dataSourceSummaries"][0]["dataSourceId"]
 QUESTION = "What boiler pressure is safe, and do I need a work order?"
 BAD = "docs/boiler-bulletin-poisoned.md"
@@ -918,7 +926,9 @@ import boto3
 from screen import screen
 
 ac, dp, s3 = boto3.client("bedrock-agentcore-control"), boto3.client("bedrock-agentcore"), boto3.client("s3")
-mid = next(m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory")
+mid = next((m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory"), None)
+if mid is None:
+    raise SystemExit("the memory 'facilities_memory' was not found. Deploy the chapter 'Agent Memory' first (its Deploy this chapter button), then run this step again.")
 refused_log = []
 
 
@@ -967,9 +977,13 @@ import boto3
 import mcp_client
 
 ac, ddb = boto3.client("bedrock-agentcore-control"), boto3.client("dynamodb")
-gw = next(g for g in ac.list_gateways()["items"] if g["name"] == "facilities-gateway")
+gw = next((g for g in ac.list_gateways()["items"] if g["name"] == "facilities-gateway"), None)
+if gw is None:
+    raise SystemExit("the gateway 'facilities-gateway' was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
 gid = gw["gatewayId"]
-engine = next(e for e in ac.list_policy_engines()["policyEngines"] if e["name"] == "facilities_policies")
+engine = next((e for e in ac.list_policy_engines()["policyEngines"] if e["name"] == "facilities_policies"), None)
+if engine is None:
+    raise SystemExit("the policy engine 'facilities_policies' was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
 
 ac.create_gateway_target(
     gatewayIdentifier=gid, name="create-work-order",
@@ -986,7 +1000,9 @@ ac.update_gateway(gatewayIdentifier=gid, name=cur["name"], roleArn=cur["roleArn"
                   policyEngineConfiguration={"arn": engine["policyEngineArn"], "mode": "ENFORCE"})
 assert ac.get_gateway(gatewayIdentifier=gid)["policyEngineConfiguration"]["mode"] == "ENFORCE"
 names = {t["name"]: t for t in mcp_client.call(gid, "tools/list")["tools"]}
-read = next(n for n in names if "asset_status" in n)
+read = next((n for n in names if "asset_status" in n), None)
+if read is None:
+    raise SystemExit("the 'asset_status' tool was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
 assert not any("create_work_order" in n for n in names), "the policy must hide the write tool from discovery, catalog is %s" % sorted(names)
 print("catalog the agent can discover:", sorted(names), "(the write tool is registered but invisible)")
 write = "create-work-order___create_work_order"          # an attacker does not need the catalog: it guesses the name
@@ -1029,11 +1045,15 @@ import urllib.request
 import boto3
 
 cg, ag = boto3.client("cognito-idp"), boto3.client("apigateway")
-pool = next(p["Id"] for p in cg.list_user_pools(MaxResults=20)["UserPools"] if p["Name"] == "facilities-users")
+pool = next((p["Id"] for p in cg.list_user_pools(MaxResults=20)["UserPools"] if p["Name"] == "facilities-users"), None)
+if pool is None:
+    raise SystemExit("the user pool 'facilities-users' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
 cid = cg.list_user_pool_clients(UserPoolId=pool)["UserPoolClients"][0]["ClientId"]
 tok = cg.initiate_auth(ClientId=cid, AuthFlow="USER_PASSWORD_AUTH",
                        AuthParameters={"USERNAME": "maria.ops@example.com", "PASSWORD": "Fac!lities-2026"})["AuthenticationResult"]["IdToken"]
-api = next(a["id"] for a in ag.get_rest_apis()["items"] if a["name"] == "facilities-api")
+api = next((a["id"] for a in ag.get_rest_apis()["items"] if a["name"] == "facilities-api"), None)
+if api is None:
+    raise SystemExit("the REST API 'facilities-api' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
 url = os.environ["AWS_ENDPOINT_URL"].rstrip("/") + "/restapis/%s/prod/_user_request_/search" % api
 
 
@@ -1228,7 +1248,9 @@ import vymodels
 from iamkit import allow
 
 ag = boto3.client("bedrock-agent")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 fn = lambda name: "arn:aws:lambda:us-east-1:123456789012:function:" + name
 iamkit.enforce("enforce")
 role = iamkit.principal("facilities-runtime-role", [allow("bedrock:InvokeModel", "arn:aws:bedrock:us-east-1::foundation-model/" + vymodels.CHAT_MODEL)])

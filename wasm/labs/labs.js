@@ -489,14 +489,56 @@
             failed++; r.chip.textContent = "failed"; r.chip.className = "vl-dchip bad";
           });
         }
+        /* Chapters this one builds on (l.requires, generated from the course) are deployed first when they are not deployed yet: their resources
+           (tool functions, the hosted agent, the knowledge base ...) are what this chapter's steps look up. Their steps run silently; a failure stops here and names the chapter. */
+        var prereqFailed = null, byId = {}; course.layers.forEach(function (c) { byId[c.id] = c; });
+        var status = el("div", { className: "vl-dstatus" }); out.append(status);
+        function runPrereq(c) {
+          status.textContent = "Deploying '" + c.title + "' first (this chapter builds on it)...";
+          var p = Promise.resolve(), ok = true;
+          (c.lab || []).forEach(function (bk) {
+            p = p.then(function () {
+              if (!ok) return;
+              if (!bk.run) return runInBrowser(files, "", env, route, function () {});
+              var text = "";
+              function attempt(retried) {
+                text = "";
+                return runInBrowser(files, bk.run, env, route, function (t) { text += t + "\n"; }).then(function (good) {
+                  if (good && (!bk.expect || text.indexOf(bk.expect) >= 0)) return;
+                  var why = classify(text);
+                  if (why && why.kind === "model" && !retried && !modelLoaded()) return modelPicker("'" + c.title + "' needs a model. ").then(function (loaded) { if (loaded) return attempt(true); noModel++; });
+                  if (why && why.kind === "model") { noModel++; return; }
+                  if (why && why.kind === "mesh") { meshOnly++; reasons.push(c.title + ": " + bk.title + ": " + why.why); return; }   // the same as on the chapter's own page: reported, the rest still runs
+                  ok = false; prereqFailed = { c: c, bk: bk, text: text + (good ? "\nExpected to see: " + bk.expect : "") };
+                });
+              }
+              return attempt(false);
+            });
+          });
+          return p.then(function () { if (ok) { store[c.id] = store[c.id] === "verified" ? "verified" : "deployed"; save(); } });
+        }
+        (l.requires || []).filter(function (id) { return byId[id] && store[id] !== "deployed" && store[id] !== "verified"; }).forEach(function (id) {
+          chain = chain.then(function () { return prereqFailed ? null : runPrereq(byId[id]); });
+        });
+        chain = chain.then(function () { status.textContent = ""; });
         rows.forEach(function (r) {
           chain = chain.then(function () {
+            if (prereqFailed) return;
             if (!r.bk.run) { r.chip.textContent = "saved"; r.chip.className = "vl-dchip ok"; return runInBrowser(files, "", env, route, function () {}); }
             return runBlock(r, false);
           });
         });
         chain.then(function () {
           btn.disabled = false; btn.textContent = "Deploy again";
+          if (prereqFailed) {
+            rows.forEach(function (r) { r.chip.textContent = "not run"; r.chip.className = "vl-dchip warn"; });
+            out.replaceChildren(el("div", { className: "vl-dres bad" },
+              el("b", { textContent: "This chapter builds on '" + prereqFailed.c.title + "', which failed to deploy, so it was not run." }),
+              el("p", { className: "vl-muted", textContent: "Step '" + prereqFailed.bk.title + "' (" + prereqFailed.bk.run + ") failed:" }),
+              el("pre", { className: "vl-dlog", textContent: prereqFailed.text.slice(-1500) }),
+              el("p", { className: "vl-muted", textContent: "Open that chapter, fix the failing step and deploy it, then deploy this one again." })));
+            return;
+          }
           var links = (l.setup || []).filter(function (s) { return s.route; }), M = null; try { M = window.parent !== window ? window.parent.VyomiMesh : null; } catch (_) {}
           var allGood = !failed && !meshOnly && !noModel;
           if (allGood) { store[l.id] = store[l.id] === "verified" ? "verified" : "deployed"; save(); var st = root.querySelector(".vl-chero .vl-status"); if (st) { st.textContent = store[l.id] === "verified" ? "Verified" : "Deployed"; st.classList.add("done"); } }

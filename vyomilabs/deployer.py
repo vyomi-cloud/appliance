@@ -12,6 +12,8 @@ import sys
 import tempfile
 import threading
 
+from . import prereqs
+
 ORDER = [10, 3, 7, 14, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
 _LOCK = threading.Lock()
 _ENVS = {}      # cloud -> dict(proc, endpoint, env, work, done:set)
@@ -76,14 +78,15 @@ def deploy(cloud, layer, endpoint=None):
         except Exception as ex:
             yield dict(t="done", ok=False, error=str(ex))
             return
-        chain = ORDER[:ORDER.index(layer) + 1]
+        chain = prereqs.requires(cloud, layer) + [layer]    # the chapters this one builds on (resources, imported files), then the chapter itself
+        titles = prereqs.titles(cloud)
         ok_all = True
         for cid in chain:
             if cid != layer and cid in e["done"]:
                 continue
             target = cid == layer
             if not target:
-                yield dict(t="status", text="Deploying chapter %s first (this chapter builds on it)..." % cid)
+                yield dict(t="status", text="Deploying '%s' first (this chapter builds on it)..." % titles.get(cid, cid))
             ok = True
             for i, blk in enumerate(lab.get(cid, [])):
                 with open(os.path.join(e["work"], blk["file"]), "w") as f:
@@ -104,6 +107,10 @@ def deploy(cloud, layer, endpoint=None):
                     if target:
                         yield dict(t="block", i=i, status="saved")
                     continue
+                if blk.get("needs_appliance") and not e["attach"]:
+                    if target:
+                        yield dict(t="block", i=i, status="blocked", out="This step needs the full appliance (IAM Enforce / audit): deploy it inside a Mesh or the offline appliance.")
+                    continue
                 if blk.get("needs_runtime") and os.environ.get("VYOMILABS_HAS_RUNTIME") != "1":
                     if target:
                         yield dict(t="block", i=i, status="blocked", out="This step runs real function code. It needs a runtime (the offline appliance or a Mesh).")
@@ -120,11 +127,11 @@ def deploy(cloud, layer, endpoint=None):
                 if target:
                     yield dict(t="block", i=i, status="passed" if passed else "failed", out=out[-4000:])
                 elif not passed:
-                    yield dict(t="status", text="Chapter %s step '%s' failed:\n%s" % (cid, blk["run"], out[-800:]))
+                    yield dict(t="status", text="Prerequisite '%s': step '%s' failed:\n%s" % (titles.get(cid, cid), blk["run"], out[-800:]))
             if ok:
                 e["done"].add(cid)
             ok_all &= ok if target else True
             if not ok and not target:
-                yield dict(t="done", ok=False, error="A chapter this one builds on failed to deploy (chapter %s)." % cid)
+                yield dict(t="done", ok=False, error="This chapter builds on '%s', which failed to deploy, so it was not run. Open that chapter, fix its failing step and deploy it, then deploy this one again." % titles.get(cid, cid))
                 return
         yield dict(t="done", ok=ok_all, endpoint=e["endpoint"])
