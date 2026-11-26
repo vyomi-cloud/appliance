@@ -1,0 +1,37 @@
+Spike run log (verbatim copy of the harness output; Apple M1, Chrome 158.0.8127.88 headless, local static server, fresh profile per run).
+Other sessions were using the machine concurrently, so absolute times drift.
+
+== v86 Alpine 3.21 i386 (production kernel+rootfs), mem 512
+run 1: prompt_ms=6431 cmd_ms=221 | run 2: 6253/210 | run 3: 6774/248          (session A)
+run 1: prompt_ms=8349 cmd_ms(sha256 20MB)=2697 | 9691/4100 | 8591/2797         (session B)
+later single runs: prompt_ms=5298, 5834, 6345 (python sum(range(1e6)) cmd_ms=4752)
+console: NAME="Alpine Linux" ID=alpine i686 DONE_42
+
+== v86 Debian 12 bookworm i386 on the production Alpine kernel, mem 512
+prompt_ms=14501/15373/10995 cmd_ms=457/400/470      (session under load)
+prompt_ms=7248/7913/7767  sha256 cmd_ms=2580/2805/2480   (quiet)
+later single runs: prompt_ms=5298, 5515, 5711
+console: PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"  6.12.115-0-virt i686  /usr/bin/apt /usr/bin/dpkg (no git, no python3)
+
+== v86 Buildroot 2024.05.2 (kernel 6.8.12), mem 256
+prompt_ms=3081/3833/3913  sha256 cmd_ms=6922/5574/8071
+
+== v86 Tiny Core 16 (kernel 6.12.11, VGA console), mem 256
+prompt_ms=12484/12294/14089 cmd_ms=106/107/107 (single earlier run 10617)
+
+== v86 FreeDOS 722 floppy: prompt (A:\>) at 704 ms
+
+== container2wasm (WASI, no network), amd64 debian sid-slim (200049381 B, 5 chunks)
+shell_prompt_ms=1685/1697/1920 cmd_ms=642/639/638 ; sha256 20MB cmd_ms=19493 ; chrome RSS 1365 MiB (baseline 620)
+== container2wasm riscv64 debian sid-slim (135768427 B, 3 chunks)
+shell_prompt_ms=1345/1122/896 cmd_ms=270/242/250 ; sha256 20MB cmd_ms=17857 ; chrome RSS 1087 MiB
+== container2wasm amd64 python 3.11.5 (145588571 B)  shell_prompt_ms=2176/1925/2616 ; python sum cmd_ms=6524 ; RSS 1185 MiB
+== container2wasm riscv64 python 3.11.5 (90078419 B) shell_prompt_ms=1636/1154/1196 ; python sum cmd_ms=11605 (earlier simpler cmd 6570-7397)
+
+== qemu-wasm Alpine x86_64 demo (networking removed)
+login_prompt_ms=56101 (shell 58594, cmd 61018 for sha256+python) ; separate runs 73772/74523 and 56356/56821 ; earlier run shell_prompt 42528 ; chrome RSS 1980 MiB
+
+== gzip -6 sizes: c2w amd64 debian 200049381 -> 85166816 ; riscv64 debian 135768427 -> 67193749 ; amd64 python 145588571 -> 53908644 ; riscv64 python 90078419 -> 39028712 ; qemu wasm 40799480 -> 14463658 ; qemu rootfs.data 82611515 -> 65452747
+
+== Docker Hub platform manifests (2026-11-26): ubuntu:24.04 amd64,arm/v7,arm64,ppc64le,riscv64,s390x ; i386/ubuntu tags 16.04/18.04/20.04/latest exist, 22.04/24.04 404 ;
+debian:trixie-slim 386,amd64,arm,arm64,ppc64le,riscv64,s390x ; alpine:3.21 386,amd64,arm,arm64,ppc64le,riscv64,s390x ; amazonlinux:2023 amd64,arm64 ; rockylinux:9 amd64,arm64,ppc64le,s390x ; fedora:41 amd64,arm64,ppc64le,s390x ; archlinux amd64

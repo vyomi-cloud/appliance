@@ -1,0 +1,5 @@
+# big/untrusted artifacts live in the scratch dir; these are symlinks created by fetch-images.sh
+c2w/images
+v86/img
+qemu-wasm/images
+work/

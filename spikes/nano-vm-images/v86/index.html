@@ -1,0 +1,34 @@
+<!doctype html><meta charset="utf-8"><title>v86 spike</title>
+<pre id="o"></pre>
+<script src="../../../wasm/vm/engine/libv86.js"></script>
+<script>
+// SPIKE harness: boots one v86 guest from ?cfg=NAME with the PRODUCTION engine (wasm/vm/engine) and exposes the serial
+// console (ttyS0) as window.__ser. VGA text-mode guests (DOS) are mirrored into window.__vga.
+// cfg: alpine | debian | buildroot | tinycore | freedos | kolibri      mem=<MB>
+const q = new URLSearchParams(location.search);
+const IMG = "/spikes/nano-vm-images/v86/img/";           // scratch dir symlink (not committed)
+const PROD = "/wasm/vm/image/";
+const mem = Number(q.get("mem") || 512) * 1024 * 1024;
+const CMD = "console=ttyS0 rdinit=/init quiet tsc=reliable mitigations=off random.trust_cpu=on";
+const cfgs = {
+  alpine:    { bzimage: { url: PROD + "vmlinuz" }, initrd: { url: PROD + "rootfs.cpio.gz" }, cmdline: CMD },
+  debian:    { bzimage: { url: PROD + "vmlinuz" }, initrd: { url: IMG + "debian-bookworm-i386.cpio.gz" }, cmdline: CMD },
+  buildroot: { bzimage: { url: IMG + "buildroot-bzimage68.bin" }, cmdline: "console=ttyS0 tsc=reliable mitigations=off random.trust_cpu=on" },
+  tinycore:  { bzimage: { url: IMG + "tc/vmlinuz" }, initrd: { url: IMG + "tc/core.gz" }, cmdline: "tsc=reliable mitigations=off random.trust_cpu=on" },
+  freedos:   { fda: { url: IMG + "freedos722.img" } },
+  kolibri:   { fda: { url: IMG + "kolibri.img" } },
+};
+window.__ser = ""; window.__vga = {}; window.__t0 = performance.now();
+const emu = new V86({
+  wasm_path: "../../../wasm/vm/engine/v86.wasm",
+  memory_size: mem, vga_memory_size: 2 * 1024 * 1024,
+  bios: { url: "../../../wasm/vm/bios/seabios.bin" }, vga_bios: { url: "../../../wasm/vm/bios/vgabios.bin" },
+  autostart: true, disable_keyboard: false, disable_mouse: true, disable_speaker: true,
+  screen_container: document.getElementById("o").parentNode.appendChild(Object.assign(document.createElement("div"), { innerHTML: "<div></div><canvas></canvas>" })),
+  ...cfgs[q.get("cfg")],
+});
+window.__emu = emu;
+emu.add_listener("serial0-output-byte", (b) => { window.__ser += String.fromCharCode(b); });
+emu.add_listener("screen-put-char", (c) => { const [r, col, ch] = c; (window.__vga[r] ||= [])[col] = String.fromCharCode(ch); });
+window.__vgaText = () => Object.keys(window.__vga).sort((a,b)=>a-b).map(r => Array.from(window.__vga[r], (c) => (c && c.charCodeAt(0) > 31 ? c : " ")).join("").trimEnd()).join("\n");
+</script>

@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>qemu-wasm spike</title>
+<link rel="stylesheet" href="../c2w/libs/xterm.css">
+<div id="term"></div>
+<script>
+// SPIKE: ktock/qemu-wasm (QEMU x86_64 TCG -> wasm, multi-threaded) booting its demo Alpine x86_64 image, networking removed.
+Module = {};
+Module["arguments"] = ["-nographic", "-M", "pc", "-m", "512M", "-accel", "tcg,tb-size=500", "-L", "/pack-rom/", "-nic", "none",
+  "-kernel", "/pack-kernel/vmlinuz-virt", "-initrd", "/pack-initramfs/initramfs-virt",
+  "-append", "console=ttyS0 root=/dev/vda noautodetect hostname=demo",
+  "-drive", "id=test,file=/pack-rootfs/disk-rootfs.img,format=raw,if=none", "-device", "virtio-blk-pci,drive=test"];
+const base = new URL("images/", location.href).pathname;
+Module["locateFile"] = (path) => base + path;
+Module["mainScriptUrlOrBlob"] = base + "out.js";
+window.__t0 = performance.now();
+</script>
+<script src="images/load-rootfs.js"></script><script src="images/load-kernel.js"></script>
+<script src="images/load-initramfs.js"></script><script src="images/load-rom.js"></script>
+<script src="../c2w/libs/xterm.js"></script><script src="../c2w/libs/xterm-pty.js"></script>
+<script type="module">
+import initEmscriptenModule from "./images/out.js";
+const xterm = new Terminal(); window.__term = xterm; xterm.open(document.getElementById("term"));
+const { master, slave } = openpty(); xterm.loadAddon(master); Module.pty = slave;
+const inst = await initEmscriptenModule(Module);
+const oldPoll = Module["TTY"].stream_ops.poll;
+Module["TTY"].stream_ops.poll = function (stream, timeout) { if (!slave.readable) return (slave.readable ? 1 : 0) | (slave.writable ? 4 : 0); return oldPoll.call(stream, timeout); };
+</script>

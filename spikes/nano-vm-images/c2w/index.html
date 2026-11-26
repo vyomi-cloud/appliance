@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>c2w spike</title>
+<link rel="stylesheet" href="libs/xterm.css">
+<div id="term"></div>
+<script src="libs/xterm.js"></script>
+<script src="libs/xterm-pty.js"></script>
+<script src="page-start.js"></script>
+<script>
+// ?img=<prefix under images/>&chunks=N&net=none[&args=sh]
+const q = new URLSearchParams(location.search);
+window.__t0 = performance.now();
+startWasi("term", "./worker.js" + location.search, "images/" + q.get("img"), Number(q.get("chunks")));
+</script>
