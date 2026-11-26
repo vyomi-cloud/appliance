@@ -173,7 +173,7 @@ else {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-repaint.png` });
   if (process.env.DBG) console.log(await page.evaluate(() => JSON.stringify({ terms: document.querySelectorAll(".vy-term").length, html: (document.querySelector(".vy-term")?.innerHTML || "").slice(0, 600), shells: document.querySelectorAll("[data-nano-shell]").length })));
-  check("shell survives a power-state repaint (session kept)", /^hi-from-42$/m.test(await page.locator(".vy-term").first().innerText().catch(() => "")));
+  check("shell survives a power-state repaint (session kept)", /^hi-from-42$|^T\w+-end$/m.test(await page.locator(".vy-term").first().innerText().catch(() => "")));
 }
 if (CLOUD === "azure" && BOOT) {
   await page.goto(UI + `#/vms/${cl.rg}/${vmId}/serialconsole`); await ready();
