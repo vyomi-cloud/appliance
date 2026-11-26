@@ -171,4 +171,18 @@ EXPLAIN = {
         ("Read the audit", "Open the cloud's audit log and look up the approval events from your run.")],
   example="The approval record for work order WO-17 is stored encrypted. An auditor asks who approved it: the audit trail shows the approver and the time, and the record only decrypts with the right context.",
   pitfalls=["One key for everything.", "Skipping the encryption context.", "Audit logs that the same people can edit."]),
+ 14: dict(
+  lead=["Before you build a knowledge pipeline, decide how it should work. How big should a chunk be? Which kind of search? How many passages go to the model, and when should the assistant refuse because nothing relevant was found? These are design choices, and the defaults are rarely the best ones for your documents.",
+        "In this chapter you open the console's RAG Studio, design the RAG on the facilities documents, test it against a golden set of questions with known answers, and save the result as one small file. The chapters that build the pipeline, search it and answer from it read that file, so changing the design changes the build."],
+  concepts=[("Chunking", "Documents are cut into passages before they are embedded. Small chunks match a question precisely but lose context; large chunks keep context but blur what they are about. Overlap repeats a little text at each edge so a sentence is not cut in half."),
+            ("Retrieval settings", "How many passages to fetch (top K), and whether to search by meaning (vector), by words (keyword) or both (hybrid). Hybrid helps when a question uses an exact code such as an asset id."),
+            ("Reranking", "A second, slower pass that re-scores the candidates against the question and keeps only the best few. It trades time for precision."),
+            ("Golden set", "A short list of real questions, each with the document that should answer it. It turns \"this seems fine\" into a score you can compare between designs."),
+            ("Grounding threshold", "A minimum relevance score. If the best passage scores below it, the assistant says it cannot answer instead of guessing.")],
+  flow=[("Open the studio", "Load the course documents into RAG Studio so you can see how they are chunked."),
+        ("Change one thing at a time", "Chunk size, search type, top K, rerank. Run the golden set after each change and keep what improves the score."),
+        ("Save the design", "Export the design as rag-design.json (schema vyomi.rag-design/v1) next to your code."),
+        ("Let the build read it", "The pipeline, search and response chapters import rag_design.py and use your numbers.")],
+  example="Priya's question \"Boiler 2 pressure is at 31 psi\" needs the boiler SOP, which is a short document, while the HVAC manual is long. With 200-token chunks the manual's answer is split across two chunks. In the studio you raise the chunk size, rerun the golden set and see the HVAC question move from third to first. You save that design and the later chapters index with it.",
+  pitfalls=["Tuning by feel: change one setting at a time and measure on the golden set.", "A golden set that only holds easy questions: include one the documents cannot answer.", "Designing on one set of documents and indexing another: keep the sources in the design.", "Setting the grounding threshold so high that every question is refused."]),
 }

@@ -60,7 +60,7 @@ def build(cloud):
     (base / ".devcontainer" / "devcontainer.json").write_text(json.dumps({"name": f"Vyomi Labs: Facilities agent ({d['cloud_name']})", "image": "mcr.microsoft.com/devcontainers/python:3.12",
         "postCreateCommand": "pip install -r requirements.txt", "workspaceFolder": f"/workspaces/${{localWorkspaceFolderBasename}}/{cloud}",
         "customizations": {"vscode": {"extensions": ["ms-python.python"], "settings": {"python.defaultInterpreterPath": "/usr/local/bin/python"}}}}, indent=2) + "\n")
-    rd = [f"# Facilities agent on {d['cloud_name']}", "", f"The finished project from the Vyomi Labs course **{d['title']}**: an enterprise agentic AI application, built in 13 layers and run against the Vyomi {d['cloud_name']} simulator at no cloud cost.", "",
+    rd = [f"# Facilities agent on {d['cloud_name']}", "", f"The finished project from the Vyomi Labs course **{d['title']}**: an enterprise agentic AI application, built in {len(d['layers'])} layers and run against the Vyomi {d['cloud_name']} simulator at no cloud cost.", "",
           "Each layer has its own folder with the exact code the course shows and deploys, and a README that explains it.", "", "## Run it", "", "1. Start your Vyomi simulator (Nano with the tunnel, a Mesh, or the appliance) and copy its endpoint settings into `.env` (see `.env.example`).",
           "2. `pip install -r requirements.txt`", "3. `./run_all.sh` for every layer, or `./run_all.sh 7` for one layer.", "", "| Layer | Folder | Steps |", "|---|---|---|"]
     rd += [f"| {o}. {t} | [{n}/]({n}) | {k} |" for o, t, n, k in toc]

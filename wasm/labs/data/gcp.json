@@ -17,7 +17,7 @@
   1800,
   1270
  ],
- "total_minutes": 469,
+ "total_minutes": 499,
  "updated": "November 26, 2026",
  "layers": [
   {
@@ -141,7 +141,7 @@
      "text": "Every other layer imports these three functions, so keep the names. The model ids are not hard-coded: vymodels.py asks the simulator's Model Garden which models it hosts. chat() is a plain generateContent call, chat_with_tools() declares a function so the model can ask your code to run it, and embed() turns text into a vector with text-embedding-005.",
      "file": "vymodels.py",
      "lang": "python",
-     "code": "from google.genai import types\n\nimport gcp\n\ndef _pick():\n    \"\"\"The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask its Model Garden, never hard-code a vendor id.\"\"\"\n    r = gcp.authed_session().get(gcp.ENDPOINT + \"/v1beta1/publishers\")\n    r.raise_for_status()\n    ids = [m[\"name\"].split(\"/\")[-1] for m in r.json()[\"publisherModels\"]]\n    emb = [i for i in ids if \"embed\" in i or \"minilm\" in i]\n    return [i for i in ids if i not in emb][0], emb[0]\n\n\nCHAT_MODEL, EMBED_MODEL = _pick()\n_client = gcp.genai_client()\n\n\ndef chat(prompt, system=None, max_tokens=300):\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt,\n                                        config=types.GenerateContentConfig(system_instruction=system, max_output_tokens=max_tokens, temperature=0))\n    return r.text\n\n\ndef chat_with_tools(prompt, declarations):\n    \"\"\"declarations: a list of types.FunctionDeclaration. Returns the function calls the model asked for (the model never runs them: your code does).\"\"\"\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt, config=types.GenerateContentConfig(\n        tools=[types.Tool(function_declarations=declarations)], automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))\n    return {\"calls\": [{\"name\": c.name, \"args\": dict(c.args)} for c in (r.function_calls or [])], \"text\": r.text if not r.function_calls else \"\"}\n\n\ndef embed(texts):\n    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts)\n    return [e.values for e in r.embeddings]\n",
+     "code": "from google.genai import types\n\nimport gcp\n\ndef _pick():\n    \"\"\"The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask its Model Garden, never hard-code a vendor id.\"\"\"\n    r = gcp.authed_session().get(gcp.ENDPOINT + \"/v1beta1/publishers\")\n    r.raise_for_status()\n    ids = [m[\"name\"].split(\"/\")[-1] for m in r.json()[\"publisherModels\"]]\n    emb = [i for i in ids if \"embed\" in i or \"minilm\" in i]\n    return [i for i in ids if i not in emb][0], emb[0]\n\n\nCHAT_MODEL, EMBED_MODEL = _pick()\n_client = gcp.genai_client()\n\n\ndef chat(prompt, system=None, max_tokens=300):\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt,\n                                        config=types.GenerateContentConfig(system_instruction=system, max_output_tokens=max_tokens, temperature=0))\n    return r.text\n\n\ndef chat_with_tools(prompt, declarations):\n    \"\"\"declarations: a list of types.FunctionDeclaration. Returns the function calls the model asked for (the model never runs them: your code does).\"\"\"\n    r = _client.models.generate_content(model=CHAT_MODEL, contents=prompt, config=types.GenerateContentConfig(\n        tools=[types.Tool(function_declarations=declarations)], automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True)))\n    return {\"calls\": [{\"name\": c.name, \"args\": dict(c.args)} for c in (r.function_calls or [])], \"text\": r.text if not r.function_calls else \"\"}\n\n\ndef embed(texts, dimensions=None):\n    \"\"\"dimensions: ask for a shorter vector when the model supports it (your RAG design sets this); None keeps the model's own size.\"\"\"\n    cfg = types.EmbedContentConfig(output_dimensionality=dimensions) if dimensions else None\n    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts, config=cfg)\n    return [e.values for e in r.embeddings]\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -1161,8 +1161,323 @@
    ]
   },
   {
-   "id": 12,
+   "id": 14,
    "order": 4,
+   "title": "Design the RAG",
+   "short": "Design",
+   "objective": "Design the retrieval-augmented generation the later chapters build: chunking, embedding, search, rerank and grounding, tested on a golden set and saved as one design file.",
+   "learn": [
+    "Chunk size, overlap and search type are design choices you can measure",
+    "A golden set of questions turns a feeling into a score",
+    "One design file that every later chapter reads"
+   ],
+   "services": [
+    "Vertex AI RAG Engine",
+    "RAG Studio (Vyomi console)"
+   ],
+   "build": [
+    "Open RAG Studio and load the course documents.",
+    "Change one setting at a time: chunking, search type, top K, rerank.",
+    "Run the golden set after each change and keep what scores better.",
+    "Save the design as rag-design.json and write rag_design.py, the loader the later chapters import.",
+    "Run show_design.py to check the file."
+   ],
+   "contract": {
+    "needs": [
+     10
+    ],
+    "names": {
+     "design": "rag-design.json"
+    }
+   },
+   "checks": [
+    "rag-design.json is saved next to your code",
+    "show_design.py prints design OK",
+    "the loader returns the same values as the file"
+   ],
+   "simplified": [
+    "RAG Studio scores retrieval with the small local embedding model, so absolute scores are lower than production; use them to compare designs, not as targets.",
+    "RAG Engine chunks by fixed length in this course; other strategies in a design fall back to fixed size with a warning."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/gcp/components/c12_pipeline.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1234,
+    1066,
+    1770,
+    1086
+   ],
+   "level": "Intermediate",
+   "minutes": 30,
+   "outcome": "A tested RAG design saved as rag-design.json, read by the pipeline, search and response chapters",
+   "lessons": 5,
+   "color": "#15803d",
+   "about": "Design the RAG is where you decide how knowledge is prepared and found before you build it: how documents are chunked, how they are embedded, how passages are searched and ranked, and when the assistant should refuse to answer.",
+   "why": [
+    "Measured settings beat defaults, and a golden set is how you measure",
+    "The tested design and the built pipeline cannot drift apart because the build reads the design file",
+    "A refusal below a grounding threshold is safer than a confident guess"
+   ],
+   "icon": "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open the API reference tab at the top of this dialog: each operation shows the exact endpoint and the CLI and SDK settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
+   ],
+   "setup": [
+    {
+     "title": "Design the RAG in RAG Studio",
+     "route": null,
+     "do": [
+      "Open Vertex AI, then RAG Studio.",
+      "Load the course documents, change one setting at a time (chunk size, search type, top K, rerank) and run the golden set after each change.",
+      "Keep the design that scores best, then export it and keep the file as rag-design.json."
+     ],
+     "fill": {
+      "Design name": "facilities-rag"
+     },
+     "service": "Vertex AI RAG Studio",
+     "note": "Every cloud's console has the same RAG Studio, and every one exports the same rag-design.json.",
+     "click": false,
+     "n": 1,
+     "shot": null
+    }
+   ],
+   "lab": [
+    {
+     "title": "Write the design loader",
+     "text": "Every later chapter that chunks, searches or answers imports this one file instead of hard-coding its settings. It finds your design file, merges it over the defaults (which are exactly the values the course used before this chapter existed), and returns plain numbers. A value that is out of range prints a warning and falls back to its default, so a typo never stops a chapter.",
+     "file": "rag_design.py",
+     "lang": "python",
+     "code": "\"\"\"rag_design.py: the one place the RAG design is read from.\n\nThe design file `rag-design.json` (schema vyomi.rag-design/v1) is what you build and test in the console's RAG Studio. This module finds it\n(RAG_DESIGN_PATH, else ./rag-design.json, else the parent folder, else next to this file), merges it over the defaults below and hands the\nchapters plain values. The defaults are exactly what the course used before there was a design, so with no file nothing changes.\nA bad value never stops a chapter: it prints a warning and the default is used for that field.\"\"\"\nimport copy\nimport json\nimport os\nimport sys\n\nCLOUD = \"gcp\"\nDEFAULTS = {\n    \"schema\": \"vyomi.rag-design/v1\", \"name\": \"facilities-rag\", \"cloud\": CLOUD,\n    \"chunking\": {\"strategy\": \"FIXED_SIZE\", \"maxTokens\": 200, \"overlapPct\": 10},\n    \"embedding\": {\"model\": \"\", \"dimensions\": None},\n    \"retrieve\": {\"topK\": 3, \"searchType\": \"vector\", \"hybridWeight\": 0.5, \"filter\": None},\n    \"rerank\": {\"enabled\": False, \"topN\": 2},\n    \"generate\": {\"groundingThreshold\": 0},\n    \"sources\": [], \"golden\": [], \"createdAt\": \"\",\n}\n# (section, key): (kind, low, high or choices). Anything outside these rules falls back to the default.\nRULES = {\n    (\"chunking\", \"strategy\"): (\"choice\", (\"FIXED_SIZE\",)),\n    (\"chunking\", \"maxTokens\"): (\"int\", 20, 8192),\n    (\"chunking\", \"overlapPct\"): (\"int\", 0, 50),\n    (\"embedding\", \"dimensions\"): (\"int?\", 1, 8192),\n    (\"retrieve\", \"topK\"): (\"int\", 1, 100),\n    (\"retrieve\", \"searchType\"): (\"choice\", (\"vector\", \"keyword\", \"hybrid\")),\n    (\"retrieve\", \"hybridWeight\"): (\"num\", 0, 1),\n    (\"rerank\", \"enabled\"): (\"bool\",),\n    (\"rerank\", \"topN\"): (\"int\", 1, 100),\n    (\"generate\", \"groundingThreshold\"): (\"num\", 0, 1),\n}\n_cache = {}\n\n\ndef _find():\n    here = os.path.dirname(os.path.abspath(__file__))\n    for p in (os.environ.get(\"RAG_DESIGN_PATH\"), \"rag-design.json\", os.path.join(\"..\", \"rag-design.json\"), os.path.join(here, \"rag-design.json\")):\n        if p and os.path.isfile(p):\n            return os.path.abspath(p)\n    return None\n\n\ndef _ok(rule, v):\n    kind = rule[0]\n    if kind == \"bool\":\n        return isinstance(v, bool)\n    if kind == \"choice\":\n        return v in rule[1]\n    if kind == \"int?\" and v is None:\n        return True\n    if kind in (\"int\", \"int?\"):\n        return isinstance(v, int) and not isinstance(v, bool) and rule[1] <= v <= rule[2]\n    return isinstance(v, (int, float)) and not isinstance(v, bool) and rule[1] <= v <= rule[2]\n\n\ndef _read(path):\n    problems, merged = [], copy.deepcopy(DEFAULTS)\n    if not path:\n        return merged, problems\n    try:\n        with open(path, encoding=\"utf-8\") as f:\n            raw = json.load(f)\n        if not isinstance(raw, dict):\n            raise ValueError(\"the top level must be an object\")\n    except (OSError, ValueError) as e:\n        return merged, [\"%s: cannot read (%s); using the defaults\" % (path, e)]\n    for key, val in raw.items():\n        if isinstance(DEFAULTS.get(key), dict):\n            if not isinstance(val, dict):\n                problems.append(\"%s must be an object; using the default\" % key)\n                continue\n            for k, v in val.items():\n                if (key, k) == (\"retrieve\", \"searchType\") and isinstance(v, str):      # RAG Studio writes HYBRID / SEMANTIC; this course says hybrid / vector\n                    v = {\"hybrid\": \"hybrid\", \"semantic\": \"vector\", \"vector\": \"vector\", \"keyword\": \"keyword\"}.get(v.lower(), v)\n                rule = RULES.get((key, k))\n                if rule and not _ok(rule, v):\n                    problems.append(\"%s.%s = %r is not allowed (%s); using %r\" % (key, k, v, _describe(rule), DEFAULTS[key][k]))\n                else:\n                    merged[key][k] = v\n        else:\n            merged[key] = val\n    if merged.get(\"cloud\") != CLOUD:\n        problems.append(\"this design was made for %r, this course builds %r\" % (merged.get(\"cloud\"), CLOUD))\n    return merged, problems\n\n\ndef _describe(rule):\n    return {\"choice\": lambda: \"one of \" + \", \".join(map(str, rule[1])), \"bool\": lambda: \"true or false\"}.get(rule[0], lambda: \"a number from %s to %s\" % rule[1:3])()\n\n\ndef _state():\n    path = _find()\n    stamp = (path, os.path.getmtime(path) if path else None)\n    if _cache.get(\"stamp\") != stamp:\n        design, problems = _read(path)\n        for p in problems:\n            print(\"rag_design: warning: \" + p, file=sys.stderr)\n        _cache.update(stamp=stamp, path=path, design=design, problems=problems)\n    return _cache\n\n\ndef load():\n    \"\"\"The design: the file merged over the defaults (a fresh copy you may change).\"\"\"\n    return copy.deepcopy(_state()[\"design\"])\n\n\ndef source():\n    \"\"\"The path of the design file in use, or None when the built-in defaults are used.\"\"\"\n    return _state()[\"path\"]\n\n\ndef problems():\n    return list(_state()[\"problems\"])\n\n\ndef customised(section):\n    \"\"\"True when the design changes this section from the course defaults (so a chapter only sends extra settings when you asked for them).\"\"\"\n    return load()[section] != DEFAULTS[section]\n\n\ndef chunk_cfg():\n    c = load()[\"chunking\"]\n    return dict(strategy=c[\"strategy\"], maxTokens=c[\"maxTokens\"], overlapPct=c[\"overlapPct\"])\n\n\ndef top_k():\n    return load()[\"retrieve\"][\"topK\"]\n\n\ndef search_type():\n    return load()[\"retrieve\"][\"searchType\"]\n\n\ndef rerank():\n    r = load()[\"rerank\"]\n    return dict(enabled=r[\"enabled\"], topN=r[\"topN\"])\n\n\ndef grounding_threshold():\n    return load()[\"generate\"][\"groundingThreshold\"]\n\n\ndef dimensions():\n    \"\"\"The embedding vector size the design asks for, or None for the model's own size.\"\"\"\n    return load()[\"embedding\"][\"dimensions\"]\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Save the starting design",
+     "text": "The design file, in the schema `vyomi.rag-design/v1` writes when you export a design. This one is the course's starting point, so saving it changes nothing yet. Replace it with the file you export from Vertex AI, RAG Studio once you have tuned and tested your own design: chapters 12, 6 and 11 will build and answer with your numbers. Keep the name `rag-design.json` next to your other files.",
+     "file": "rag-design.json",
+     "lang": "json",
+     "code": "{\n  \"schema\": \"vyomi.rag-design/v1\",\n  \"name\": \"facilities-rag\",\n  \"cloud\": \"gcp\",\n  \"chunking\": {\n    \"strategy\": \"FIXED_SIZE\",\n    \"maxTokens\": 200,\n    \"overlapPct\": 10\n  },\n  \"embedding\": {\n    \"model\": \"\",\n    \"dimensions\": null\n  },\n  \"retrieve\": {\n    \"topK\": 3,\n    \"searchType\": \"SEMANTIC\",\n    \"hybridWeight\": 0.5,\n    \"filter\": null\n  },\n  \"rerank\": {\n    \"enabled\": false,\n    \"topN\": 2\n  },\n  \"generate\": {\n    \"groundingThreshold\": 0\n  },\n  \"sources\": [\n    {\n      \"bucket\": \"facilities-docs\",\n      \"prefix\": \"docs/\"\n    }\n  ],\n  \"golden\": [\n    {\n      \"question\": \"What should I do when boiler pressure exceeds 30 psi?\",\n      \"expectedSources\": [\n        \"boiler-sop\"\n      ],\n      \"expectedAnswer\": \"close the main steam valve\"\n    },\n    {\n      \"question\": \"AHU-7 supply air temperature drift chilled water valve\",\n      \"expectedSources\": [\n        \"hvac-maintenance-manual\"\n      ],\n      \"expectedAnswer\": \"\"\n    }\n  ],\n  \"createdAt\": \"2026-11-26T09:00:00Z\"\n}\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Check the design",
+     "text": "Loads the design the way the later chapters will, checks every value against its allowed range and prints what they will use. Run it after every change to `rag-design.json`.",
+     "file": "show_design.py",
+     "lang": "python",
+     "code": "import rag_design\n\nd = rag_design.load()\nprint(\"design file:\", rag_design.source() or \"none found, using the built-in defaults\")\nprint(\"name:\", d[\"name\"], \"| cloud:\", d[\"cloud\"])\nc = d[\"chunking\"]\nprint(\"chunking:\", c[\"strategy\"], \"| maxTokens\", c[\"maxTokens\"], \"| overlap\", c[\"overlapPct\"], \"%\")\ne = d[\"embedding\"]\nprint(\"embedding:\", e[\"model\"] or \"the model this simulator hosts\", \"| dimensions\", e[\"dimensions\"] or \"model default\")\nr = d[\"retrieve\"]\nprint(\"retrieve: topK\", r[\"topK\"], \"|\", r[\"searchType\"], \"search\", \"| hybridWeight\", r[\"hybridWeight\"], \"| filter\", r[\"filter\"])\nrr = d[\"rerank\"]\nprint(\"rerank:\", \"on, keep the best %d\" % rr[\"topN\"] if rr[\"enabled\"] else \"off\")\nprint(\"generate: refuse below a grounding score of\", d[\"generate\"][\"groundingThreshold\"])\nprint(\"sources:\", len(d[\"sources\"]), \"| golden questions:\", len(d[\"golden\"]))\nbad = rag_design.problems()\nprint(\"design OK\" if not bad else \"design has %d problem(s); the defaults are used for those fields\" % len(bad))\nfor p in bad:\n    print(\"  -\", p)\n",
+     "run": "python show_design.py",
+     "expect": "design OK",
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    }
+   ],
+   "explain": {
+    "lead": [
+     "Before you build a knowledge pipeline, decide how it should work. How big should a chunk be? Which kind of search? How many passages go to the model, and when should the assistant refuse because nothing relevant was found? These are design choices, and the defaults are rarely the best ones for your documents.",
+     "In this chapter you open the console's RAG Studio, design the RAG on the facilities documents, test it against a golden set of questions with known answers, and save the result as one small file. The chapters that build the pipeline, search it and answer from it read that file, so changing the design changes the build."
+    ],
+    "concepts": [
+     [
+      "Chunking",
+      "Documents are cut into passages before they are embedded. Small chunks match a question precisely but lose context; large chunks keep context but blur what they are about. Overlap repeats a little text at each edge so a sentence is not cut in half."
+     ],
+     [
+      "Retrieval settings",
+      "How many passages to fetch (top K), and whether to search by meaning (vector), by words (keyword) or both (hybrid). Hybrid helps when a question uses an exact code such as an asset id."
+     ],
+     [
+      "Reranking",
+      "A second, slower pass that re-scores the candidates against the question and keeps only the best few. It trades time for precision."
+     ],
+     [
+      "Golden set",
+      "A short list of real questions, each with the document that should answer it. It turns \"this seems fine\" into a score you can compare between designs."
+     ],
+     [
+      "Grounding threshold",
+      "A minimum relevance score. If the best passage scores below it, the assistant says it cannot answer instead of guessing."
+     ]
+    ],
+    "flow": [
+     [
+      "Open the studio",
+      "Load the course documents into RAG Studio so you can see how they are chunked."
+     ],
+     [
+      "Change one thing at a time",
+      "Chunk size, search type, top K, rerank. Run the golden set after each change and keep what improves the score."
+     ],
+     [
+      "Save the design",
+      "Export the design as rag-design.json (schema vyomi.rag-design/v1) next to your code."
+     ],
+     [
+      "Let the build read it",
+      "The pipeline, search and response chapters import rag_design.py and use your numbers."
+     ]
+    ],
+    "example": "Priya's question \"Boiler 2 pressure is at 31 psi\" needs the boiler SOP, which is a short document, while the HVAC manual is long. With 200-token chunks the manual's answer is split across two chunks. In the studio you raise the chunk size, rerun the golden set and see the HVAC question move from third to first. You save that design and the later chapters index with it.",
+    "pitfalls": [
+     "Tuning by feel: change one setting at a time and measure on the golden set.",
+     "A golden set that only holds easy questions: include one the documents cannot answer.",
+     "Designing on one set of documents and indexing another: keep the sources in the design.",
+     "Setting the grounding threshold so high that every question is refused."
+    ]
+   },
+   "narr": {
+    "scene": "Priya asks about the HVAC filter schedule and gets half an answer: the sentence she needs was cut in two by the pipeline, one half in each chunk. Nobody chose a chunk size. It was a default, and nobody ever checked it against the questions people really ask.",
+    "problem": "Chunk size, search type, how many passages to fetch, whether to rerank: each is a setting, and each changes the answers. If you set them once without measuring, you are guessing, and you will not know it until a technician gets a wrong answer.",
+    "idea": [
+     "A recipe you taste as you cook",
+     "A good cook does not fix the salt before tasting. They change one thing, taste, and write down the version that worked. RAG design is the same: change one setting, run a fixed set of test questions, keep what scores better, and save the recipe so the next build uses it."
+    ],
+    "walk": [
+     [
+      "Load the documents into the studio",
+      "RAG Studio shows the facilities documents cut into chunks, so you can see where a sentence gets split."
+     ],
+     [
+      "Make a change and test it",
+      "Raise the chunk size, or switch to hybrid search. Run the golden set: each question has the document that should answer it, and the studio scores how many came first."
+     ],
+     [
+      "Keep the version that scores best",
+      "Compare the runs. Keep one change at a time so you know which setting helped."
+     ],
+     [
+      "Save the recipe",
+      "Export rag-design.json. Chunking, embedding, search type, top K, rerank and the grounding threshold are in one small file."
+     ],
+     [
+      "The build reads it",
+      "The pipeline chunks with your size, the search fetches your top K, the response chapter refuses below your threshold. The code does not change, the file does."
+     ]
+    ],
+    "quiz": [
+     [
+      "Why test a design on a golden set instead of trying a few questions?",
+      [
+       "It is required by the cloud",
+       "A fixed set gives a score you can compare between designs",
+       "It makes the index smaller"
+      ],
+      1,
+      "Trying a few questions by hand cannot tell you whether a change helped or only moved the problem."
+     ],
+     [
+      "What does a grounding threshold do?",
+      [
+       "Speeds up search",
+       "Refuses to answer when nothing retrieved is relevant enough",
+       "Encrypts the documents"
+      ],
+      1,
+      "A low score means the passages do not really answer the question, so a refusal is more honest than a guess."
+     ],
+     [
+      "Why save the design as a file the later chapters read?",
+      [
+       "So the build and the design cannot drift apart",
+       "To make the course longer",
+       "Because JSON is required"
+      ],
+      0,
+      "One file means the settings you tested are the settings that run."
+     ]
+    ],
+    "recap": [
+     "Chunking, search and grounding are design choices, not defaults.",
+     "Change one thing at a time and measure on a golden set.",
+     "Save the design as rag-design.json: the build reads it, so the tested design is the built design."
+    ],
+    "simple": "Use the default settings of the knowledge service.",
+    "got": [
+     "It works the first time",
+     "Nothing to decide",
+     "Good enough for a demo"
+    ],
+    "missing": [
+     "Knowing whether the chunk size suits your documents",
+     "A score to compare designs",
+     "Refusing to answer when nothing relevant was found"
+    ],
+    "why": "Defaults are tuned for the average document, and yours are not average. A wrong default fails quietly: the answer still sounds right.",
+    "design": "Design the RAG in the studio, measure it on a golden set, save it as one file and let every later chapter read that file."
+   },
+   "docs": [
+    {
+     "id": "vertex-ai",
+     "title": "Vertex AI",
+     "f": "vertex-ai.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.operations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.batchPredictionJobs.list"
+    },
+    {
+     "f": "vertex-ai.json",
+     "n": "aiplatform.projects.locations.customJobs.list"
+    }
+   ],
+   "validate": [
+    {
+     "kind": "Console",
+     "what": "The design runs on the golden set",
+     "how": "Vertex AI, RAG Studio",
+     "expect": "Your golden questions score, and the design exports as JSON"
+    },
+    {
+     "kind": "CLI",
+     "what": "The design file is valid",
+     "how": "python show_design.py",
+     "expect": "design OK"
+    }
+   ],
+   "blocks_total": 3,
+   "blocks_nano": 3,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
+  },
+  {
+   "id": 12,
+   "order": 5,
    "title": "Knowledge Pipeline",
    "short": "Pipeline",
    "objective": "Turn documents into searchable knowledge, and re-index automatically when a new document lands.",
@@ -1186,7 +1501,8 @@
    ],
    "contract": {
     "needs": [
-     10
+     10,
+     14
     ],
     "names": {
      "bucket": "facilities-docs",
@@ -1211,7 +1527,7 @@
     1214,
     888,
     1790,
-    1092
+    1062
    ],
    "level": "Intermediate",
    "minutes": 40,
@@ -1321,7 +1637,7 @@
      "text": "Small helpers over the Vertex AI RAG Engine clients that chapters 12, 6, 11 and 13 reuse: find the corpus by its display name, import files from Cloud Storage and list what is in it.",
      "file": "rag.py",
      "lang": "python",
-     "code": "import gcp\nfrom google.cloud import aiplatform_v1 as av\n\nKB_NAME = \"facilities-kb\"\n\n\ndef data_client():\n    return gcp.rest(av.VertexRagDataServiceClient)\n\n\ndef search_client():\n    return gcp.rest(av.VertexRagServiceClient)\n\n\ndef corpus_name():\n    for c in data_client().list_rag_corpora(request={\"parent\": gcp.PARENT}):\n        if c.display_name == KB_NAME:\n            return c.name\n    return None\n\n\ndef import_uris(corpus, uris):\n    data_client().import_rag_files(request={\"parent\": corpus, \"import_rag_files_config\": {\"gcs_source\": {\"uris\": uris}}}).result(timeout=180)\n\n\ndef files(corpus):\n    return list(data_client().list_rag_files(request={\"parent\": corpus}))\n",
+     "code": "import gcp\nimport rag_design\nfrom google.cloud import aiplatform_v1 as av\n\nKB_NAME = \"facilities-kb\"\n\n\ndef data_client():\n    return gcp.rest(av.VertexRagDataServiceClient)\n\n\ndef search_client():\n    return gcp.rest(av.VertexRagServiceClient)\n\n\ndef corpus_name():\n    for c in data_client().list_rag_corpora(request={\"parent\": gcp.PARENT}):\n        if c.display_name == KB_NAME:\n            return c.name\n    return None\n\n\ndef import_config(uris):\n    cfg = {\"gcs_source\": {\"uris\": uris}}\n    if rag_design.customised(\"chunking\"):          # your design: chunk size and overlap (the overlap is a percentage of the size in the design)\n        c = rag_design.chunk_cfg()\n        cfg[\"rag_file_transformation_config\"] = {\"rag_file_chunking_config\": {\"fixed_length_chunking\": {\n            \"chunk_size\": c[\"maxTokens\"], \"chunk_overlap\": round(c[\"maxTokens\"] * c[\"overlapPct\"] / 100)}}}\n    return cfg\n\n\ndef import_uris(corpus, uris):\n    data_client().import_rag_files(request={\"parent\": corpus, \"import_rag_files_config\": import_config(uris)}).result(timeout=180)\n\n\ndef files(corpus):\n    return list(data_client().list_rag_files(request={\"parent\": corpus}))\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -1372,7 +1688,7 @@
      "text": "The function Eventarc calls when a document lands: it imports just that one object into the corpus, so a new upload becomes searchable without re-indexing everything. It is a CloudEvent function (functions_framework.cloud_event).",
      "file": "ingest_docs_fn.py",
      "lang": "python",
-     "code": "import os\n\nimport functions_framework\n\n\n@functions_framework.cloud_event\ndef handler(event):\n    data = getattr(event, \"data\", None) or event\n    data = data if isinstance(data, dict) else {}\n    name, bucket = data.get(\"name\", \"\"), data.get(\"bucket\", \"facilities-docs\")\n    if not name.startswith(\"docs/\"):\n        return \"ignored\"\n    from google.api_core.client_options import ClientOptions\n    from google.auth.credentials import AnonymousCredentials\n    from google.cloud import aiplatform_v1 as av\n    endpoint = os.environ.get(\"VERTEX_API_ENDPOINT\")\n    if endpoint:       # the simulator; on real Google Cloud leave this variable unset and the client uses Application Default Credentials\n        client = av.VertexRagDataServiceClient(credentials=AnonymousCredentials(), transport=\"rest\", client_options=ClientOptions(api_endpoint=endpoint))\n    else:\n        client = av.VertexRagDataServiceClient()\n    client.import_rag_files(request={\"parent\": os.environ[\"RAG_CORPUS\"], \"import_rag_files_config\": {\"gcs_source\": {\"uris\": [f\"gs://{bucket}/{name}\"]}}}).result(timeout=120)\n    return \"imported \" + name\n",
+     "code": "import os\n\nimport functions_framework\n\n\n@functions_framework.cloud_event\ndef handler(event):\n    data = getattr(event, \"data\", None) or event\n    data = data if isinstance(data, dict) else {}\n    name, bucket = data.get(\"name\", \"\"), data.get(\"bucket\", \"facilities-docs\")\n    if not name.startswith(\"docs/\"):\n        return \"ignored\"\n    from google.api_core.client_options import ClientOptions\n    from google.auth.credentials import AnonymousCredentials\n    from google.cloud import aiplatform_v1 as av\n    endpoint = os.environ.get(\"VERTEX_API_ENDPOINT\")\n    if endpoint:       # the simulator; on real Google Cloud leave this variable unset and the client uses Application Default Credentials\n        client = av.VertexRagDataServiceClient(credentials=AnonymousCredentials(), transport=\"rest\", client_options=ClientOptions(api_endpoint=endpoint))\n    else:\n        client = av.VertexRagDataServiceClient()\n    cfg = {\"gcs_source\": {\"uris\": [f\"gs://{bucket}/{name}\"]}}\n    if os.environ.get(\"RAG_CHUNK_SIZE\"):           # your design (chapter 14): set when the function is deployed, only if the design changes the chunking\n        cfg[\"rag_file_transformation_config\"] = {\"rag_file_chunking_config\": {\"fixed_length_chunking\": {\n            \"chunk_size\": int(os.environ[\"RAG_CHUNK_SIZE\"]), \"chunk_overlap\": int(os.environ[\"RAG_CHUNK_OVERLAP\"])}}}\n    client.import_rag_files(request={\"parent\": os.environ[\"RAG_CORPUS\"], \"import_rag_files_config\": cfg}).result(timeout=120)\n    return \"imported \" + name\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -1389,7 +1705,7 @@
      "text": "Deploys facilities-ingest-docs and creates the Eventarc trigger facilities-docs-finalized: when an object is finalized in facilities-docs, call the function.",
      "file": "deploy_pipeline.py",
      "lang": "python",
-     "code": "from google.api_core import exceptions as gex\nfrom google.cloud import eventarc_v1 as ea\n\nimport functions\nimport gcp\nimport rag\n\ncorpus = rag.corpus_name()\nuri = functions.deploy(\"facilities-ingest-docs\", \"ingest_docs_fn.py\", env={\"RAG_CORPUS\": corpus}, cloudevent=True)\nprint(\"deployed facilities-ingest-docs\")\n\nclient = gcp.rest(ea.EventarcClient)\ntrigger = ea.Trigger(\n    name=f\"{gcp.PARENT}/triggers/facilities-docs-finalized\",\n    event_filters=[ea.EventFilter(attribute=\"type\", value=\"google.cloud.storage.object.v1.finalized\"), ea.EventFilter(attribute=\"bucket\", value=\"facilities-docs\")],\n    destination=ea.Destination(cloud_run=ea.CloudRun(service=\"facilities-ingest-docs\", region=gcp.LOCATION)))\ntry:\n    client.create_trigger(request={\"parent\": gcp.PARENT, \"trigger\": trigger, \"trigger_id\": \"facilities-docs-finalized\"}).result(timeout=60)\nexcept gex.AlreadyExists:\n    pass\nprint(\"trigger facilities-docs-finalized created\")\n",
+     "code": "from google.api_core import exceptions as gex\nfrom google.cloud import eventarc_v1 as ea\n\nimport functions\nimport gcp\nimport rag\nimport rag_design\n\ncorpus = rag.corpus_name()\ndesign_env = {}\nif rag_design.customised(\"chunking\"):         # your design: the re-index function chunks the same way the first import did\n    c = rag_design.chunk_cfg()\n    design_env = {\"RAG_CHUNK_SIZE\": str(c[\"maxTokens\"]), \"RAG_CHUNK_OVERLAP\": str(round(c[\"maxTokens\"] * c[\"overlapPct\"] / 100))}\nuri = functions.deploy(\"facilities-ingest-docs\", \"ingest_docs_fn.py\", env=dict(design_env, RAG_CORPUS=corpus), cloudevent=True)\nprint(\"deployed facilities-ingest-docs\")\n\nclient = gcp.rest(ea.EventarcClient)\ntrigger = ea.Trigger(\n    name=f\"{gcp.PARENT}/triggers/facilities-docs-finalized\",\n    event_filters=[ea.EventFilter(attribute=\"type\", value=\"google.cloud.storage.object.v1.finalized\"), ea.EventFilter(attribute=\"bucket\", value=\"facilities-docs\")],\n    destination=ea.Destination(cloud_run=ea.CloudRun(service=\"facilities-ingest-docs\", region=gcp.LOCATION)))\ntry:\n    client.create_trigger(request={\"parent\": gcp.PARENT, \"trigger\": trigger, \"trigger_id\": \"facilities-docs-finalized\"}).result(timeout=60)\nexcept gex.AlreadyExists:\n    pass\nprint(\"trigger facilities-docs-finalized created\")\n",
      "run": "python deploy_pipeline.py",
      "expect": "trigger facilities-docs-finalized created",
      "needs_runtime": false,
@@ -1662,7 +1978,7 @@
   },
   {
    "id": 6,
-   "order": 5,
+   "order": 6,
    "title": "Knowledge Search (RAG)",
    "short": "Search",
    "objective": "Retrieve the right passages for a question, rank them, and keep the source so answers can cite it.",
@@ -1683,7 +1999,8 @@
    ],
    "contract": {
     "needs": [
-     12
+     12,
+     14
     ],
     "names": {
      "corpus": "facilities-kb"
@@ -1763,7 +2080,7 @@
      "text": "retrieveContexts on the RAG Engine returns the top-k passages with a score and the gs:// source of each. Ask about the boiler, then about the AHU: the right document must come first each time. Retrieval here uses the simulator's lexical vectors without a real embedding model, so scores are indicative, not production-quality.",
      "file": "search.py",
      "lang": "python",
-     "code": "import gcp\nimport rag\n\nCORPUS = rag.corpus_name()\n\n\ndef search(question, top_k=3):\n    r = rag.search_client().retrieve_contexts(request={\n        \"parent\": gcp.PARENT, \"query\": {\"text\": question, \"rag_retrieval_config\": {\"top_k\": top_k}},\n        \"vertex_rag_store\": {\"rag_resources\": [{\"rag_corpus\": CORPUS}]}})\n    return [{\"source\": c.source_uri, \"score\": round(c.score, 3), \"text\": c.text} for c in r.contexts.contexts]\n\n\nif __name__ == \"__main__\":\n    for q in (\"What should I do when boiler pressure exceeds 30 psi?\", \"AHU-7 supply air temperature drift chilled water valve\"):\n        hits = search(q)\n        print(q[:40], \"->\", hits[0][\"source\"], hits[0][\"score\"])\n        assert all(h[\"text\"] and h[\"source\"] for h in hits), \"every passage must carry its source\"\n    print(\"every passage carries text and a gs:// source\")\n",
+     "code": "import gcp\nimport rag\nimport rag_design\n\nCORPUS = rag.corpus_name()\n\n\ndef search(question, top_k=None):\n    cfg = {\"top_k\": top_k or rag_design.top_k()}                  # your design: how many passages (the v1 client has no hybrid setting, so searchType is not applied here)\n    r = rag.search_client().retrieve_contexts(request={\n        \"parent\": gcp.PARENT, \"query\": {\"text\": question, \"rag_retrieval_config\": cfg},\n        \"vertex_rag_store\": {\"rag_resources\": [{\"rag_corpus\": CORPUS}]}})\n    return [{\"source\": c.source_uri, \"score\": round(c.score, 3), \"text\": c.text} for c in r.contexts.contexts]\n\n\nif __name__ == \"__main__\":\n    for q in (\"What should I do when boiler pressure exceeds 30 psi?\", \"AHU-7 supply air temperature drift chilled water valve\"):\n        hits = search(q)\n        print(q[:40], \"->\", hits[0][\"source\"], hits[0][\"score\"])\n        assert all(h[\"text\"] and h[\"source\"] for h in hits), \"every passage must carry its source\"\n    print(\"every passage carries text and a gs:// source\")\n",
      "run": "python search.py",
      "expect": "every passage carries text and a gs:// source",
      "needs_runtime": false,
@@ -1797,7 +2114,7 @@
      "text": "The same search packaged as a read-only Cloud Run function, so an agent can call it. API Gateway (chapter 1) forwards the caller's verified identity in the X-Apigateway-Api-Userinfo header and the function echoes it as caller.",
      "file": "kb_search_fn.py",
      "lang": "python",
-     "code": "import base64\nimport json\nimport os\n\n\ndef handler(request):\n    from google.api_core.client_options import ClientOptions\n    from google.auth.credentials import AnonymousCredentials\n    from google.cloud import aiplatform_v1 as av\n    body = request.get_json(silent=True) or {}\n    endpoint = os.environ.get(\"VERTEX_API_ENDPOINT\")\n    if endpoint:       # the simulator; on real Google Cloud leave this unset and Application Default Credentials are used\n        client = av.VertexRagServiceClient(credentials=AnonymousCredentials(), transport=\"rest\", client_options=ClientOptions(api_endpoint=endpoint))\n    else:\n        client = av.VertexRagServiceClient()\n    parent = f\"projects/{os.environ['GOOGLE_CLOUD_PROJECT']}/locations/{os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')}\"\n    r = client.retrieve_contexts(request={\"parent\": parent, \"query\": {\"text\": body.get(\"query\", \"\"), \"rag_retrieval_config\": {\"top_k\": int(body.get(\"top_k\", 3))}},\n                                          \"vertex_rag_store\": {\"rag_resources\": [{\"rag_corpus\": os.environ[\"RAG_CORPUS\"]}]}})\n    caller = \"anonymous\"\n    info = request.headers.get(\"X-Apigateway-Api-Userinfo\")\n    if info:\n        try:\n            caller = json.loads(base64.urlsafe_b64decode(info + \"=\" * (-len(info) % 4))).get(\"email\", \"anonymous\")\n        except Exception:\n            pass\n    return {\"results\": [{\"text\": c.text, \"score\": getattr(c, \"score\", None), \"source\": c.source_uri} for c in r.contexts.contexts], \"caller\": caller}\n",
+     "code": "import base64\nimport json\nimport os\n\n# RAG_TOP_K is your RAG design (chapter 14): deploy_kb_search.py sets it when it deploys this function.\n\n\ndef handler(request):\n    from google.api_core.client_options import ClientOptions\n    from google.auth.credentials import AnonymousCredentials\n    from google.cloud import aiplatform_v1 as av\n    body = request.get_json(silent=True) or {}\n    endpoint = os.environ.get(\"VERTEX_API_ENDPOINT\")\n    if endpoint:       # the simulator; on real Google Cloud leave this unset and Application Default Credentials are used\n        client = av.VertexRagServiceClient(credentials=AnonymousCredentials(), transport=\"rest\", client_options=ClientOptions(api_endpoint=endpoint))\n    else:\n        client = av.VertexRagServiceClient()\n    parent = f\"projects/{os.environ['GOOGLE_CLOUD_PROJECT']}/locations/{os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')}\"\n    r = client.retrieve_contexts(request={\"parent\": parent, \"query\": {\"text\": body.get(\"query\", \"\"), \"rag_retrieval_config\": {\"top_k\": int(body.get(\"top_k\", os.environ.get(\"RAG_TOP_K\", 3)))}},\n                                          \"vertex_rag_store\": {\"rag_resources\": [{\"rag_corpus\": os.environ[\"RAG_CORPUS\"]}]}})\n    caller = \"anonymous\"\n    info = request.headers.get(\"X-Apigateway-Api-Userinfo\")\n    if info:\n        try:\n            caller = json.loads(base64.urlsafe_b64decode(info + \"=\" * (-len(info) % 4))).get(\"email\", \"anonymous\")\n        except Exception:\n            pass\n    return {\"results\": [{\"text\": c.text, \"score\": getattr(c, \"score\", None), \"source\": c.source_uri} for c in r.contexts.contexts], \"caller\": caller}\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -1814,7 +2131,7 @@
      "text": "Deploys facilities-kb-search with the corpus name in its environment and calls it over HTTPS.",
      "file": "deploy_kb_search.py",
      "lang": "python",
-     "code": "import functions\nimport rag\n\nuri = functions.deploy(\"facilities-kb-search\", \"kb_search_fn.py\", env={\"RAG_CORPUS\": rag.corpus_name()})\nout = functions.call(uri, {\"query\": \"boiler pressure limit\"})\nprint(\"deployed facilities-kb-search; first source:\", out[\"results\"][0][\"source\"])\nassert \"boiler\" in out[\"results\"][0][\"text\"].lower()\nprint(\"kb-search returned\", len(out[\"results\"]), \"cited results\")\n",
+     "code": "import functions\nimport rag\nimport rag_design\n\nuri = functions.deploy(\"facilities-kb-search\", \"kb_search_fn.py\", env={\"RAG_CORPUS\": rag.corpus_name(), \"RAG_TOP_K\": str(rag_design.top_k())})\nout = functions.call(uri, {\"query\": \"boiler pressure limit\"})\nprint(\"deployed facilities-kb-search; first source:\", out[\"results\"][0][\"source\"])\nassert \"boiler\" in out[\"results\"][0][\"text\"].lower()\nprint(\"kb-search returned\", len(out[\"results\"]), \"cited results\")\n",
      "run": "python deploy_kb_search.py",
      "expect": "kb-search returned 3 cited results",
      "needs_runtime": false,
@@ -1991,7 +2308,7 @@
   },
   {
    "id": 11,
-   "order": 6,
+   "order": 7,
    "title": "Response Generation",
    "short": "Response",
    "objective": "Answer in plain language from the retrieved documents, with citations, and filter sensitive data out before the user sees it.",
@@ -2014,7 +2331,8 @@
     "needs": [
      6,
      10,
-     2
+     2,
+     14
     ],
     "names": {
      "armor": "facilities-guardrail"
@@ -2112,7 +2430,7 @@
      "text": "Retrieve passages, number them, and ask the model to answer only from them, so every claim can be traced to a source. In this verification the model is the deterministic test stub: it answers with the first retrieved passage and a [1] marker, which is enough to prove the grounding and citation plumbing; a larger model would write a fluent sentence.",
      "file": "respond.py",
      "lang": "python",
-     "code": "import vymodels as models\nfrom search import search\n\nSYSTEM = \"Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say so.\"\n\n\ndef grounded_answer(question, top_k=3):\n    passages = search(question, top_k)\n    context = \"\\n\".join(f\"[{i + 1}] {p['text']}\" for i, p in enumerate(passages))\n    answer = models.chat(f\"Context:\\n{context}\\n\\nQuestion: {question}\", system=SYSTEM)\n    citations = [{\"n\": i + 1, \"source\": p[\"source\"]} for i, p in enumerate(passages)]\n    return {\"answer\": answer, \"citations\": citations}\n",
+     "code": "import vymodels as models\nimport rag_design\nfrom search import search\n\nSYSTEM = \"Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say so.\"\n\n\ndef grounded_answer(question, top_k=None):\n    passages = search(question, top_k)\n    best = max([p.get(\"score\") or 0 for p in passages] or [0])\n    if rag_design.grounding_threshold() > 0 and best < rag_design.grounding_threshold():       # your design: refuse when nothing retrieved is relevant enough\n        return {\"answer\": \"I can't answer that from the approved documents.\", \"citations\": []}\n    context = \"\\n\".join(f\"[{i + 1}] {p['text']}\" for i, p in enumerate(passages))\n    answer = models.chat(f\"Context:\\n{context}\\n\\nQuestion: {question}\", system=SYSTEM)\n    citations = [{\"n\": i + 1, \"source\": p[\"source\"]} for i, p in enumerate(passages)]\n    return {\"answer\": answer, \"citations\": citations}\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -2180,7 +2498,7 @@
      "text": "Vertex AI can also ground generateContent directly on the RAG corpus, with no retrieval code of your own: add a Retrieval tool pointing at the corpus. The response carries groundingMetadata listing the chunks it used.",
      "file": "grounded_generate.py",
      "lang": "python",
-     "code": "from google.genai import types\n\nimport gcp\nimport rag\n\ncorpus = rag.corpus_name()\ntool = types.Tool(retrieval=types.Retrieval(vertex_rag_store=types.VertexRagStore(\n    rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=2)))\nfrom vymodels import CHAT_MODEL\nclient = gcp.genai_client()          # keep a reference: a garbage-collected genai client closes its HTTP session\nr = client.models.generate_content(model=CHAT_MODEL, contents=\"What should I do when boiler pressure exceeds 30 psi?\",\n                                   config=types.GenerateContentConfig(tools=[tool]))\nmeta = r.candidates[0].grounding_metadata\nchunks = meta.grounding_chunks or []\nprint(\"grounding chunks:\", len(chunks))\nassert chunks and r.text\nprint(\"generateContent grounded on the RAG corpus\")\n",
+     "code": "from google.genai import types\n\nimport gcp\nimport rag\nimport rag_design\n\ncorpus = rag.corpus_name()\ntool = types.Tool(retrieval=types.Retrieval(vertex_rag_store=types.VertexRagStore(\n    rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=min(2, rag_design.top_k()))))\nfrom vymodels import CHAT_MODEL\nclient = gcp.genai_client()          # keep a reference: a garbage-collected genai client closes its HTTP session\nr = client.models.generate_content(model=CHAT_MODEL, contents=\"What should I do when boiler pressure exceeds 30 psi?\",\n                                   config=types.GenerateContentConfig(tools=[tool]))\nmeta = r.candidates[0].grounding_metadata\nchunks = meta.grounding_chunks or []\nprint(\"grounding chunks:\", len(chunks))\nassert chunks and r.text\nprint(\"generateContent grounded on the RAG corpus\")\n",
      "run": "python grounded_generate.py",
      "expect": "generateContent grounded on the RAG corpus",
      "needs_runtime": false,
@@ -2357,7 +2675,7 @@
   },
   {
    "id": 9,
-   "order": 7,
+   "order": 8,
    "title": "Agent Memory",
    "short": "Memory",
    "objective": "Give the agent memory: short-term events inside a session and long-term facts it can retrieve later.",
@@ -2688,7 +3006,7 @@
   },
   {
    "id": 4,
-   "order": 8,
+   "order": 9,
    "title": "Agent Gateway",
    "short": "Gateway",
    "objective": "Put one governed door in front of the tools: a tool catalogue, a policy check on every call and a rate limit.",
@@ -2795,7 +3113,7 @@
      "text": "MCP (Model Context Protocol) is the open standard the gateway speaks to tools. This Cloud Run function is a tiny MCP server over streamable HTTP (JSON-RPC 2.0) that publishes exactly two read-only tools, kb_search and asset_status. The write tool is deliberately not in the catalogue: write actions go through the approval flow in chapter 5.",
      "file": "mcp_server_fn.py",
      "lang": "python",
-     "code": "import json\nimport os\n\n\ndef _kb_search(args):\n    from google.api_core.client_options import ClientOptions\n    from google.auth.credentials import AnonymousCredentials\n    from google.cloud import aiplatform_v1 as av\n    endpoint = os.environ.get(\"VERTEX_API_ENDPOINT\")\n    if endpoint:\n        client = av.VertexRagServiceClient(credentials=AnonymousCredentials(), transport=\"rest\", client_options=ClientOptions(api_endpoint=endpoint))\n    else:\n        client = av.VertexRagServiceClient()\n    parent = f\"projects/{os.environ['GOOGLE_CLOUD_PROJECT']}/locations/{os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')}\"\n    r = client.retrieve_contexts(request={\"parent\": parent, \"query\": {\"text\": args.get(\"query\", \"\"), \"rag_retrieval_config\": {\"top_k\": int(args.get(\"top_k\", 3))}},\n                                          \"vertex_rag_store\": {\"rag_resources\": [{\"rag_corpus\": os.environ[\"RAG_CORPUS\"]}]}})\n    return {\"results\": [{\"text\": c.text, \"score\": getattr(c, \"score\", None), \"source\": c.source_uri} for c in r.contexts.contexts]}\n\n\ndef _asset_status(args):\n    from google.cloud import firestore\n    from google.cloud.firestore_v1.base_query import FieldFilter\n    db = firestore.Client(project=os.environ[\"GOOGLE_CLOUD_PROJECT\"])\n    snap = db.collection(os.environ.get(\"ASSETS_COLLECTION\", \"assets\")).document(args[\"asset_id\"]).get()\n    if not snap.exists:\n        return {\"found\": False}\n    orders = db.collection(os.environ.get(\"WORK_ORDERS_COLLECTION\", \"work-orders\")).where(filter=FieldFilter(\"asset_id\", \"==\", args[\"asset_id\"])).stream()\n    return {\"found\": True, \"asset\": snap.to_dict(), \"work_orders\": [d.to_dict() for d in orders]}\n\n\nTOOLS = [\n    {\"name\": \"kb_search\", \"description\": \"Search the facilities knowledge base (read-only).\",\n     \"inputSchema\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"]}},\n    {\"name\": \"asset_status\", \"description\": \"Look up an asset and its work orders (read-only).\",\n     \"inputSchema\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}},\n]\nIMPL = {\"kb_search\": _kb_search, \"asset_status\": _asset_status}\n\n\ndef _reply(rid, result=None, error=None):\n    out = {\"jsonrpc\": \"2.0\", \"id\": rid}\n    out.update({\"error\": error} if error else {\"result\": result})\n    return out\n\n\ndef handler(request):\n    msg = request.get_json(silent=True) or {}\n    rid, method, params = msg.get(\"id\"), msg.get(\"method\"), msg.get(\"params\") or {}\n    if method == \"initialize\":\n        return _reply(rid, {\"protocolVersion\": params.get(\"protocolVersion\", \"2025-03-26\"), \"capabilities\": {\"tools\": {}},\n                            \"serverInfo\": {\"name\": \"facilities-tools\", \"version\": \"1.0.0\"}})\n    if method and method.startswith(\"notifications/\"):\n        return {}\n    if method == \"tools/list\":\n        return _reply(rid, {\"tools\": TOOLS})\n    if method == \"tools/call\":\n        fn = IMPL.get(params.get(\"name\"))\n        if not fn:\n            return _reply(rid, error={\"code\": -32602, \"message\": f\"unknown tool {params.get('name')}\"})\n        try:\n            return _reply(rid, {\"content\": [{\"type\": \"text\", \"text\": json.dumps(fn(params.get(\"arguments\") or {}))}], \"isError\": False})\n        except Exception as e:\n            return _reply(rid, {\"content\": [{\"type\": \"text\", \"text\": f\"{type(e).__name__}: {e}\"}], \"isError\": True})\n    return _reply(rid, error={\"code\": -32601, \"message\": f\"method not found: {method}\"})\n",
+     "code": "import json\nimport os\n\n# RAG_TOP_K is your RAG design (chapter 14): register_tools.py sets it when it deploys this function.\n\n\ndef _kb_search(args):\n    from google.api_core.client_options import ClientOptions\n    from google.auth.credentials import AnonymousCredentials\n    from google.cloud import aiplatform_v1 as av\n    endpoint = os.environ.get(\"VERTEX_API_ENDPOINT\")\n    if endpoint:\n        client = av.VertexRagServiceClient(credentials=AnonymousCredentials(), transport=\"rest\", client_options=ClientOptions(api_endpoint=endpoint))\n    else:\n        client = av.VertexRagServiceClient()\n    parent = f\"projects/{os.environ['GOOGLE_CLOUD_PROJECT']}/locations/{os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')}\"\n    r = client.retrieve_contexts(request={\"parent\": parent, \"query\": {\"text\": args.get(\"query\", \"\"), \"rag_retrieval_config\": {\"top_k\": int(args.get(\"top_k\", os.environ.get(\"RAG_TOP_K\", 3)))}},\n                                          \"vertex_rag_store\": {\"rag_resources\": [{\"rag_corpus\": os.environ[\"RAG_CORPUS\"]}]}})\n    return {\"results\": [{\"text\": c.text, \"score\": getattr(c, \"score\", None), \"source\": c.source_uri} for c in r.contexts.contexts]}\n\n\ndef _asset_status(args):\n    from google.cloud import firestore\n    from google.cloud.firestore_v1.base_query import FieldFilter\n    db = firestore.Client(project=os.environ[\"GOOGLE_CLOUD_PROJECT\"])\n    snap = db.collection(os.environ.get(\"ASSETS_COLLECTION\", \"assets\")).document(args[\"asset_id\"]).get()\n    if not snap.exists:\n        return {\"found\": False}\n    orders = db.collection(os.environ.get(\"WORK_ORDERS_COLLECTION\", \"work-orders\")).where(filter=FieldFilter(\"asset_id\", \"==\", args[\"asset_id\"])).stream()\n    return {\"found\": True, \"asset\": snap.to_dict(), \"work_orders\": [d.to_dict() for d in orders]}\n\n\nTOOLS = [\n    {\"name\": \"kb_search\", \"description\": \"Search the facilities knowledge base (read-only).\",\n     \"inputSchema\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"]}},\n    {\"name\": \"asset_status\", \"description\": \"Look up an asset and its work orders (read-only).\",\n     \"inputSchema\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}},\n]\nIMPL = {\"kb_search\": _kb_search, \"asset_status\": _asset_status}\n\n\ndef _reply(rid, result=None, error=None):\n    out = {\"jsonrpc\": \"2.0\", \"id\": rid}\n    out.update({\"error\": error} if error else {\"result\": result})\n    return out\n\n\ndef handler(request):\n    msg = request.get_json(silent=True) or {}\n    rid, method, params = msg.get(\"id\"), msg.get(\"method\"), msg.get(\"params\") or {}\n    if method == \"initialize\":\n        return _reply(rid, {\"protocolVersion\": params.get(\"protocolVersion\", \"2025-03-26\"), \"capabilities\": {\"tools\": {}},\n                            \"serverInfo\": {\"name\": \"facilities-tools\", \"version\": \"1.0.0\"}})\n    if method and method.startswith(\"notifications/\"):\n        return {}\n    if method == \"tools/list\":\n        return _reply(rid, {\"tools\": TOOLS})\n    if method == \"tools/call\":\n        fn = IMPL.get(params.get(\"name\"))\n        if not fn:\n            return _reply(rid, error={\"code\": -32602, \"message\": f\"unknown tool {params.get('name')}\"})\n        try:\n            return _reply(rid, {\"content\": [{\"type\": \"text\", \"text\": json.dumps(fn(params.get(\"arguments\") or {}))}], \"isError\": False})\n        except Exception as e:\n            return _reply(rid, {\"content\": [{\"type\": \"text\", \"text\": f\"{type(e).__name__}: {e}\"}], \"isError\": True})\n    return _reply(rid, error={\"code\": -32601, \"message\": f\"method not found: {method}\"})\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -2829,7 +3147,7 @@
      "text": "Deploys the MCP server function and registers it in the agent registry as the MCP server facilities-tools, so the gateway knows where the tools live.",
      "file": "register_tools.py",
      "lang": "python",
-     "code": "import functions\nimport gateway\nimport rag\n\nuri = functions.deploy(\"facilities-tools-mcp\", \"mcp_server_fn.py\", env={\"RAG_CORPUS\": rag.corpus_name()})\nprint(\"deployed facilities-tools-mcp\")\ndirect = functions.call(uri, {\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/list\"})\nprint(\"server publishes:\", sorted(t[\"name\"] for t in direct[\"result\"][\"tools\"]))\n\nregistered = gateway.api(\"POST\", gateway.BASE + f\"/mcpServers?mcpServerId={gateway.MCP_SERVER}\", {\n    \"endpoint\": uri, \"displayName\": \"Facilities tools (MCP)\", \"description\": \"kb_search, asset_status\",\n    \"authentication\": {\"apiKey\": {\"value\": \"Bearer vyomi-local\"}}})        # the credential the gateway presents to the tool server\nprint(\"registered:\", registered[\"name\"])\n",
+     "code": "import functions\nimport gateway\nimport rag\nimport rag_design\n\nuri = functions.deploy(\"facilities-tools-mcp\", \"mcp_server_fn.py\", env={\"RAG_CORPUS\": rag.corpus_name(), \"RAG_TOP_K\": str(rag_design.top_k())})\nprint(\"deployed facilities-tools-mcp\")\ndirect = functions.call(uri, {\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"tools/list\"})\nprint(\"server publishes:\", sorted(t[\"name\"] for t in direct[\"result\"][\"tools\"]))\n\nregistered = gateway.api(\"POST\", gateway.BASE + f\"/mcpServers?mcpServerId={gateway.MCP_SERVER}\", {\n    \"endpoint\": uri, \"displayName\": \"Facilities tools (MCP)\", \"description\": \"kb_search, asset_status\",\n    \"authentication\": {\"apiKey\": {\"value\": \"Bearer vyomi-local\"}}})        # the credential the gateway presents to the tool server\nprint(\"registered:\", registered[\"name\"])\n",
      "run": "python register_tools.py",
      "expect": "registered: projects/",
      "needs_runtime": false,
@@ -3063,7 +3381,7 @@
   },
   {
    "id": 5,
-   "order": 9,
+   "order": 10,
    "title": "Actions and Approval",
    "short": "Approval",
    "objective": "Make write actions safe: park the action for a human, record every decision, and only then execute.",
@@ -3486,7 +3804,7 @@
   },
   {
    "id": 1,
-   "order": 10,
+   "order": 11,
    "title": "Access and Perimeter",
    "short": "Access",
    "objective": "Sign users in, carry their identity to every layer, and put a protected edge in front of the tools.",
@@ -3845,7 +4163,7 @@
   },
   {
    "id": 2,
-   "order": 11,
+   "order": 12,
    "title": "Channels and Input Guardrails",
    "short": "Channels",
    "objective": "Let people reach the agent, filter what comes in, and tell approvers what is waiting.",
@@ -4162,7 +4480,7 @@
   },
   {
    "id": 8,
-   "order": 12,
+   "order": 13,
    "title": "AgentOps and Observability",
    "short": "AgentOps",
    "objective": "See what the agent did: a trace per step, metrics for KPIs, and structured logs tied to the trace.",
@@ -4556,7 +4874,7 @@
   },
   {
    "id": 13,
-   "order": 13,
+   "order": 14,
    "title": "Governance and Security",
    "short": "Governance",
    "objective": "Protect and audit the whole app: encrypt the sensitive records and prove who did what.",

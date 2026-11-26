@@ -210,7 +210,26 @@ async def _search(request: Request):
     return JSONResponse(r["body"], status_code=r["status"])
 
 
+async def _search_inspect(request: Request):
+    """Vyomi RAG Studio extension: /_vyomi/azure/search/{svc}/indexes/{ix}/(chunks|retrieve-trace)."""
+    from urllib.parse import unquote
+    from fastapi.responses import JSONResponse
+    from core import app_context as _ctx
+    from core import azure_search_core as sc
+    from providers.azure_services import core_arm
+    body = await request.body()
+    tail = _raw(request)[len("/_vyomi/azure/search/"):]
+    svc, _, rest = tail.partition("/")
+    tok = _ctx.REQUEST_PROVIDER.set("azure")
+    try:
+        r = sc.inspect_dispatch(core_arm().state, unquote(svc), request.method, unquote("/" + rest), _query(request), body, headers=dict(request.headers))
+    finally:
+        _ctx.REQUEST_PROVIDER.reset(tok)
+    return JSONResponse(r["body"], status_code=r["status"])
+
+
 def register(app) -> None:
+    app.add_route("/_vyomi/azure/search/{svc}/{rest:path}", _search_inspect, methods=_METHODS)
     app.add_route("/azure-data/search/{svc}/{rest:path}", _search, methods=_METHODS)
     kv, acr = _wi.is_unified("azure_keyvault"), _wi.is_unified("azure_acr")
     sb = _wi.is_unified("azure_servicebus")

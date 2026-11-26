@@ -34,3 +34,14 @@ export const searchDocs = (rg, name, ix, body) => arm("POST", `${base(rg, name)}
 export const indexDocs = (rg, name, ix, value) => arm("POST", `${base(rg, name)}/indexes/${e(ix)}/docs/index`, { value }, {}, V);
 export const runIndexer = (rg, name, ixr) => arm("POST", `${base(rg, name)}/indexers/${e(ixr)}/run`, {}, {}, V);
 export const indexerStatus = (rg, name, ixr) => arm("GET", `${base(rg, name)}/indexers/${e(ixr)}/status`, undefined, {}, V);
+
+/* RAG Studio: Vyomi inspect extension on the same ARM wire (core/azure_search_core.inspect_index): chunk list + per-stage retrieve trace. */
+export const inspectChunks = (rg, name, ix, vectors = false) => arm("GET", `${base(rg, name)}/indexes/${e(ix)}/chunks`, undefined, vectors ? { vectors: "true" } : {}, V);
+export const inspectTrace = (rg, name, ix, body) => arm("POST", `${base(rg, name)}/indexes/${e(ix)}/retrieve-trace`, body, {}, V);
+export const resetIndexer = (rg, name, ixr) => arm("POST", `${base(rg, name)}/indexers/${e(ixr)}/reset`, {}, {}, V);
+/* Azure OpenAI through the ARM proxy (account/openai/deployments/{d}/chat/completions) - chat "on your data" included. */
+export const OPENAI_V = "2024-10-21";
+export const openaiChat = (accountId, deployment, body) => arm("POST", `${accountId}/openai/deployments/${e(deployment)}/chat/completions`, body, {}, OPENAI_V);
+export const listStorageAccounts = async () => (await armList(`${subPath()}/providers/Microsoft.Storage/storageAccounts`, { "api-version": "2023-01-01" }));
+export const listOpenAiAccounts = async () => (await armList(`${subPath()}/providers/Microsoft.CognitiveServices/accounts`, { "api-version": "2023-05-01" })).filter((a) => a.kind === "OpenAI");
+export const listDeployments = async (accountId) => (await armList(`${accountId}/deployments`, { "api-version": "2023-05-01" }));

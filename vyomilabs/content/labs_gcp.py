@@ -1,5 +1,5 @@
 """Hands-on lab blocks for the Google Cloud course. Every block is complete, copy-paste code: the learner saves `file`, runs `run`, and sees `expect`.
-vyomilabs/labrun.py executes these blocks in order against a clean simulator (python -m vyomilabs.labrun gcp 10 3 7 12 6 11 9 4 5 1 2 8 13),
+vyomilabs/labrun.py executes these blocks in order against a clean simulator (python -m vyomilabs.labrun gcp 10 3 7 14 12 6 11 9 4 5 1 2 8 13),
 so what the guide shows is what has actually run. Model replies in verification come from the repo's deterministic test stub (tools/llm_stub), not a real model."""
 
 
@@ -14,6 +14,8 @@ def b(title, text, file, code, run=None, expect=None, lang="python", needs_runti
     return dict(title=title, text=text, file=file, lang=lang, code=code.strip("\n") + "\n", run=run, expect=expect, needs_runtime=needs_runtime,
                 edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
+
+from .rag_design_src import design_blocks
 
 LAB = {}
 
@@ -131,8 +133,10 @@ def chat_with_tools(prompt, declarations):
     return {"calls": [{"name": c.name, "args": dict(c.args)} for c in (r.function_calls or [])], "text": r.text if not r.function_calls else ""}
 
 
-def embed(texts):
-    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts)
+def embed(texts, dimensions=None):
+    """dimensions: ask for a shorter vector when the model supports it (your RAG design sets this); None keeps the model's own size."""
+    cfg = types.EmbedContentConfig(output_dimensionality=dimensions) if dimensions else None
+    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts, config=cfg)
     return [e.values for e in r.embeddings]
 '''),
  b("Try all three calls", "A chat call, a tool-calling call and an embedding. The model behind generateContent is one the simulator hosts (a small open model in your browser on Nano, the Mesh model pool on a Mesh), so answers are those of a small open model; the SDK calls, the request shapes and the tool-calling flow are exactly what you would write against real Vertex AI.",
@@ -599,6 +603,10 @@ db.collection("approval-ledger").document(rid).delete()
 ''', run="python check_write_tool.py", expect="ledger: EXECUTED"),
 ]
 
+# ───────────────────────── chapter 14: design the RAG ─────────────────────────
+LAB[14] = design_blocks(b, "gcp")
+
+# ───────────────────────── chapter 12: knowledge pipeline ─────────────────────────
 LAB[12] = [
  b("Install the libraries", "Chapter 12 turns documents into searchable knowledge. It uses Cloud Storage, Vertex AI RAG Engine, Pub/Sub (for the bucket notification), Eventarc and Cloud Functions. It relies on gcp.py (chapter 10) and functions.py (chapter 7).",
    "install_12.sh", "pip install google-cloud-storage google-cloud-aiplatform google-cloud-pubsub google-cloud-eventarc google-cloud-functions", lang="bash"),
@@ -648,6 +656,7 @@ print(f"{len(DOCS)} documents uploaded to gs://facilities-docs/docs/")
  b("Write the RAG helper", "Small helpers over the Vertex AI RAG Engine clients that chapters 12, 6, 11 and 13 reuse: find the corpus by its display name, import files from Cloud Storage and list what is in it.",
    "rag.py", '''
 import gcp
+import rag_design
 from google.cloud import aiplatform_v1 as av
 
 KB_NAME = "facilities-kb"
@@ -668,8 +677,17 @@ def corpus_name():
     return None
 
 
+def import_config(uris):
+    cfg = {"gcs_source": {"uris": uris}}
+    if rag_design.customised("chunking"):          # your design: chunk size and overlap (the overlap is a percentage of the size in the design)
+        c = rag_design.chunk_cfg()
+        cfg["rag_file_transformation_config"] = {"rag_file_chunking_config": {"fixed_length_chunking": {
+            "chunk_size": c["maxTokens"], "chunk_overlap": round(c["maxTokens"] * c["overlapPct"] / 100)}}}
+    return cfg
+
+
 def import_uris(corpus, uris):
-    data_client().import_rag_files(request={"parent": corpus, "import_rag_files_config": {"gcs_source": {"uris": uris}}}).result(timeout=180)
+    data_client().import_rag_files(request={"parent": corpus, "import_rag_files_config": import_config(uris)}).result(timeout=180)
 
 
 def files(corpus):
@@ -745,7 +763,11 @@ def handler(event):
         client = av.VertexRagDataServiceClient(credentials=AnonymousCredentials(), transport="rest", client_options=ClientOptions(api_endpoint=endpoint))
     else:
         client = av.VertexRagDataServiceClient()
-    client.import_rag_files(request={"parent": os.environ["RAG_CORPUS"], "import_rag_files_config": {"gcs_source": {"uris": [f"gs://{bucket}/{name}"]}}}).result(timeout=120)
+    cfg = {"gcs_source": {"uris": [f"gs://{bucket}/{name}"]}}
+    if os.environ.get("RAG_CHUNK_SIZE"):           # your design (chapter 14): set when the function is deployed, only if the design changes the chunking
+        cfg["rag_file_transformation_config"] = {"rag_file_chunking_config": {"fixed_length_chunking": {
+            "chunk_size": int(os.environ["RAG_CHUNK_SIZE"]), "chunk_overlap": int(os.environ["RAG_CHUNK_OVERLAP"])}}}
+    client.import_rag_files(request={"parent": os.environ["RAG_CORPUS"], "import_rag_files_config": cfg}).result(timeout=120)
     return "imported " + name
 '''),
  b("Deploy the function and the Eventarc trigger", "Deploys facilities-ingest-docs and creates the Eventarc trigger facilities-docs-finalized: when an object is finalized in facilities-docs, call the function.",
@@ -756,9 +778,14 @@ from google.cloud import eventarc_v1 as ea
 import functions
 import gcp
 import rag
+import rag_design
 
 corpus = rag.corpus_name()
-uri = functions.deploy("facilities-ingest-docs", "ingest_docs_fn.py", env={"RAG_CORPUS": corpus}, cloudevent=True)
+design_env = {}
+if rag_design.customised("chunking"):         # your design: the re-index function chunks the same way the first import did
+    c = rag_design.chunk_cfg()
+    design_env = {"RAG_CHUNK_SIZE": str(c["maxTokens"]), "RAG_CHUNK_OVERLAP": str(round(c["maxTokens"] * c["overlapPct"] / 100))}
+uri = functions.deploy("facilities-ingest-docs", "ingest_docs_fn.py", env=dict(design_env, RAG_CORPUS=corpus), cloudevent=True)
 print("deployed facilities-ingest-docs")
 
 client = gcp.rest(ea.EventarcClient)
@@ -826,13 +853,15 @@ LAB[6] = [
    "search.py", '''
 import gcp
 import rag
+import rag_design
 
 CORPUS = rag.corpus_name()
 
 
-def search(question, top_k=3):
+def search(question, top_k=None):
+    cfg = {"top_k": top_k or rag_design.top_k()}                  # your design: how many passages (the v1 client has no hybrid setting, so searchType is not applied here)
     r = rag.search_client().retrieve_contexts(request={
-        "parent": gcp.PARENT, "query": {"text": question, "rag_retrieval_config": {"top_k": top_k}},
+        "parent": gcp.PARENT, "query": {"text": question, "rag_retrieval_config": cfg},
         "vertex_rag_store": {"rag_resources": [{"rag_corpus": CORPUS}]}})
     return [{"source": c.source_uri, "score": round(c.score, 3), "text": c.text} for c in r.contexts.contexts]
 
@@ -861,6 +890,8 @@ import base64
 import json
 import os
 
+# RAG_TOP_K is your RAG design (chapter 14): deploy_kb_search.py sets it when it deploys this function.
+
 
 def handler(request):
     from google.api_core.client_options import ClientOptions
@@ -873,7 +904,7 @@ def handler(request):
     else:
         client = av.VertexRagServiceClient()
     parent = f"projects/{os.environ['GOOGLE_CLOUD_PROJECT']}/locations/{os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')}"
-    r = client.retrieve_contexts(request={"parent": parent, "query": {"text": body.get("query", ""), "rag_retrieval_config": {"top_k": int(body.get("top_k", 3))}},
+    r = client.retrieve_contexts(request={"parent": parent, "query": {"text": body.get("query", ""), "rag_retrieval_config": {"top_k": int(body.get("top_k", os.environ.get("RAG_TOP_K", 3)))}},
                                           "vertex_rag_store": {"rag_resources": [{"rag_corpus": os.environ["RAG_CORPUS"]}]}})
     caller = "anonymous"
     info = request.headers.get("X-Apigateway-Api-Userinfo")
@@ -888,8 +919,9 @@ def handler(request):
    "deploy_kb_search.py", '''
 import functions
 import rag
+import rag_design
 
-uri = functions.deploy("facilities-kb-search", "kb_search_fn.py", env={"RAG_CORPUS": rag.corpus_name()})
+uri = functions.deploy("facilities-kb-search", "kb_search_fn.py", env={"RAG_CORPUS": rag.corpus_name(), "RAG_TOP_K": str(rag_design.top_k())})
 out = functions.call(uri, {"query": "boiler pressure limit"})
 print("deployed facilities-kb-search; first source:", out["results"][0]["source"])
 assert "boiler" in out["results"][0]["text"].lower()
@@ -934,13 +966,17 @@ LAB[11] = [
  b("Write the grounded answer function", "Retrieve passages, number them, and ask the model to answer only from them, so every claim can be traced to a source. In this verification the model is the deterministic test stub: it answers with the first retrieved passage and a [1] marker, which is enough to prove the grounding and citation plumbing; a larger model would write a fluent sentence.",
    "respond.py", '''
 import vymodels as models
+import rag_design
 from search import search
 
 SYSTEM = "Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say so."
 
 
-def grounded_answer(question, top_k=3):
+def grounded_answer(question, top_k=None):
     passages = search(question, top_k)
+    best = max([p.get("score") or 0 for p in passages] or [0])
+    if rag_design.grounding_threshold() > 0 and best < rag_design.grounding_threshold():       # your design: refuse when nothing retrieved is relevant enough
+        return {"answer": "I can't answer that from the approved documents.", "citations": []}
     context = "\\n".join(f"[{i + 1}] {p['text']}" for i, p in enumerate(passages))
     answer = models.chat(f"Context:\\n{context}\\n\\nQuestion: {question}", system=SYSTEM)
     citations = [{"n": i + 1, "source": p["source"]} for i, p in enumerate(passages)]
@@ -1004,10 +1040,11 @@ from google.genai import types
 
 import gcp
 import rag
+import rag_design
 
 corpus = rag.corpus_name()
 tool = types.Tool(retrieval=types.Retrieval(vertex_rag_store=types.VertexRagStore(
-    rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=2)))
+    rag_resources=[types.VertexRagStoreRagResource(rag_corpus=corpus)], similarity_top_k=min(2, rag_design.top_k()))))
 from vymodels import CHAT_MODEL
 client = gcp.genai_client()          # keep a reference: a garbage-collected genai client closes its HTTP session
 r = client.models.generate_content(model=CHAT_MODEL, contents="What should I do when boiler pressure exceeds 30 psi?",
@@ -1107,6 +1144,8 @@ LAB[4] = [
 import json
 import os
 
+# RAG_TOP_K is your RAG design (chapter 14): register_tools.py sets it when it deploys this function.
+
 
 def _kb_search(args):
     from google.api_core.client_options import ClientOptions
@@ -1118,7 +1157,7 @@ def _kb_search(args):
     else:
         client = av.VertexRagServiceClient()
     parent = f"projects/{os.environ['GOOGLE_CLOUD_PROJECT']}/locations/{os.environ.get('GOOGLE_CLOUD_REGION', 'us-central1')}"
-    r = client.retrieve_contexts(request={"parent": parent, "query": {"text": args.get("query", ""), "rag_retrieval_config": {"top_k": int(args.get("top_k", 3))}},
+    r = client.retrieve_contexts(request={"parent": parent, "query": {"text": args.get("query", ""), "rag_retrieval_config": {"top_k": int(args.get("top_k", os.environ.get("RAG_TOP_K", 3)))}},
                                           "vertex_rag_store": {"rag_resources": [{"rag_corpus": os.environ["RAG_CORPUS"]}]}})
     return {"results": [{"text": c.text, "score": getattr(c, "score", None), "source": c.source_uri} for c in r.contexts.contexts]}
 
@@ -1199,8 +1238,9 @@ def mcp(url, method, params=None):
 import functions
 import gateway
 import rag
+import rag_design
 
-uri = functions.deploy("facilities-tools-mcp", "mcp_server_fn.py", env={"RAG_CORPUS": rag.corpus_name()})
+uri = functions.deploy("facilities-tools-mcp", "mcp_server_fn.py", env={"RAG_CORPUS": rag.corpus_name(), "RAG_TOP_K": str(rag_design.top_k())})
 print("deployed facilities-tools-mcp")
 direct = functions.call(uri, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
 print("server publishes:", sorted(t["name"] for t in direct["result"]["tools"]))

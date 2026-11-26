@@ -17,7 +17,7 @@
   1800,
   1270
  ],
- "total_minutes": 533,
+ "total_minutes": 563,
  "updated": "November 26, 2026",
  "layers": [
   {
@@ -121,7 +121,7 @@
      "text": "Every other layer imports these three functions, so keep the names. boto3 reads the simulator address from AWS_ENDPOINT_URL, exactly as it would on real AWS.",
      "file": "vymodels.py",
      "lang": "python",
-     "code": "import json\nimport os\nimport random\nimport time\n\nimport boto3\nfrom botocore.config import Config\nfrom botocore.exceptions import ClientError\n\n\ndef _pick():\n    \"\"\"The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask it, never hard-code a vendor id.\"\"\"\n    ms = [m for m in boto3.client(\"bedrock\").list_foundation_models()[\"modelSummaries\"] if m[\"modelId\"].startswith(\"vyomi.\")]\n    chat = [m[\"modelId\"] for m in ms if \"EMBEDDING\" not in m[\"outputModalities\"]]\n    emb = [m[\"modelId\"] for m in ms if \"EMBEDDING\" in m[\"outputModalities\"]]\n    return chat[0], emb[0]\n\n\nCHAT_MODEL, EMBED_MODEL = _pick()\n# One attempt per boto3 call: this module owns the retry policy so the learner can see and test it.\n_rt = boto3.client(\"bedrock-runtime\", config=Config(retries={\"total_max_attempts\": 1}, read_timeout=60))\n\nRETRYABLE = {\"ThrottlingException\", \"ServiceUnavailableException\", \"ModelTimeoutException\", \"TooManyRequestsException\", \"InternalServerException\"}\nMAX_ATTEMPTS = 4\n\n\nclass ModelUnavailable(RuntimeError):\n    \"\"\"The model kept failing after every retry: surface it, never loop forever.\"\"\"\n\n\nclass BudgetExceeded(RuntimeError):\n    \"\"\"The spend limit for this layer is used up: refuse the call before it is made.\"\"\"\n\n\n# Notional price per 1,000 tokens. The simulator's models are free; the numbers only make the meter and the limit tangible.\nPRICE_PER_1K = {\"input\": 0.003, \"output\": 0.015, \"embed\": 0.0001}\n\n\nclass Budget:\n    def __init__(self, limit_usd):\n        self.limit, self.spent, self.calls, self.tokens = float(limit_usd), 0.0, 0, {\"input\": 0, \"output\": 0}\n\n    def check(self):\n        if self.spent >= self.limit:\n            raise BudgetExceeded(\"budget of $%.4f used up after %d calls\" % (self.limit, self.calls))\n\n    def charge(self, kind, tokens_in=0, tokens_out=0):\n        self.calls += 1\n        self.tokens[\"input\"] += tokens_in\n        self.tokens[\"output\"] += tokens_out\n        self.spent += tokens_in / 1000 * PRICE_PER_1K[\"embed\" if kind == \"embed\" else \"input\"] + tokens_out / 1000 * PRICE_PER_1K[\"output\"]\n\n\nBUDGET = Budget(os.environ.get(\"VY_BUDGET_USD\", \"1.00\"))\n\n\ndef _call(fn):\n    \"\"\"Retry throttling and transient errors with exponential backoff and jitter; anything else (validation, access denied) fails at once.\"\"\"\n    BUDGET.check()\n    for attempt in range(1, MAX_ATTEMPTS + 1):\n        try:\n            return fn()\n        except ClientError as e:\n            code = e.response[\"Error\"][\"Code\"]\n            if code not in RETRYABLE:\n                raise\n            if attempt == MAX_ATTEMPTS:\n                raise ModelUnavailable(\"%s after %d attempts\" % (code, attempt)) from e\n            time.sleep(0.05 * 2 ** attempt + random.random() * 0.05)\n\n\ndef _text(resp):\n    return \"\".join(b.get(\"text\", \"\") for b in resp[\"output\"][\"message\"][\"content\"])\n\n\ndef chat(prompt):\n    r = _call(lambda: _rt.converse(modelId=CHAT_MODEL, messages=[{\"role\": \"user\", \"content\": [{\"text\": prompt}]}], inferenceConfig={\"maxTokens\": 200}))\n    BUDGET.charge(\"chat\", r[\"usage\"][\"inputTokens\"], r[\"usage\"][\"outputTokens\"])\n    return _text(r)\n\n\ndef chat_with_tools(prompt, tools):\n    r = _call(lambda: _rt.converse(modelId=CHAT_MODEL, messages=[{\"role\": \"user\", \"content\": [{\"text\": prompt}]}], toolConfig={\"tools\": tools}))\n    BUDGET.charge(\"chat\", r[\"usage\"][\"inputTokens\"], r[\"usage\"][\"outputTokens\"])\n    tool = next((b[\"toolUse\"] for b in r[\"output\"][\"message\"][\"content\"] if \"toolUse\" in b), None)\n    return {\"stop_reason\": r[\"stopReason\"], \"tool_use\": tool, \"text\": _text(r)}\n\n\ndef embed(text):\n    r = _call(lambda: _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps({\"inputText\": text})))\n    BUDGET.charge(\"embed\", len(text.split()))\n    return json.loads(r[\"body\"].read())[\"embedding\"]\n",
+     "code": "import json\nimport os\nimport random\nimport time\n\nimport boto3\nfrom botocore.config import Config\nfrom botocore.exceptions import ClientError\n\n\ndef _pick():\n    \"\"\"The models are the ones this simulator hosts: in-browser models on Nano, the Mesh model pool on a Mesh. Ask it, never hard-code a vendor id.\"\"\"\n    ms = [m for m in boto3.client(\"bedrock\").list_foundation_models()[\"modelSummaries\"] if m[\"modelId\"].startswith(\"vyomi.\")]\n    chat = [m[\"modelId\"] for m in ms if \"EMBEDDING\" not in m[\"outputModalities\"]]\n    emb = [m[\"modelId\"] for m in ms if \"EMBEDDING\" in m[\"outputModalities\"]]\n    return chat[0], emb[0]\n\n\nCHAT_MODEL, EMBED_MODEL = _pick()\n# One attempt per boto3 call: this module owns the retry policy so the learner can see and test it.\n_rt = boto3.client(\"bedrock-runtime\", config=Config(retries={\"total_max_attempts\": 1}, read_timeout=60))\n\nRETRYABLE = {\"ThrottlingException\", \"ServiceUnavailableException\", \"ModelTimeoutException\", \"TooManyRequestsException\", \"InternalServerException\"}\nMAX_ATTEMPTS = 4\n\n\nclass ModelUnavailable(RuntimeError):\n    \"\"\"The model kept failing after every retry: surface it, never loop forever.\"\"\"\n\n\nclass BudgetExceeded(RuntimeError):\n    \"\"\"The spend limit for this layer is used up: refuse the call before it is made.\"\"\"\n\n\n# Notional price per 1,000 tokens. The simulator's models are free; the numbers only make the meter and the limit tangible.\nPRICE_PER_1K = {\"input\": 0.003, \"output\": 0.015, \"embed\": 0.0001}\n\n\nclass Budget:\n    def __init__(self, limit_usd):\n        self.limit, self.spent, self.calls, self.tokens = float(limit_usd), 0.0, 0, {\"input\": 0, \"output\": 0}\n\n    def check(self):\n        if self.spent >= self.limit:\n            raise BudgetExceeded(\"budget of $%.4f used up after %d calls\" % (self.limit, self.calls))\n\n    def charge(self, kind, tokens_in=0, tokens_out=0):\n        self.calls += 1\n        self.tokens[\"input\"] += tokens_in\n        self.tokens[\"output\"] += tokens_out\n        self.spent += tokens_in / 1000 * PRICE_PER_1K[\"embed\" if kind == \"embed\" else \"input\"] + tokens_out / 1000 * PRICE_PER_1K[\"output\"]\n\n\nBUDGET = Budget(os.environ.get(\"VY_BUDGET_USD\", \"1.00\"))\n\n\ndef _call(fn):\n    \"\"\"Retry throttling and transient errors with exponential backoff and jitter; anything else (validation, access denied) fails at once.\"\"\"\n    BUDGET.check()\n    for attempt in range(1, MAX_ATTEMPTS + 1):\n        try:\n            return fn()\n        except ClientError as e:\n            code = e.response[\"Error\"][\"Code\"]\n            if code not in RETRYABLE:\n                raise\n            if attempt == MAX_ATTEMPTS:\n                raise ModelUnavailable(\"%s after %d attempts\" % (code, attempt)) from e\n            time.sleep(0.05 * 2 ** attempt + random.random() * 0.05)\n\n\ndef _text(resp):\n    return \"\".join(b.get(\"text\", \"\") for b in resp[\"output\"][\"message\"][\"content\"])\n\n\ndef chat(prompt):\n    r = _call(lambda: _rt.converse(modelId=CHAT_MODEL, messages=[{\"role\": \"user\", \"content\": [{\"text\": prompt}]}], inferenceConfig={\"maxTokens\": 200}))\n    BUDGET.charge(\"chat\", r[\"usage\"][\"inputTokens\"], r[\"usage\"][\"outputTokens\"])\n    return _text(r)\n\n\ndef chat_with_tools(prompt, tools):\n    r = _call(lambda: _rt.converse(modelId=CHAT_MODEL, messages=[{\"role\": \"user\", \"content\": [{\"text\": prompt}]}], toolConfig={\"tools\": tools}))\n    BUDGET.charge(\"chat\", r[\"usage\"][\"inputTokens\"], r[\"usage\"][\"outputTokens\"])\n    tool = next((b[\"toolUse\"] for b in r[\"output\"][\"message\"][\"content\"] if \"toolUse\" in b), None)\n    return {\"stop_reason\": r[\"stopReason\"], \"tool_use\": tool, \"text\": _text(r)}\n\n\ndef embed(text, dimensions=None):\n    \"\"\"dimensions: ask for a shorter vector when the model supports it (your RAG design sets this); None keeps the model's own size.\"\"\"\n    body = {\"inputText\": text}\n    if dimensions:\n        body[\"dimensions\"] = dimensions\n    r = _call(lambda: _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps(body)))\n    BUDGET.charge(\"embed\", len(text.split()))\n    return json.loads(r[\"body\"].read())[\"embedding\"]\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -500,7 +500,7 @@
      "text": "One LangGraph StateGraph: the supervisor plans a route, then the Facilities agent (knowledge search), Maintenance agent (asset lookup and, for write requests, a human-approval workflow) and Analytics agent (work-order statistics) run in order, and the supervisor synthesises a cited answer. Tools come from the gateway when it exists, otherwise from the Lambda functions, otherwise the agent reports the tool as unavailable instead of failing. That is why you can deploy and test this chapter before the tools exist: chapters 7, 6, 4 and 5 light the tools up one by one.",
      "file": "agents.py",
      "lang": "python",
-     "code": "import json\nimport os\nimport re\nimport time\nimport uuid\nfrom typing import TypedDict\n\nimport boto3\nfrom langgraph.graph import END, StateGraph\n\nimport mcp_client\n\nfrom vymodels import CHAT_MODEL as MODEL_ID\nLAMBDAS = {\"kb_search\": \"facilities-kb-search\", \"asset_status\": \"facilities-asset-status\"}\nGATEWAY = {}\n\n\nclass S(TypedDict, total=False):\n    question: str\n    user: str\n    route: list\n    facts: list\n    citations: list\n    analytics: dict\n    approval: dict\n    answer: str\n    llm_used: bool\n    tools: list\n    spans: list\n    steps: int\n    stopped: str\n\n\ndef guarded(fn):\n    \"\"\"Step budget and kill switch: every agent node counts as a step, and over budget the graph stops cleanly instead of running on.\n    The limit belongs to the runtime (an environment variable), not to the caller, so a user cannot raise it.\"\"\"\n    def run(st):\n        limit = int(os.environ.get(\"AGENT_MAX_STEPS\", \"12\"))\n        if st.get(\"stopped\"):\n            return st\n        st[\"steps\"] = st.get(\"steps\", 0) + 1\n        if st[\"steps\"] > limit:\n            st[\"stopped\"] = \"step_budget\"\n            st[\"answer\"] = \"I stopped because this request needed more than %d steps.\" % limit\n            return st\n        return fn(st)\n    return run\n\n\ndef converse(system, text, max_tokens=300):\n    try:\n        r = boto3.client(\"bedrock-runtime\").converse(modelId=MODEL_ID, system=[{\"text\": system}],\n                                                     messages=[{\"role\": \"user\", \"content\": [{\"text\": text}]}],\n                                                     inferenceConfig={\"maxTokens\": max_tokens, \"temperature\": 0})\n        return r[\"output\"][\"message\"][\"content\"][0][\"text\"]\n    except Exception:\n        return None\n\n\ndef discover_gateway():\n    \"\"\"Use the AgentCore Gateway when it exists and serves both tools.\"\"\"\n    GATEWAY.clear()\n    try:\n        gws = boto3.client(\"bedrock-agentcore-control\").list_gateways()[\"items\"]\n        gw = next(g for g in gws if g[\"name\"] == \"facilities-gateway\")\n        names = {t[\"name\"] for t in mcp_client.call(gw[\"gatewayId\"], \"tools/list\")[\"tools\"]}\n        if any(\"kb_search\" in n for n in names) and any(\"asset_status\" in n for n in names):\n            GATEWAY.update(id=gw[\"gatewayId\"], tools=names)\n    except Exception:\n        pass\n\n\ndef call_tool(tool, args, st):\n    t0 = time.time()\n    try:\n        if GATEWAY:\n            name = [n for n in GATEWAY[\"tools\"] if tool in n][0]\n            res = mcp_client.call(GATEWAY[\"id\"], \"tools/call\", {\"name\": name, \"arguments\": args})\n            out, via = (json.loads(res[\"content\"][0][\"text\"]) if res.get(\"content\") else res), \"agentcore-gateway\"\n        else:\n            r = boto3.client(\"lambda\").invoke(FunctionName=LAMBDAS[tool], Payload=json.dumps(args).encode())\n            out, via = json.loads(r[\"Payload\"].read() or b\"null\"), \"lambda-direct\"\n            if \"FunctionError\" in r:\n                raise RuntimeError(str(out)[:120])\n    except Exception as e:\n        out, via = {\"error\": type(e).__name__ + \": \" + str(e)[:100]}, \"unavailable\"\n    st.setdefault(\"tools\", []).append({\"tool\": tool, \"via\": via, \"args\": args})\n    st.setdefault(\"spans\", []).append(dict(name=\"tool:\" + tool, kind=\"tool\", start=t0, end=time.time(), via=via))\n    return out\n\n\ndef start_approval(rid, payload):\n    sf = boto3.client(\"stepfunctions\")\n    try:\n        sm = next(m for m in sf.list_state_machines()[\"stateMachines\"] if m[\"name\"] == \"work-order-approval\")\n        ex = sf.start_execution(stateMachineArn=sm[\"stateMachineArn\"], name=rid, input=json.dumps(payload))\n        return {\"request_id\": rid, \"execution_arn\": ex[\"executionArn\"], \"status\": \"PENDING_APPROVAL\"}\n    except Exception as e:\n        return {\"request_id\": rid, \"status\": \"APPROVAL_UNAVAILABLE\", \"error\": type(e).__name__}\n\n\nROUTER_PROMPT = (\n    \"You route facilities requests to specialist agents. The agents are:\\n\"\n    \"- facilities: searches the knowledge base (SOPs, safety rules, policies, procedures).\\n\"\n    \"- maintenance: looks up a specific asset (ids like B-12 or AHU-7) and its work orders, and can raise a work order.\\n\"\n    \"- analytics: counts and statistics over work orders.\\n\"\n    \"Reply with only a JSON list such as [\\\"facilities\\\",\\\"maintenance\\\"], drawn from [\\\"facilities\\\",\\\"maintenance\\\",\\\"analytics\\\"].\")\nANALYTICS_ONLY = re.compile(r\"^\\s*(how many|count|give me a summary|summary of|report|trend)\", re.I)\n\n\ndef build():\n    def span(st, name, t0):\n        st.setdefault(\"spans\", []).append(dict(name=name, kind=\"agent\", start=t0, end=time.time()))\n\n    def supervisor(st):\n        t0 = time.time()\n        plan, txt = None, converse(ROUTER_PROMPT, st[\"question\"], 60)\n        if txt:\n            try:\n                plan = [p for p in json.loads(re.search(r\"\\[.*\\]\", txt, re.S).group(0)) if p in (\"facilities\", \"maintenance\", \"analytics\")]\n            except Exception:\n                plan = None\n        st[\"llm_used\"] = bool(plan)\n        if plan and \"facilities\" not in plan and not ANALYTICS_ONLY.search(st[\"question\"]):\n            plan.insert(0, \"facilities\")      # grounding rule: every non-statistics question is answered from the knowledge base\n        if not plan:                          # no model reachable: keyword routing\n            plan = [\"facilities\"]\n            if re.search(r\"[A-Z]{1,3}-\\d+|work order|status|ticket|asset\", st[\"question\"]):\n                plan.append(\"maintenance\")\n            if re.search(r\"how many|count|summary|report|trend|open work orders\", st[\"question\"].lower()):\n                plan.append(\"analytics\")\n        st[\"route\"] = plan\n        span(st, \"supervisor.plan\", t0)\n        return st\n\n    def facilities(st):\n        t0 = time.time()\n        out = call_tool(\"kb_search\", {\"query\": st[\"question\"], \"top_k\": 3}, st)\n        results = out.get(\"results\", [])\n        st[\"facts\"] = [r[\"text\"] for r in results]\n        st[\"citations\"] = [{\"n\": i + 1, \"source\": r[\"source\"], \"text\": r[\"text\"][:160]} for i, r in enumerate(results)]\n        span(st, \"agent:facilities\", t0)\n        return st\n\n    def maintenance(st):\n        t0 = time.time()\n        m = re.search(r\"\\b([A-Z]{1,3}-\\d+)\\b\", st[\"question\"])\n        if m:\n            out = call_tool(\"asset_status\", {\"asset_id\": m.group(1)}, st)\n            if out.get(\"found\"):\n                open_wos = [w[\"work_order_id\"] + \" \" + w[\"title\"] for w in out[\"work_orders\"] if w.get(\"status\") == \"OPEN\"]\n                st.setdefault(\"facts\", []).append(\"Asset %s status %s; open work orders: %s.\" % (m.group(1), out[\"asset\"].get(\"status\"), open_wos or \"none\"))\n                if re.search(r\"work order|raise|open a|create\", st[\"question\"], re.I):      # write path: human approval first\n                    rid = \"req-\" + uuid.uuid4().hex[:10]\n                    st[\"approval\"] = start_approval(rid, {\n                        \"request_id\": rid, \"asset_id\": m.group(1), \"summary\": \"Work order for %s: %s\" % (m.group(1), st[\"question\"][:100]),\n                        \"priority\": \"P1\" if re.search(r\"exceed|pressure|fire|trapped\", st[\"question\"], re.I) else \"P2\", \"requester\": st.get(\"user\", \"\")})\n                    st[\"tools\"].append({\"tool\": \"create_work_order\", \"via\": \"step-functions-approval\", \"args\": {\"request_id\": rid}})\n        span(st, \"agent:maintenance\", t0)\n        return st\n\n    def analytics(st):\n        t0 = time.time()\n        try:\n            items = boto3.client(\"dynamodb\").scan(TableName=\"facilities-work-orders\")[\"Items\"]\n            rows = [{k: list(v.values())[0] for k, v in i.items()} for i in items]\n        except Exception:\n            rows = None\n        if rows is None:\n            st[\"analytics\"] = {\"error\": \"work-order table not available yet\"}\n        else:\n            by = {}\n            for w in rows:\n                by.setdefault(w[\"status\"], {}).setdefault(w[\"priority\"], 0)\n                by[w[\"status\"]][w[\"priority\"]] += 1\n            st[\"analytics\"] = {\"total\": len(rows), \"by_status_priority\": by}\n            st.setdefault(\"facts\", []).append(\"Work orders: %d total; by status/priority %s.\" % (len(rows), json.dumps(by)))\n        st.setdefault(\"tools\", []).append({\"tool\": \"work_order_stats\", \"via\": \"dynamodb\" if rows is not None else \"unavailable\", \"args\": {}})\n        span(st, \"agent:analytics\", t0)\n        return st\n\n    def synth(st):\n        t0 = time.time()\n        cites = st.get(\"citations\", [])\n        ctxt = \"\\n\".join(\"[%d] %s\" % (c[\"n\"], c[\"text\"]) for c in cites) + \"\\n\" + \"\\n\".join(st.get(\"facts\", [])[len(cites):])\n        txt = converse(\"Answer using only the context. Cite sources like [1].\", \"Context:\\n%s\\n\\nQuestion: %s\" % (ctxt, st[\"question\"]), 300)\n        if txt:\n            st[\"answer\"] = txt\n        else:\n            parts = []\n            if cites:\n                first = cites[0][\"text\"].split(\"\\n\")\n                parts.append(\"%s: %s [1]\" % (first[0].lstrip(\"# \").strip(), \" \".join(first[1:]).strip()))\n            parts += st.get(\"facts\", [])[len(cites):]\n            if st.get(\"approval\", {}).get(\"status\") == \"PENDING_APPROVAL\":\n                parts.append(\"A work order request (%s) was submitted and is waiting for approval.\" % st[\"approval\"][\"request_id\"])\n            st[\"answer\"] = \" \".join(parts) or \"I could not reach my tools yet, so I have nothing grounded to answer with.\"\n        span(st, \"supervisor.synthesize\", t0)\n        return st\n\n    g = StateGraph(S)\n    for n, f in [(\"supervisor\", supervisor), (\"facilities\", facilities), (\"maintenance\", maintenance), (\"analytics\", analytics), (\"synth\", synth)]:\n        g.add_node(n, guarded(f))\n    g.set_entry_point(\"supervisor\")\n\n    def nxt(after):\n        order = [\"facilities\", \"maintenance\", \"analytics\"]\n\n        def r(st):\n            rest = [a for a in order[order.index(after) + 1:] if a in st[\"route\"]] if after else [a for a in order if a in st[\"route\"]]\n            return rest[0] if rest else \"synth\"\n        return r\n    for n in (None, \"facilities\", \"maintenance\", \"analytics\"):\n        g.add_conditional_edges(n or \"supervisor\", nxt(n), {\"facilities\": \"facilities\", \"maintenance\": \"maintenance\", \"analytics\": \"analytics\", \"synth\": \"synth\"})\n    g.add_edge(\"synth\", END)\n    return g.compile()\n\n\ndef ask(question, user=\"anonymous\"):\n    discover_gateway()\n    return build().invoke({\"question\": question, \"user\": user, \"tools\": [], \"spans\": []})\n",
+     "code": "import json\nimport os\nimport re\nimport time\nimport uuid\nfrom typing import TypedDict\n\nimport boto3\nfrom langgraph.graph import END, StateGraph\n\nimport mcp_client\n\nfrom vymodels import CHAT_MODEL as MODEL_ID\nLAMBDAS = {\"kb_search\": \"facilities-kb-search\", \"asset_status\": \"facilities-asset-status\"}\nGATEWAY = {}\n\n\nclass S(TypedDict, total=False):\n    question: str\n    user: str\n    route: list\n    facts: list\n    citations: list\n    analytics: dict\n    approval: dict\n    answer: str\n    llm_used: bool\n    tools: list\n    spans: list\n    steps: int\n    stopped: str\n\n\ndef guarded(fn):\n    \"\"\"Step budget and kill switch: every agent node counts as a step, and over budget the graph stops cleanly instead of running on.\n    The limit belongs to the runtime (an environment variable), not to the caller, so a user cannot raise it.\"\"\"\n    def run(st):\n        limit = int(os.environ.get(\"AGENT_MAX_STEPS\", \"12\"))\n        if st.get(\"stopped\"):\n            return st\n        st[\"steps\"] = st.get(\"steps\", 0) + 1\n        if st[\"steps\"] > limit:\n            st[\"stopped\"] = \"step_budget\"\n            st[\"answer\"] = \"I stopped because this request needed more than %d steps.\" % limit\n            return st\n        return fn(st)\n    return run\n\n\ndef converse(system, text, max_tokens=300):\n    try:\n        r = boto3.client(\"bedrock-runtime\").converse(modelId=MODEL_ID, system=[{\"text\": system}],\n                                                     messages=[{\"role\": \"user\", \"content\": [{\"text\": text}]}],\n                                                     inferenceConfig={\"maxTokens\": max_tokens, \"temperature\": 0})\n        return r[\"output\"][\"message\"][\"content\"][0][\"text\"]\n    except Exception:\n        return None\n\n\ndef discover_gateway():\n    \"\"\"Use the AgentCore Gateway when it exists and serves both tools.\"\"\"\n    GATEWAY.clear()\n    try:\n        gws = boto3.client(\"bedrock-agentcore-control\").list_gateways()[\"items\"]\n        gw = next(g for g in gws if g[\"name\"] == \"facilities-gateway\")\n        names = {t[\"name\"] for t in mcp_client.call(gw[\"gatewayId\"], \"tools/list\")[\"tools\"]}\n        if any(\"kb_search\" in n for n in names) and any(\"asset_status\" in n for n in names):\n            GATEWAY.update(id=gw[\"gatewayId\"], tools=names)\n    except Exception:\n        pass\n\n\ndef call_tool(tool, args, st):\n    t0 = time.time()\n    try:\n        if GATEWAY:\n            name = [n for n in GATEWAY[\"tools\"] if tool in n][0]\n            res = mcp_client.call(GATEWAY[\"id\"], \"tools/call\", {\"name\": name, \"arguments\": args})\n            out, via = (json.loads(res[\"content\"][0][\"text\"]) if res.get(\"content\") else res), \"agentcore-gateway\"\n        else:\n            r = boto3.client(\"lambda\").invoke(FunctionName=LAMBDAS[tool], Payload=json.dumps(args).encode())\n            out, via = json.loads(r[\"Payload\"].read() or b\"null\"), \"lambda-direct\"\n            if \"FunctionError\" in r:\n                raise RuntimeError(str(out)[:120])\n    except Exception as e:\n        out, via = {\"error\": type(e).__name__ + \": \" + str(e)[:100]}, \"unavailable\"\n    st.setdefault(\"tools\", []).append({\"tool\": tool, \"via\": via, \"args\": args})\n    st.setdefault(\"spans\", []).append(dict(name=\"tool:\" + tool, kind=\"tool\", start=t0, end=time.time(), via=via))\n    return out\n\n\ndef start_approval(rid, payload):\n    sf = boto3.client(\"stepfunctions\")\n    try:\n        sm = next(m for m in sf.list_state_machines()[\"stateMachines\"] if m[\"name\"] == \"work-order-approval\")\n        ex = sf.start_execution(stateMachineArn=sm[\"stateMachineArn\"], name=rid, input=json.dumps(payload))\n        return {\"request_id\": rid, \"execution_arn\": ex[\"executionArn\"], \"status\": \"PENDING_APPROVAL\"}\n    except Exception as e:\n        return {\"request_id\": rid, \"status\": \"APPROVAL_UNAVAILABLE\", \"error\": type(e).__name__}\n\n\nROUTER_PROMPT = (\n    \"You route facilities requests to specialist agents. The agents are:\\n\"\n    \"- facilities: searches the knowledge base (SOPs, safety rules, policies, procedures).\\n\"\n    \"- maintenance: looks up a specific asset (ids like B-12 or AHU-7) and its work orders, and can raise a work order.\\n\"\n    \"- analytics: counts and statistics over work orders.\\n\"\n    \"Reply with only a JSON list such as [\\\"facilities\\\",\\\"maintenance\\\"], drawn from [\\\"facilities\\\",\\\"maintenance\\\",\\\"analytics\\\"].\")\nANALYTICS_ONLY = re.compile(r\"^\\s*(how many|count|give me a summary|summary of|report|trend)\", re.I)\n\n\ndef build():\n    def span(st, name, t0):\n        st.setdefault(\"spans\", []).append(dict(name=name, kind=\"agent\", start=t0, end=time.time()))\n\n    def supervisor(st):\n        t0 = time.time()\n        plan, txt = None, converse(ROUTER_PROMPT, st[\"question\"], 60)\n        if txt:\n            try:\n                plan = [p for p in json.loads(re.search(r\"\\[.*\\]\", txt, re.S).group(0)) if p in (\"facilities\", \"maintenance\", \"analytics\")]\n            except Exception:\n                plan = None\n        st[\"llm_used\"] = bool(plan)\n        if plan and \"facilities\" not in plan and not ANALYTICS_ONLY.search(st[\"question\"]):\n            plan.insert(0, \"facilities\")      # grounding rule: every non-statistics question is answered from the knowledge base\n        if not plan:                          # no model reachable: keyword routing\n            plan = [\"facilities\"]\n            if re.search(r\"[A-Z]{1,3}-\\d+|work order|status|ticket|asset\", st[\"question\"]):\n                plan.append(\"maintenance\")\n            if re.search(r\"how many|count|summary|report|trend|open work orders\", st[\"question\"].lower()):\n                plan.append(\"analytics\")\n        st[\"route\"] = plan\n        span(st, \"supervisor.plan\", t0)\n        return st\n\n    def facilities(st):\n        t0 = time.time()\n        out = call_tool(\"kb_search\", {\"query\": st[\"question\"]}, st)      # how many passages comes from your design, inside the tool\n        results = out.get(\"results\", [])\n        st[\"facts\"] = [r[\"text\"] for r in results]\n        st[\"citations\"] = [{\"n\": i + 1, \"source\": r[\"source\"], \"text\": r[\"text\"][:160], \"score\": r.get(\"score\")} for i, r in enumerate(results)]\n        span(st, \"agent:facilities\", t0)\n        return st\n\n    def maintenance(st):\n        t0 = time.time()\n        m = re.search(r\"\\b([A-Z]{1,3}-\\d+)\\b\", st[\"question\"])\n        if m:\n            out = call_tool(\"asset_status\", {\"asset_id\": m.group(1)}, st)\n            if out.get(\"found\"):\n                open_wos = [w[\"work_order_id\"] + \" \" + w[\"title\"] for w in out[\"work_orders\"] if w.get(\"status\") == \"OPEN\"]\n                st.setdefault(\"facts\", []).append(\"Asset %s status %s; open work orders: %s.\" % (m.group(1), out[\"asset\"].get(\"status\"), open_wos or \"none\"))\n                if re.search(r\"work order|raise|open a|create\", st[\"question\"], re.I):      # write path: human approval first\n                    rid = \"req-\" + uuid.uuid4().hex[:10]\n                    st[\"approval\"] = start_approval(rid, {\n                        \"request_id\": rid, \"asset_id\": m.group(1), \"summary\": \"Work order for %s: %s\" % (m.group(1), st[\"question\"][:100]),\n                        \"priority\": \"P1\" if re.search(r\"exceed|pressure|fire|trapped\", st[\"question\"], re.I) else \"P2\", \"requester\": st.get(\"user\", \"\")})\n                    st[\"tools\"].append({\"tool\": \"create_work_order\", \"via\": \"step-functions-approval\", \"args\": {\"request_id\": rid}})\n        span(st, \"agent:maintenance\", t0)\n        return st\n\n    def analytics(st):\n        t0 = time.time()\n        try:\n            items = boto3.client(\"dynamodb\").scan(TableName=\"facilities-work-orders\")[\"Items\"]\n            rows = [{k: list(v.values())[0] for k, v in i.items()} for i in items]\n        except Exception:\n            rows = None\n        if rows is None:\n            st[\"analytics\"] = {\"error\": \"work-order table not available yet\"}\n        else:\n            by = {}\n            for w in rows:\n                by.setdefault(w[\"status\"], {}).setdefault(w[\"priority\"], 0)\n                by[w[\"status\"]][w[\"priority\"]] += 1\n            st[\"analytics\"] = {\"total\": len(rows), \"by_status_priority\": by}\n            st.setdefault(\"facts\", []).append(\"Work orders: %d total; by status/priority %s.\" % (len(rows), json.dumps(by)))\n        st.setdefault(\"tools\", []).append({\"tool\": \"work_order_stats\", \"via\": \"dynamodb\" if rows is not None else \"unavailable\", \"args\": {}})\n        span(st, \"agent:analytics\", t0)\n        return st\n\n    def synth(st):\n        t0 = time.time()\n        cites = st.get(\"citations\", [])\n        ctxt = \"\\n\".join(\"[%d] %s\" % (c[\"n\"], c[\"text\"]) for c in cites) + \"\\n\" + \"\\n\".join(st.get(\"facts\", [])[len(cites):])\n        txt = converse(\"Answer using only the context. Cite sources like [1].\", \"Context:\\n%s\\n\\nQuestion: %s\" % (ctxt, st[\"question\"]), 300)\n        if txt:\n            st[\"answer\"] = txt\n        else:\n            parts = []\n            if cites:\n                first = cites[0][\"text\"].split(\"\\n\")\n                parts.append(\"%s: %s [1]\" % (first[0].lstrip(\"# \").strip(), \" \".join(first[1:]).strip()))\n            parts += st.get(\"facts\", [])[len(cites):]\n            if st.get(\"approval\", {}).get(\"status\") == \"PENDING_APPROVAL\":\n                parts.append(\"A work order request (%s) was submitted and is waiting for approval.\" % st[\"approval\"][\"request_id\"])\n            st[\"answer\"] = \" \".join(parts) or \"I could not reach my tools yet, so I have nothing grounded to answer with.\"\n        span(st, \"supervisor.synthesize\", t0)\n        return st\n\n    g = StateGraph(S)\n    for n, f in [(\"supervisor\", supervisor), (\"facilities\", facilities), (\"maintenance\", maintenance), (\"analytics\", analytics), (\"synth\", synth)]:\n        g.add_node(n, guarded(f))\n    g.set_entry_point(\"supervisor\")\n\n    def nxt(after):\n        order = [\"facilities\", \"maintenance\", \"analytics\"]\n\n        def r(st):\n            rest = [a for a in order[order.index(after) + 1:] if a in st[\"route\"]] if after else [a for a in order if a in st[\"route\"]]\n            return rest[0] if rest else \"synth\"\n        return r\n    for n in (None, \"facilities\", \"maintenance\", \"analytics\"):\n        g.add_conditional_edges(n or \"supervisor\", nxt(n), {\"facilities\": \"facilities\", \"maintenance\": \"maintenance\", \"analytics\": \"analytics\", \"synth\": \"synth\"})\n    g.add_edge(\"synth\", END)\n    return g.compile()\n\n\ndef ask(question, user=\"anonymous\"):\n    discover_gateway()\n    return build().invoke({\"question\": question, \"user\": user, \"tools\": [], \"spans\": []})\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -1253,8 +1253,311 @@
    ]
   },
   {
-   "id": 12,
+   "id": 14,
    "order": 4,
+   "title": "Design the RAG",
+   "short": "Design",
+   "objective": "Design the retrieval-augmented generation the later chapters build: chunking, embedding, search, rerank and grounding, tested on a golden set and saved as one design file.",
+   "learn": [
+    "Chunk size, overlap and search type are design choices you can measure",
+    "A golden set of questions turns a feeling into a score",
+    "One design file that every later chapter reads"
+   ],
+   "services": [
+    "Amazon Bedrock Knowledge Bases",
+    "RAG Studio (Vyomi console)"
+   ],
+   "build": [
+    "Open RAG Studio and load the course documents.",
+    "Change one setting at a time: chunking, search type, top K, rerank.",
+    "Run the golden set after each change and keep what scores better.",
+    "Save the design as rag-design.json and write rag_design.py, the loader the later chapters import.",
+    "Run show_design.py to check the file."
+   ],
+   "contract": {
+    "needs": [
+     10
+    ],
+    "names": {
+     "design": "rag-design.json"
+    }
+   },
+   "checks": [
+    "rag-design.json is saved next to your code",
+    "show_design.py prints design OK",
+    "the loader returns the same values as the file"
+   ],
+   "simplified": [
+    "RAG Studio scores retrieval with the small local embedding model, so absolute scores are lower than production; use them to compare designs, not as targets.",
+    "Bedrock knowledge bases offer fixed-size chunking in this course; other strategies in a design fall back to fixed size with a warning."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/components/c12_pipeline.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1234,
+    1066,
+    1770,
+    1086
+   ],
+   "level": "Intermediate",
+   "minutes": 30,
+   "outcome": "A tested RAG design saved as rag-design.json, read by the pipeline, search and response chapters",
+   "lessons": 5,
+   "color": "#15803d",
+   "about": "Design the RAG is where you decide how knowledge is prepared and found before you build it: how documents are chunked, how they are embedded, how passages are searched and ranked, and when the assistant should refuse to answer.",
+   "why": [
+    "Measured settings beat defaults, and a golden set is how you measure",
+    "The tested design and the built pipeline cannot drift apart because the build reads the design file",
+    "A refusal below a grounding threshold is safer than a confident guess"
+   ],
+   "icon": "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open the API reference tab at the top of this dialog: each operation shows the exact endpoint and the CLI and SDK settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
+   ],
+   "setup": [
+    {
+     "title": "Design the RAG in RAG Studio",
+     "route": "/bedrock/knowledge-bases/studio",
+     "do": [
+      "Open Bedrock, Knowledge bases, then RAG Studio.",
+      "Load the course documents, change one setting at a time (chunk size, search type, top K, rerank) and run the golden set after each change.",
+      "Keep the design that scores best, then Save JSON and keep the file as rag-design.json."
+     ],
+     "fill": {
+      "Design name": "facilities-rag"
+     },
+     "service": "Bedrock RAG Studio",
+     "note": "",
+     "click": false,
+     "n": 1,
+     "shot": null
+    }
+   ],
+   "lab": [
+    {
+     "title": "Write the design loader",
+     "text": "Every later chapter that chunks, searches or answers imports this one file instead of hard-coding its settings. It finds your design file, merges it over the defaults (which are exactly the values the course used before this chapter existed), and returns plain numbers. A value that is out of range prints a warning and falls back to its default, so a typo never stops a chapter.",
+     "file": "rag_design.py",
+     "lang": "python",
+     "code": "\"\"\"rag_design.py: the one place the RAG design is read from.\n\nThe design file `rag-design.json` (schema vyomi.rag-design/v1) is what you build and test in the console's RAG Studio. This module finds it\n(RAG_DESIGN_PATH, else ./rag-design.json, else the parent folder, else next to this file), merges it over the defaults below and hands the\nchapters plain values. The defaults are exactly what the course used before there was a design, so with no file nothing changes.\nA bad value never stops a chapter: it prints a warning and the default is used for that field.\"\"\"\nimport copy\nimport json\nimport os\nimport sys\n\nCLOUD = \"aws\"\nDEFAULTS = {\n    \"schema\": \"vyomi.rag-design/v1\", \"name\": \"facilities-rag\", \"cloud\": CLOUD,\n    \"chunking\": {\"strategy\": \"FIXED_SIZE\", \"maxTokens\": 200, \"overlapPct\": 10},\n    \"embedding\": {\"model\": \"\", \"dimensions\": None},\n    \"retrieve\": {\"topK\": 3, \"searchType\": \"vector\", \"hybridWeight\": 0.5, \"filter\": None},\n    \"rerank\": {\"enabled\": False, \"topN\": 2},\n    \"generate\": {\"groundingThreshold\": 0},\n    \"sources\": [], \"golden\": [], \"createdAt\": \"\",\n}\n# (section, key): (kind, low, high or choices). Anything outside these rules falls back to the default.\nRULES = {\n    (\"chunking\", \"strategy\"): (\"choice\", (\"FIXED_SIZE\",)),\n    (\"chunking\", \"maxTokens\"): (\"int\", 20, 8192),\n    (\"chunking\", \"overlapPct\"): (\"int\", 0, 50),\n    (\"embedding\", \"dimensions\"): (\"int?\", 1, 8192),\n    (\"retrieve\", \"topK\"): (\"int\", 1, 100),\n    (\"retrieve\", \"searchType\"): (\"choice\", (\"vector\", \"keyword\", \"hybrid\")),\n    (\"retrieve\", \"hybridWeight\"): (\"num\", 0, 1),\n    (\"rerank\", \"enabled\"): (\"bool\",),\n    (\"rerank\", \"topN\"): (\"int\", 1, 100),\n    (\"generate\", \"groundingThreshold\"): (\"num\", 0, 1),\n}\n_cache = {}\n\n\ndef _find():\n    here = os.path.dirname(os.path.abspath(__file__))\n    for p in (os.environ.get(\"RAG_DESIGN_PATH\"), \"rag-design.json\", os.path.join(\"..\", \"rag-design.json\"), os.path.join(here, \"rag-design.json\")):\n        if p and os.path.isfile(p):\n            return os.path.abspath(p)\n    return None\n\n\ndef _ok(rule, v):\n    kind = rule[0]\n    if kind == \"bool\":\n        return isinstance(v, bool)\n    if kind == \"choice\":\n        return v in rule[1]\n    if kind == \"int?\" and v is None:\n        return True\n    if kind in (\"int\", \"int?\"):\n        return isinstance(v, int) and not isinstance(v, bool) and rule[1] <= v <= rule[2]\n    return isinstance(v, (int, float)) and not isinstance(v, bool) and rule[1] <= v <= rule[2]\n\n\ndef _read(path):\n    problems, merged = [], copy.deepcopy(DEFAULTS)\n    if not path:\n        return merged, problems\n    try:\n        with open(path, encoding=\"utf-8\") as f:\n            raw = json.load(f)\n        if not isinstance(raw, dict):\n            raise ValueError(\"the top level must be an object\")\n    except (OSError, ValueError) as e:\n        return merged, [\"%s: cannot read (%s); using the defaults\" % (path, e)]\n    for key, val in raw.items():\n        if isinstance(DEFAULTS.get(key), dict):\n            if not isinstance(val, dict):\n                problems.append(\"%s must be an object; using the default\" % key)\n                continue\n            for k, v in val.items():\n                if (key, k) == (\"retrieve\", \"searchType\") and isinstance(v, str):      # RAG Studio writes HYBRID / SEMANTIC; this course says hybrid / vector\n                    v = {\"hybrid\": \"hybrid\", \"semantic\": \"vector\", \"vector\": \"vector\", \"keyword\": \"keyword\"}.get(v.lower(), v)\n                rule = RULES.get((key, k))\n                if rule and not _ok(rule, v):\n                    problems.append(\"%s.%s = %r is not allowed (%s); using %r\" % (key, k, v, _describe(rule), DEFAULTS[key][k]))\n                else:\n                    merged[key][k] = v\n        else:\n            merged[key] = val\n    if merged.get(\"cloud\") != CLOUD:\n        problems.append(\"this design was made for %r, this course builds %r\" % (merged.get(\"cloud\"), CLOUD))\n    return merged, problems\n\n\ndef _describe(rule):\n    return {\"choice\": lambda: \"one of \" + \", \".join(map(str, rule[1])), \"bool\": lambda: \"true or false\"}.get(rule[0], lambda: \"a number from %s to %s\" % rule[1:3])()\n\n\ndef _state():\n    path = _find()\n    stamp = (path, os.path.getmtime(path) if path else None)\n    if _cache.get(\"stamp\") != stamp:\n        design, problems = _read(path)\n        for p in problems:\n            print(\"rag_design: warning: \" + p, file=sys.stderr)\n        _cache.update(stamp=stamp, path=path, design=design, problems=problems)\n    return _cache\n\n\ndef load():\n    \"\"\"The design: the file merged over the defaults (a fresh copy you may change).\"\"\"\n    return copy.deepcopy(_state()[\"design\"])\n\n\ndef source():\n    \"\"\"The path of the design file in use, or None when the built-in defaults are used.\"\"\"\n    return _state()[\"path\"]\n\n\ndef problems():\n    return list(_state()[\"problems\"])\n\n\ndef customised(section):\n    \"\"\"True when the design changes this section from the course defaults (so a chapter only sends extra settings when you asked for them).\"\"\"\n    return load()[section] != DEFAULTS[section]\n\n\ndef chunk_cfg():\n    c = load()[\"chunking\"]\n    return dict(strategy=c[\"strategy\"], maxTokens=c[\"maxTokens\"], overlapPct=c[\"overlapPct\"])\n\n\ndef top_k():\n    return load()[\"retrieve\"][\"topK\"]\n\n\ndef search_type():\n    return load()[\"retrieve\"][\"searchType\"]\n\n\ndef rerank():\n    r = load()[\"rerank\"]\n    return dict(enabled=r[\"enabled\"], topN=r[\"topN\"])\n\n\ndef grounding_threshold():\n    return load()[\"generate\"][\"groundingThreshold\"]\n\n\ndef dimensions():\n    \"\"\"The embedding vector size the design asks for, or None for the model's own size.\"\"\"\n    return load()[\"embedding\"][\"dimensions\"]\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Save the starting design",
+     "text": "The design file, in the schema `vyomi.rag-design/v1` writes when you export a design. This one is the course's starting point, so saving it changes nothing yet. Replace it with the file you export from Bedrock, RAG Studio once you have tuned and tested your own design: chapters 12, 6 and 11 will build and answer with your numbers. Keep the name `rag-design.json` next to your other files.",
+     "file": "rag-design.json",
+     "lang": "json",
+     "code": "{\n  \"schema\": \"vyomi.rag-design/v1\",\n  \"name\": \"facilities-rag\",\n  \"cloud\": \"aws\",\n  \"chunking\": {\n    \"strategy\": \"FIXED_SIZE\",\n    \"maxTokens\": 200,\n    \"overlapPct\": 10\n  },\n  \"embedding\": {\n    \"model\": \"\",\n    \"dimensions\": null\n  },\n  \"retrieve\": {\n    \"topK\": 3,\n    \"searchType\": \"SEMANTIC\",\n    \"hybridWeight\": 0.5,\n    \"filter\": null\n  },\n  \"rerank\": {\n    \"enabled\": false,\n    \"topN\": 2\n  },\n  \"generate\": {\n    \"groundingThreshold\": 0\n  },\n  \"sources\": [\n    {\n      \"bucket\": \"facilities-docs\",\n      \"prefix\": \"docs/\"\n    }\n  ],\n  \"golden\": [\n    {\n      \"question\": \"What should I do when boiler pressure exceeds 30 psi?\",\n      \"expectedSources\": [\n        \"boiler-sop\"\n      ],\n      \"expectedAnswer\": \"close the main steam valve\"\n    },\n    {\n      \"question\": \"AHU-7 supply air temperature drift chilled water valve\",\n      \"expectedSources\": [\n        \"hvac-maintenance-manual\"\n      ],\n      \"expectedAnswer\": \"\"\n    }\n  ],\n  \"createdAt\": \"2026-11-26T09:00:00Z\"\n}\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    },
+    {
+     "title": "Check the design",
+     "text": "Loads the design the way the later chapters will, checks every value against its allowed range and prints what they will use. Run it after every change to `rag-design.json`.",
+     "file": "show_design.py",
+     "lang": "python",
+     "code": "import rag_design\n\nd = rag_design.load()\nprint(\"design file:\", rag_design.source() or \"none found, using the built-in defaults\")\nprint(\"name:\", d[\"name\"], \"| cloud:\", d[\"cloud\"])\nc = d[\"chunking\"]\nprint(\"chunking:\", c[\"strategy\"], \"| maxTokens\", c[\"maxTokens\"], \"| overlap\", c[\"overlapPct\"], \"%\")\ne = d[\"embedding\"]\nprint(\"embedding:\", e[\"model\"] or \"the model this simulator hosts\", \"| dimensions\", e[\"dimensions\"] or \"model default\")\nr = d[\"retrieve\"]\nprint(\"retrieve: topK\", r[\"topK\"], \"|\", r[\"searchType\"], \"search\", \"| hybridWeight\", r[\"hybridWeight\"], \"| filter\", r[\"filter\"])\nrr = d[\"rerank\"]\nprint(\"rerank:\", \"on, keep the best %d\" % rr[\"topN\"] if rr[\"enabled\"] else \"off\")\nprint(\"generate: refuse below a grounding score of\", d[\"generate\"][\"groundingThreshold\"])\nprint(\"sources:\", len(d[\"sources\"]), \"| golden questions:\", len(d[\"golden\"]))\nbad = rag_design.problems()\nprint(\"design OK\" if not bad else \"design has %d problem(s); the defaults are used for those fields\" % len(bad))\nfor p in bad:\n    print(\"  -\", p)\n",
+     "run": "python show_design.py",
+     "expect": "design OK",
+     "needs_runtime": false,
+     "edition": [
+      "nano",
+      "mesh"
+     ],
+     "nano_note": null,
+     "kind": "build",
+     "needs_appliance": false
+    }
+   ],
+   "explain": {
+    "lead": [
+     "Before you build a knowledge pipeline, decide how it should work. How big should a chunk be? Which kind of search? How many passages go to the model, and when should the assistant refuse because nothing relevant was found? These are design choices, and the defaults are rarely the best ones for your documents.",
+     "In this chapter you open the console's RAG Studio, design the RAG on the facilities documents, test it against a golden set of questions with known answers, and save the result as one small file. The chapters that build the pipeline, search it and answer from it read that file, so changing the design changes the build."
+    ],
+    "concepts": [
+     [
+      "Chunking",
+      "Documents are cut into passages before they are embedded. Small chunks match a question precisely but lose context; large chunks keep context but blur what they are about. Overlap repeats a little text at each edge so a sentence is not cut in half."
+     ],
+     [
+      "Retrieval settings",
+      "How many passages to fetch (top K), and whether to search by meaning (vector), by words (keyword) or both (hybrid). Hybrid helps when a question uses an exact code such as an asset id."
+     ],
+     [
+      "Reranking",
+      "A second, slower pass that re-scores the candidates against the question and keeps only the best few. It trades time for precision."
+     ],
+     [
+      "Golden set",
+      "A short list of real questions, each with the document that should answer it. It turns \"this seems fine\" into a score you can compare between designs."
+     ],
+     [
+      "Grounding threshold",
+      "A minimum relevance score. If the best passage scores below it, the assistant says it cannot answer instead of guessing."
+     ]
+    ],
+    "flow": [
+     [
+      "Open the studio",
+      "Load the course documents into RAG Studio so you can see how they are chunked."
+     ],
+     [
+      "Change one thing at a time",
+      "Chunk size, search type, top K, rerank. Run the golden set after each change and keep what improves the score."
+     ],
+     [
+      "Save the design",
+      "Export the design as rag-design.json (schema vyomi.rag-design/v1) next to your code."
+     ],
+     [
+      "Let the build read it",
+      "The pipeline, search and response chapters import rag_design.py and use your numbers."
+     ]
+    ],
+    "example": "Priya's question \"Boiler 2 pressure is at 31 psi\" needs the boiler SOP, which is a short document, while the HVAC manual is long. With 200-token chunks the manual's answer is split across two chunks. In the studio you raise the chunk size, rerun the golden set and see the HVAC question move from third to first. You save that design and the later chapters index with it.",
+    "pitfalls": [
+     "Tuning by feel: change one setting at a time and measure on the golden set.",
+     "A golden set that only holds easy questions: include one the documents cannot answer.",
+     "Designing on one set of documents and indexing another: keep the sources in the design.",
+     "Setting the grounding threshold so high that every question is refused."
+    ]
+   },
+   "narr": {
+    "scene": "Priya asks about the HVAC filter schedule and gets half an answer: the sentence she needs was cut in two by the pipeline, one half in each chunk. Nobody chose a chunk size. It was a default, and nobody ever checked it against the questions people really ask.",
+    "problem": "Chunk size, search type, how many passages to fetch, whether to rerank: each is a setting, and each changes the answers. If you set them once without measuring, you are guessing, and you will not know it until a technician gets a wrong answer.",
+    "idea": [
+     "A recipe you taste as you cook",
+     "A good cook does not fix the salt before tasting. They change one thing, taste, and write down the version that worked. RAG design is the same: change one setting, run a fixed set of test questions, keep what scores better, and save the recipe so the next build uses it."
+    ],
+    "walk": [
+     [
+      "Load the documents into the studio",
+      "RAG Studio shows the facilities documents cut into chunks, so you can see where a sentence gets split."
+     ],
+     [
+      "Make a change and test it",
+      "Raise the chunk size, or switch to hybrid search. Run the golden set: each question has the document that should answer it, and the studio scores how many came first."
+     ],
+     [
+      "Keep the version that scores best",
+      "Compare the runs. Keep one change at a time so you know which setting helped."
+     ],
+     [
+      "Save the recipe",
+      "Export rag-design.json. Chunking, embedding, search type, top K, rerank and the grounding threshold are in one small file."
+     ],
+     [
+      "The build reads it",
+      "The pipeline chunks with your size, the search fetches your top K, the response chapter refuses below your threshold. The code does not change, the file does."
+     ]
+    ],
+    "quiz": [
+     [
+      "Why test a design on a golden set instead of trying a few questions?",
+      [
+       "It is required by the cloud",
+       "A fixed set gives a score you can compare between designs",
+       "It makes the index smaller"
+      ],
+      1,
+      "Trying a few questions by hand cannot tell you whether a change helped or only moved the problem."
+     ],
+     [
+      "What does a grounding threshold do?",
+      [
+       "Speeds up search",
+       "Refuses to answer when nothing retrieved is relevant enough",
+       "Encrypts the documents"
+      ],
+      1,
+      "A low score means the passages do not really answer the question, so a refusal is more honest than a guess."
+     ],
+     [
+      "Why save the design as a file the later chapters read?",
+      [
+       "So the build and the design cannot drift apart",
+       "To make the course longer",
+       "Because JSON is required"
+      ],
+      0,
+      "One file means the settings you tested are the settings that run."
+     ]
+    ],
+    "recap": [
+     "Chunking, search and grounding are design choices, not defaults.",
+     "Change one thing at a time and measure on a golden set.",
+     "Save the design as rag-design.json: the build reads it, so the tested design is the built design."
+    ],
+    "simple": "Use the default settings of the knowledge service.",
+    "got": [
+     "It works the first time",
+     "Nothing to decide",
+     "Good enough for a demo"
+    ],
+    "missing": [
+     "Knowing whether the chunk size suits your documents",
+     "A score to compare designs",
+     "Refusing to answer when nothing relevant was found"
+    ],
+    "why": "Defaults are tuned for the average document, and yours are not average. A wrong default fails quietly: the answer still sounds right.",
+    "design": "Design the RAG in the studio, measure it on a golden set, save it as one file and let every later chapter read that file."
+   },
+   "docs": [
+    {
+     "id": "bedrock",
+     "title": "Amazon Bedrock",
+     "f": "bedrock.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "bedrock.json",
+     "n": "Retrieve"
+    }
+   ],
+   "validate": [
+    {
+     "kind": "Console",
+     "what": "The design runs on the golden set",
+     "how": "Bedrock, Knowledge bases, RAG Studio",
+     "expect": "Your golden questions score, and Save JSON downloads the design"
+    },
+    {
+     "kind": "CLI",
+     "what": "The design file is valid",
+     "how": "python show_design.py",
+     "expect": "design OK"
+    }
+   ],
+   "blocks_total": 3,
+   "blocks_nano": 3,
+   "blocks_mesh_only": 0,
+   "mesh_only_titles": []
+  },
+  {
+   "id": 12,
+   "order": 5,
    "title": "Knowledge Pipeline",
    "short": "Pipeline",
    "objective": "Turn documents into searchable knowledge, and re-index automatically when a new document lands.",
@@ -1277,7 +1580,8 @@
    ],
    "contract": {
     "needs": [
-     10
+     10,
+     14
     ],
     "names": {
      "kb": "facilities-kb"
@@ -1301,7 +1605,7 @@
     1214,
     888,
     1790,
-    1092
+    1062
    ],
    "level": "Intermediate",
    "minutes": 48,
@@ -1394,7 +1698,7 @@
      "text": "The knowledge base turns text into vectors with the embedding model this simulator hosts and stores them in the collection. The data source points at `docs/` in the bucket and cuts documents into 200-token chunks with 10% overlap.",
      "file": "knowledge_base.py",
      "lang": "python",
-     "code": "import boto3\n\nfrom vymodels import EMBED_MODEL\n\nREGION = \"us-east-1\"\nag = boto3.client(\"bedrock-agent\")\ncoll = boto3.client(\"opensearchserverless\").batch_get_collection(names=[\"facilities-kb\"])[\"collectionDetails\"][0][\"arn\"]\n\nkb = ag.create_knowledge_base(\n    name=\"facilities-kb\", roleArn=\"arn:aws:iam::123456789012:role/facilities-role\",\n    knowledgeBaseConfiguration={\"type\": \"VECTOR\", \"vectorKnowledgeBaseConfiguration\": {\n        \"embeddingModelArn\": \"arn:aws:bedrock:%s::foundation-model/%s\" % (REGION, EMBED_MODEL)}},\n    storageConfiguration={\"type\": \"OPENSEARCH_SERVERLESS\", \"opensearchServerlessConfiguration\": {\n        \"collectionArn\": coll, \"vectorIndexName\": \"facilities-index\",\n        \"fieldMapping\": {\"vectorField\": \"embedding\", \"textField\": \"text\", \"metadataField\": \"metadata\"}}})[\"knowledgeBase\"]\nprint(\"knowledge base\", kb[\"knowledgeBaseId\"])\n\nds = ag.create_data_source(\n    knowledgeBaseId=kb[\"knowledgeBaseId\"], name=\"facilities-docs\",\n    dataSourceConfiguration={\"type\": \"S3\", \"s3Configuration\": {\"bucketArn\": \"arn:aws:s3:::facilities-docs\", \"inclusionPrefixes\": [\"docs/\"]}},\n    vectorIngestionConfiguration={\"chunkingConfiguration\": {\"chunkingStrategy\": \"FIXED_SIZE\",\n                                                            \"fixedSizeChunkingConfiguration\": {\"maxTokens\": 200, \"overlapPercentage\": 10}}})[\"dataSource\"]\nprint(\"data source\", ds[\"dataSourceId\"])\n",
+     "code": "import boto3\n\nfrom vymodels import EMBED_MODEL\nfrom rag_design import chunk_cfg\n\nREGION = \"us-east-1\"\nag = boto3.client(\"bedrock-agent\")\ncoll = boto3.client(\"opensearchserverless\").batch_get_collection(names=[\"facilities-kb\"])[\"collectionDetails\"][0][\"arn\"]\n\nkb = ag.create_knowledge_base(\n    name=\"facilities-kb\", roleArn=\"arn:aws:iam::123456789012:role/facilities-role\",\n    knowledgeBaseConfiguration={\"type\": \"VECTOR\", \"vectorKnowledgeBaseConfiguration\": {\n        \"embeddingModelArn\": \"arn:aws:bedrock:%s::foundation-model/%s\" % (REGION, EMBED_MODEL)}},\n    storageConfiguration={\"type\": \"OPENSEARCH_SERVERLESS\", \"opensearchServerlessConfiguration\": {\n        \"collectionArn\": coll, \"vectorIndexName\": \"facilities-index\",\n        \"fieldMapping\": {\"vectorField\": \"embedding\", \"textField\": \"text\", \"metadataField\": \"metadata\"}}})[\"knowledgeBase\"]\nprint(\"knowledge base\", kb[\"knowledgeBaseId\"])\n\nds = ag.create_data_source(\n    knowledgeBaseId=kb[\"knowledgeBaseId\"], name=\"facilities-docs\",\n    dataSourceConfiguration={\"type\": \"S3\", \"s3Configuration\": {\"bucketArn\": \"arn:aws:s3:::facilities-docs\", \"inclusionPrefixes\": [\"docs/\"]}},\n    vectorIngestionConfiguration={\"chunkingConfiguration\": {\"chunkingStrategy\": \"FIXED_SIZE\",       # your design: chunking\n                                                            \"fixedSizeChunkingConfiguration\": {\"maxTokens\": chunk_cfg()[\"maxTokens\"],\n                                                                                                \"overlapPercentage\": chunk_cfg()[\"overlapPct\"]}}})[\"dataSource\"]\nprint(\"data source\", ds[\"dataSourceId\"])\n",
      "run": "python knowledge_base.py",
      "expect": "data source",
      "needs_runtime": false,
@@ -1676,7 +1980,7 @@
   },
   {
    "id": 6,
-   "order": 5,
+   "order": 6,
    "title": "Knowledge Search (RAG)",
    "short": "Search",
    "objective": "Retrieve the right passages for a question, rank them, and keep the source so answers can cite it.",
@@ -1696,7 +2000,8 @@
    ],
    "contract": {
     "needs": [
-     12
+     12,
+     14
     ],
     "names": {
      "kb": "facilities-kb"
@@ -1759,7 +2064,7 @@
      "text": "Retrieve is the vector-search call. Ask the question an engineer would ask and check the boiler SOP ranks first, then an HVAC question, and that every hit carries the S3 location the answer will cite. Needs the knowledge base from chapter 12.",
      "file": "search.py",
      "lang": "python",
-     "code": "import boto3\n\nag = boto3.client(\"bedrock-agent\")\nrt = boto3.client(\"bedrock-agent-runtime\")\nkb = next(k for k in ag.list_knowledge_bases()[\"knowledgeBaseSummaries\"] if k[\"name\"] == \"facilities-kb\")[\"knowledgeBaseId\"]\n\n\ndef search(q, k=3):\n    return rt.retrieve(knowledgeBaseId=kb, retrievalQuery={\"text\": q},\n                       retrievalConfiguration={\"vectorSearchConfiguration\": {\"numberOfResults\": k}})[\"retrievalResults\"]\n\n\ndef uri(hit):\n    return hit.get(\"location\", {}).get(\"s3Location\", {}).get(\"uri\", \"\")\n\n\nif __name__ == \"__main__\":\n    r = search(\"What should I do when boiler pressure exceeds 30 psi?\")\n    print(\"boiler question, top hit:\", uri(r[0]), \"score\", r[0].get(\"score\"))\n    print(\"  text:\", r[0][\"content\"][\"text\"][:90].replace(\"\\n\", \" \"))\n    assert \"boiler-sop\" in uri(r[0]), \"the boiler question must retrieve the boiler SOP first, got \" + uri(r[0])\n    boiler_score = r[0][\"score\"]\n    r = search(\"AHU-7 supply air temperature drift chilled water valve\")\n    print(\"AHU question, top hit:\", uri(r[0]))\n    assert \"hvac-maintenance-manual\" in uri(r[0]), \"the AHU question must retrieve the HVAC manual first, got \" + uri(r[0])\n    r = search(\"fire alarm evacuation\")\n    assert \"fire-safety-sop\" in uri(r[0]), \"the fire question must retrieve the fire SOP first, got \" + uri(r[0])\n    print(\"every hit has text and a source:\", all(x[\"content\"][\"text\"] and uri(x) for x in r))\n    assert all(x[\"content\"][\"text\"] and uri(x) for x in r), \"a hit without text or source cannot be cited\"\n    # Scores are RELATIVE to the other chunks in this index (the best hit is always near 1.0), so they cannot say \"no answer exists\".\n    # Chapter 11 adds the evidence gate that decides when to refuse.\n",
+     "code": "import boto3\n\nimport rag_design\n\nag = boto3.client(\"bedrock-agent\")\nrt = boto3.client(\"bedrock-agent-runtime\")\nkb = next(k for k in ag.list_knowledge_bases()[\"knowledgeBaseSummaries\"] if k[\"name\"] == \"facilities-kb\")[\"knowledgeBaseId\"]\n\n\ndef search(q, k=None):\n    cfg = {\"numberOfResults\": k or rag_design.top_k()}                 # your design: how many passages\n    if rag_design.search_type() != \"vector\":\n        cfg[\"overrideSearchType\"] = \"HYBRID\"                           # Bedrock has two modes: SEMANTIC (vector) and HYBRID (vector plus keyword)\n    return rt.retrieve(knowledgeBaseId=kb, retrievalQuery={\"text\": q},\n                       retrievalConfiguration={\"vectorSearchConfiguration\": cfg})[\"retrievalResults\"]\n\n\ndef uri(hit):\n    return hit.get(\"location\", {}).get(\"s3Location\", {}).get(\"uri\", \"\")\n\n\nif __name__ == \"__main__\":\n    r = search(\"What should I do when boiler pressure exceeds 30 psi?\")\n    print(\"boiler question, top hit:\", uri(r[0]), \"score\", r[0].get(\"score\"))\n    print(\"  text:\", r[0][\"content\"][\"text\"][:90].replace(\"\\n\", \" \"))\n    assert \"boiler-sop\" in uri(r[0]), \"the boiler question must retrieve the boiler SOP first, got \" + uri(r[0])\n    boiler_score = r[0][\"score\"]\n    r = search(\"AHU-7 supply air temperature drift chilled water valve\")\n    print(\"AHU question, top hit:\", uri(r[0]))\n    assert \"hvac-maintenance-manual\" in uri(r[0]), \"the AHU question must retrieve the HVAC manual first, got \" + uri(r[0])\n    r = search(\"fire alarm evacuation\")\n    assert \"fire-safety-sop\" in uri(r[0]), \"the fire question must retrieve the fire SOP first, got \" + uri(r[0])\n    print(\"every hit has text and a source:\", all(x[\"content\"][\"text\"] and uri(x) for x in r))\n    assert all(x[\"content\"][\"text\"] and uri(x) for x in r), \"a hit without text or source cannot be cited\"\n    # Scores are RELATIVE to the other chunks in this index (the best hit is always near 1.0), so they cannot say \"no answer exists\".\n    # Chapter 11 adds the evidence gate that decides when to refuse.\n",
      "run": "python search.py",
      "expect": "every hit has text and a source: True",
      "needs_runtime": false,
@@ -1776,9 +2081,9 @@
      "text": "Vector similarity is a first pass. Rerank re-scores the candidates against the question with a reranking model and keeps the best two.",
      "file": "rerank.py",
      "lang": "python",
-     "code": "import boto3\n\nfrom search import search\n\nQUERY = \"elevator door fault\"\nhits = search(QUERY, 4)\n# Rerank takes a reranking-model ARN; the simulator scores with its own hosted embedding model\nout = boto3.client(\"bedrock-agent-runtime\").rerank(\n    queries=[{\"type\": \"TEXT\", \"textQuery\": {\"text\": QUERY}}],\n    sources=[{\"type\": \"INLINE\", \"inlineDocumentSource\": {\"type\": \"TEXT\", \"textDocument\": {\"text\": h[\"content\"][\"text\"]}}} for h in hits],\n    rerankingConfiguration={\"type\": \"BEDROCK_RERANKING_MODEL\", \"bedrockRerankingConfiguration\": {\n        \"numberOfResults\": 2, \"modelConfiguration\": {\"modelArn\": \"arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0\"}}})\nbest = hits[out[\"results\"][0][\"index\"]][\"content\"][\"text\"]\nassert len(out[\"results\"]) == 2, \"rerank must return the 2 requested results\"\nassert \"elevator\" in best.lower(), \"the best reranked passage must be about the elevator, got: \" + best[:60]\nassert out[\"results\"][0][\"relevanceScore\"] >= out[\"results\"][1][\"relevanceScore\"], \"results must be ordered best first\"\nprint(\"rerank returned\", len(out[\"results\"]), \"results; best index\", out[\"results\"][0][\"index\"], \"-> the elevator SOP\")\n",
+     "code": "import boto3\n\nimport rag_design\nfrom search import search\n\nQUERY = \"elevator door fault\"\nhits = search(QUERY, 4)\n# Rerank takes a reranking-model ARN; the simulator scores with its own hosted embedding model\nout = boto3.client(\"bedrock-agent-runtime\").rerank(\n    queries=[{\"type\": \"TEXT\", \"textQuery\": {\"text\": QUERY}}],\n    sources=[{\"type\": \"INLINE\", \"inlineDocumentSource\": {\"type\": \"TEXT\", \"textDocument\": {\"text\": h[\"content\"][\"text\"]}}} for h in hits],\n    rerankingConfiguration={\"type\": \"BEDROCK_RERANKING_MODEL\", \"bedrockRerankingConfiguration\": {\n        \"numberOfResults\": rag_design.rerank()[\"topN\"], \"modelConfiguration\": {\"modelArn\": \"arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0\"}}})\nbest = hits[out[\"results\"][0][\"index\"]][\"content\"][\"text\"]\nassert len(out[\"results\"]) == rag_design.rerank()[\"topN\"], \"rerank must return the requested number of results\"\nassert \"elevator\" in best.lower(), \"the best reranked passage must be about the elevator, got: \" + best[:60]\nassert all(out[\"results\"][i][\"relevanceScore\"] >= out[\"results\"][i + 1][\"relevanceScore\"] for i in range(len(out[\"results\"]) - 1)), \"results must be ordered best first\"\nprint(\"rerank returned\", len(out[\"results\"]), \"results; best index\", out[\"results\"][0][\"index\"], \"-> the elevator SOP\")\n",
      "run": "python rerank.py",
-     "expect": "rerank returned 2 results",
+     "expect": "rerank returned",
      "needs_runtime": false,
      "edition": [
       "nano",
@@ -1793,7 +2098,7 @@
      "text": "The agents never call Retrieve themselves; they call this read-only Lambda tool. It accepts a plain event or an API Gateway proxy event (chapter 1 puts it behind an API). The knowledge base id comes from the function's environment.",
      "file": "kb_search.py",
      "lang": "python",
-     "code": "import json\nimport os\n\nimport boto3\n\n\ndef handler(event, context):\n    proxy = \"httpMethod\" in event or \"requestContext\" in event      # invoked by API Gateway (Lambda proxy integration)\n    if proxy:\n        claims = ((event.get(\"requestContext\") or {}).get(\"authorizer\") or {}).get(\"claims\") or {}\n        event = json.loads(event.get(\"body\") or \"{}\")\n    r = boto3.client(\"bedrock-agent-runtime\").retrieve(\n        knowledgeBaseId=os.environ[\"KB_ID\"], retrievalQuery={\"text\": event.get(\"query\", \"\")},\n        retrievalConfiguration={\"vectorSearchConfiguration\": {\"numberOfResults\": int(event.get(\"top_k\", 3))}})\n    out = {\"results\": [{\"text\": x[\"content\"][\"text\"], \"score\": x.get(\"score\"),\n                        \"source\": (x.get(\"location\") or {}).get(\"s3Location\", {}).get(\"uri\", \"\")} for x in r.get(\"retrievalResults\", [])]}\n    if proxy:\n        return {\"statusCode\": 200, \"headers\": {\"Content-Type\": \"application/json\"},\n                \"body\": json.dumps(dict(out, caller=claims.get(\"email\", \"anonymous\")))}\n    return out\n",
+     "code": "import json\nimport os\n\nimport boto3\n\n# Your RAG design (chapter 14) reaches this tool as function configuration: deploy_kb_search.py copies it into these variables.\nTOP_K = int(os.environ.get(\"RAG_TOP_K\", \"3\"))\nSEARCH_TYPE = os.environ.get(\"RAG_SEARCH_TYPE\", \"vector\")\nRERANK_TOP_N = int(os.environ.get(\"RAG_RERANK_TOP_N\", \"0\"))      # 0 = no rerank\n\n\ndef handler(event, context):\n    proxy = \"httpMethod\" in event or \"requestContext\" in event      # invoked by API Gateway (Lambda proxy integration)\n    if proxy:\n        claims = ((event.get(\"requestContext\") or {}).get(\"authorizer\") or {}).get(\"claims\") or {}\n        event = json.loads(event.get(\"body\") or \"{}\")\n    r = boto3.client(\"bedrock-agent-runtime\").retrieve(\n        knowledgeBaseId=os.environ[\"KB_ID\"], retrievalQuery={\"text\": event.get(\"query\", \"\")},\n        retrievalConfiguration={\"vectorSearchConfiguration\": {\"numberOfResults\": int(event.get(\"top_k\", TOP_K)),\n                                                                   **({\"overrideSearchType\": \"HYBRID\"} if SEARCH_TYPE != \"vector\" else {})}})\n    hits = r.get(\"retrievalResults\", [])\n    if RERANK_TOP_N and len(hits) > 1:         # your design: rerank, keep the best few\n        ranked = boto3.client(\"bedrock-agent-runtime\").rerank(\n            queries=[{\"type\": \"TEXT\", \"textQuery\": {\"text\": event.get(\"query\", \"\")}}],\n            sources=[{\"type\": \"INLINE\", \"inlineDocumentSource\": {\"type\": \"TEXT\", \"textDocument\": {\"text\": h[\"content\"][\"text\"]}}} for h in hits],\n            rerankingConfiguration={\"type\": \"BEDROCK_RERANKING_MODEL\", \"bedrockRerankingConfiguration\": {\n                \"numberOfResults\": min(RERANK_TOP_N, len(hits)),\n                \"modelConfiguration\": {\"modelArn\": \"arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0\"}}})\n        hits = [hits[x[\"index\"]] for x in ranked[\"results\"]]\n    out = {\"results\": [{\"text\": x[\"content\"][\"text\"], \"score\": x.get(\"score\"),\n                        \"source\": (x.get(\"location\") or {}).get(\"s3Location\", {}).get(\"uri\", \"\")} for x in hits]}\n    if proxy:\n        return {\"statusCode\": 200, \"headers\": {\"Content-Type\": \"application/json\"},\n                \"body\": json.dumps(dict(out, caller=claims.get(\"email\", \"anonymous\")))}\n    return out\n",
      "run": null,
      "expect": null,
      "needs_runtime": false,
@@ -1807,10 +2112,10 @@
     },
     {
      "title": "Deploy and call the tool",
-     "text": "Deploys `facilities-kb-search` with the knowledge base id in its environment, then calls it the way an agent will.",
+     "text": "Deploys `facilities-kb-search` with the knowledge base id and your RAG design (top K, search type, rerank) in its environment, then calls it the way an agent will. Change the design later and deploy again to apply it.",
      "file": "deploy_kb_search.py",
      "lang": "python",
-     "code": "import io\nimport json\nimport os\nimport zipfile\n\nimport boto3\n\nlam, ag = boto3.client(\"lambda\"), boto3.client(\"bedrock-agent\")\nkb = next(k for k in ag.list_knowledge_bases()[\"knowledgeBaseSummaries\"] if k[\"name\"] == \"facilities-kb\")[\"knowledgeBaseId\"]\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.write(\"kb_search.py\")\nlam.create_function(FunctionName=\"facilities-kb-search\", Runtime=\"python3.12\", Role=\"arn:aws:iam::123456789012:role/facilities-role\",\n                    Handler=\"kb_search.handler\", Code={\"ZipFile\": buf.getvalue()}, Timeout=30,\n                    Environment={\"Variables\": {\"KB_ID\": kb, \"AWS_ENDPOINT_URL\": os.environ[\"AWS_ENDPOINT_URL\"],\n                                               \"AWS_DEFAULT_REGION\": os.environ.get(\"AWS_DEFAULT_REGION\", \"us-east-1\")}})\nprint(\"deployed facilities-kb-search\")\n\nr = lam.invoke(FunctionName=\"facilities-kb-search\", Payload=json.dumps({\"query\": \"boiler pressure limit\"}).encode())\nout = json.loads(r[\"Payload\"].read())\nprint(\"tool returned\", len(out[\"results\"]), \"cited results; first source:\", out[\"results\"][0][\"source\"])\n",
+     "code": "import io\nimport json\nimport os\nimport zipfile\n\nimport boto3\n\nimport rag_design\n\nlam, ag = boto3.client(\"lambda\"), boto3.client(\"bedrock-agent\")\nkb = next(k for k in ag.list_knowledge_bases()[\"knowledgeBaseSummaries\"] if k[\"name\"] == \"facilities-kb\")[\"knowledgeBaseId\"]\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.write(\"kb_search.py\")\nrr = rag_design.rerank()\nDESIGN = {\"RAG_TOP_K\": str(rag_design.top_k()), \"RAG_SEARCH_TYPE\": rag_design.search_type(),        # your design becomes the tool's configuration\n          \"RAG_RERANK_TOP_N\": str(rr[\"topN\"] if rr[\"enabled\"] else 0)}\nlam.create_function(FunctionName=\"facilities-kb-search\", Runtime=\"python3.12\", Role=\"arn:aws:iam::123456789012:role/facilities-role\",\n                    Handler=\"kb_search.handler\", Code={\"ZipFile\": buf.getvalue()}, Timeout=30,\n                    Environment={\"Variables\": dict(DESIGN, KB_ID=kb, AWS_ENDPOINT_URL=os.environ[\"AWS_ENDPOINT_URL\"],\n                                                   AWS_DEFAULT_REGION=os.environ.get(\"AWS_DEFAULT_REGION\", \"us-east-1\"))})\nprint(\"deployed facilities-kb-search\")\n\nr = lam.invoke(FunctionName=\"facilities-kb-search\", Payload=json.dumps({\"query\": \"boiler pressure limit\"}).encode())\nout = json.loads(r[\"Payload\"].read())\nprint(\"tool returned\", len(out[\"results\"]), \"cited results; first source:\", out[\"results\"][0][\"source\"])\n",
      "run": "python deploy_kb_search.py",
      "expect": "first source: s3://facilities-docs/docs/boiler-sop.md",
      "needs_runtime": true,
@@ -1979,7 +2284,7 @@
   },
   {
    "id": 11,
-   "order": 6,
+   "order": 7,
    "title": "Response Generation",
    "short": "Response",
    "objective": "Answer in plain language from the retrieved documents, with citations, and filter sensitive data out before the user sees it.",
@@ -2002,7 +2307,8 @@
     "needs": [
      6,
      10,
-     2
+     2,
+     14
     ],
     "names": {
      "guardrail": "facilities-guardrail"
@@ -2099,10 +2405,10 @@
     },
     {
      "title": "Ask the agent for a grounded, cited answer",
-     "text": "Calls the hosted agent (chapter 3) with the boiler question. Because the knowledge-search tool is deployed (chapter 6) the facilities sub-agent now retrieves the SOP and the answer cites it. The script then runs the agent's answer through the output guardrail. Needs chapters 3, 6, 7 and the helper from chapter 3.",
+     "text": "Calls the hosted agent (chapter 3) with the boiler question. Because the knowledge-search tool is deployed (chapter 6) the facilities sub-agent now retrieves the SOP and the answer cites it. The script then runs the agent's answer through the output guardrail. If your design (chapter 14) sets a grounding threshold above 0, an answer whose best passage scores below it is replaced by a refusal instead of being guessed. Needs chapters 3, 6, 7 and the helper from chapter 3.",
      "file": "grounded_answer.py",
      "lang": "python",
-     "code": "import boto3\n\nfrom ask_agent import ask\nfrom guardrail import ensure_guardrail\n\nres = ask(\"facilities-session-\" + \"c\" * 20)\nprint(\"route:\", res[\"route\"])\nprint(\"cited sources:\", sorted({c[\"source\"] for c in res[\"citations\"]}))\nprint(\"answer:\", res[\"answer\"])\nprint(\"grounded in the boiler SOP:\", any(\"boiler-sop\" in c[\"source\"] for c in res[\"citations\"]))\n\ncheck = boto3.client(\"bedrock-runtime\").apply_guardrail(guardrailIdentifier=ensure_guardrail(), guardrailVersion=\"DRAFT\", source=\"OUTPUT\",\n                                                        content=[{\"text\": {\"text\": res[\"answer\"]}}])\nassert res[\"citations\"], \"an answer with no citations is not grounded\"\nassert all(c[\"source\"].startswith(\"s3://\") for c in res[\"citations\"]), \"every citation must point at a source document\"\nassert res[\"answer\"].strip(), \"the agent returned an empty answer\"\nprint(\"agent answer passes the output guardrail:\", check[\"action\"] == \"NONE\")\nassert check[\"action\"] == \"NONE\", \"the answer was intervened by the output guardrail\"\n",
+     "code": "import boto3\n\nimport rag_design\nfrom ask_agent import ask\nfrom guardrail import ensure_guardrail\n\nres = ask(\"facilities-session-\" + \"c\" * 20)\nbest = max([c.get(\"score\") or 0 for c in res[\"citations\"]] or [0])\nif rag_design.grounding_threshold() > 0 and best < rag_design.grounding_threshold():       # your design: refuse when nothing retrieved is relevant enough\n    res = dict(res, answer=\"I can't answer that from the approved documents.\", citations=[])\nprint(\"route:\", res[\"route\"])\nprint(\"cited sources:\", sorted({c[\"source\"] for c in res[\"citations\"]}))\nprint(\"answer:\", res[\"answer\"])\nprint(\"grounded in the boiler SOP:\", any(\"boiler-sop\" in c[\"source\"] for c in res[\"citations\"]))\n\ncheck = boto3.client(\"bedrock-runtime\").apply_guardrail(guardrailIdentifier=ensure_guardrail(), guardrailVersion=\"DRAFT\", source=\"OUTPUT\",\n                                                        content=[{\"text\": {\"text\": res[\"answer\"]}}])\nassert res[\"citations\"], \"an answer with no citations is not grounded\"\nassert all(c[\"source\"].startswith(\"s3://\") for c in res[\"citations\"]), \"every citation must point at a source document\"\nassert res[\"answer\"].strip(), \"the agent returned an empty answer\"\nprint(\"agent answer passes the output guardrail:\", check[\"action\"] == \"NONE\")\nassert check[\"action\"] == \"NONE\", \"the answer was intervened by the output guardrail\"\n",
      "run": "python grounded_answer.py",
      "expect": "grounded in the boiler SOP: True",
      "needs_runtime": true,
@@ -2356,7 +2662,7 @@
   },
   {
    "id": 9,
-   "order": 7,
+   "order": 8,
    "title": "Agent Memory",
    "short": "Memory",
    "objective": "Give the agent memory: short-term events inside a session and long-term facts it can retrieve later.",
@@ -2670,7 +2976,7 @@
   },
   {
    "id": 4,
-   "order": 8,
+   "order": 9,
    "title": "Agent Gateway",
    "short": "Gateway",
    "objective": "Put one governed door in front of the tools: a tool catalogue, a policy check on every call and a rate limit.",
@@ -3022,7 +3328,7 @@
   },
   {
    "id": 5,
-   "order": 9,
+   "order": 10,
    "title": "Actions and Approval",
    "short": "Approval",
    "objective": "Make write actions safe: park the action for a human, record every decision, and only then execute.",
@@ -3531,7 +3837,7 @@
   },
   {
    "id": 1,
-   "order": 10,
+   "order": 11,
    "title": "Access and Perimeter",
    "short": "Access",
    "objective": "Sign users in, carry their identity to every layer, and put a protected edge in front of the tools.",
@@ -3878,7 +4184,7 @@
   },
   {
    "id": 2,
-   "order": 11,
+   "order": 12,
    "title": "Channels and Input Guardrails",
    "short": "Channels",
    "objective": "Let people reach the agent, filter what comes in, and tell approvers what is waiting.",
@@ -4221,7 +4527,7 @@
   },
   {
    "id": 8,
-   "order": 12,
+   "order": 13,
    "title": "AgentOps and Observability",
    "short": "AgentOps",
    "objective": "See what the agent did: a trace per step, metrics for KPIs, and structured logs tied to the trace.",
@@ -4553,7 +4859,7 @@
   },
   {
    "id": 13,
-   "order": 13,
+   "order": 14,
    "title": "Governance and Security",
    "short": "Governance",
    "objective": "Protect and audit the whole app: encrypt the sensitive records and prove who did what.",

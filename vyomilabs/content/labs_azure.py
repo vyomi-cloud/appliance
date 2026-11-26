@@ -15,6 +15,8 @@ def b(title, text, file, code, run=None, expect=None, lang="python", needs_runti
                 edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
+from .rag_design_src import design_blocks
+
 LAB = {}
 
 PIP1 = "pip install azure-core azure-identity azure-mgmt-apimanagement azure-mgmt-frontdoor azure-mgmt-network PyJWT cryptography requests"
@@ -709,10 +711,12 @@ from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 from azlab import aoai, EMBED
 from azdata import search_endpoint, search_key, INDEX
+import rag_design
 
 sc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))
 rows = list(sc.search(search_text="*", select=["id", "source", "content"], top=50))
-vectors = [d.embedding for d in aoai().embeddings.create(model=EMBED, input=[r["content"] for r in rows]).data]
+dims = {"dimensions": rag_design.dimensions()} if rag_design.dimensions() else {}        # your design: vector size
+vectors = [d.embedding for d in aoai().embeddings.create(model=EMBED, input=[r["content"] for r in rows], **dims).data]
 results = sc.merge_documents([{"id": r["id"], "content_vector": v} for r, v in zip(rows, vectors)])
 print("embedded and merged", sum(1 for r in results if r.succeeded), "documents")
 ''', run="python embed_docs.py", expect="embedded and merged 5 documents"),
@@ -723,14 +727,17 @@ from azure.search.documents import SearchClient
 from azure.search.documents.models import VectorizedQuery
 from azlab import aoai, EMBED
 from azdata import search_endpoint, search_key, INDEX
+import rag_design
 
 _sc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))
 
 
-def kb_search(query, mode="text", top=3):
+def kb_search(query, mode="text", top=None):
+    top = top or rag_design.top_k()                      # your design: how many passages
     vector = None
     if mode in ("vector", "hybrid"):
-        emb = aoai().embeddings.create(model=EMBED, input=[query]).data[0].embedding
+        dims = {"dimensions": rag_design.dimensions()} if rag_design.dimensions() else {}     # your design: vector size
+        emb = aoai().embeddings.create(model=EMBED, input=[query], **dims).data[0].embedding
         vector = [VectorizedQuery(vector=emb, k_nearest_neighbors=top, fields="content_vector")]
     kw = {"query_type": "semantic", "semantic_configuration_name": "sem"} if mode == "semantic" else {}
     rows = _sc.search(search_text=None if mode == "vector" else query, vector_queries=vector, select=["id", "source", "title", "content"], top=top, **kw)
@@ -748,6 +755,20 @@ for mode, q in (("text", "boiler pressure exceeds 30 psi"), ("text", "AHU-7 supp
     print(f"{mode:8} {q[:44]:44} -> {hits[0]['source']}{extra}")
 print("every hit has a source:", all(h["source"] for h in kb_search("fire alarm evacuation")))
 ''', run="python try_search.py", expect="vector   what to do when boiler pressure is too high  -> boiler-sop.md\nhybrid   fire alarm evacuation procedure              -> fire-safety-sop.md"),
+ b("Apply your design to the kb-search tool", "The `kb-search` function from chapter 7 returns three passages unless told otherwise. It reads `RAG_TOP_K` from its application settings, so this script copies the top K from your RAG design (chapter 14) into the Function App's settings, keeping every other setting. Run it again after you change the design.",
+   "apply_design.py", '''
+from azure.mgmt.web import WebSiteManagementClient
+from azure.mgmt.web.models import StringDictionary
+from azlab import arm, RG
+from azdata import FUNCTION_APP
+import rag_design
+
+web = arm(WebSiteManagementClient)
+settings = dict(web.web_apps.list_application_settings(RG, FUNCTION_APP).properties or {})
+settings["RAG_TOP_K"] = str(rag_design.top_k())
+web.web_apps.update_application_settings(RG, FUNCTION_APP, StringDictionary(properties=settings))
+print("kb-search now returns", web.web_apps.list_application_settings(RG, FUNCTION_APP).properties["RAG_TOP_K"], "passages")
+''', run="python apply_design.py", expect="kb-search now returns 3 passages"),
 ]
 PIP7 = "pip install azure-core azure-data-tables azure-mgmt-resource azure-mgmt-web azure-mgmt-search requests"
 
@@ -848,7 +869,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
     from azure.search.documents import SearchClient
     body = req.get_json() if req.get_body() else {}
     sc = SearchClient(os.environ["SEARCH_ENDPOINT"], os.environ.get("SEARCH_INDEX", "facilities-kb"), AzureKeyCredential(os.environ["SEARCH_KEY"]))
-    rows = sc.search(search_text=body.get("query", ""), top=int(body.get("top_k", 3)))
+    rows = sc.search(search_text=body.get("query", ""), top=int(body.get("top_k", os.environ.get("RAG_TOP_K", 3))))      # your design (chapter 14), set as the RAG_TOP_K app setting
     results = [{"text": r["content"], "score": r.get("@search.score"), "source": r.get("source") or r.get("title") or r["id"]} for r in rows]
     caller = req.headers.get("x-vyomi-caller") or "anonymous"      # set by the API Management gateway in chapter 1 after it validated the token
     return func.HttpResponse(json.dumps({"results": results, "caller": caller}), mimetype="application/json")
@@ -1042,7 +1063,7 @@ def _tool_span(st, name, t0):
 
 def facilities(st):
     t0 = time.time()
-    out = call_function(FUNCTION_APP, "kb-search", {"query": st["question"], "top_k": 3})
+    out = call_function(FUNCTION_APP, "kb-search", {"query": st["question"]})      # how many passages comes from your design, inside the tool
     _tool_span(st, "kb_search", t0)
     st["citations"] = [{"n": i + 1, "source": r["source"], "text": r["text"]} for i, r in enumerate(out["results"])]
     return "\\n".join(f"[{c['n']}] {c['text']}" for c in st["citations"])
@@ -1381,8 +1402,10 @@ def chat_with_tools(prompt, tools):
             "text": m.content or ""}
 
 
-def embed(text):
-    return aoai().embeddings.create(model=EMBED, input=[text]).data[0].embedding
+def embed(text, dimensions=None):
+    """dimensions: ask for a shorter vector (your RAG design sets this); None keeps the model's own size."""
+    kw = {"dimensions": dimensions} if dimensions else {}
+    return aoai().embeddings.create(model=EMBED, input=[text], **kw).data[0].embedding
 '''),
  b("Try chat, a tool call and an embedding", "A chat turn, a tool-calling turn (the model asks for `asset_status`, your code would run it) and an embedding (a list of numbers: its length depends on the embedding model your simulator hosts). The tool definition is the one the agents use later.",
    "try_models.py", '''
@@ -1423,12 +1446,16 @@ LAB[11] = [
    "respond.py", '''
 from azlab import aoai, CHAT
 from kb import kb_search
+import rag_design
 
 SYSTEM = "Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say you do not know."
 
 
-def answer(question, mode="hybrid", top=3):
-    hits = kb_search(question, mode, top)
+def answer(question, mode=None, top=None):
+    hits = kb_search(question, mode or rag_design.search_type(), top)      # your design: search type and how many passages
+    best = max([h.get("score") or 0 for h in hits] or [0])
+    if rag_design.grounding_threshold() > 0 and best < rag_design.grounding_threshold():       # your design: refuse when nothing retrieved is relevant enough
+        return {"answer": "I do not know: nothing in the approved documents is relevant enough.", "citations": []}
     citations = [{"n": i + 1, "source": h["source"], "text": h["text"][:160]} for i, h in enumerate(hits)]
     context = "\\n".join(f"[{c['n']}] {h['text']}" for c, h in zip(citations, hits))
     r = aoai().chat.completions.create(model=CHAT, max_tokens=300, temperature=0, messages=[
@@ -1510,6 +1537,10 @@ print("On Your Data citations:", len(context.get("citations", [])))
 ]
 PIP12 = "pip install azure-core azure-storage-blob azure-search-documents azure-mgmt-storage azure-mgmt-search azure-mgmt-eventgrid azure-mgmt-web requests"
 
+# ───────────────────────── chapter 14: design the RAG ─────────────────────────
+LAB[14] = design_blocks(b, "azure")
+
+# ───────────────────────── chapter 12: knowledge pipeline ─────────────────────────
 LAB[12] = [
  b("Install the libraries", "Chapter 12 turns documents into searchable knowledge: Blob Storage holds the files, an Azure AI Search indexer reads them into the `facilities-kb` index, and an Event Grid subscription plus a Function re-runs the indexer whenever a new blob lands. It relies on the search service and `azdata.py` from chapter 7.",
    "install12.sh", PIP12, lang="bash"),
@@ -1571,8 +1602,10 @@ from azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, S
                                                    VectorSearch, VectorSearchProfile)
 from azdata import search_endpoint, search_key, INDEX
 from vymodels import embed
+import rag_design
 
-DIMS = len(embed("dimension probe"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)
+# the vector size: your design when it sets one, otherwise that of the embedding model this simulator hosts (it differs between Nano and a Mesh)
+DIMS = rag_design.dimensions() or len(embed("dimension probe"))
 
 
 def kb_index():

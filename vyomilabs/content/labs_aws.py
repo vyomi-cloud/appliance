@@ -15,6 +15,8 @@ def b(title, text, file, code, run=None, expect=None, lang="python", needs_runti
                 edition=list(edition or BOTH), nano_note=nano_note, kind=kind, needs_appliance=needs_appliance)
 
 
+from .rag_design_src import design_blocks
+
 LAB = {}
 
 LAB[10] = [
@@ -108,8 +110,12 @@ def chat_with_tools(prompt, tools):
     return {"stop_reason": r["stopReason"], "tool_use": tool, "text": _text(r)}
 
 
-def embed(text):
-    r = _call(lambda: _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps({"inputText": text})))
+def embed(text, dimensions=None):
+    """dimensions: ask for a shorter vector when the model supports it (your RAG design sets this); None keeps the model's own size."""
+    body = {"inputText": text}
+    if dimensions:
+        body["dimensions"] = dimensions
+    r = _call(lambda: _rt.invoke_model(modelId=EMBED_MODEL, body=json.dumps(body)))
     BUDGET.charge("embed", len(text.split()))
     return json.loads(r["body"].read())["embedding"]
 '''),
@@ -483,10 +489,10 @@ def build():
 
     def facilities(st):
         t0 = time.time()
-        out = call_tool("kb_search", {"query": st["question"], "top_k": 3}, st)
+        out = call_tool("kb_search", {"query": st["question"]}, st)      # how many passages comes from your design, inside the tool
         results = out.get("results", [])
         st["facts"] = [r["text"] for r in results]
-        st["citations"] = [{"n": i + 1, "source": r["source"], "text": r["text"][:160]} for i, r in enumerate(results)]
+        st["citations"] = [{"n": i + 1, "source": r["source"], "text": r["text"][:160], "score": r.get("score")} for i, r in enumerate(results)]
         span(st, "agent:facilities", t0)
         return st
 
@@ -675,6 +681,10 @@ print("stopped session b; runtime still", ac.get_agent_runtime(agentRuntimeId=ar
 ]
 
 # ───────────────────────── chapter 12: knowledge processing pipeline ─────────────────────────
+# ───────────────────────── chapter 14: design the RAG ─────────────────────────
+LAB[14] = design_blocks(b, "aws")
+
+# ───────────────────────── chapter 12: knowledge pipeline ─────────────────────────
 LAB[12] = [
  b("Upload the documents", "The four source documents (boiler, elevator and fire-safety SOPs and the AHU maintenance manual) go to the docs bucket under `docs/`. Run this after chapter 10; the bucket is shared with the agent code zip from chapter 3.",
    "upload_docs.py", r'''
@@ -731,6 +741,7 @@ print("collection", c["name"], c["arn"])
 import boto3
 
 from vymodels import EMBED_MODEL
+from rag_design import chunk_cfg
 
 REGION = "us-east-1"
 ag = boto3.client("bedrock-agent")
@@ -748,8 +759,9 @@ print("knowledge base", kb["knowledgeBaseId"])
 ds = ag.create_data_source(
     knowledgeBaseId=kb["knowledgeBaseId"], name="facilities-docs",
     dataSourceConfiguration={"type": "S3", "s3Configuration": {"bucketArn": "arn:aws:s3:::facilities-docs", "inclusionPrefixes": ["docs/"]}},
-    vectorIngestionConfiguration={"chunkingConfiguration": {"chunkingStrategy": "FIXED_SIZE",
-                                                            "fixedSizeChunkingConfiguration": {"maxTokens": 200, "overlapPercentage": 10}}})["dataSource"]
+    vectorIngestionConfiguration={"chunkingConfiguration": {"chunkingStrategy": "FIXED_SIZE",       # your design: chunking
+                                                            "fixedSizeChunkingConfiguration": {"maxTokens": chunk_cfg()["maxTokens"],
+                                                                                                "overlapPercentage": chunk_cfg()["overlapPct"]}}})["dataSource"]
 print("data source", ds["dataSourceId"])
 ''', run="python knowledge_base.py", expect="data source"),
  b("Ingest the documents", "StartIngestionJob reads every document, chunks it, embeds each chunk and writes the vectors. The script polls GetIngestionJob until the job finishes.",
@@ -825,14 +837,19 @@ LAB[6] = [
    "search.py", r'''
 import boto3
 
+import rag_design
+
 ag = boto3.client("bedrock-agent")
 rt = boto3.client("bedrock-agent-runtime")
 kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
 
 
-def search(q, k=3):
+def search(q, k=None):
+    cfg = {"numberOfResults": k or rag_design.top_k()}                 # your design: how many passages
+    if rag_design.search_type() != "vector":
+        cfg["overrideSearchType"] = "HYBRID"                           # Bedrock has two modes: SEMANTIC (vector) and HYBRID (vector plus keyword)
     return rt.retrieve(knowledgeBaseId=kb, retrievalQuery={"text": q},
-                       retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": k}})["retrievalResults"]
+                       retrievalConfiguration={"vectorSearchConfiguration": cfg})["retrievalResults"]
 
 
 def uri(hit):
@@ -859,6 +876,7 @@ if __name__ == "__main__":
    "rerank.py", r'''
 import boto3
 
+import rag_design
 from search import search
 
 QUERY = "elevator door fault"
@@ -868,19 +886,24 @@ out = boto3.client("bedrock-agent-runtime").rerank(
     queries=[{"type": "TEXT", "textQuery": {"text": QUERY}}],
     sources=[{"type": "INLINE", "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": h["content"]["text"]}}} for h in hits],
     rerankingConfiguration={"type": "BEDROCK_RERANKING_MODEL", "bedrockRerankingConfiguration": {
-        "numberOfResults": 2, "modelConfiguration": {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0"}}})
+        "numberOfResults": rag_design.rerank()["topN"], "modelConfiguration": {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0"}}})
 best = hits[out["results"][0]["index"]]["content"]["text"]
-assert len(out["results"]) == 2, "rerank must return the 2 requested results"
+assert len(out["results"]) == rag_design.rerank()["topN"], "rerank must return the requested number of results"
 assert "elevator" in best.lower(), "the best reranked passage must be about the elevator, got: " + best[:60]
-assert out["results"][0]["relevanceScore"] >= out["results"][1]["relevanceScore"], "results must be ordered best first"
+assert all(out["results"][i]["relevanceScore"] >= out["results"][i + 1]["relevanceScore"] for i in range(len(out["results"]) - 1)), "results must be ordered best first"
 print("rerank returned", len(out["results"]), "results; best index", out["results"][0]["index"], "-> the elevator SOP")
-''', run="python rerank.py", expect="rerank returned 2 results"),
+''', run="python rerank.py", expect="rerank returned"),
  b("Write the knowledge-search tool", "The agents never call Retrieve themselves; they call this read-only Lambda tool. It accepts a plain event or an API Gateway proxy event (chapter 1 puts it behind an API). The knowledge base id comes from the function's environment.",
    "kb_search.py", r'''
 import json
 import os
 
 import boto3
+
+# Your RAG design (chapter 14) reaches this tool as function configuration: deploy_kb_search.py copies it into these variables.
+TOP_K = int(os.environ.get("RAG_TOP_K", "3"))
+SEARCH_TYPE = os.environ.get("RAG_SEARCH_TYPE", "vector")
+RERANK_TOP_N = int(os.environ.get("RAG_RERANK_TOP_N", "0"))      # 0 = no rerank
 
 
 def handler(event, context):
@@ -890,15 +913,25 @@ def handler(event, context):
         event = json.loads(event.get("body") or "{}")
     r = boto3.client("bedrock-agent-runtime").retrieve(
         knowledgeBaseId=os.environ["KB_ID"], retrievalQuery={"text": event.get("query", "")},
-        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": int(event.get("top_k", 3))}})
+        retrievalConfiguration={"vectorSearchConfiguration": {"numberOfResults": int(event.get("top_k", TOP_K)),
+                                                                   **({"overrideSearchType": "HYBRID"} if SEARCH_TYPE != "vector" else {})}})
+    hits = r.get("retrievalResults", [])
+    if RERANK_TOP_N and len(hits) > 1:         # your design: rerank, keep the best few
+        ranked = boto3.client("bedrock-agent-runtime").rerank(
+            queries=[{"type": "TEXT", "textQuery": {"text": event.get("query", "")}}],
+            sources=[{"type": "INLINE", "inlineDocumentSource": {"type": "TEXT", "textDocument": {"text": h["content"]["text"]}}} for h in hits],
+            rerankingConfiguration={"type": "BEDROCK_RERANKING_MODEL", "bedrockRerankingConfiguration": {
+                "numberOfResults": min(RERANK_TOP_N, len(hits)),
+                "modelConfiguration": {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/amazon.rerank-v1:0"}}})
+        hits = [hits[x["index"]] for x in ranked["results"]]
     out = {"results": [{"text": x["content"]["text"], "score": x.get("score"),
-                        "source": (x.get("location") or {}).get("s3Location", {}).get("uri", "")} for x in r.get("retrievalResults", [])]}
+                        "source": (x.get("location") or {}).get("s3Location", {}).get("uri", "")} for x in hits]}
     if proxy:
         return {"statusCode": 200, "headers": {"Content-Type": "application/json"},
                 "body": json.dumps(dict(out, caller=claims.get("email", "anonymous")))}
     return out
 '''),
- b("Deploy and call the tool", "Deploys `facilities-kb-search` with the knowledge base id in its environment, then calls it the way an agent will.",
+ b("Deploy and call the tool", "Deploys `facilities-kb-search` with the knowledge base id and your RAG design (top K, search type, rerank) in its environment, then calls it the way an agent will. Change the design later and deploy again to apply it.",
    "deploy_kb_search.py", r'''
 import io
 import json
@@ -907,15 +940,20 @@ import zipfile
 
 import boto3
 
+import rag_design
+
 lam, ag = boto3.client("lambda"), boto3.client("bedrock-agent")
 kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     z.write("kb_search.py")
+rr = rag_design.rerank()
+DESIGN = {"RAG_TOP_K": str(rag_design.top_k()), "RAG_SEARCH_TYPE": rag_design.search_type(),        # your design becomes the tool's configuration
+          "RAG_RERANK_TOP_N": str(rr["topN"] if rr["enabled"] else 0)}
 lam.create_function(FunctionName="facilities-kb-search", Runtime="python3.12", Role="arn:aws:iam::123456789012:role/facilities-role",
                     Handler="kb_search.handler", Code={"ZipFile": buf.getvalue()}, Timeout=30,
-                    Environment={"Variables": {"KB_ID": kb, "AWS_ENDPOINT_URL": os.environ["AWS_ENDPOINT_URL"],
-                                               "AWS_DEFAULT_REGION": os.environ.get("AWS_DEFAULT_REGION", "us-east-1")}})
+                    Environment={"Variables": dict(DESIGN, KB_ID=kb, AWS_ENDPOINT_URL=os.environ["AWS_ENDPOINT_URL"],
+                                                   AWS_DEFAULT_REGION=os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))})
 print("deployed facilities-kb-search")
 
 r = lam.invoke(FunctionName="facilities-kb-search", Payload=json.dumps({"query": "boiler pressure limit"}).encode())
@@ -971,14 +1009,18 @@ leaky = check("Close the main steam valve. Contact the duty engineer at jane.doe
 print("leaky answer:", leaky["action"], "->", leaky["outputs"][0]["text"])
 print("email removed:", "jane.doe@example.com" not in leaky["outputs"][0]["text"])
 ''', run="python output_guardrail.py", expect="email removed: True"),
- b("Ask the agent for a grounded, cited answer", "Calls the hosted agent (chapter 3) with the boiler question. Because the knowledge-search tool is deployed (chapter 6) the facilities sub-agent now retrieves the SOP and the answer cites it. The script then runs the agent's answer through the output guardrail. Needs chapters 3, 6, 7 and the helper from chapter 3.",
+ b("Ask the agent for a grounded, cited answer", "Calls the hosted agent (chapter 3) with the boiler question. Because the knowledge-search tool is deployed (chapter 6) the facilities sub-agent now retrieves the SOP and the answer cites it. The script then runs the agent's answer through the output guardrail. If your design (chapter 14) sets a grounding threshold above 0, an answer whose best passage scores below it is replaced by a refusal instead of being guessed. Needs chapters 3, 6, 7 and the helper from chapter 3.",
    "grounded_answer.py", r'''
 import boto3
 
+import rag_design
 from ask_agent import ask
 from guardrail import ensure_guardrail
 
 res = ask("facilities-session-" + "c" * 20)
+best = max([c.get("score") or 0 for c in res["citations"]] or [0])
+if rag_design.grounding_threshold() > 0 and best < rag_design.grounding_threshold():       # your design: refuse when nothing retrieved is relevant enough
+    res = dict(res, answer="I can't answer that from the approved documents.", citations=[])
 print("route:", res["route"])
 print("cited sources:", sorted({c["source"] for c in res["citations"]}))
 print("answer:", res["answer"])

@@ -307,7 +307,7 @@ let src = fs.readFileSync(jsPath, "utf8");
 const hook = "_snips: snips,";
 if (!src.includes(hook)) { console.error("nano-docs.js no longer exports `_snips: snips,`"); process.exit(3); }
 src = src.replace(hook, hook + " _pickOps: pickOps,");
-const ctx = { window: {}, document: { baseURI: "http://localhost/" }, URL, console };
+const ctx = { window: {}, location: { search: "" }, document: { baseURI: "http://localhost/", createElement: () => ({ style: {} }), head: { appendChild() {} }, documentElement: { appendChild() {} }, getElementById: () => null }, URL, console };
 vm.createContext(ctx); vm.runInContext(src, ctx);
 const ND = ctx.window.NanoDocs, out = {};
 for (const cloud of clouds) {

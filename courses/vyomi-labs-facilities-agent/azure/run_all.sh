@@ -20,49 +20,51 @@ if [ "$want" = "  " ] || [[ "$want" == *" 3 "* ]]; then echo '== Layer 3: Tools'
 if [ "$want" = "  " ] || [[ "$want" == *" 3 "* ]]; then echo '== Layer 3: Tools'; python deploy_tools.py; fi
 if [ "$want" = "  " ] || [[ "$want" == *" 3 "* ]]; then echo '== Layer 3: Tools'; python call_tools.py; fi
 if [ "$want" = "  " ] || [[ "$want" == *" 3 "* ]]; then echo '== Layer 3: Tools'; python tool_contract.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Knowledge Pipeline'; python upload_docs.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Knowledge Pipeline'; python kb_index.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Knowledge Pipeline'; python indexer.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Knowledge Pipeline'; python check_search.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Knowledge Pipeline'; python deploy_ingest.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Knowledge Pipeline'; python new_doc.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Search (RAG)'; python inspect_index.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Search (RAG)'; python embed_docs.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Search (RAG)'; python try_search.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Response Generation'; python try_respond.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Response Generation'; python guard.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Response Generation'; python file_search.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Response Generation'; python on_your_data.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Agent Memory'; python short_term.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Agent Memory'; python try_memory.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Agent Memory'; python no_managed_memory.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Gateway'; python create_gateway.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Gateway'; python call_gateway.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Gateway'; python policies.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Gateway'; python mcp_server.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Actions and Approval'; python create_bus.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Actions and Approval'; python park_request.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Actions and Approval'; python approve_request.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Actions and Approval'; python reject_request.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Actions and Approval'; python expiry.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Access and Perimeter'; python entra.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Access and Perimeter'; python sign_in.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Access and Perimeter'; python protect_gateway.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Access and Perimeter'; python waf.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Channels and Input Guardrails'; python screen_input.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Channels and Input Guardrails'; python content_filter.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Channels and Input Guardrails'; python inbox.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python create_observability.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python run_agent.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python export_telemetry.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python query_telemetry.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python custom_table.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python platform_metrics.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: AgentOps and Observability'; python cost_meter.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python create_vault.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python make_key.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python envelope.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python audit.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python key_rotation.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python audit_chain.py; fi
-if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: Governance and Security'; python ship_it.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 4 "* ]]; then echo '== Layer 4: Design the RAG'; python show_design.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Pipeline'; python upload_docs.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Pipeline'; python kb_index.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Pipeline'; python indexer.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Pipeline'; python check_search.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Pipeline'; python deploy_ingest.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 5 "* ]]; then echo '== Layer 5: Knowledge Pipeline'; python new_doc.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Knowledge Search (RAG)'; python inspect_index.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Knowledge Search (RAG)'; python embed_docs.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Knowledge Search (RAG)'; python try_search.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 6 "* ]]; then echo '== Layer 6: Knowledge Search (RAG)'; python apply_design.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Response Generation'; python try_respond.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Response Generation'; python guard.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Response Generation'; python file_search.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 7 "* ]]; then echo '== Layer 7: Response Generation'; python on_your_data.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Memory'; python short_term.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Memory'; python try_memory.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 8 "* ]]; then echo '== Layer 8: Agent Memory'; python no_managed_memory.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Agent Gateway'; python create_gateway.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Agent Gateway'; python call_gateway.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Agent Gateway'; python policies.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 9 "* ]]; then echo '== Layer 9: Agent Gateway'; python mcp_server.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Actions and Approval'; python create_bus.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Actions and Approval'; python park_request.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Actions and Approval'; python approve_request.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Actions and Approval'; python reject_request.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 10 "* ]]; then echo '== Layer 10: Actions and Approval'; python expiry.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Access and Perimeter'; python entra.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Access and Perimeter'; python sign_in.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Access and Perimeter'; python protect_gateway.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 11 "* ]]; then echo '== Layer 11: Access and Perimeter'; python waf.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: Channels and Input Guardrails'; python screen_input.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: Channels and Input Guardrails'; python content_filter.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 12 "* ]]; then echo '== Layer 12: Channels and Input Guardrails'; python inbox.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python create_observability.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python run_agent.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python export_telemetry.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python query_telemetry.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python custom_table.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python platform_metrics.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 13 "* ]]; then echo '== Layer 13: AgentOps and Observability'; python cost_meter.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python create_vault.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python make_key.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python envelope.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python audit.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python key_rotation.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python audit_chain.py; fi
+if [ "$want" = "  " ] || [[ "$want" == *" 14 "* ]]; then echo '== Layer 14: Governance and Security'; python ship_it.py; fi

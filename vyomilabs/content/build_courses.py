@@ -1,4 +1,4 @@
-"""Generates wasm/labs/data/{aws,gcp,azure}.json: the 13-layer Enterprise Facilities agent course, once per cloud with that cloud's native services.
+"""Generates wasm/labs/data/{aws,gcp,azure}.json: the 14-layer Enterprise Facilities agent course, once per cloud with that cloud's native services.
 Source of truth for the course text. Names come from examples/enterprise-facilities-agent/facilities/{,gcp/,azure/}runtime.py NAMES; every step is
 something the reference app does for that cloud (so the learner builds what the reference builds). Run: python -m vyomilabs.content.build_courses"""
 import datetime
@@ -12,10 +12,10 @@ from .setup_steps import STEPS
 import importlib
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "wasm", "labs", "data")
-ORDER = [10, 3, 7, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
+ORDER = [10, 3, 7, 14, 12, 6, 11, 9, 4, 5, 1, 2, 8, 13]
 _HOT_OLD = {1: (4, 62, 94, 402), 2: (94, 62, 165, 330), 3: (166, 62, 317, 402), 4: (318, 62, 412, 402), 5: (413, 62, 521, 402), 6: (521, 62, 606, 338),
        7: (607, 62, 705, 400), 8: (706, 62, 797, 402), 9: (200, 407, 364, 523), 10: (4, 407, 198, 523), 11: (364, 407, 500, 500),
-       12: (500, 407, 797, 500), 13: (4, 525, 797, 596)}
+       12: (500, 407, 797, 500), 13: (4, 525, 797, 596), 14: (500, 500, 797, 520)}
 HOT, IMG_SIZE = hotspots()
 CLOUDS = {"aws": "AWS", "gcp": "Google Cloud", "azure": "Microsoft Azure"}
 AI = {"aws": "Amazon Bedrock", "gcp": "Vertex AI", "azure": "Azure OpenAI / AI Foundry"}
@@ -28,12 +28,14 @@ SHARED = {
      ["Supervisor and sub-agents: plan, route, synthesise", "The agent harness: step, token and cost budgets, checkpoints, timeouts, a kill switch", "Session isolation: separate state per session"], [10, 7]),
  7: ("Tools", "Tools", "Build the tools the agents call: read-only lookups first, then write tools that sit behind approval.",
      ["A tool is a function with a clear input and output contract", "Read-only tools versus approval-gated write tools", "Tool code never trusts its caller"], [6]),
+ 14: ("Design the RAG", "Design", "Design the retrieval-augmented generation the later chapters build: chunking, embedding, search, rerank and grounding, tested on a golden set and saved as one design file.",
+      ["Chunk size, overlap and search type are design choices you can measure", "A golden set of questions turns a feeling into a score", "One design file that every later chapter reads"], [10]),
  12: ("Knowledge Pipeline", "Pipeline", "Turn documents into searchable knowledge, and re-index automatically when a new document lands.",
-      ["Chunking and why chunk size matters", "Embeddings and vector search", "Event-driven ingestion: storage event, function, index job"], [10]),
+      ["Chunking and why chunk size matters", "Embeddings and vector search", "Event-driven ingestion: storage event, function, index job"], [10, 14]),
  6: ("Knowledge Search (RAG)", "Search", "Retrieve the right passages for a question, rank them, and keep the source so answers can cite it.",
-     ["Vector, keyword and hybrid retrieval", "Reranking", "Why sources must travel with results"], [12]),
+     ["Vector, keyword and hybrid retrieval", "Reranking", "Why sources must travel with results"], [12, 14]),
  11: ("Response Generation", "Response", "Answer in plain language from the retrieved documents, with citations, and filter sensitive data out before the user sees it.",
-      ["Grounding: answer only from retrieved text", "Citations and how to check them", "Output guardrails: sensitive-data masking and policy filters"], [6, 10, 2]),
+      ["Grounding: answer only from retrieved text", "Citations and how to check them", "Output guardrails: sensitive-data masking and policy filters"], [6, 10, 2, 14]),
  9: ("Agent Memory", "Memory", "Give the agent memory: short-term events inside a session and long-term facts it can retrieve later.",
      ["Short-term memory is the events of one session", "Long-term memory outlives a session", "Scope memory per user and tenant; mind retention and poisoning"], [3]),
  4: ("Agent Gateway", "Gateway", "Put one governed door in front of the tools: a tool catalogue, a policy check on every call and a rate limit.",
@@ -55,6 +57,7 @@ META = {
  10: ("Beginner", 25, "A model client any layer can import: chat, tool calling and embeddings"),
  3: ("Intermediate", 40, "A supervisor agent and three sub-agents answering in isolated sessions"),
  7: ("Intermediate", 35, "Read-only and approval-gated tools your agents can call"),
+ 14: ("Intermediate", 30, "A tested RAG design saved as rag-design.json, read by the pipeline, search and response chapters"),
  12: ("Intermediate", 40, "Documents flowing into a searchable knowledge base, re-indexed on every upload"),
  6: ("Intermediate", 30, "Ranked retrieval that keeps the source of every passage"),
  11: ("Intermediate", 30, "Grounded answers with citations and sensitive data masked"),
@@ -75,6 +78,8 @@ INTRO = {
      ["Isolation stops one user's session from leaking into another's", "Budgets, timeouts and a kill switch contain runaway agents and runaway cost", "A managed host gives you deployments, versions and rollback"]),
  7: ("Tools are the functions the agents may call: read-only lookups and write operations. Each one has a narrow contract, validates its input and never trusts its caller.",
      ["An agent is only as safe as the tools you hand it", "Narrow, typed tools make behaviour testable and auditable", "Separating read from write is what makes approval gates possible"]),
+ 14: ("Design the RAG is where you decide how knowledge is prepared and found before you build it: how documents are chunked, how they are embedded, how passages are searched and ranked, and when the assistant should refuse to answer.",
+      ["Measured settings beat defaults, and a golden set is how you measure", "The tested design and the built pipeline cannot drift apart because the build reads the design file", "A refusal below a grounding threshold is safer than a confident guess"]),
  12: ("The pipeline turns documents such as SOPs and manuals into searchable knowledge: store, extract, chunk, embed, index, and re-index automatically when a document changes.",
       ["Answers are only as current as the index", "Event-driven ingestion removes manual re-indexing and stale answers", "Scanning documents before indexing keeps sensitive or malicious content out"]),
  6: ("Retrieval finds the passages that answer a question and ranks them, keeping the source of each one so the answer can cite it.",
@@ -149,6 +154,10 @@ v("azure", 1, ("CLI", "The gateway exists", "az apim show -g <rg> -n facilities-
 v("azure", 2, ("CLI", "The inbox receives requests", "az servicebus topic subscription show -g <rg> --namespace-name facilities-bus --topic-name work-order-approval -n approver-inbox --query messageCount", "A message count above 0 after a request is published"))
 v("azure", 8, ("CLI", "Spans are readable with KQL", "az monitor log-analytics query -w <workspace-id> --analytics-query 'AppTraces | take 5'", "Your agent log lines"), ("Console", "The custom metric appears", "Application Insights, Metrics, facilities.tool_calls", "A non-empty series"))
 v("azure", 13, ("CLI", "The key exists", "az keyvault key list --vault-name facilities-kv -o table", "ledger-key"), ("CLI", "The run is in the activity log", "az monitor activity-log list -g <rg> --max-events 5", "Recent control-plane operations from your run"))
+
+v("aws", 14, ("Console", "The design runs on the golden set", "Bedrock, Knowledge bases, RAG Studio", "Your golden questions score, and Save JSON downloads the design"), ("CLI", "The design file is valid", "python show_design.py", "design OK"))
+v("gcp", 14, ("Console", "The design runs on the golden set", "Vertex AI, RAG Studio", "Your golden questions score, and the design exports as JSON"), ("CLI", "The design file is valid", "python show_design.py", "design OK"))
+v("azure", 14, ("Console", "The design runs on the golden set", "AI Search, RAG Studio", "Your golden questions score, and the design exports as JSON"), ("CLI", "The design file is valid", "python show_design.py", "design OK"))
 
 def _setup(cloud, lid):
     """Setup steps with the console deep link and the screenshot (only when the real capture exists)."""
@@ -226,7 +235,7 @@ def _ops(cloud, docs, lab):
         out += picked
     return out
 
-LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
+LAYER_ICON = {10: "brain", 3: "cube", 7: "wrench", 14: "layers", 12: "bucket", 6: "search", 11: "doc", 9: "db", 4: "route", 5: "check", 1: "lock", 2: "chat", 8: "chart", 13: "shield"}
 
 def _lab(cloud, lid, edition="mesh"):
     """Hands-on code blocks (complete, copy-paste), verified by vyomilabs/labrun.py. Empty until a chapter has been written and run.
@@ -249,6 +258,9 @@ def _lab(cloud, lid, edition="mesh"):
 
 C = {}  # cloud -> layer -> dict(services, build, names, checks, simplified, native, ref, code)
 C["aws"] = {
+ 14: dict(services=["Amazon Bedrock Knowledge Bases", "RAG Studio (Vyomi console)"], build=["Open RAG Studio and load the course documents.", "Change one setting at a time: chunking, search type, top K, rerank.", "Run the golden set after each change and keep what scores better.", "Save the design as rag-design.json and write rag_design.py, the loader the later chapters import.", "Run show_design.py to check the file."],
+          names=dict(design="rag-design.json"), checks=["rag-design.json is saved next to your code", "show_design.py prints design OK", "the loader returns the same values as the file"],
+          simplified=["RAG Studio scores retrieval with the small local embedding model, so absolute scores are lower than production; use them to compare designs, not as targets.", "Bedrock knowledge bases offer fixed-size chunking in this course; other strategies in a design fall back to fixed size with a warning."], ref="c12_pipeline.py"),
  10: dict(services=["Amazon Bedrock Runtime: Converse, InvokeModel"], build=["ListFoundationModels to see what you can call.", "Converse: send a user message and read the text and token usage.", "Converse with toolConfig and handle stopReason.", "InvokeModel with the embedding model the simulator hosts.", "Attach your guardrail (chapter 11) to a Converse call and watch it stop a prompt attack."],
           names={}, checks=["ListFoundationModels returns models", "Converse returns text and usage", "Converse with toolConfig returns tool_use or end_turn", "InvokeModel returns an embedding"],
           simplified=["Answers come from the open models Vyomi hosts (small in-browser models on Nano, the Mesh pool on a Mesh); quality is that of those models.", "Your code asks ListFoundationModels which models exist instead of using a vendor model id."], ref="c10_models.py",
@@ -288,6 +300,9 @@ C["aws"] = {
           names={}, checks=["key with rotation exists", "encrypt/decrypt with context", "SSE-KMS object", "trail shows approval events"], simplified=["IAM policy evaluation is simplified; check the capability notes for what is enforced."], ref="c13_governance.py"),
 }
 C["gcp"] = {
+ 14: dict(services=["Vertex AI RAG Engine", "RAG Studio (Vyomi console)"], build=["Open RAG Studio and load the course documents.", "Change one setting at a time: chunking, search type, top K, rerank.", "Run the golden set after each change and keep what scores better.", "Save the design as rag-design.json and write rag_design.py, the loader the later chapters import.", "Run show_design.py to check the file."],
+          names=dict(design="rag-design.json"), checks=["rag-design.json is saved next to your code", "show_design.py prints design OK", "the loader returns the same values as the file"],
+          simplified=["RAG Studio scores retrieval with the small local embedding model, so absolute scores are lower than production; use them to compare designs, not as targets.", "RAG Engine chunks by fixed length in this course; other strategies in a design fall back to fixed size with a warning."], ref="gcp/components/c12_pipeline.py"),
  10: dict(services=["Vertex AI: generateContent, embedContent"], build=["models.list to see the catalogue; models.get resolves the id your app uses.", "generateContent: a chat turn.", "generateContent with function declarations (tool calling).", "embedContent with text-embedding-005: a paraphrase ranks above unrelated text.", "Attach your Model Armor template (chapter 11) to a model call and watch it block a prompt attack."],
           names={}, checks=["catalogue lists models", "generateContent answers", "function calling returns a call or text", "embedContent returns a vector"],
           simplified=["Answers come from the open models Vyomi hosts (small in-browser models on Nano, the Mesh pool on a Mesh); quality is that of those models.", "Your code asks the Model Garden which models exist instead of using a vendor model id."], ref="gcp/components/c10_models.py",
@@ -320,6 +335,9 @@ C["gcp"] = {
           names=dict(keyring="facilities", key="ledger-key"), checks=["key with rotation", "wrong AAD refused", "audit entries for the run"], simplified=["IAM evaluation is simplified; check the capability notes for what is enforced."], ref="gcp/components/c13_governance.py"),
 }
 C["azure"] = {
+ 14: dict(services=["Azure AI Search", "RAG Studio (Vyomi console)"], build=["Open RAG Studio and load the course documents.", "Change one setting at a time: chunking, search type, top K, rerank.", "Run the golden set after each change and keep what scores better.", "Save the design as rag-design.json and write rag_design.py, the loader the later chapters import.", "Run show_design.py to check the file."],
+          names=dict(design="rag-design.json"), checks=["rag-design.json is saved next to your code", "show_design.py prints design OK", "the loader returns the same values as the file"],
+          simplified=["RAG Studio scores retrieval with the small local embedding model, so absolute scores are lower than production; use them to compare designs, not as targets.", "The course indexer loads whole documents, so the design's chunk size is recorded but not applied on Azure yet; top K, embedding dimensions, search type and the grounding threshold are."], ref="azure/components/c12_pipeline.py"),
  10: dict(services=["Azure OpenAI chat and embeddings (deployments)"], build=["List the chat and embed deployments through ARM.", "embeddings.create, and dimensions=256 for a shorter vector.", "chat.completions: a chat turn through your deployment name.", "chat.completions with a function tool, and with stream=True.", "An unknown deployment answers 404 DeploymentNotFound; the content filter refuses a violent prompt (chapter 11)."],
           names=dict(chat="chat", embed="embed", openai="facilities-openai"), checks=["deployments listed", "embeddings return a vector", "chat answers", "tool call works", "unknown deployment is 404"],
           simplified=["Answers come from the open models Vyomi hosts (small in-browser models on Nano, the Mesh pool on a Mesh); quality is that of those models.", "Your deployments are created from the models the simulator lists, not from a vendor model."], ref="azure/components/c10_models.py",
