@@ -371,7 +371,7 @@ C["azure"] = {
 CHECKERS = {"aws": {2, 10}}
 
 
-EDITIONS = {"mesh": "", "nano": "-nano"}      # edition -> file suffix: wasm/labs/data/<cloud>.json (Mesh, everything) and <cloud>-nano.json (Nano subset)
+EDITIONS = {"mesh": ""}      # edition -> file suffix: the course is Mesh-only (Pro/Max): wasm/labs/data/<cloud>.json
 SCHEMA = 2                                      # 2 = blocks carry edition/nano_note/kind/needs_appliance; layers carry blocks_total/blocks_nano/blocks_mesh_only
 
 

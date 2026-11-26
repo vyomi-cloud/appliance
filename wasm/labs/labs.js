@@ -37,7 +37,7 @@
     /* the layer count is whatever the course data has, never a typed number: adding a chapter must not leave a stale "13" behind */
     function nLayers() { return course ? course.layers.length : 0; }
     function nWord(cap) { var w = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"][nLayers()] || String(nLayers()); return cap ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
-    var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, edition = "nano", store = {};
+    var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, edition = "mesh", store = {};
     var root = el("div", { className: "vl" });
     host.replaceChildren(root);
     var KEY = function () { return "vyomi.labs." + cloud; };
@@ -48,12 +48,10 @@
 
     function load(c) {
       cloud = c; root.dataset.cloud = c; store = lsGet(KEY()); sel = null; inCourse = false;
-      /* Two editions of one course: "mesh" = every chapter step (appliance or Mesh runner), "nano" = only the steps that run in this browser. ?edition=nano|mesh forces one. */
-      var q = (location.search.match(/[?&]edition=(nano|mesh)\b/) || [])[1];
+      /* This course is the Pro/Max Mesh course: one data file per cloud, deployed only through a Mesh or the Vyomi runner. */
       return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; }).then(function () {
-        edition = q || (hasApi || meshRoute() ? "mesh" : "nano");
-        return fetch(base + "data/" + c + (edition === "nano" ? "-nano" : "") + ".json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("no " + edition); return r.json(); })
-          .catch(function () { return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }); });
+        edition = "mesh";
+        return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("no course data"); return r.json(); });
       }).then(function (d) { course = d; }).then(function () { render(); });
     }
     function go(id) { sel = id; render(); var s = host.closest ? host : null; window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); }
@@ -83,7 +81,7 @@
       return el("div", { className: "vl-page" },
         el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." })), cloudTabs,
           (course.plan || []).length ? el("p", { className: "vl-disclaimer" }, icon("M12 8v5M12 16.500v.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", 16),
-            el("span", {}, el("b", { textContent: cloud === "aws" && edition === "nano" ? "AWS chapters deploy in your browser. " : "Deploying needs a Mesh. " }), (cloud === "aws" && edition === "nano" ? "On the free Nano edition every step that has an in-browser engine runs here; a step that calls a model asks you to load one (WebGPU browser), and only steps with no engine yet need a Mesh, included with the " : "Courses that deploy code run it inside a Mesh, which is included with the "), el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. You can always read every lesson, browse and edit the code, and download the project.")) : null),
+            el("span", {}, el("b", { textContent: "Deploying needs a Mesh. " }), ("Courses that deploy code run it inside a Mesh, which is included with the "), el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. You can always read every lesson, browse and edit the code, and download the project.")) : null),
         el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
     }
 
@@ -384,7 +382,7 @@
       });
     }
     function deployPanel(l) {
-      var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : cloud === "aws" ? "in this browser (Nano); a step that needs a model asks you to load one, and only steps with no in-browser engine are left for a Mesh" : "inside a Mesh (started for you if it is not running)";
+      var route = meshRoute(), target = route ? "inside your Mesh (" + route.name + ")" : hasApi ? "in the Vyomi runner" : "inside a Mesh (started for you if it is not running)";
       var supported = true;
       var rows = l.lab.map(function (bk) { return { bk: bk, chip: el("span", { className: "vl-dchip", textContent: bk.run ? "waiting" : "saved on run" }), log: el("pre", { className: "vl-dlog" }) }; });
       var btn = el("button", { type: "button", className: "vl-btn primary sm vl-deploybtn" }, icon("M8 5v14l11-7z", 14), "Deploy this chapter");
@@ -423,7 +421,7 @@
         }).catch(function (e) { out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: "Could not run the deploy: " + e.message }))); btn.disabled = false; btn.textContent = "Deploy again"; });
       }
       /* On Nano (no Mesh, no local runner) the browser runs what it can. Only non-AWS clouds (no browser SDK runner) still need a Mesh up front. */
-      var needsMesh = function () { return !meshRoute() && !hasApi && (cloud !== "aws" || meshWanted); };
+      var needsMesh = function () { return !meshRoute() && !hasApi; };
       var meshWanted = false;
       var kernel = function () { try { if (window.parent !== window && window.parent.vyomiEnableWebLLM) return window.parent; } catch (_) {} return window.vyomiEnableWebLLM ? window : null; };
       /* Why a failed step cannot run in the browser: {kind:"model"} (load a model) or {kind:"mesh", why} (genuinely Mesh-only). */
