@@ -1,0 +1,31 @@
+{
+ "schema": 1,
+ "courses": [
+  {
+   "id": "facilities",
+   "cloud": "aws",
+   "file": "aws.json",
+   "key": "vyomi.labs.aws",
+   "title": "Build the Enterprise Facilities agent on AWS (Mesh, enterprise)",
+   "level": "Advanced",
+   "chapters": 14,
+   "minutes": 563,
+   "kicker": "Enterprise course",
+   "badge": "Pro / Max: deploys inside a Mesh",
+   "blurb": "Build a complete enterprise agentic application layer by layer: models, runtime, tools, knowledge, memory, gateway, approval, access, observability and governance."
+  },
+  {
+   "id": "agent-nano",
+   "cloud": "aws",
+   "file": "aws-agent-nano.json",
+   "key": "vyomi.labs.aws.agent-nano",
+   "title": "Build Your First Agent (Nano)",
+   "level": "Beginner",
+   "chapters": 7,
+   "minutes": 230,
+   "kicker": "Start here",
+   "badge": "Free. Runs entirely in your browser, no Mesh",
+   "blurb": "Build and deploy a working help-desk agent with a small language model in your browser: a loop, a model, three tools, memory, knowledge and guardrails, deployed as a Lambda and evaluated."
+  }
+ ]
+}

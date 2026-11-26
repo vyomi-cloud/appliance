@@ -93,6 +93,7 @@ def _urlopen(req, data=None, timeout=None, **kw):
 _ur.urlopen = _urlopen
 `;
 let py = null, ready = null;
+const seen = {};
 async function boot(post) {
   const { loadPyodide } = await import(PYODIDE + "pyodide.mjs");
   py = await loadPyodide({ indexURL: PYODIDE });
@@ -107,14 +108,20 @@ self.onmessage = async (ev) => {
   try {
     ready = ready || boot(out);
     await ready;
-    for (const [n, c] of Object.entries(files || {})) py.FS.writeFile("/home/pyodide/" + n, c);
+    const stale = [];   // a course may save a file again in a later chapter (tools.py, agent.py): drop the module Python already imported from the old text
+    for (const [n, c] of Object.entries(files || {})) { if (n.endsWith(".py") && seen[n] !== undefined && seen[n] !== c) stale.push(n.slice(0, -3)); seen[n] = c; py.FS.writeFile("/home/pyodide/" + n, c); }
+    py.globals.set("_stale", py.toPy(stale));
     py.globals.set("_env", py.toPy(env || {}));
     py.globals.set("_routecfg", py.toPy(route || null));
     py.globals.set("_cmd", run || "");
     py.setStdout({ batched: (s) => out(s) }); py.setStderr({ batched: (s) => out(s) });
     await py.runPythonAsync(`
-import os, sys, runpy
+import os, sys, runpy, importlib
 os.chdir("/home/pyodide"); sys.path.insert(0, "/home/pyodide")
+if list(_stale):    # a changed file may be imported by others: forget every module that came from the course folder
+    for _m in [k for k, v in list(sys.modules.items()) if str(getattr(v, "__file__", "") or "").startswith("/home/pyodide/")]:
+        sys.modules.pop(_m, None)
+importlib.invalidate_caches()
 os.environ.update({k: str(v) for k, v in dict(_env).items()})
 import __main__ as _m
 _m.ROUTE['mesh'] = dict(_routecfg) if _routecfg else None

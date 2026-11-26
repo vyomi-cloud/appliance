@@ -38,9 +38,13 @@
     function nLayers() { return course ? course.layers.length : 0; }
     function nWord(cap) { var w = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"][nLayers()] || String(nLayers()); return cap ? w.charAt(0).toUpperCase() + w.slice(1) : w; }
     var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, edition = "mesh", store = {};
+    /* Several courses can share one cloud. "facilities" is the original course (data/<cloud>[-nano].json); any other id is listed in data/courses.json and has its own data file, progress and project. */
+    var courseId = opts.course || ((location.search.match(/[?&]course=([\w-]+)/) || [])[1]) || "facilities", listing = null;
+    var suffix = function () { return courseId === "facilities" ? "" : "." + courseId; };
+    var listed = function (id) { return listing && listing.courses.filter(function (c) { return c.id === id && c.cloud === cloud; })[0]; };
     var root = el("div", { className: "vl" });
     host.replaceChildren(root);
-    var KEY = function () { return "vyomi.labs." + cloud; };
+    var KEY = function () { return "vyomi.labs." + cloud + suffix(); };
     var done = function (id) { return store[id]; };
     var byId = function (id) { return course.layers.filter(function (l) { return l.id === id; })[0]; };
     var nextId = function () { var l = course.layers.filter(function (x) { return !done(x.id); })[0]; return l ? l.id : null; };
@@ -51,7 +55,11 @@
       /* This course is the Pro/Max Mesh course: one data file per cloud, deployed only through a Mesh or the Vyomi runner. */
       return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; }).then(function () {
         edition = "mesh";
+        return (listing ? Promise.resolve() : fetch(base + "data/courses.json", { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) { listing = j; }, function () { listing = null; })).then(function () {
+        if (courseId !== "facilities" && !listed(courseId)) { courseId = "facilities"; store = lsGet(KEY()); }
+        if (courseId !== "facilities") return fetch(base + "data/" + listed(courseId).file, { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("no course"); return r.json(); });
         return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("no course data"); return r.json(); });
+        });
       }).then(function (d) { course = d; }).then(function () { render(); });
     }
     function go(id) { sel = id; render(); var s = host.closest ? host : null; window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); }
@@ -70,7 +78,7 @@
       var start = function () { inCourse = true; render(); window.scrollTo && window.scrollTo(0, 0); root.scrollIntoView && root.scrollIntoView({ block: "start" }); };
       var card = el("article", { className: "vl-ccard" + ((course.plan || []).length ? " has-ribbon" : "") }, planTag(),
         el("div", { className: "vl-herotxt" },
-          el("div", { className: "vl-eyebrow" }, "Hands-on course · " + course.cloud_name + " · " + course.ai_platform),
+          el("div", { className: "vl-eyebrow" }, (otherCards().length ? "Enterprise course · Advanced · " : "Hands-on course · ") + course.cloud_name + " · " + course.ai_platform),
           el("h2", { textContent: course.title }),
           el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
           el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps"), stat(P.flag, "Beginner to Advanced", nLayers() + " layers")), archLink()),
@@ -82,7 +90,22 @@
         el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." })), cloudTabs,
           (course.plan || []).length ? el("p", { className: "vl-disclaimer" }, icon("M12 8v5M12 16.500v.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", 16),
             el("span", {}, el("b", { textContent: "Deploying needs a Mesh. " }), ("Courses that deploy code run it inside a Mesh, which is included with the "), el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. You can always read every lesson, browse and edit the code, and download the project.")) : null),
-        el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
+        el("div", { className: "vl-cgrid" }, otherCards(), card, otherCards().length ? null : el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
+    }
+    /* The other courses listed in data/courses.json for this cloud, as cards of their own (Nano edition only). Each has its own data, progress and project. */
+    function otherCards() {
+      if (!listing || cloud !== "aws") return [];
+      return listing.courses.filter(function (c) { return c.cloud === cloud && c.id !== courseId; }).map(function (c) {
+        var st = lsGet(c.key), n = Object.keys(st).length, pct = Math.round(100 * n / c.chapters);
+        var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
+        var open = function () { courseId = c.id; load(cloud).then(function () { inCourse = true; render(); window.scrollTo && window.scrollTo(0, 0); }); };
+        return el("article", { className: "vl-ccard", "data-course": c.id },
+          el("div", { className: "vl-herotxt" }, el("div", { className: "vl-eyebrow" }, c.kicker + " \u00b7 " + c.level + " \u00b7 " + c.badge), el("h2", { textContent: c.title }), el("p", { textContent: c.blurb }),
+            el("div", { className: "vl-statrow" }, stat(P.book, String(c.chapters), "chapters"), stat(P.clock, hm(c.minutes), "estimated"), stat(P.flag, c.level, "level"))),
+          el("div", { className: "vl-progcard" }, el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
+            el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + c.chapters + " complete" }), el("div", { className: "vl-muted", textContent: c.kicker === "Start here" ? "New to agents? Begin here." : "Continue when you are ready." })),
+            el("button", { type: "button", className: "vl-btn primary lg", onclick: open }, n ? "Continue course" : "Start course", icon(P.arrow, 18))));
+      });
     }
 
     /* ---------- Start here: the premise (why this many layers) ---------- */
@@ -182,7 +205,7 @@
     /* ---------- course view ---------- */
     /* ---------- In-course code editor: the project's files in a Monaco editor (plain textarea if the CDN is unreachable); edits stay in this browser ---------- */
     var PROJ = null, monacoP = null;
-    function loadProject() { return PROJ ? Promise.resolve(PROJ) : fetch(base + "project/" + cloud + ".json", { cache: "no-cache" }).then(function (r) { return r.json(); }).then(function (j) { PROJ = j; return j; }); }
+    function loadProject() { return PROJ ? Promise.resolve(PROJ) : fetch(base + "project/" + cloud + (courseId === "facilities" ? "" : "-" + courseId) + ".json", { cache: "no-cache" }).then(function (r) { return r.json(); }).then(function (j) { PROJ = j; return j; }); }
     function loadMonaco() {
       if (monacoP) return monacoP;
       var CDN = "https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min";
@@ -215,7 +238,7 @@
       root.appendChild(ov); var closeEd = function () { try { ed && ed.dispose(); } catch (_) {} ov.remove(); document.removeEventListener("keydown", onKey); }, ed = null;
       var onKey = function (e) { if (e.key === "Escape") closeEd(); }; document.addEventListener("keydown", onKey);
       Promise.all([loadProject(), loadMonaco().catch(function () { return null; })]).then(function (r) {
-        var proj = r[0], mon = r[1], KEYE = "vyomi.labs.edit." + cloud, edits = {}; try { edits = JSON.parse(localStorage.getItem(KEYE) || "{}"); } catch (_) {}
+        var proj = r[0], mon = r[1], KEYE = "vyomi.labs.edit." + cloud + suffix(), edits = {}; try { edits = JSON.parse(localStorage.getItem(KEYE) || "{}"); } catch (_) {}
         var paths = Object.keys(proj.files), models = {}, cur = null, treeEl = el("div", { className: "vl-edtree" }), tabsEl = el("div", { className: "vl-edtabs" }), host = el("div", { className: "vl-edhost" }), ta = null, open = [];
         var text = function (p) { return edits[p] !== undefined ? edits[p] : proj.files[p]; };
         var persist = function () { try { localStorage.setItem(KEYE, JSON.stringify(edits)); } catch (_) {} };
@@ -267,6 +290,7 @@
           el("button", { type: "button", className: "vl-btn", textContent: "Layer guide", onclick: function () { openEditor(dir + "/README.md"); } })));
     }
     function archLink() {   // the full architecture this course teaches you to build, opened full size in its own tab
+      if (!course.image) return null;
       return el("a", { className: "vl-archlink", href: base + course.image, target: "_blank", rel: "noopener" }, icon("M4 5h16v14H4zM4 10h16M10 10v9", 15), "View the full reference architecture you will build", icon("M7 17L17 7M9 7h8v8", 14));
     }
     function courseView() {
@@ -279,22 +303,22 @@
       var stat = function (ic, v, k) { return el("div", { className: "vl-stat" }, el("span", { className: "vl-stati" }, icon(ic, 18)), el("div", {}, el("b", { textContent: v }), el("small", { textContent: k }))); };
       var hero = el("header", { className: "vl-hero" + ((course.plan || []).length ? " has-ribbon" : "") }, planTag(),
         el("div", { className: "vl-herotxt" },
-          el("button", { type: "button", className: "vl-backlink", onclick: function () { inCourse = false; render(); } }, icon(P.back, 14), "All courses"),
+          el("button", { type: "button", className: "vl-backlink", onclick: function () { inCourse = false; if (courseId !== "facilities") { courseId = "facilities"; load(cloud); } else render(); } }, icon(P.back, 14), "All courses"),
           el("div", { className: "vl-eyebrow" }, "Vyomi Labs · " + course.cloud_name + " · " + course.ai_platform),
           el("h1", { textContent: course.title }),
-          el("p", { textContent: "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
+          el("p", { textContent: course.blurb || "Build a complete enterprise agentic AI application layer by layer. Every chapter gives you the code, deploys it to your simulator and verifies it, so the app always works." }),
           el("div", { className: "vl-statrow" }, stat(P.book, String(tot), "chapters"), stat(P.clock, hm(course.total_minutes), "estimated"), stat("M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12", String(labN), "code steps to copy and run"), stat(P.flag, "Beginner to Advanced", nLayers() + " layers")), archLink(), cloudTabs),
         el("div", { className: "vl-progcard" },
           el("div", { className: "vl-ring", style: "--p:" + pct }, el("b", { textContent: pct + "%" })),
           el("div", {}, el("div", { className: "vl-progt", textContent: n + " of " + tot + " complete" }), el("div", { className: "vl-muted", textContent: nx ? "Up next: " + byId(nx).title : "Course complete" })), cta));
 
-      var map = el("section", { className: "vl-map", "aria-label": "Reference architecture" },
+      var map = !course.image ? null : el("section", { className: "vl-map", "aria-label": "Reference architecture" },
         el("div", { className: "vl-sechead" }, el("h2", { textContent: "Reference architecture" }), el("p", { className: "vl-muted", textContent: "Native " + course.cloud_name + " services. Select any layer to open its chapter." }), archLink()),
         diagram(null, true), el("ul", { className: "vl-legend" }, el("li", {}, el("i", { className: "vl-dot" }), "Not started"), el("li", {}, el("i", { className: "vl-dot done" }), "Complete"), el("li", {}, el("i", { className: "vl-dot next" }), "Up next")));
 
       var tiles = el("section", { className: "vl-contents", "aria-label": "Course contents" },
         el("div", { className: "vl-sechead" }, el("h2", { textContent: "Course contents" }), el("p", { className: "vl-muted", textContent: "Recommended order. You can start anywhere." })),
-        el("div", { className: "vl-tiles" }, introTile(), course.layers.map(function (l) { return tile(l, nx); })));
+        el("div", { className: "vl-tiles" }, course.intro === false ? null : introTile(), course.layers.map(function (l) { return tile(l, nx); })));
       return el("div", { className: "vl-page" }, hero, tiles, map, projectCard());
     }
 
@@ -421,7 +445,7 @@
         }).catch(function (e) { out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: "Could not run the deploy: " + e.message }))); btn.disabled = false; btn.textContent = "Deploy again"; });
       }
       /* On Nano (no Mesh, no local runner) the browser runs what it can. Only non-AWS clouds (no browser SDK runner) still need a Mesh up front. */
-      var needsMesh = function () { return !meshRoute() && !hasApi; };
+      var needsMesh = function () { return courseId === "facilities" && !meshRoute() && !hasApi; };   /* the Nano course runs in the browser; only the Mesh course needs a Mesh */
       var meshWanted = false;
       var kernel = function () { try { if (window.parent !== window && window.parent.vyomiEnableWebLLM) return window.parent; } catch (_) {} return window.vyomiEnableWebLLM ? window : null; };
       /* Why a failed step cannot run in the browser: {kind:"model"} (load a model) or {kind:"mesh", why} (genuinely Mesh-only). */
@@ -467,9 +491,9 @@
       function modelLoaded() { try { var h = kernel(); return !!(h && h.vyomiLlmStatus && h.vyomiLlmStatus().available); } catch (_) { return false; } }
       btn.onclick = function () {
         if (needsMesh()) { btn.disabled = true; var say = function (t) { out.replaceChildren(el("div", { className: "vl-dstatus", textContent: t })); }; return ensureMesh(say).then(function () { btn.disabled = false; btn.onclick(); }, function (e) { btn.disabled = false; out.replaceChildren(el("div", { className: "vl-dres bad" }, el("b", { textContent: e.message }))); }); }
-        var route = meshRoute();
+        var route = courseId === "facilities" ? meshRoute() : null;   // the Nano course never goes through a Mesh
         if (route && window.parent.VyomiMesh.apiFetch) return deployVia(function () { return window.parent.VyomiMesh.apiFetch("/mesh/labs/deploy/" + cloud + "/" + l.id, { method: "POST" }); });   // a Mesh is on: deploy INSIDE the Mesh
-        if (hasApi) return deployVia(function () { return fetch("/api/deploy/" + cloud + "/" + l.id, { method: "POST" }); });
+        if (hasApi && courseId === "facilities") return deployVia(function () { return fetch("/api/deploy/" + cloud + "/" + l.id, { method: "POST" }); });
         btn.disabled = true; btn.textContent = "Deploying..."; out.replaceChildren(); var failed = 0, meshOnly = 0, noModel = 0, passed = 0, reasons = [];
         rows.forEach(function (r) { r.chip.textContent = r.bk.run ? "waiting" : "saved on run"; r.chip.className = "vl-dchip"; r.log.textContent = ""; });
         var files = allFiles(), env = { AWS_ENDPOINT_URL: wireEndpoint(), AWS_DEFAULT_REGION: "us-east-1", AWS_ACCESS_KEY_ID: "test", AWS_SECRET_ACCESS_KEY: "test" };

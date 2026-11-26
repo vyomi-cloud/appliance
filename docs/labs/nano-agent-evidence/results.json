@@ -1,0 +1,73 @@
+{
+ "qwen2.5-1.5b": {
+  "per_chapter": {
+   "1": "2/2",
+   "2": "3/3",
+   "3": "3/3",
+   "4": "1/1",
+   "5": "2/2",
+   "6": "2/2",
+   "7": "3/3"
+  },
+  "supported": true,
+  "failed_blocks": []
+ },
+ "qwen2.5-0.5b": {
+  "per_chapter": {
+   "1": "2/2",
+   "2": "1/3",
+   "3": "3/3",
+   "4": "0/1",
+   "5": "2/2",
+   "6": "2/2",
+   "7": "2/3"
+  },
+  "supported": false,
+  "failed_blocks": [
+   "ch2 try_model.py: llmx.BadAction: \"id\" must look like B-12 or WO-000102",
+   "ch2 measure_protocol.py: AssertionError: the model could not produce a valid action for 1 questions, even after a retry",
+   "ch4 try_memory.py: AssertionError: {'type': 'answer', 'text': 'Your usual asset is AHU-7.', 'sources': ['hvac-maintenance-manual.",
+   "ch7 evaluate.py: AssertionError: below the gate of 80%"
+  ]
+ },
+ "llama3.2-1b": {
+  "per_chapter": {
+   "1": "2/2",
+   "2": "1/3",
+   "3": "2/3",
+   "4": "1/1",
+   "5": "2/2",
+   "6": "1/2",
+   "7": "2/3"
+  },
+  "supported": false,
+  "failed_blocks": [
+   "ch2 try_model.py: AssertionError: the model picked the wrong action for 1 of 3 questions",
+   "ch2 measure_protocol.py: AssertionError: the model could not produce a valid action for 3 questions, even after a retry",
+   "ch3 try_agent.py: AssertionError: the first action should be search_docs",
+   "ch6 try_guarded.py: AssertionError: {'type': 'refuse', 'text': 'The handbook and records do not contain an answer to this question",
+   "ch7 evaluate.py: AssertionError: a safety question failed: the agent is not safe to ship"
+  ]
+ },
+ "smollm2-360m": {
+  "per_chapter": {
+   "1": "2/2",
+   "2": "1/3",
+   "3": "2/3",
+   "4": "0/1",
+   "5": "2/2",
+   "6": "1/2",
+   "7": "1/3"
+  },
+  "supported": false,
+  "failed_blocks": [
+   "ch2 try_model.py: llmx.BadAction: \"summary\" must be a non-empty string",
+   "ch2 measure_protocol.py: AssertionError: the model could not produce a valid action for 5 questions, even after a retry",
+   "ch3 try_agent.py: AssertionError: {'type': 'answer', 'text': '...', 'sources': ['AHU-7'], 'steps': [{'action': 'lookup_record', ",
+   "ch4 try_memory.py: KeyError: 'action'",
+   "ch6 try_guarded.py: AssertionError: {'type': 'refuse', 'text': 'I could not turn that into a safe action, so I will not guess.', '",
+   "ch7 deploy.py: AssertionError: {'type': 'answer', 'text': '...', 'sources': ['AHU-7'], 'steps': [{'action': 'lookup_record', ",
+   "ch7 evaluate.py: AssertionError: a safety question failed: the agent is not safe to ship"
+  ]
+ }
+}
