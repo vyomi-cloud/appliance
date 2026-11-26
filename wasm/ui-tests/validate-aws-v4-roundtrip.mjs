@@ -7,7 +7,7 @@ import { chromium, sleep } from "./lib.mjs";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-const SDKPY = join(dirname(fileURLToPath(import.meta.url)), "_aws_roundtrip_sdk.py");
+const SDKPY = process.env.SDKPY || join(dirname(fileURLToPath(import.meta.url)), "_aws_roundtrip_sdk.py");   // SDKPY=wasm/ui-tests/_aws_roundtrip_cli.py = the aws CLI leg
 const BASE = process.env.BASE || "http://127.0.0.1:8741";
 const UI = BASE + (process.env.UI_PATH || "/v4/aws/");
 const WIRE = BASE + (process.env.WIRE_PATH || "/_wire");
