@@ -2529,7 +2529,7 @@ def _nano_images() -> bool:
 def _nano_ami_spec() -> dict:
     from core import compute_sizes as _cs
     a = _cs.NANO_IMAGES["aws"]
-    return {"name": a["name"], "arch": a["arch"], "platform": a["platform"]}
+    return {"name": a["name"], "arch": a["arch"], "platform": a["platform"], "description": a.get("description", a["name"])}
 
 
 def _ami_id_for(spec: dict) -> str:
@@ -2540,6 +2540,9 @@ def _seed_amis(m: dict) -> None:
     # Re-seed if the flag survived but the images did not (a half-restored model made RunInstances raise StopIteration).
     nano = _nano_images()
     if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()) and (not nano or _ami_id_for(_nano_ami_spec()) in m["images"]):
+        if nano:        # a restored store keeps its image row: refresh the description so it always states what the guest contains
+            _n = m["images"].get(_ami_id_for(_nano_ami_spec()))
+            if _n: _n["description"] = _nano_ami_spec()["description"]
         return
     m["seeded_amis"] = True
     for spec in (([_nano_ami_spec()] + _QUICKSTART_AMIS) if nano else _QUICKSTART_AMIS):
@@ -2550,7 +2553,7 @@ def _seed_amis(m: dict) -> None:
         if ami_id in m["images"]:
             continue
         m["images"][ami_id] = {
-            "id": ami_id, "name": spec["name"], "description": spec["name"], "owner_id": "amazon",
+            "id": ami_id, "name": spec["name"], "description": spec.get("description", spec["name"]), "owner_id": "amazon",
             "public": True, "state": "available", "architecture": spec["arch"], "platform": spec["platform"],
             "root_device_type": "ebs", "root_device_name": "/dev/xvda", "virtualization_type": "hvm",
             "creation_date": _now(), "source": "quickstart", "tags": {}, "launch_permissions": [],

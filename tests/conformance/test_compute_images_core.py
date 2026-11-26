@@ -46,6 +46,11 @@ def run() -> int:
         flags = re.findall(r"<architecture>([^<]*)</architecture>.*?<vyomiRunnable>(\w+)</vyomiRunnable>", body, re.S)
         _check("nano aws: only the i386 AMI is runnable, every other flagged false", [f for f in flags if f[1] == "true"] == [("i386", "true")] and len(flags) == len(names))
         _check("nano aws: substrate marker", "<vyomiSubstrate>nano</vyomiSubstrate>" in body)
+        # data-driven: EVERY runnable image must declare (and in the browser VM smoke, prove) python3, pip, apk and git; the description states exactly that
+        _check("nano: NANO_TOOLS is python3 + pip + apk + git and the summary names them", cs.NANO_TOOLS == ("Python 3", "pip", "apk", "git") and cs.NANO_SUMMARY == "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git")
+        for cloud, spec in cs.NANO_IMAGES.items():
+            _check("nano %s: the runnable image description is the exact summary (%s)" % (cloud, cs.NANO_SUMMARY), spec["description"] == cs.NANO_SUMMARY)
+        _check("nano aws: DescribeImages carries the summary as the runnable AMI's description", "<description>%s</description>" % cs.NANO_SUMMARY in body)
         ami = re.search(r"<imageId>([^<]+)</imageId>", body).group(1)
         r = vpc.dispatch(s, {"Action": "RunInstances", "ImageId": ami, "InstanceType": "t3.micro", "MinCount": "1", "MaxCount": "1"})
         _check("nano aws: RunInstances with the Alpine AMI works, instance is i386", r.status == 200 and "<architecture>i386</architecture>" in r.body)
@@ -70,6 +75,7 @@ def run() -> int:
         lst = json.loads(gce.dispatch(st, "GET", "/compute/v1/projects/%s/global/images" % g["project"], {}, {}, b"").body)["items"]
         _check("nano gcp: the Nano image project lists the Alpine image, runnable", [i["name"] for i in lst] == [g["name"]] and lst[0]["vyomiRunnable"] is True)
         deb = json.loads(gce.dispatch(st, "GET", "/compute/v1/projects/debian-cloud/global/images", {}, {}, b"").body)["items"]
+        _check("nano gcp: the runnable image description is the exact summary", lst[0]["description"] == cs.NANO_SUMMARY)
         _check("nano gcp: debian-cloud still lists, flagged not runnable", deb and all(i["vyomiRunnable"] is False for i in deb))
         ok = _gce_post(st, "ok1", "projects/%s/global/images/family/%s" % (g["project"], g["family"]))
         _check("nano gcp: insert with the Alpine family works", ok.status == 200)

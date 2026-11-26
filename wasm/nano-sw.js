@@ -19,8 +19,9 @@ const NANO_BASE = location.pathname.replace(/\/[^/]*$/, "");
 (async () => {
   if (!("serviceWorker" in navigator)) return;
   try {
-    const reg = await navigator.serviceWorker.register(NANO_BASE + "/sw.js", { scope: NANO_BASE + "/", updateViaCache: "none" });
-    try { await reg.update(); } catch (_) {}
+    // not awaited: a first-visit update()/register() job stalls ~60 s in Chrome (see nano-boot.js); ready is all that matters here
+    const regP = navigator.serviceWorker.register(NANO_BASE + "/sw.js", { scope: NANO_BASE + "/", updateViaCache: "none" });
+    regP.then((reg) => { if (wasControlledAtStart) return reg.update(); }).catch(() => {});
     await navigator.serviceWorker.ready;
     if (wasControlledAtStart) {
       sessionStorage.removeItem("nano-sw-reload");

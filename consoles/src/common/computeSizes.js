@@ -17,7 +17,7 @@ export function sizesNote(substrate) {
   return `Showing sizes available on ${LABEL[substrate]}.${tail}`;
 }
 
-/* Images / OS / architecture on Nano. The in-browser VM (wasm/vm) boots ONE guest, Alpine Linux 3.21 on a 32-bit x86 kernel, whatever image the
+/* Images / OS / architecture on Nano. The in-browser VM (wasm/vm) boots ONE guest (a second image, Debian 12 i386, was evaluated and dropped: it has no apk; see docs/architecture/v4.0/branches/nano-os-catalog.md), Alpine Linux 3.21 on a 32-bit x86 kernel, whatever image the
  * cloud record names, so Nano offers exactly that image per cloud (the server lists / accepts the same one: core/compute_sizes.py NANO_IMAGES).
  * Mesh and offline keep the full catalogs. */
 /** True on Nano. The size list the server answered is authoritative ("nano" | "mesh" mark); until it has loaded, the Nano page meta decides. */
@@ -30,6 +30,8 @@ export const NANO_IMAGES = {
 };
 
 export const NANO_REASON = "Not available on Nano: runs only in a Mesh";
-export const IMAGES_NOTE = "Nano runs VMs inside your browser: only Alpine Linux 3.21 (32-bit x86) can run here. Everything else is greyed out; launch a Mesh for the full catalog.";
+/** Exactly what the one runnable image contains (core/compute_sizes.py NANO_SUMMARY; the build is wasm/vm/build-image.sh). */
+export const IMAGE_SUMMARY = "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git";
+export const IMAGES_NOTE = `Nano runs VMs inside your browser: the only image that can run here is ${IMAGE_SUMMARY}. Everything else is greyed out; launch a Mesh for the full catalog.`;
 /** A size / image row the substrate can run. Nano lists everything and flags the rest `vyomiRunnable: false` (core/compute_sizes.py); other substrates never flag. */
 export const runnableRow = (r) => !(r && (r.vyomiRunnable === false || r.vyomiRunnable === "false" || r.Runnable === false));

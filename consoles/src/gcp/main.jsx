@@ -1,3 +1,4 @@
+import "../common/nanoWireRetry.js";
 import { createRoot } from "react-dom/client";
 import { NotifyProvider } from "../common/notify.jsx";
 import App from "./App.jsx";

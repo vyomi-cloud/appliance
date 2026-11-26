@@ -712,8 +712,11 @@ builtins._embed_bridge_set = _embed_bridge_set
   if (!("serviceWorker" in navigator)) { banner("Nano needs a service-worker-capable browser.", true); return; }
   try {
     const sw = K.step("service", "service worker: registering " + BASE + "/sw.js");
-    const reg = await navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/", updateViaCache: "none" });
-    try { await reg.update(); } catch (_) {}
+    // register() / update() are NOT awaited: on a first visit Chrome parks the update job for ~60 s (measured: headless Chrome 158, register()
+    // on the reloaded page then queues behind it), which held the whole boot - and every catalog call (AMI list, instance types) - back by a
+    // minute. serviceWorker.ready already says "an active worker controls this scope", which is all the boot needs.
+    const regP = navigator.serviceWorker.register(BASE + "/sw.js", { scope: BASE + "/", updateViaCache: "none" });
+    regP.then((reg) => { if (wasControlledAtStart) return reg.update(); }).catch(() => {});
     await navigator.serviceWorker.ready;
     sw.ok(wasControlledAtStart ? "active, controlling this page" : "installed");
     // Arriving from the dashboard we're already CONTROLLED. If a console URL is
