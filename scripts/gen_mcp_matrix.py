@@ -307,7 +307,11 @@ let src = fs.readFileSync(jsPath, "utf8");
 const hook = "_snips: snips,";
 if (!src.includes(hook)) { console.error("nano-docs.js no longer exports `_snips: snips,`"); process.exit(3); }
 src = src.replace(hook, hook + " _pickOps: pickOps,");
-const ctx = { window: {}, document: { baseURI: "http://localhost/" }, URL, console };
+// nano-docs.js also runs browser-only setup at load (style injection etc.): any property/call on `document` returns an inert stub.
+const stub = () => new Proxy(function () {}, { get: (_, k) => (k === Symbol.toPrimitive ? () => "" : stub()), set: () => true, apply: () => stub() });
+const documentShim = new Proxy({ baseURI: "http://localhost/" }, { get: (t, k) => (k in t ? t[k] : stub()), set: () => true });
+const locationShim = { search: "", hash: "", href: "http://localhost/", origin: "http://localhost", pathname: "/", host: "localhost", hostname: "localhost" };
+const ctx = { window: {}, document: documentShim, location: locationShim, URL, console };
 vm.createContext(ctx); vm.runInContext(src, ctx);
 const ND = ctx.window.NanoDocs, out = {};
 for (const cloud of clouds) {
