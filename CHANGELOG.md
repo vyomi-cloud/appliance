@@ -4,6 +4,59 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.1] — 2026-11-27
+
+A free Nano course, Nano compute options that match what a browser VM can run, and fixes to the Vyomi Labs course. The Labs course is Pro / Max Mesh-only again.
+
+### Added
+- **Vyomi Labs: Build Your First Agent (Nano)**: a separate free AWS course (7 chapters, 28 blocks, 16 runnable) that builds a Facilities help-desk agent entirely in the browser with a WebLLM and no Mesh: search policy documents in S3, look up a record in DynamoDB, file a ticket to SQS, memory, guardrails, deployed as a Nano Lambda. Measured in headless Chrome: only Qwen2.5 1.5B passes all 16 blocks (Qwen2.5 0.5B, Llama 3.2 1B and SmolLM2 360M do not), so the course lists only that model as supported.
+- **Nano identity and edge backends**: Cognito user pools, WAFv2 and API Gateway authorizers, with a pure-Python RS256 signer, plus a Nano Lambda sandbox SDK (typed `client.exceptions`, in-process Lambda invokes that wait for the in-browser model).
+- **Vyomi Labs chapter 14, Design the RAG**, with RAG Studio under AI Search in the AWS, GCP and Azure consoles (design, validate, test, corpus, query analysis, `vyomi.rag-design/v1` export and import).
+- **Terraform**: the exporter no longer leaks the simulator account id inside `jsonencode` policies in real-cloud mode.
+- **Nano compute create flows** (AWS EC2 launch, launch templates, AMI catalog, GCP create instance and templates, Azure create VM) show the full catalog and DISABLE what the in-browser VM cannot run, with the reason; the VM boots Alpine Linux 3.21 (32-bit x86: Python 3, pip, apk, git). Mesh and offline are unchanged.
+
+### Changed
+- **Vyomi Labs (the 13-layer Facilities agent course) is Pro / Max Mesh-only again.** The Nano edition filter of that course was removed; the free Nano course above replaces it for Nano users.
+- **Windows VM images are disabled, not removed**, on every cloud and in the backends (one flag per language; AWS `UnsupportedOperation`, Azure `OperationNotAllowed`, GCP `INVALID_ARGUMENT`), pending a proper analysis.
+- **Vyomi Mesh** tab: the collapsed tab is the same size as the expanded one on all clouds.
+
+### Fixed
+- **Nano: the AMI list (and every first catalog call) could stay empty for 60 s to several minutes on a first visit.** The page awaited the service worker's register and update; the backend then missed the service worker's hold and the page got `no client to run the in-browser backend` once and never retried. Registration is no longer awaited and `/_wire` calls retry on that error. A stalled Pyodide download on the CDN can still delay a first load.
+- **Labs: "Deploy this chapter" for a chapter that builds on earlier ones** (for example Agent Gateway) failed with `KeyError: 'found'` or `StopIteration` when the earlier chapters were not deployed. Deploy now runs the prerequisite chapters first, and the steps give actionable errors.
+- **Labs runner** installs the AWS SDK from shipped wheels, not live PyPI, so a first Deploy no longer hangs.
+- Several small-model fixes in the Nano LLM tool-call parser and AgentCore memory and runtime, and S3 no longer invokes a Lambda for `s3:TestEvent`.
+
+### Known limits
+- Nano runs one image (Alpine 3.21 i386, 1 vCPU, at most 1 GiB). Windows, macOS and 64-bit guests are not available. The container2wasm 64-bit and riscv64 guests and a Debian 12 i386 image were measured in a spike and are not shipped.
+- The free Nano course supports one model; it needs about a 1 GB download once.
+- The Mesh course has not been run end to end on a real Mesh Codespace in this release; the enterprise-only steps that need the full appliance (IAM Enforce, Cedar enforce) were not verified there.
+- GCP and Azure Labs courses cannot run on Nano (no browser SDKs).
+- Several Nano checks were run on a loaded machine; the compute smoke suite passed 44/44 and the per-cloud VM boot suites passed on the merged tree (AWS 19/19, GCP 19/19, Azure 20/20).
+
+## [4.1.0] — 2026-11-25
+
+Vyomi Labs: a hands-on course that builds the 13-layer enterprise Facilities agent on AWS, Google Cloud and Azure, plus Terraform import and export in the v4 consoles and the faithful-IAM waves (these were prepared as 4.0.11, which is not released separately). Beta, Dev Simplified.
+
+### Added
+- **Vyomi Labs** (bottom drawer of the AWS, GCP and Azure Nano consoles): a Pro / Max course per cloud. A "Start here" lesson (the problem, the simplest design, why enterprises go beyond it, the 13 questions, the resulting architecture), then 13 chapters, each one scrolling lesson with a sticky "On this page" menu: problem, why, layer design, build, create, connect, validate, clean up.
+- **One-click deploy** of a chapter: in the browser runner where possible (AWS chapters 1, 2, 7, 11), otherwise inside a Mesh, which is started and joined automatically.
+- **In-page code editor** (Monaco, textarea fallback) that opens only the course project, with reset and project zip download. The project lives in `courses/vyomi-labs-facilities-agent/<cloud>/NN-<layer>/` (code exactly as shown and deployed, a README per layer, `run_all.sh`, `requirements.txt`, devcontainer), generated by `vyomilabs/content/build_project.py`.
+- **API reference tab** in the Labs dialog: operations grouped by service type with per-operation Try it.
+- **Terraform import and export** in the v4 consoles: AWS Infrastructure Studio (`#/tfstudio`), GCP Infrastructure Manager (`#/infra-manager`), Azure ARM deployments with what-if and azurerm import / export.
+- **IAM**: faithful IAM waves (engines, catalogs, enforcement modes, audit).
+
+### Changed
+- The legacy `*-console.html` pages are removed; the v4 consoles are the only consoles.
+- GCP: the collapsed Vyomi Mesh tab is the same size as the expanded one on service pages.
+- The "Vyomi Labs" dialog header shows only the Course and API reference tabs (selected tab in black); the console Beta label is hidden while it is open.
+- `scripts/gen_mcp_matrix.py` stubs `location` and DOM calls so it can render the API reference snippets.
+
+### Known limits
+- Labs deploy on a real Mesh Codespace is not verified (exercised against a stub Mesh API); the AWS browser runner is verified for the chapters that need no Mesh only on the simulator code path.
+- The Build / Create / Connect / Validate / Clean up sections still use the earlier layout; the story-first rewrite covers the overview only.
+- Terraform import: no `module`, `templatefile()` or `%{if}`; existing resources are not updated; GCP applies 6 resource types; Azure rejects `count`, `for_each`, modules and data sources.
+- The standalone course mirror `vyomi-cloud/vyomi-labs-facilities-agent` is not published yet.
+
 ## [4.0.10] — 2026-11-20
 
 Release-check fixes and the AWS Mesh drawer width, plus the endurance harness (AWS stages 7 and 8) and tunnel 1.3.2. Beta, Dev Simplified.
