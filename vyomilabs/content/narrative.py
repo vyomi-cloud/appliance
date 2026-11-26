@@ -231,5 +231,23 @@ TMPL = {
   why="Auditors ask who approved what, and whether the record could have been changed. Without evidence the honest answer is \"we think so\".",
   design="Managed keys with an encryption context, an encrypted store and an audit log of the approval events."),
 }
+NARR[14] = dict(
+  scene="Priya asks about the HVAC filter schedule and gets half an answer: the sentence she needs was cut in two by the pipeline, one half in each chunk. Nobody chose a chunk size. It was a default, and nobody ever checked it against the questions people really ask.",
+  problem="Chunk size, search type, how many passages to fetch, whether to rerank: each is a setting, and each changes the answers. If you set them once without measuring, you are guessing, and you will not know it until a technician gets a wrong answer.",
+  idea=("A recipe you taste as you cook", "A good cook does not fix the salt before tasting. They change one thing, taste, and write down the version that worked. RAG design is the same: change one setting, run a fixed set of test questions, keep what scores better, and save the recipe so the next build uses it."),
+  walk=[("Load the documents into the studio", "RAG Studio shows the facilities documents cut into chunks, so you can see where a sentence gets split."),
+        ("Make a change and test it", "Raise the chunk size, or switch to hybrid search. Run the golden set: each question has the document that should answer it, and the studio scores how many came first."),
+        ("Keep the version that scores best", "Compare the runs. Keep one change at a time so you know which setting helped."),
+        ("Save the recipe", "Export rag-design.json. Chunking, embedding, search type, top K, rerank and the grounding threshold are in one small file."),
+        ("The build reads it", "The pipeline chunks with your size, the search fetches your top K, the response chapter refuses below your threshold. The code does not change, the file does.")],
+  quiz=[("Why test a design on a golden set instead of trying a few questions?", ["It is required by the cloud", "A fixed set gives a score you can compare between designs", "It makes the index smaller"], 1, "Trying a few questions by hand cannot tell you whether a change helped or only moved the problem."),
+        ("What does a grounding threshold do?", ["Speeds up search", "Refuses to answer when nothing retrieved is relevant enough", "Encrypts the documents"], 1, "A low score means the passages do not really answer the question, so a refusal is more honest than a guess."),
+        ("Why save the design as a file the later chapters read?", ["So the build and the design cannot drift apart", "To make the course longer", "Because JSON is required"], 0, "One file means the settings you tested are the settings that run.")],
+  recap=["Chunking, search and grounding are design choices, not defaults.", "Change one thing at a time and measure on a golden set.", "Save the design as rag-design.json: the build reads it, so the tested design is the built design."])
+TMPL[14] = dict(simple="Use the default settings of the knowledge service.",
+  got=["It works the first time", "Nothing to decide", "Good enough for a demo"],
+  missing=["Knowing whether the chunk size suits your documents", "A score to compare designs", "Refusing to answer when nothing relevant was found"],
+  why="Defaults are tuned for the average document, and yours are not average. A wrong default fails quietly: the answer still sounds right.",
+  design="Design the RAG in the studio, measure it on a golden set, save it as one file and let every later chapter read that file.")
 for _k, _v in TMPL.items():
     NARR[_k].update(_v)

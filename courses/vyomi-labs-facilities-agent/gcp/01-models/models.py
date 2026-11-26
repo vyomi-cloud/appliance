@@ -28,6 +28,8 @@ def chat_with_tools(prompt, declarations):
     return {"calls": [{"name": c.name, "args": dict(c.args)} for c in (r.function_calls or [])], "text": r.text if not r.function_calls else ""}
 
 
-def embed(texts):
-    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts)
+def embed(texts, dimensions=None):
+    """dimensions: ask for a shorter vector when the model supports it (your RAG design sets this); None keeps the model's own size."""
+    cfg = types.EmbedContentConfig(output_dimensionality=dimensions) if dimensions else None
+    r = _client.models.embed_content(model=EMBED_MODEL, contents=texts, config=cfg)
     return [e.values for e in r.embeddings]

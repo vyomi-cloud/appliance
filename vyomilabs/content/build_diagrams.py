@@ -1,4 +1,4 @@
-"""Draws the 13-layer enterprise agentic AI reference diagram for each cloud (wasm/labs/img/{aws,gcp,azure}.svg) as our OWN artwork:
+"""Draws the 14-layer enterprise agentic AI reference diagram for each cloud (wasm/labs/img/{aws,gcp,azure}.svg) as our OWN artwork:
 own icons (simple stroke glyphs), own palette and layout, that cloud's native service names. The structure (layers, flows, legend) follows the
 published layer model the course is built on; no third-party artwork is embedded. Hotspots come from here (panel rectangles) so the page and the
 diagram can never drift apart.  Run: python -m vyomilabs.content.build_diagrams"""
@@ -10,7 +10,7 @@ from xml.sax.saxutils import escape
 BASE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "wasm", "labs")
 W, H = 1800, 1270
 COL = dict(purple="#7c3aed", blue="#2563eb", red="#dc2626", teal="#0f766e", orange="#ea580c", green="#15803d", ink="#111827", mute="#4b5563")
-LAYER_COLOR = {1: "purple", 2: "blue", 3: "blue", 4: "purple", 5: "red", 6: "blue", 7: "teal", 8: "orange", 9: "blue", 10: "purple", 11: "teal", 12: "green", 13: "purple"}
+LAYER_COLOR = {1: "purple", 2: "blue", 3: "blue", 4: "purple", 5: "red", 6: "blue", 7: "teal", 8: "orange", 9: "blue", 10: "purple", 11: "teal", 12: "green", 13: "purple", 14: "green"}
 
 # ---- panels (x1, y1, x2, y2) in diagram units; also the click hotspots
 CX = [10, 208, 406, 744, 967, 1210, 1408, 1606]
@@ -20,7 +20,9 @@ BOT = {1: 850, 2: 770, 3: 850, 4: 850, 5: 850, 6: 800, 7: 850, 8: 850}
 R2T, R2B, GT, GB = 888, 1092, 1116, 1256
 PANEL = {i + 1: (CX[i], TOP, CX[i] + CW[i], BOT[i + 1]) for i in range(8)}
 PANEL.update({10: (10, R2T, 480, R2B), 9: (498, R2T, 900, R2B), 11: (918, R2T, 1196, R2B), 12: (1214, R2T, 1790, R2B), 13: (10, GT, 1450, GB)})
+PANEL[14] = (PANEL[12][0] + 20, PANEL[12][1] + 178, PANEL[12][2] - 20, PANEL[12][3] - 6)       # a slim strip at the foot of the pipeline panel: the design the pipeline and search build to
 HOTSPOTS = {k: list(v) for k, v in PANEL.items()}
+HOTSPOTS[12] = [PANEL[12][0], PANEL[12][1], PANEL[12][2], PANEL[12][1] + 174]              # so the strip is clickable on its own
 
 # ---- cloud-native vocabulary (what the reference app really uses per cloud)
 T = {
@@ -164,7 +166,7 @@ def draw(cloud):
     d.add("<defs>" + "".join(f'<marker id="ah-{k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9z" fill="{v}"/></marker>' for k, v in COL.items() if k in ("blue", "purple", "green", "red")) + "</defs>")
     d.add(f'<rect width="{W}" height="{H}" fill="#fff"/>')
     d.text(W / 2, 44, f"Building an Agentic AI Solution on {t['name']}", 34, 800, COL["ink"], "middle")
-    d.text(W / 2, 72, "A reference architecture: 13 layers, built one at a time on the Vyomi simulator", 16, 400, COL["mute"], "middle")
+    d.text(W / 2, 72, "A reference architecture: 14 layers, built one at a time on the Vyomi simulator", 16, 400, COL["mute"], "middle")
     # telemetry line
     d.add(f'<path d="M{PANEL[3][0]+160},100 H{PANEL[8][0]+92}" stroke="{COL["purple"]}" stroke-width="2" stroke-dasharray="7 5" fill="none"/>')
     d.add('<rect x="1040" y="88" width="310" height="22" fill="#fff"/>')
@@ -308,6 +310,10 @@ def draw(cloud):
         cx = x1 + 20 + sw * i + sw / 2; d.rect(cx - 44, y1 + 62, cx + 44, y1 + 128, COL["green"] + "77", "#fff", 10, 1.6); d.icon(ic, cx - 17, y1 + 70, 34, COL["green"])
         d.text(cx, y1 + 154, a, 12.3, 800, anchor="middle"); d.text(cx, y1 + 171, b, 10.8, 400, COL["mute"], "middle")
         if i < 4: d.arrow([(cx + 46, y1 + 95), (cx + sw - 46, y1 + 95)], "green", None, 2)
+    x1, y1, x2, y2 = PANEL[14]
+    d.rect(x1, y1, x2, y2, COL["green"] + "88", COL["green"] + "10", 6, 1.4, "5 4")
+    d.add(f'<circle cx="{x1+14}" cy="{(y1+y2)/2}" r="9" fill="{COL["green"]}"/><text x="{x1+14}" y="{(y1+y2)/2+4}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle">14</text>')
+    d.text(x1 + 32, (y1 + y2) / 2 + 4, "Design the RAG: chunking, embedding, search, rerank, grounding", 11.5, 700, COL["green"])
     d.arrow([(1500, PANEL[7][3] + 2), (1500, PANEL[12][1] - 2)], "green", "6 4", 2)
     d.arrow([(1700, PANEL[12][1] - 2), (1700, PANEL[8][3] + 2)], "purple", "7 5", 2)
 

@@ -1,6 +1,6 @@
 """Vyomi Labs: learn cloud and agentic-AI architecture by building the Enterprise Facilities agent, layer by layer, on the Vyomi simulator.
 
-v1 (AI track): an interactive map of the 13-layer reference architecture, a guide per layer, and a checker that inspects what the learner
+v1 (AI track): an interactive map of the 14-layer reference architecture, a guide per layer, and a checker that inspects what the learner
 built through the real cloud SDK. Layers not yet built by the learner can be supplied by the reference implementation in
 examples/enterprise-facilities-agent (same layer numbers)."""
 import os

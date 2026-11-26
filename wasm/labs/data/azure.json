@@ -15,8 +15,8 @@
   1800,
   1270
  ],
- "total_minutes": 445,
- "updated": "November 25, 2026",
+ "total_minutes": 475,
+ "updated": "November 26, 2026",
  "layers": [
   {
    "id": 10,
@@ -142,7 +142,7 @@
      "text": "Every other chapter imports these three functions, so keep the names. The model behind your deployments is one the simulator hosts (a small open model on Nano, the Mesh model pool on a Mesh), so replies are those of a small open model; the calls are identical to what you would send to a larger hosted model.",
      "file": "models.py",
      "lang": "python",
-     "code": "import json\nfrom azlab import aoai, CHAT, EMBED\n\n\ndef chat(prompt, system=None):\n    msgs = ([{\"role\": \"system\", \"content\": system}] if system else []) + [{\"role\": \"user\", \"content\": prompt}]\n    r = aoai().chat.completions.create(model=CHAT, messages=msgs, max_tokens=200, temperature=0)\n    return r.choices[0].message.content\n\n\ndef chat_with_tools(prompt, tools):\n    r = aoai().chat.completions.create(model=CHAT, messages=[{\"role\": \"user\", \"content\": prompt}], tools=tools, tool_choice=\"auto\")\n    m = r.choices[0].message\n    call = m.tool_calls[0] if m.tool_calls else None\n    return {\"finish_reason\": r.choices[0].finish_reason,\n            \"tool_use\": {\"name\": call.function.name, \"input\": json.loads(call.function.arguments)} if call else None,\n            \"text\": m.content or \"\"}\n\n\ndef embed(text):\n    return aoai().embeddings.create(model=EMBED, input=[text]).data[0].embedding\n",
+     "code": "import json\nfrom azlab import aoai, CHAT, EMBED\n\n\ndef chat(prompt, system=None):\n    msgs = ([{\"role\": \"system\", \"content\": system}] if system else []) + [{\"role\": \"user\", \"content\": prompt}]\n    r = aoai().chat.completions.create(model=CHAT, messages=msgs, max_tokens=200, temperature=0)\n    return r.choices[0].message.content\n\n\ndef chat_with_tools(prompt, tools):\n    r = aoai().chat.completions.create(model=CHAT, messages=[{\"role\": \"user\", \"content\": prompt}], tools=tools, tool_choice=\"auto\")\n    m = r.choices[0].message\n    call = m.tool_calls[0] if m.tool_calls else None\n    return {\"finish_reason\": r.choices[0].finish_reason,\n            \"tool_use\": {\"name\": call.function.name, \"input\": json.loads(call.function.arguments)} if call else None,\n            \"text\": m.content or \"\"}\n\n\ndef embed(text, dimensions=None):\n    \"\"\"dimensions: ask for a shorter vector (your RAG design sets this); None keeps the model's own size.\"\"\"\n    kw = {\"dimensions\": dimensions} if dimensions else {}\n    return aoai().embeddings.create(model=EMBED, input=[text], **kw).data[0].embedding\n",
      "run": null,
      "expect": null,
      "needs_runtime": false
@@ -809,7 +809,7 @@
      "text": "Read-only. It calls Azure AI Search with the real `azure-search-documents` client, using the address and key from the function's application settings. It returns passages with their source name so answers can cite them. It runs after chapter 12 has filled the index.",
      "file": "fn_kb_search.py",
      "lang": "python",
-     "code": "import json\nimport os\nimport azure.functions as func\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    from azure.core.credentials import AzureKeyCredential\n    from azure.search.documents import SearchClient\n    body = req.get_json() if req.get_body() else {}\n    sc = SearchClient(os.environ[\"SEARCH_ENDPOINT\"], os.environ.get(\"SEARCH_INDEX\", \"facilities-kb\"), AzureKeyCredential(os.environ[\"SEARCH_KEY\"]))\n    rows = sc.search(search_text=body.get(\"query\", \"\"), top=int(body.get(\"top_k\", 3)))\n    results = [{\"text\": r[\"content\"], \"score\": r.get(\"@search.score\"), \"source\": r.get(\"source\") or r.get(\"title\") or r[\"id\"]} for r in rows]\n    caller = req.headers.get(\"x-vyomi-caller\") or \"anonymous\"      # set by the API Management gateway in chapter 1 after it validated the token\n    return func.HttpResponse(json.dumps({\"results\": results, \"caller\": caller}), mimetype=\"application/json\")\n",
+     "code": "import json\nimport os\nimport azure.functions as func\nimport rag_design\n\n\ndef main(req: func.HttpRequest) -> func.HttpResponse:\n    from azure.core.credentials import AzureKeyCredential\n    from azure.search.documents import SearchClient\n    body = req.get_json() if req.get_body() else {}\n    sc = SearchClient(os.environ[\"SEARCH_ENDPOINT\"], os.environ.get(\"SEARCH_INDEX\", \"facilities-kb\"), AzureKeyCredential(os.environ[\"SEARCH_KEY\"]))\n    rows = sc.search(search_text=body.get(\"query\", \"\"), top=int(body.get(\"top_k\", rag_design.top_k())))\n    results = [{\"text\": r[\"content\"], \"score\": r.get(\"@search.score\"), \"source\": r.get(\"source\") or r.get(\"title\") or r[\"id\"]} for r in rows]\n    caller = req.headers.get(\"x-vyomi-caller\") or \"anonymous\"      # set by the API Management gateway in chapter 1 after it validated the token\n    return func.HttpResponse(json.dumps({\"results\": results, \"caller\": caller}), mimetype=\"application/json\")\n",
      "run": null,
      "expect": null,
      "needs_runtime": false
@@ -849,7 +849,7 @@
      "text": "Four steps, the same ones `az functionapp create`, `az functionapp config appsettings set` and `az functionapp deployment source config-zip` perform: an App Service plan (consumption), the site, its application settings (the Table connection string, the search address and key, the table names) and a zip deploy of the four functions in the Python v1 layout (`<name>/__init__.py` plus `function.json`). On real Azure the settings would be Key Vault references or a managed identity.",
      "file": "deploy_tools.py",
      "lang": "python",
-     "code": "import io\nimport json\nimport zipfile\nimport requests\nfrom azure.mgmt.web import WebSiteManagementClient\nfrom azure.mgmt.web.models import StringDictionary\nfrom azlab import arm, rid, RG, LOC, ENDPOINT, HTTP_ENDPOINT\nfrom azdata import storage_cs, search_endpoint, search_key, function_key, FUNCTION_APP, INDEX\n\nFUNCTIONS = {\"kb-search\": \"fn_kb_search.py\", \"asset-status\": \"fn_asset_status.py\",\n             \"approval-decision\": \"fn_approval_decision.py\", \"create-work-order\": \"fn_create_work_order.py\"}\n\nweb = arm(WebSiteManagementClient)\nweb.app_service_plans.begin_create_or_update(RG, FUNCTION_APP + \"-plan\", {\"location\": LOC, \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}, \"kind\": \"functionapp\"}).result()\nweb.web_apps.begin_create_or_update(RG, FUNCTION_APP, {\"location\": LOC, \"kind\": \"functionapp,linux\",\n                                                       \"server_farm_id\": rid(\"Microsoft.Web\", \"serverfarms\", FUNCTION_APP + \"-plan\")}).result()\nweb.web_apps.update_application_settings(RG, FUNCTION_APP, StringDictionary(properties={\n    \"FUNCTIONS_WORKER_RUNTIME\": \"python\",\n    \"TABLE_CONNECTION_STRING\": storage_cs(\"Table\", HTTP_ENDPOINT, \"http\"),     # the function sandbox reaches the simulator over plain http\n    \"SEARCH_ENDPOINT\": search_endpoint().replace(ENDPOINT, HTTP_ENDPOINT, 1), \"SEARCH_KEY\": search_key(), \"SEARCH_INDEX\": INDEX,\n    \"ASSETS_TABLE\": \"assets\", \"WORK_ORDERS_TABLE\": \"workorders\", \"LEDGER_TABLE\": \"approvalledger\", \"INDEXER_NAME\": \"docs-indexer\"}))\n\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.writestr(\"host.json\", json.dumps({\"version\": \"2.0\"}))\n    z.writestr(\"requirements.txt\", \"azure-functions\\nazure-data-tables\\nazure-search-documents\\n\")\n    for name, path in FUNCTIONS.items():\n        z.writestr(f\"{name}/__init__.py\", open(path).read())\n        z.writestr(f\"{name}/function.json\", json.dumps({\"scriptFile\": \"__init__.py\", \"bindings\": [\n            {\"authLevel\": \"function\", \"type\": \"httpTrigger\", \"direction\": \"in\", \"name\": \"req\", \"methods\": [\"get\", \"post\"]},\n            {\"type\": \"http\", \"direction\": \"out\", \"name\": \"$return\"}]}))\nr = requests.post(f\"{ENDPOINT}/azure-data/functions/{FUNCTION_APP}/api/zipdeploy\", data=buf.getvalue(), timeout=60)\nr.raise_for_status()\nlisted = sorted(f.name.split(\"/\")[-1] for f in web.web_apps.list_functions(RG, FUNCTION_APP))\nprint(\"deployed\", FUNCTION_APP, listed)\nprint(\"host key listed through ARM:\", bool(function_key()))\n",
+     "code": "import io\nimport json\nimport os\nimport zipfile\nimport requests\nfrom azure.mgmt.web import WebSiteManagementClient\nfrom azure.mgmt.web.models import StringDictionary\nfrom azlab import arm, rid, RG, LOC, ENDPOINT, HTTP_ENDPOINT\nfrom azdata import storage_cs, search_endpoint, search_key, function_key, FUNCTION_APP, INDEX\n\nFUNCTIONS = {\"kb-search\": \"fn_kb_search.py\", \"asset-status\": \"fn_asset_status.py\",\n             \"approval-decision\": \"fn_approval_decision.py\", \"create-work-order\": \"fn_create_work_order.py\"}\n\nweb = arm(WebSiteManagementClient)\nweb.app_service_plans.begin_create_or_update(RG, FUNCTION_APP + \"-plan\", {\"location\": LOC, \"sku\": {\"name\": \"Y1\", \"tier\": \"Dynamic\"}, \"kind\": \"functionapp\"}).result()\nweb.web_apps.begin_create_or_update(RG, FUNCTION_APP, {\"location\": LOC, \"kind\": \"functionapp,linux\",\n                                                       \"server_farm_id\": rid(\"Microsoft.Web\", \"serverfarms\", FUNCTION_APP + \"-plan\")}).result()\nweb.web_apps.update_application_settings(RG, FUNCTION_APP, StringDictionary(properties={\n    \"FUNCTIONS_WORKER_RUNTIME\": \"python\",\n    \"TABLE_CONNECTION_STRING\": storage_cs(\"Table\", HTTP_ENDPOINT, \"http\"),     # the function sandbox reaches the simulator over plain http\n    \"SEARCH_ENDPOINT\": search_endpoint().replace(ENDPOINT, HTTP_ENDPOINT, 1), \"SEARCH_KEY\": search_key(), \"SEARCH_INDEX\": INDEX,\n    \"ASSETS_TABLE\": \"assets\", \"WORK_ORDERS_TABLE\": \"workorders\", \"LEDGER_TABLE\": \"approvalledger\", \"INDEXER_NAME\": \"docs-indexer\"}))\n\nbuf = io.BytesIO()\nwith zipfile.ZipFile(buf, \"w\", zipfile.ZIP_DEFLATED) as z:\n    z.writestr(\"host.json\", json.dumps({\"version\": \"2.0\"}))\n    z.writestr(\"requirements.txt\", \"azure-functions\\nazure-data-tables\\nazure-search-documents\\n\")\n    for extra in (\"rag_design.py\", \"rag-design.json\"):        # the kb-search tool reads your RAG design at run time\n        if os.path.exists(extra):\n            z.write(extra)\n    for name, path in FUNCTIONS.items():\n        z.writestr(f\"{name}/__init__.py\", open(path).read())\n        z.writestr(f\"{name}/function.json\", json.dumps({\"scriptFile\": \"__init__.py\", \"bindings\": [\n            {\"authLevel\": \"function\", \"type\": \"httpTrigger\", \"direction\": \"in\", \"name\": \"req\", \"methods\": [\"get\", \"post\"]},\n            {\"type\": \"http\", \"direction\": \"out\", \"name\": \"$return\"}]}))\nr = requests.post(f\"{ENDPOINT}/azure-data/functions/{FUNCTION_APP}/api/zipdeploy\", data=buf.getvalue(), timeout=60)\nr.raise_for_status()\nlisted = sorted(f.name.split(\"/\")[-1] for f in web.web_apps.list_functions(RG, FUNCTION_APP))\nprint(\"deployed\", FUNCTION_APP, listed)\nprint(\"host key listed through ARM:\", bool(function_key()))\n",
      "run": "python deploy_tools.py",
      "expect": "deployed facilities-tools ['approval-decision', 'asset-status', 'create-work-order', 'kb-search']",
      "needs_runtime": false
@@ -1043,8 +1043,294 @@
    ]
   },
   {
-   "id": 12,
+   "id": 14,
    "order": 4,
+   "title": "Design the RAG",
+   "short": "Design",
+   "objective": "Design the retrieval-augmented generation the later chapters build: chunking, embedding, search, rerank and grounding, tested on a golden set and saved as one design file.",
+   "learn": [
+    "Chunk size, overlap and search type are design choices you can measure",
+    "A golden set of questions turns a feeling into a score",
+    "One design file that every later chapter reads"
+   ],
+   "services": [
+    "Azure AI Search",
+    "RAG Studio (Vyomi console)"
+   ],
+   "build": [
+    "Open RAG Studio and load the course documents.",
+    "Change one setting at a time: chunking, search type, top K, rerank.",
+    "Run the golden set after each change and keep what scores better.",
+    "Save the design as rag-design.json and write rag_design.py, the loader the later chapters import.",
+    "Run show_design.py to check the file."
+   ],
+   "contract": {
+    "needs": [
+     10
+    ],
+    "names": {
+     "design": "rag-design.json"
+    }
+   },
+   "checks": [
+    "rag-design.json is saved next to your code",
+    "show_design.py prints design OK",
+    "the loader returns the same values as the file"
+   ],
+   "simplified": [
+    "RAG Studio scores retrieval with the small local embedding model, so absolute scores are lower than production; use them to compare designs, not as targets.",
+    "The course indexer loads whole documents, so the design's chunk size is recorded but not applied on Azure yet; top K, embedding dimensions, search type and the grounding threshold are."
+   ],
+   "native": null,
+   "reference": "examples/enterprise-facilities-agent/facilities/azure/components/c12_pipeline.py",
+   "code": null,
+   "checker": false,
+   "hotspot": [
+    1234,
+    1066,
+    1770,
+    1086
+   ],
+   "level": "Intermediate",
+   "minutes": 30,
+   "outcome": "A tested RAG design saved as rag-design.json, read by the pipeline, search and response chapters",
+   "lessons": 5,
+   "color": "#15803d",
+   "about": "Design the RAG is where you decide how knowledge is prepared and found before you build it: how documents are chunked, how they are embedded, how passages are searched and ranked, and when the assistant should refuse to answer.",
+   "why": [
+    "Measured settings beat defaults, and a golden set is how you measure",
+    "The tested design and the built pipeline cannot drift apart because the build reads the design file",
+    "A refusal below a grounding threshold is safer than a confident guess"
+   ],
+   "icon": "M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.5l9 5 9-5",
+   "prereq": [
+    "The simulator is running: you are in its console.",
+    "Your tools point at it: open the API reference tab at the top of this dialog: each operation shows the exact endpoint and the CLI and SDK settings for this cloud.",
+    "Layers this one needs are built, or you are happy to use the reference version (see the section on connecting it to the other layers)."
+   ],
+   "setup": [
+    {
+     "title": "Design the RAG in RAG Studio",
+     "route": null,
+     "do": [
+      "Open AI Search, then RAG Studio.",
+      "Load the course documents, change one setting at a time (chunk size, search type, top K, rerank) and run the golden set after each change.",
+      "Keep the design that scores best, then export it and keep the file as rag-design.json."
+     ],
+     "fill": {
+      "Design name": "facilities-rag"
+     },
+     "service": "Azure AI Search RAG Studio",
+     "note": "Every cloud's console has the same RAG Studio, and every one exports the same rag-design.json.",
+     "click": false,
+     "n": 1,
+     "shot": null
+    }
+   ],
+   "lab": [
+    {
+     "title": "Write the design loader",
+     "text": "Every later chapter that chunks, searches or answers imports this one file instead of hard-coding its settings. It finds your design file, merges it over the defaults (which are exactly the values the course used before this chapter existed), and returns plain numbers. A value that is out of range prints a warning and falls back to its default, so a typo never stops a chapter.",
+     "file": "rag_design.py",
+     "lang": "python",
+     "code": "\"\"\"rag_design.py: the one place the RAG design is read from.\n\nThe design file `rag-design.json` (schema vyomi.rag-design/v1) is what you build and test in the console's RAG Studio. This module finds it\n(RAG_DESIGN_PATH, else ./rag-design.json, else the parent folder, else next to this file), merges it over the defaults below and hands the\nchapters plain values. The defaults are exactly what the course used before there was a design, so with no file nothing changes.\nA bad value never stops a chapter: it prints a warning and the default is used for that field.\"\"\"\nimport copy\nimport json\nimport os\nimport sys\n\nCLOUD = \"azure\"\nDEFAULTS = {\n    \"schema\": \"vyomi.rag-design/v1\", \"name\": \"facilities-rag\", \"cloud\": CLOUD,\n    \"chunking\": {\"strategy\": \"FIXED_SIZE\", \"maxTokens\": 200, \"overlapPct\": 10},\n    \"embedding\": {\"model\": \"\", \"dimensions\": None},\n    \"retrieve\": {\"topK\": 3, \"searchType\": \"hybrid\", \"hybridWeight\": 0.5, \"filter\": None},\n    \"rerank\": {\"enabled\": False, \"topN\": 2},\n    \"generate\": {\"groundingThreshold\": 0},\n    \"sources\": [], \"golden\": [], \"createdAt\": \"\",\n}\n# (section, key): (kind, low, high or choices). Anything outside these rules falls back to the default.\nRULES = {\n    (\"chunking\", \"strategy\"): (\"choice\", (\"FIXED_SIZE\",)),\n    (\"chunking\", \"maxTokens\"): (\"int\", 20, 8192),\n    (\"chunking\", \"overlapPct\"): (\"int\", 0, 50),\n    (\"embedding\", \"dimensions\"): (\"int?\", 1, 8192),\n    (\"retrieve\", \"topK\"): (\"int\", 1, 100),\n    (\"retrieve\", \"searchType\"): (\"choice\", (\"vector\", \"keyword\", \"hybrid\")),\n    (\"retrieve\", \"hybridWeight\"): (\"num\", 0, 1),\n    (\"rerank\", \"enabled\"): (\"bool\",),\n    (\"rerank\", \"topN\"): (\"int\", 1, 100),\n    (\"generate\", \"groundingThreshold\"): (\"num\", 0, 1),\n}\n_cache = {}\n\n\ndef _find():\n    here = os.path.dirname(os.path.abspath(__file__))\n    for p in (os.environ.get(\"RAG_DESIGN_PATH\"), \"rag-design.json\", os.path.join(\"..\", \"rag-design.json\"), os.path.join(here, \"rag-design.json\")):\n        if p and os.path.isfile(p):\n            return os.path.abspath(p)\n    return None\n\n\ndef _ok(rule, v):\n    kind = rule[0]\n    if kind == \"bool\":\n        return isinstance(v, bool)\n    if kind == \"choice\":\n        return v in rule[1]\n    if kind == \"int?\" and v is None:\n        return True\n    if kind in (\"int\", \"int?\"):\n        return isinstance(v, int) and not isinstance(v, bool) and rule[1] <= v <= rule[2]\n    return isinstance(v, (int, float)) and not isinstance(v, bool) and rule[1] <= v <= rule[2]\n\n\ndef _read(path):\n    problems, merged = [], copy.deepcopy(DEFAULTS)\n    if not path:\n        return merged, problems\n    try:\n        with open(path, encoding=\"utf-8\") as f:\n            raw = json.load(f)\n        if not isinstance(raw, dict):\n            raise ValueError(\"the top level must be an object\")\n    except (OSError, ValueError) as e:\n        return merged, [\"%s: cannot read (%s); using the defaults\" % (path, e)]\n    for key, val in raw.items():\n        if isinstance(DEFAULTS.get(key), dict):\n            if not isinstance(val, dict):\n                problems.append(\"%s must be an object; using the default\" % key)\n                continue\n            for k, v in val.items():\n                if (key, k) == (\"retrieve\", \"searchType\") and isinstance(v, str):      # RAG Studio writes HYBRID / SEMANTIC; this course says hybrid / vector\n                    v = {\"hybrid\": \"hybrid\", \"semantic\": \"vector\", \"vector\": \"vector\", \"keyword\": \"keyword\"}.get(v.lower(), v)\n                rule = RULES.get((key, k))\n                if rule and not _ok(rule, v):\n                    problems.append(\"%s.%s = %r is not allowed (%s); using %r\" % (key, k, v, _describe(rule), DEFAULTS[key][k]))\n                else:\n                    merged[key][k] = v\n        else:\n            merged[key] = val\n    if merged.get(\"cloud\") != CLOUD:\n        problems.append(\"this design was made for %r, this course builds %r\" % (merged.get(\"cloud\"), CLOUD))\n    return merged, problems\n\n\ndef _describe(rule):\n    return {\"choice\": lambda: \"one of \" + \", \".join(map(str, rule[1])), \"bool\": lambda: \"true or false\"}.get(rule[0], lambda: \"a number from %s to %s\" % rule[1:3])()\n\n\ndef _state():\n    path = _find()\n    stamp = (path, os.path.getmtime(path) if path else None)\n    if _cache.get(\"stamp\") != stamp:\n        design, problems = _read(path)\n        for p in problems:\n            print(\"rag_design: warning: \" + p, file=sys.stderr)\n        _cache.update(stamp=stamp, path=path, design=design, problems=problems)\n    return _cache\n\n\ndef load():\n    \"\"\"The design: the file merged over the defaults (a fresh copy you may change).\"\"\"\n    return copy.deepcopy(_state()[\"design\"])\n\n\ndef source():\n    \"\"\"The path of the design file in use, or None when the built-in defaults are used.\"\"\"\n    return _state()[\"path\"]\n\n\ndef problems():\n    return list(_state()[\"problems\"])\n\n\ndef customised(section):\n    \"\"\"True when the design changes this section from the course defaults (so a chapter only sends extra settings when you asked for them).\"\"\"\n    return load()[section] != DEFAULTS[section]\n\n\ndef chunk_cfg():\n    c = load()[\"chunking\"]\n    return dict(strategy=c[\"strategy\"], maxTokens=c[\"maxTokens\"], overlapPct=c[\"overlapPct\"])\n\n\ndef top_k():\n    return load()[\"retrieve\"][\"topK\"]\n\n\ndef search_type():\n    return load()[\"retrieve\"][\"searchType\"]\n\n\ndef rerank():\n    r = load()[\"rerank\"]\n    return dict(enabled=r[\"enabled\"], topN=r[\"topN\"])\n\n\ndef grounding_threshold():\n    return load()[\"generate\"][\"groundingThreshold\"]\n\n\ndef dimensions():\n    \"\"\"The embedding vector size the design asks for, or None for the model's own size.\"\"\"\n    return load()[\"embedding\"][\"dimensions\"]\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false
+    },
+    {
+     "title": "Save the starting design",
+     "text": "The design file, in the schema `vyomi.rag-design/v1` writes when you export a design. This one is the course's starting point, so saving it changes nothing yet. Replace it with the file you export from AI Search, RAG Studio once you have tuned and tested your own design: chapters 12, 6 and 11 will build and answer with your numbers. Keep the name `rag-design.json` next to your other files.",
+     "file": "rag-design.json",
+     "lang": "json",
+     "code": "{\n  \"schema\": \"vyomi.rag-design/v1\",\n  \"name\": \"facilities-rag\",\n  \"cloud\": \"azure\",\n  \"chunking\": {\n    \"strategy\": \"FIXED_SIZE\",\n    \"maxTokens\": 200,\n    \"overlapPct\": 10\n  },\n  \"embedding\": {\n    \"model\": \"\",\n    \"dimensions\": null\n  },\n  \"retrieve\": {\n    \"topK\": 3,\n    \"searchType\": \"HYBRID\",\n    \"hybridWeight\": 0.5,\n    \"filter\": null\n  },\n  \"rerank\": {\n    \"enabled\": false,\n    \"topN\": 2\n  },\n  \"generate\": {\n    \"groundingThreshold\": 0\n  },\n  \"sources\": [\n    {\n      \"bucket\": \"facilitiesdocs\",\n      \"prefix\": \"docs/\"\n    }\n  ],\n  \"golden\": [\n    {\n      \"question\": \"What should I do when boiler pressure exceeds 30 psi?\",\n      \"expectedSources\": [\n        \"boiler-sop\"\n      ],\n      \"expectedAnswer\": \"close the main steam valve\"\n    },\n    {\n      \"question\": \"AHU-7 supply air temperature drift chilled water valve\",\n      \"expectedSources\": [\n        \"hvac-maintenance-manual\"\n      ],\n      \"expectedAnswer\": \"\"\n    }\n  ],\n  \"createdAt\": \"2026-11-26T09:00:00Z\"\n}\n",
+     "run": null,
+     "expect": null,
+     "needs_runtime": false
+    },
+    {
+     "title": "Check the design",
+     "text": "Loads the design the way the later chapters will, checks every value against its allowed range and prints what they will use. Run it after every change to `rag-design.json`.",
+     "file": "show_design.py",
+     "lang": "python",
+     "code": "import rag_design\n\nd = rag_design.load()\nprint(\"design file:\", rag_design.source() or \"none found, using the built-in defaults\")\nprint(\"name:\", d[\"name\"], \"| cloud:\", d[\"cloud\"])\nc = d[\"chunking\"]\nprint(\"chunking:\", c[\"strategy\"], \"| maxTokens\", c[\"maxTokens\"], \"| overlap\", c[\"overlapPct\"], \"%\")\ne = d[\"embedding\"]\nprint(\"embedding:\", e[\"model\"] or \"the model this simulator hosts\", \"| dimensions\", e[\"dimensions\"] or \"model default\")\nr = d[\"retrieve\"]\nprint(\"retrieve: topK\", r[\"topK\"], \"|\", r[\"searchType\"], \"search\", \"| hybridWeight\", r[\"hybridWeight\"], \"| filter\", r[\"filter\"])\nrr = d[\"rerank\"]\nprint(\"rerank:\", \"on, keep the best %d\" % rr[\"topN\"] if rr[\"enabled\"] else \"off\")\nprint(\"generate: refuse below a grounding score of\", d[\"generate\"][\"groundingThreshold\"])\nprint(\"sources:\", len(d[\"sources\"]), \"| golden questions:\", len(d[\"golden\"]))\nbad = rag_design.problems()\nprint(\"design OK\" if not bad else \"design has %d problem(s); the defaults are used for those fields\" % len(bad))\nfor p in bad:\n    print(\"  -\", p)\n",
+     "run": "python show_design.py",
+     "expect": "design OK",
+     "needs_runtime": false
+    }
+   ],
+   "explain": {
+    "lead": [
+     "Before you build a knowledge pipeline, decide how it should work. How big should a chunk be? Which kind of search? How many passages go to the model, and when should the assistant refuse because nothing relevant was found? These are design choices, and the defaults are rarely the best ones for your documents.",
+     "In this chapter you open the console's RAG Studio, design the RAG on the facilities documents, test it against a golden set of questions with known answers, and save the result as one small file. The chapters that build the pipeline, search it and answer from it read that file, so changing the design changes the build."
+    ],
+    "concepts": [
+     [
+      "Chunking",
+      "Documents are cut into passages before they are embedded. Small chunks match a question precisely but lose context; large chunks keep context but blur what they are about. Overlap repeats a little text at each edge so a sentence is not cut in half."
+     ],
+     [
+      "Retrieval settings",
+      "How many passages to fetch (top K), and whether to search by meaning (vector), by words (keyword) or both (hybrid). Hybrid helps when a question uses an exact code such as an asset id."
+     ],
+     [
+      "Reranking",
+      "A second, slower pass that re-scores the candidates against the question and keeps only the best few. It trades time for precision."
+     ],
+     [
+      "Golden set",
+      "A short list of real questions, each with the document that should answer it. It turns \"this seems fine\" into a score you can compare between designs."
+     ],
+     [
+      "Grounding threshold",
+      "A minimum relevance score. If the best passage scores below it, the assistant says it cannot answer instead of guessing."
+     ]
+    ],
+    "flow": [
+     [
+      "Open the studio",
+      "Load the course documents into RAG Studio so you can see how they are chunked."
+     ],
+     [
+      "Change one thing at a time",
+      "Chunk size, search type, top K, rerank. Run the golden set after each change and keep what improves the score."
+     ],
+     [
+      "Save the design",
+      "Export the design as rag-design.json (schema vyomi.rag-design/v1) next to your code."
+     ],
+     [
+      "Let the build read it",
+      "The pipeline, search and response chapters import rag_design.py and use your numbers."
+     ]
+    ],
+    "example": "Priya's question \"Boiler 2 pressure is at 31 psi\" needs the boiler SOP, which is a short document, while the HVAC manual is long. With 200-token chunks the manual's answer is split across two chunks. In the studio you raise the chunk size, rerun the golden set and see the HVAC question move from third to first. You save that design and the later chapters index with it.",
+    "pitfalls": [
+     "Tuning by feel: change one setting at a time and measure on the golden set.",
+     "A golden set that only holds easy questions: include one the documents cannot answer.",
+     "Designing on one set of documents and indexing another: keep the sources in the design.",
+     "Setting the grounding threshold so high that every question is refused."
+    ]
+   },
+   "narr": {
+    "scene": "Priya asks about the HVAC filter schedule and gets half an answer: the sentence she needs was cut in two by the pipeline, one half in each chunk. Nobody chose a chunk size. It was a default, and nobody ever checked it against the questions people really ask.",
+    "problem": "Chunk size, search type, how many passages to fetch, whether to rerank: each is a setting, and each changes the answers. If you set them once without measuring, you are guessing, and you will not know it until a technician gets a wrong answer.",
+    "idea": [
+     "A recipe you taste as you cook",
+     "A good cook does not fix the salt before tasting. They change one thing, taste, and write down the version that worked. RAG design is the same: change one setting, run a fixed set of test questions, keep what scores better, and save the recipe so the next build uses it."
+    ],
+    "walk": [
+     [
+      "Load the documents into the studio",
+      "RAG Studio shows the facilities documents cut into chunks, so you can see where a sentence gets split."
+     ],
+     [
+      "Make a change and test it",
+      "Raise the chunk size, or switch to hybrid search. Run the golden set: each question has the document that should answer it, and the studio scores how many came first."
+     ],
+     [
+      "Keep the version that scores best",
+      "Compare the runs. Keep one change at a time so you know which setting helped."
+     ],
+     [
+      "Save the recipe",
+      "Export rag-design.json. Chunking, embedding, search type, top K, rerank and the grounding threshold are in one small file."
+     ],
+     [
+      "The build reads it",
+      "The pipeline chunks with your size, the search fetches your top K, the response chapter refuses below your threshold. The code does not change, the file does."
+     ]
+    ],
+    "quiz": [
+     [
+      "Why test a design on a golden set instead of trying a few questions?",
+      [
+       "It is required by the cloud",
+       "A fixed set gives a score you can compare between designs",
+       "It makes the index smaller"
+      ],
+      1,
+      "Trying a few questions by hand cannot tell you whether a change helped or only moved the problem."
+     ],
+     [
+      "What does a grounding threshold do?",
+      [
+       "Speeds up search",
+       "Refuses to answer when nothing retrieved is relevant enough",
+       "Encrypts the documents"
+      ],
+      1,
+      "A low score means the passages do not really answer the question, so a refusal is more honest than a guess."
+     ],
+     [
+      "Why save the design as a file the later chapters read?",
+      [
+       "So the build and the design cannot drift apart",
+       "To make the course longer",
+       "Because JSON is required"
+      ],
+      0,
+      "One file means the settings you tested are the settings that run."
+     ]
+    ],
+    "recap": [
+     "Chunking, search and grounding are design choices, not defaults.",
+     "Change one thing at a time and measure on a golden set.",
+     "Save the design as rag-design.json: the build reads it, so the tested design is the built design."
+    ],
+    "simple": "Use the default settings of the knowledge service.",
+    "got": [
+     "It works the first time",
+     "Nothing to decide",
+     "Good enough for a demo"
+    ],
+    "missing": [
+     "Knowing whether the chunk size suits your documents",
+     "A score to compare designs",
+     "Refusing to answer when nothing relevant was found"
+    ],
+    "why": "Defaults are tuned for the average document, and yours are not average. A wrong default fails quietly: the answer still sounds right.",
+    "design": "Design the RAG in the studio, measure it on a golden set, save it as one file and let every later chapter read that file."
+   },
+   "docs": [
+    {
+     "id": "search",
+     "title": "Azure AI Search",
+     "f": "search.json"
+    }
+   ],
+   "ops": [
+    {
+     "f": "search.json",
+     "n": "List by subscription"
+    },
+    {
+     "f": "search.json",
+     "n": "List by resource group"
+    },
+    {
+     "f": "search.json",
+     "n": "Get"
+    }
+   ],
+   "validate": [
+    {
+     "kind": "Console",
+     "what": "The design runs on the golden set",
+     "how": "AI Search, RAG Studio",
+     "expect": "Your golden questions score, and the design exports as JSON"
+    },
+    {
+     "kind": "CLI",
+     "what": "The design file is valid",
+     "how": "python show_design.py",
+     "expect": "design OK"
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "order": 5,
    "title": "Knowledge Pipeline",
    "short": "Pipeline",
    "objective": "Turn documents into searchable knowledge, and re-index automatically when a new document lands.",
@@ -1068,7 +1354,8 @@
    ],
    "contract": {
     "needs": [
-     10
+     10,
+     14
     ],
     "names": {
      "docs_account": "facilitiesdocs",
@@ -1092,7 +1379,7 @@
     1214,
     888,
     1790,
-    1092
+    1062
    ],
    "level": "Intermediate",
    "minutes": 40,
@@ -1208,7 +1495,7 @@
      "text": "The index `facilities-kb` is the schema of what is searchable: an `id` key, `source` (the blob name, for citations), `title` and `content` as full-text fields, and `content_vector`, a 1536-number vector field with an HNSW algorithm. A semantic configuration `sem` tells the semantic ranker which fields matter. Chapter 6 queries this index with text, vectors and the ranker. `kb_index()` is reused there.",
      "file": "kb_index.py",
      "lang": "python",
-     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents.indexes import SearchIndexClient\nfrom azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, SearchField, SearchFieldDataType, SearchIndex, SearchableField,\n                                                   SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,\n                                                   VectorSearch, VectorSearchProfile)\nfrom azdata import search_endpoint, search_key, INDEX\nfrom models import embed\n\nDIMS = len(embed(\"dimension probe\"))      # the vector size of the embedding model this simulator hosts (it differs between Nano and a Mesh)\n\n\ndef kb_index():\n    fields = [SimpleField(name=\"id\", type=SearchFieldDataType.String, key=True, filterable=True),\n              SimpleField(name=\"source\", type=SearchFieldDataType.String, filterable=True),\n              SearchableField(name=\"title\", type=SearchFieldDataType.String),\n              SearchableField(name=\"content\", type=SearchFieldDataType.String),\n              SearchField(name=\"content_vector\", type=SearchFieldDataType.Collection(SearchFieldDataType.Single), searchable=True,\n                          vector_search_dimensions=DIMS, vector_search_profile_name=\"vp\")]\n    return SearchIndex(name=INDEX, fields=fields,\n                       vector_search=VectorSearch(algorithms=[HnswAlgorithmConfiguration(name=\"h\")],\n                                                  profiles=[VectorSearchProfile(name=\"vp\", algorithm_configuration_name=\"h\")]),\n                       semantic_search=SemanticSearch(configurations=[SemanticConfiguration(name=\"sem\", prioritized_fields=SemanticPrioritizedFields(\n                           title_field=SemanticField(field_name=\"title\"), content_fields=[SemanticField(field_name=\"content\")]))]))\n\n\ndef index_client():\n    return SearchIndexClient(search_endpoint(), AzureKeyCredential(search_key()))\n\n\nif __name__ == \"__main__\":\n    ic = index_client()\n    ic.create_or_update_index(kb_index())\n    print(\"index\", INDEX, \"fields:\", [f.name for f in ic.get_index(INDEX).fields])\n",
+     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents.indexes import SearchIndexClient\nfrom azure.search.documents.indexes.models import (HnswAlgorithmConfiguration, SearchField, SearchFieldDataType, SearchIndex, SearchableField,\n                                                   SemanticConfiguration, SemanticField, SemanticPrioritizedFields, SemanticSearch, SimpleField,\n                                                   VectorSearch, VectorSearchProfile)\nfrom azdata import search_endpoint, search_key, INDEX\nfrom models import embed\nimport rag_design\n\n# the vector size: your design when it sets one, otherwise that of the embedding model this simulator hosts (it differs between Nano and a Mesh)\nDIMS = rag_design.dimensions() or len(embed(\"dimension probe\"))\n\n\ndef kb_index():\n    fields = [SimpleField(name=\"id\", type=SearchFieldDataType.String, key=True, filterable=True),\n              SimpleField(name=\"source\", type=SearchFieldDataType.String, filterable=True),\n              SearchableField(name=\"title\", type=SearchFieldDataType.String),\n              SearchableField(name=\"content\", type=SearchFieldDataType.String),\n              SearchField(name=\"content_vector\", type=SearchFieldDataType.Collection(SearchFieldDataType.Single), searchable=True,\n                          vector_search_dimensions=DIMS, vector_search_profile_name=\"vp\")]\n    return SearchIndex(name=INDEX, fields=fields,\n                       vector_search=VectorSearch(algorithms=[HnswAlgorithmConfiguration(name=\"h\")],\n                                                  profiles=[VectorSearchProfile(name=\"vp\", algorithm_configuration_name=\"h\")]),\n                       semantic_search=SemanticSearch(configurations=[SemanticConfiguration(name=\"sem\", prioritized_fields=SemanticPrioritizedFields(\n                           title_field=SemanticField(field_name=\"title\"), content_fields=[SemanticField(field_name=\"content\")]))]))\n\n\ndef index_client():\n    return SearchIndexClient(search_endpoint(), AzureKeyCredential(search_key()))\n\n\nif __name__ == \"__main__\":\n    ic = index_client()\n    ic.create_or_update_index(kb_index())\n    print(\"index\", INDEX, \"fields:\", [f.name for f in ic.get_index(INDEX).fields])\n",
      "run": "python kb_index.py",
      "expect": "index facilities-kb fields: ['id', 'source', 'title', 'content', 'content_vector']",
      "needs_runtime": false
@@ -1477,7 +1764,7 @@
   },
   {
    "id": 6,
-   "order": 5,
+   "order": 6,
    "title": "Knowledge Search (RAG)",
    "short": "Search",
    "objective": "Retrieve the right passages for a question, rank them, and keep the source so answers can cite it.",
@@ -1498,7 +1785,8 @@
    ],
    "contract": {
     "needs": [
-     12
+     12,
+     14
     ],
     "names": {
      "search": "facilities-search",
@@ -1582,7 +1870,7 @@
      "text": "Chapter 12's indexer loaded the text (the four SOPs plus the water-leak SOP you uploaded in its last block, five documents in all). Vector search needs one embedding per document: ask your `embed` deployment for the vectors, then `merge_documents` writes them into `content_vector` without touching the rest of the document. Embeddings come from the repo's deterministic test stub, so similarity is crude: real `text-embedding-3` vectors rank far better.",
      "file": "embed_docs.py",
      "lang": "python",
-     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azlab import aoai, EMBED\nfrom azdata import search_endpoint, search_key, INDEX\n\nsc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\nrows = list(sc.search(search_text=\"*\", select=[\"id\", \"source\", \"content\"], top=50))\nvectors = [d.embedding for d in aoai().embeddings.create(model=EMBED, input=[r[\"content\"] for r in rows]).data]\nresults = sc.merge_documents([{\"id\": r[\"id\"], \"content_vector\": v} for r, v in zip(rows, vectors)])\nprint(\"embedded and merged\", sum(1 for r in results if r.succeeded), \"documents\")\n",
+     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azlab import aoai, EMBED\nfrom azdata import search_endpoint, search_key, INDEX\nimport rag_design\n\nsc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\nrows = list(sc.search(search_text=\"*\", select=[\"id\", \"source\", \"content\"], top=50))\ndims = {\"dimensions\": rag_design.dimensions()} if rag_design.dimensions() else {}        # your design: vector size\nvectors = [d.embedding for d in aoai().embeddings.create(model=EMBED, input=[r[\"content\"] for r in rows], **dims).data]\nresults = sc.merge_documents([{\"id\": r[\"id\"], \"content_vector\": v} for r, v in zip(rows, vectors)])\nprint(\"embedded and merged\", sum(1 for r in results if r.succeeded), \"documents\")\n",
      "run": "python embed_docs.py",
      "expect": "embedded and merged 5 documents",
      "needs_runtime": false
@@ -1592,7 +1880,7 @@
      "text": "One function every later layer imports: `kb_search(query, mode)` returns ranked passages, each with its `source` so an answer can cite it. `mode` is `text`, `vector`, `hybrid` or `semantic`. A vector query sends the embedding of the question; a hybrid query sends both text and vector and the service fuses the two rankings (reciprocal rank fusion); a semantic query asks the semantic ranker to re-rank and returns a reranker score.",
      "file": "kb.py",
      "lang": "python",
-     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azure.search.documents.models import VectorizedQuery\nfrom azlab import aoai, EMBED\nfrom azdata import search_endpoint, search_key, INDEX\n\n_sc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\n\n\ndef kb_search(query, mode=\"text\", top=3):\n    vector = None\n    if mode in (\"vector\", \"hybrid\"):\n        emb = aoai().embeddings.create(model=EMBED, input=[query]).data[0].embedding\n        vector = [VectorizedQuery(vector=emb, k_nearest_neighbors=top, fields=\"content_vector\")]\n    kw = {\"query_type\": \"semantic\", \"semantic_configuration_name\": \"sem\"} if mode == \"semantic\" else {}\n    rows = _sc.search(search_text=None if mode == \"vector\" else query, vector_queries=vector, select=[\"id\", \"source\", \"title\", \"content\"], top=top, **kw)\n    return [{\"source\": r[\"source\"], \"text\": r[\"content\"], \"score\": r[\"@search.score\"], \"reranker\": r.get(\"@search.reranker_score\")} for r in rows]\n",
+     "code": "from azure.core.credentials import AzureKeyCredential\nfrom azure.search.documents import SearchClient\nfrom azure.search.documents.models import VectorizedQuery\nfrom azlab import aoai, EMBED\nfrom azdata import search_endpoint, search_key, INDEX\nimport rag_design\n\n_sc = SearchClient(search_endpoint(), INDEX, AzureKeyCredential(search_key()))\n\n\ndef kb_search(query, mode=\"text\", top=None):\n    top = top or rag_design.top_k()                      # your design: how many passages\n    vector = None\n    if mode in (\"vector\", \"hybrid\"):\n        dims = {\"dimensions\": rag_design.dimensions()} if rag_design.dimensions() else {}     # your design: vector size\n        emb = aoai().embeddings.create(model=EMBED, input=[query], **dims).data[0].embedding\n        vector = [VectorizedQuery(vector=emb, k_nearest_neighbors=top, fields=\"content_vector\")]\n    kw = {\"query_type\": \"semantic\", \"semantic_configuration_name\": \"sem\"} if mode == \"semantic\" else {}\n    rows = _sc.search(search_text=None if mode == \"vector\" else query, vector_queries=vector, select=[\"id\", \"source\", \"title\", \"content\"], top=top, **kw)\n    return [{\"source\": r[\"source\"], \"text\": r[\"content\"], \"score\": r[\"@search.score\"], \"reranker\": r.get(\"@search.reranker_score\")} for r in rows]\n",
      "run": null,
      "expect": null,
      "needs_runtime": false
@@ -1764,7 +2052,7 @@
   },
   {
    "id": 11,
-   "order": 6,
+   "order": 7,
    "title": "Response Generation",
    "short": "Response",
    "objective": "Answer in plain language from the retrieved documents, with citations, and filter sensitive data out before the user sees it.",
@@ -1788,7 +2076,8 @@
     "needs": [
      6,
      10,
-     2
+     2,
+     14
     ],
     "names": {}
    },
@@ -1859,7 +2148,7 @@
      "text": "Retrieve, number the passages, and instruct the model to answer only from them and cite like [1]. The function returns the answer together with the numbered citations (source file plus the passage), so a user interface can show where each claim came from. The reply here is the repo's deterministic test stub, which simply quotes the first passage; a larger model writes a fuller answer.",
      "file": "respond.py",
      "lang": "python",
-     "code": "from azlab import aoai, CHAT\nfrom kb import kb_search\n\nSYSTEM = \"Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say you do not know.\"\n\n\ndef answer(question, mode=\"hybrid\", top=3):\n    hits = kb_search(question, mode, top)\n    citations = [{\"n\": i + 1, \"source\": h[\"source\"], \"text\": h[\"text\"][:160]} for i, h in enumerate(hits)]\n    context = \"\\n\".join(f\"[{c['n']}] {h['text']}\" for c, h in zip(citations, hits))\n    r = aoai().chat.completions.create(model=CHAT, max_tokens=300, temperature=0, messages=[\n        {\"role\": \"system\", \"content\": SYSTEM}, {\"role\": \"user\", \"content\": f\"Context:\\n{context}\\n\\nQuestion: {question}\"}])\n    return {\"answer\": r.choices[0].message.content, \"citations\": citations}\n",
+     "code": "from azlab import aoai, CHAT\nfrom kb import kb_search\nimport rag_design\n\nSYSTEM = \"Answer using only the context. Cite sources like [1]. If the context does not contain the answer, say you do not know.\"\n\n\ndef answer(question, mode=None, top=None):\n    hits = kb_search(question, mode or rag_design.search_type(), top)      # your design: search type and how many passages\n    best = max([h.get(\"score\") or 0 for h in hits] or [0])\n    if rag_design.grounding_threshold() > 0 and best < rag_design.grounding_threshold():       # your design: refuse when nothing retrieved is relevant enough\n        return {\"answer\": \"I do not know: nothing in the approved documents is relevant enough.\", \"citations\": []}\n    citations = [{\"n\": i + 1, \"source\": h[\"source\"], \"text\": h[\"text\"][:160]} for i, h in enumerate(hits)]\n    context = \"\\n\".join(f\"[{c['n']}] {h['text']}\" for c, h in zip(citations, hits))\n    r = aoai().chat.completions.create(model=CHAT, max_tokens=300, temperature=0, messages=[\n        {\"role\": \"system\", \"content\": SYSTEM}, {\"role\": \"user\", \"content\": f\"Context:\\n{context}\\n\\nQuestion: {question}\"}])\n    return {\"answer\": r.choices[0].message.content, \"citations\": citations}\n",
      "run": null,
      "expect": null,
      "needs_runtime": false
@@ -2061,7 +2350,7 @@
   },
   {
    "id": 9,
-   "order": 7,
+   "order": 8,
    "title": "Agent Memory",
    "short": "Memory",
    "objective": "Give the agent memory: short-term events inside a session and long-term facts it can retrieve later.",
@@ -2370,7 +2659,7 @@
   },
   {
    "id": 4,
-   "order": 8,
+   "order": 9,
    "title": "Agent Gateway",
    "short": "Gateway",
    "objective": "Put one governed door in front of the tools: a tool catalogue, a policy check on every call and a rate limit.",
@@ -2677,7 +2966,7 @@
   },
   {
    "id": 5,
-   "order": 9,
+   "order": 10,
    "title": "Actions and Approval",
    "short": "Approval",
    "objective": "Make write actions safe: park the action for a human, record every decision, and only then execute.",
@@ -3022,7 +3311,7 @@
   },
   {
    "id": 1,
-   "order": 10,
+   "order": 11,
    "title": "Access and Perimeter",
    "short": "Access",
    "objective": "Sign users in, carry their identity to every layer, and put a protected edge in front of the tools.",
@@ -3367,7 +3656,7 @@
   },
   {
    "id": 2,
-   "order": 11,
+   "order": 12,
    "title": "Channels and Input Guardrails",
    "short": "Channels",
    "objective": "Let people reach the agent, filter what comes in, and tell approvers what is waiting.",
@@ -3660,7 +3949,7 @@
   },
   {
    "id": 8,
-   "order": 12,
+   "order": 13,
    "title": "AgentOps and Observability",
    "short": "AgentOps",
    "objective": "See what the agent did: a trace per step, metrics for KPIs, and structured logs tied to the trace.",
@@ -3780,7 +4069,7 @@
      "text": "The chapter 3 graph, now with real tools plugged into its `tools` hook. Facilities calls the `kb-search` function, Maintenance calls `asset-status` and, when the question asks for a work order, parks an approval request (chapter 5), and Analytics counts work orders in Table storage. Each tool call is recorded as a span of kind `tool` next to the agent spans. The model is the repo's deterministic test stub, so its answers are short and fixed; the routing, the tool calls and the spans are real.",
      "file": "full_agent.py",
      "lang": "python",
-     "code": "import os\nimport re\nimport time\nimport uuid\nos.environ.setdefault(\"VYOMI_ENDPOINT\", os.environ[\"VYOMI_AZURE_HTTP_ENDPOINT\"])\nimport agent_graph\nfrom app import converse\nfrom approval import request_approval, work_orders\nfrom azdata import call_function, FUNCTION_APP\n\n\ndef _tool_span(st, name, t0):\n    st[\"spans\"].append({\"name\": f\"tool:{name}\", \"kind\": \"tool\", \"start\": t0, \"end\": time.time()})\n\n\ndef facilities(st):\n    t0 = time.time()\n    out = call_function(FUNCTION_APP, \"kb-search\", {\"query\": st[\"question\"], \"top_k\": 3})\n    _tool_span(st, \"kb_search\", t0)\n    st[\"citations\"] = [{\"n\": i + 1, \"source\": r[\"source\"], \"text\": r[\"text\"]} for i, r in enumerate(out[\"results\"])]\n    return \"\\n\".join(f\"[{c['n']}] {c['text']}\" for c in st[\"citations\"])\n\n\ndef maintenance(st):\n    t0 = time.time()\n    m = re.search(r\"\\b([A-Z]{1,3}-\\d+)\\b\", st[\"question\"])\n    if not m:\n        return \"No asset id in the question.\"\n    out = call_function(FUNCTION_APP, \"asset-status\", {\"asset_id\": m.group(1)})\n    _tool_span(st, \"asset_status\", t0)\n    note = f\"Asset {m.group(1)} status {out['asset']['status']}; open work orders: {[w['work_order_id'] for w in out['work_orders'] if w['status'] == 'OPEN']}.\"\n    if re.search(r\"work order|raise|create\", st[\"question\"], re.I):\n        rid = \"req-\" + uuid.uuid4().hex[:10]\n        t1 = time.time()\n        request_approval(rid, m.group(1), f\"Work order for {m.group(1)}: \" + st[\"question\"][:100], \"P1\" if re.search(r\"exceed|pressure|fire\", st[\"question\"], re.I) else \"P2\", st.get(\"user\", \"\"))\n        _tool_span(st, \"create_work_order\", t1)\n        st[\"approval\"] = rid\n        note += f\" A work order request ({rid}) was submitted and is waiting for approval.\"\n    return note\n\n\ndef analytics(st):\n    t0 = time.time()\n    rows = work_orders()\n    _tool_span(st, \"work_order_stats\", t0)\n    return f\"Work orders: {len(rows)} total, {len([r for r in rows if r.get('status') == 'OPEN'])} open.\"\n\n\ngraph = agent_graph.build(converse, tools={\"facilities\": facilities, \"maintenance\": maintenance, \"analytics\": analytics})\n\n\ndef ask(question, user=\"maria\"):\n    return graph.invoke({\"question\": question, \"user\": user, \"spans\": []})\n\n\nif __name__ == \"__main__\":\n    st = ask(\"Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\")\n    print(\"route:\", st[\"route\"])\n    print(\"spans:\", [s[\"name\"] for s in st[\"spans\"]])\n    print(\"approval request:\", st.get(\"approval\", \"none\")[:8], \"| answer:\", st[\"answer\"][:70])\n",
+     "code": "import os\nimport re\nimport time\nimport uuid\nos.environ.setdefault(\"VYOMI_ENDPOINT\", os.environ[\"VYOMI_AZURE_HTTP_ENDPOINT\"])\nimport agent_graph\nfrom app import converse\nfrom approval import request_approval, work_orders\nfrom azdata import call_function, FUNCTION_APP\n\n\ndef _tool_span(st, name, t0):\n    st[\"spans\"].append({\"name\": f\"tool:{name}\", \"kind\": \"tool\", \"start\": t0, \"end\": time.time()})\n\n\ndef facilities(st):\n    t0 = time.time()\n    out = call_function(FUNCTION_APP, \"kb-search\", {\"query\": st[\"question\"]})      # how many passages comes from your design, inside the tool\n    _tool_span(st, \"kb_search\", t0)\n    st[\"citations\"] = [{\"n\": i + 1, \"source\": r[\"source\"], \"text\": r[\"text\"]} for i, r in enumerate(out[\"results\"])]\n    return \"\\n\".join(f\"[{c['n']}] {c['text']}\" for c in st[\"citations\"])\n\n\ndef maintenance(st):\n    t0 = time.time()\n    m = re.search(r\"\\b([A-Z]{1,3}-\\d+)\\b\", st[\"question\"])\n    if not m:\n        return \"No asset id in the question.\"\n    out = call_function(FUNCTION_APP, \"asset-status\", {\"asset_id\": m.group(1)})\n    _tool_span(st, \"asset_status\", t0)\n    note = f\"Asset {m.group(1)} status {out['asset']['status']}; open work orders: {[w['work_order_id'] for w in out['work_orders'] if w['status'] == 'OPEN']}.\"\n    if re.search(r\"work order|raise|create\", st[\"question\"], re.I):\n        rid = \"req-\" + uuid.uuid4().hex[:10]\n        t1 = time.time()\n        request_approval(rid, m.group(1), f\"Work order for {m.group(1)}: \" + st[\"question\"][:100], \"P1\" if re.search(r\"exceed|pressure|fire\", st[\"question\"], re.I) else \"P2\", st.get(\"user\", \"\"))\n        _tool_span(st, \"create_work_order\", t1)\n        st[\"approval\"] = rid\n        note += f\" A work order request ({rid}) was submitted and is waiting for approval.\"\n    return note\n\n\ndef analytics(st):\n    t0 = time.time()\n    rows = work_orders()\n    _tool_span(st, \"work_order_stats\", t0)\n    return f\"Work orders: {len(rows)} total, {len([r for r in rows if r.get('status') == 'OPEN'])} open.\"\n\n\ngraph = agent_graph.build(converse, tools={\"facilities\": facilities, \"maintenance\": maintenance, \"analytics\": analytics})\n\n\ndef ask(question, user=\"maria\"):\n    return graph.invoke({\"question\": question, \"user\": user, \"spans\": []})\n\n\nif __name__ == \"__main__\":\n    st = ask(\"Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?\")\n    print(\"route:\", st[\"route\"])\n    print(\"spans:\", [s[\"name\"] for s in st[\"spans\"]])\n    print(\"approval request:\", st.get(\"approval\", \"none\")[:8], \"| answer:\", st[\"answer\"][:70])\n",
      "run": null,
      "expect": null,
      "needs_runtime": false
@@ -4015,7 +4304,7 @@
   },
   {
    "id": 13,
-   "order": 13,
+   "order": 14,
    "title": "Governance and Security",
    "short": "Governance",
    "objective": "Protect and audit the whole app: encrypt the sensitive records and prove who did what.",

@@ -116,10 +116,10 @@ def build():
 
     def facilities(st):
         t0 = time.time()
-        out = call_tool("kb_search", {"query": st["question"], "top_k": 3}, st)
+        out = call_tool("kb_search", {"query": st["question"]}, st)      # how many passages comes from your design, inside the tool
         results = out.get("results", [])
         st["facts"] = [r["text"] for r in results]
-        st["citations"] = [{"n": i + 1, "source": r["source"], "text": r["text"][:160]} for i, r in enumerate(results)]
+        st["citations"] = [{"n": i + 1, "source": r["source"], "text": r["text"][:160], "score": r.get("score")} for i, r in enumerate(results)]
         span(st, "agent:facilities", t0)
         return st
 

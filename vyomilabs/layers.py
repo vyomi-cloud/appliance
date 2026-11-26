@@ -1,4 +1,4 @@
-"""Course content: the 13 layers of the reference architecture, one file per cloud (wasm/labs/data/<cloud>.json). Checkers exist for AWS only so far."""
+"""Course content: the 14 layers of the reference architecture, one file per cloud (wasm/labs/data/<cloud>.json). Checkers exist for AWS only so far."""
 import json
 import os
 from . import CONTENT_DIR

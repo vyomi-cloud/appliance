@@ -2512,7 +2512,7 @@ def azure_openai_dispatch(arm_state, method, path, query, headers, body, net_sta
             return _a_err(400, "BadRequest", req[1], req[0])
     ody = None
     if op == "chat/completions" and p.get("data_sources") is not None:
-        g = _az_on_your_data(arm_state, p, req[0])
+        g = _az_on_your_data(net_state or arm_state, p, req[0])   # ARM-proxy callers pass a one-account arm_state; net_state is the whole space
         if not isinstance(g, tuple) or len(g) != 2 or isinstance(g[0], int):
             return g
         req, ody = (g[0],) + tuple(req[1:]), g[1]

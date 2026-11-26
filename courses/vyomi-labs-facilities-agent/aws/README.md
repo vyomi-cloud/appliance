@@ -1,6 +1,6 @@
 # Facilities agent on AWS
 
-The finished project from the Vyomi Labs course **Build the Enterprise Facilities agent on AWS**: an enterprise agentic AI application, built in 13 layers and run against the Vyomi AWS simulator at no cloud cost.
+The finished project from the Vyomi Labs course **Build the Enterprise Facilities agent on AWS**: an enterprise agentic AI application, built in 14 layers and run against the Vyomi AWS simulator at no cloud cost.
 
 Each layer has its own folder with the exact code the course shows and deploys, and a README that explains it.
 
@@ -15,13 +15,14 @@ Each layer has its own folder with the exact code the course shows and deploys, 
 | 1. Models | [01-models/](01-models) | 2 |
 | 2. Agent Runtime | [02-agent-runtime/](02-agent-runtime) | 8 |
 | 3. Tools | [03-tools/](03-tools) | 7 |
-| 4. Knowledge Pipeline | [04-knowledge-pipeline/](04-knowledge-pipeline) | 6 |
-| 5. Knowledge Search (RAG) | [05-knowledge-search-rag/](05-knowledge-search-rag) | 4 |
-| 6. Response Generation | [06-response-generation/](06-response-generation) | 4 |
-| 7. Agent Memory | [07-agent-memory/](07-agent-memory) | 3 |
-| 8. Agent Gateway | [08-agent-gateway/](08-agent-gateway) | 5 |
-| 9. Actions and Approval | [09-actions-and-approval/](09-actions-and-approval) | 6 |
-| 10. Access and Perimeter | [10-access-and-perimeter/](10-access-and-perimeter) | 5 |
-| 11. Channels and Input Guardrails | [11-channels-and-input-guardrails/](11-channels-and-input-guardrails) | 2 |
-| 12. AgentOps and Observability | [12-agentops-and-observability/](12-agentops-and-observability) | 2 |
-| 13. Governance and Security | [13-governance-and-security/](13-governance-and-security) | 3 |
+| 4. Design the RAG | [04-design-the-rag/](04-design-the-rag) | 3 |
+| 5. Knowledge Pipeline | [05-knowledge-pipeline/](05-knowledge-pipeline) | 6 |
+| 6. Knowledge Search (RAG) | [06-knowledge-search-rag/](06-knowledge-search-rag) | 4 |
+| 7. Response Generation | [07-response-generation/](07-response-generation) | 4 |
+| 8. Agent Memory | [08-agent-memory/](08-agent-memory) | 3 |
+| 9. Agent Gateway | [09-agent-gateway/](09-agent-gateway) | 5 |
+| 10. Actions and Approval | [10-actions-and-approval/](10-actions-and-approval) | 6 |
+| 11. Access and Perimeter | [11-access-and-perimeter/](11-access-and-perimeter) | 5 |
+| 12. Channels and Input Guardrails | [12-channels-and-input-guardrails/](12-channels-and-input-guardrails) | 2 |
+| 13. AgentOps and Observability | [13-agentops-and-observability/](13-agentops-and-observability) | 2 |
+| 14. Governance and Security | [14-governance-and-security/](14-governance-and-security) | 3 |
