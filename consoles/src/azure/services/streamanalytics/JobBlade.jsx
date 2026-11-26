@@ -11,10 +11,12 @@ import ResourceBlade from "../../kit/ResourceBlade.jsx";
 import { Essentials, ErrorBar, Glyph, InfoBar, Loading, NotSimulatedContainer } from "../../kit/common.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import * as api from "./api.js";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
   { id: "activitylog", label: "Activity log" },
+  { id: "iam", label: "Access control (IAM)" },
   { group: "Job topology", items: [{ id: "inputs", label: "Inputs" }, { id: "outputs", label: "Outputs" }, { id: "query", label: "Query" }, { id: "results", label: "Results" }] },
   { group: "Support + troubleshooting", items: [{ id: "diagnose", label: "Diagnose and solve problems" }] },
 ];
@@ -37,6 +39,7 @@ export default function JobBlade({ params }) {
       query: () => <Query j={j} rg={rg} reload={reload} />,
       results: () => <Results j={j} />,
       activitylog: () => <SharedActivityLog scope={j.id} name={j.name} />,
+      iam: () => <ResourceIam a={j} capId="azure.streamanalytics.iam" />,
       diagnose: () => <NotSimulatedContainer title={`${j.name} | Diagnose and solve problems`} feature="Stream Analytics diagnostics" />,
     }[panel];
     body = P ? <CapabilityContainer id="azure.streamanalytics.jobs" title={`${j.name} | ${LABEL[panel]}`}>{P()}</CapabilityContainer> : null;

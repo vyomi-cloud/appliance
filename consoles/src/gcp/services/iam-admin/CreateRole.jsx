@@ -1,6 +1,6 @@
 /* Create a custom IAM role — native projects.roles.create. */
 import { useState } from "react";
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControl, IconButton, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
+import { Box, Button, FormControl, IconButton, InputLabel, MenuItem, Select, Stack, TextField } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/esm/ArrowBack.js";
 import DeleteIcon from "@mui/icons-material/esm/Delete.js";
 import { useNotify } from "../../../common/notify.jsx";
@@ -8,11 +8,14 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import { ErrorAlert, PageHeader, Section } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import * as api from "./api.js";
+import { AddPermissionsDialog } from "./pickers.jsx";
+import { usePickerData } from "./usePickerData.js";
 
 const STAGES = ["Alpha", "Beta", "General Availability", "Disabled"];
 
 export default function CreateRole() {
   const notify = useNotify();
+  const data = usePickerData();
   const [title, setTitle] = useState("Custom Role");
   const [description, setDescription] = useState(`Created on: ${new Date().toISOString().slice(0, 10)}`);
   const [id, setId] = useState("CustomRole");
@@ -66,24 +69,7 @@ export default function CreateRole() {
         <Button type="submit" variant="contained" disabled={!ok || busy}>{busy ? "Creating…" : "Create"}</Button>
         <Button href="#/iam-admin/roles">Cancel</Button>
       </Stack>
-      <AddPermissionsDialog open={addOpen} onClose={() => setAddOpen(false)} onAdd={(ps) => setPermissions([...new Set([...permissions, ...ps])])} />
+      <AddPermissionsDialog open={addOpen} catalog={data} existing={permissions} onClose={() => setAddOpen(false)} onAdd={(ps) => setPermissions([...new Set([...permissions, ...ps])])} />
     </Box>
-  );
-}
-
-function AddPermissionsDialog({ open, onClose, onAdd }) {
-  const [value, setValue] = useState("");
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Add permissions</DialogTitle>
-      <DialogContent>
-        <TextField autoFocus fullWidth multiline minRows={3} sx={{ mt: 1 }} label="Permissions" value={value} onChange={(e) => setValue(e.target.value)}
-          helperText="Comma or newline-separated, e.g. storage.objects.get, storage.objects.list" />
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={() => { onAdd(value.split(/[,\n]/).map((s) => s.trim()).filter(Boolean)); setValue(""); onClose(); }}>Add</Button>
-      </DialogActions>
-    </Dialog>
   );
 }

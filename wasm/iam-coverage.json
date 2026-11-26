@@ -12,13 +12,13 @@
    "services": 30,
    "enforceable": 22,
    "catalog_none": 0,
-   "permissions": 13886
+   "permissions": 13893
   },
   "azure": {
-   "services": 31,
-   "enforceable": 26,
+   "services": 32,
+   "enforceable": 27,
    "catalog_none": 1,
-   "permissions": 11550
+   "permissions": 11575
   }
  },
  "services": [
@@ -730,12 +730,12 @@
    "catalog": [
     "backupdr"
    ],
-   "permissions": 305,
+   "permissions": 310,
    "mapped_pct": 70.3,
    "floor": 70,
    "enforceable": false,
-   "strict_pct": 37.0,
-   "strict_floor": 37,
+   "strict_pct": 36.5,
+   "strict_floor": 36,
    "surface_methods": 91,
    "surface_mapped": 64
   },
@@ -794,11 +794,11 @@
    "catalog": [
     "aiplatform"
    ],
-   "permissions": 922,
+   "permissions": 924,
    "mapped_pct": 87.1,
    "floor": 87,
    "enforceable": false,
-   "strict_pct": 50.2,
+   "strict_pct": 50.1,
    "strict_floor": 50,
    "surface_methods": 1159,
    "surface_mapped": 1010
@@ -1134,6 +1134,18 @@
    "mapped_pct": null,
    "floor": 0,
    "enforceable": false
+  },
+  {
+   "cloud": "azure",
+   "id": "managementgroups",
+   "title": "Management groups",
+   "catalog": [
+    "Microsoft.Management"
+   ],
+   "permissions": 25,
+   "mapped_pct": 96.0,
+   "floor": 96,
+   "enforceable": true
   },
   {
    "cloud": "azure",

@@ -70,7 +70,7 @@ export async function describeInstanceTypes() {
   const r = await call("DescribeInstanceTypes");
   return asList(r.instanceTypeSet?.item).map((x) => ({
     InstanceType: x.instanceType, FreeTierEligible: x.freeTierEligible === "true", BareMetal: x.bareMetal === "true",
-    Hypervisor: x.hypervisor, VCpuCount: Number((x.vCpuInfo || x.vcpuInfo)?.defaultVCpus || 0), MemoryMiB: Number(x.memoryInfo?.sizeInMiB || 0),
+    Hypervisor: x.hypervisor, Substrate: x.vyomiSubstrate || "", VCpuCount: Number((x.vCpuInfo || x.vcpuInfo)?.defaultVCpus || 0), MemoryMiB: Number(x.memoryInfo?.sizeInMiB || 0),
     Architectures: asList(x.processorInfo?.supportedArchitectures?.item), NetworkPerformance: x.networkInfo?.networkPerformance,
   }));
 }

@@ -1,0 +1,26 @@
+{
+"cloud":"gcp",
+"service":"remotingcloud",
+"permissions":{
+"compute.instanceSettings.get":{
+"stage":"SUPPORTED"
+},
+"compute.instances.get":{
+"stage":"SUPPORTED"
+},
+"compute.projects.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/remotingcloud.serviceAgent":{
+"title":"Remoting Cloud Service Agent",
+"desc":"Grants Chrome Remote Desktop Service Agent access to Google Compute Engine metadata.",
+"permissions":[
+"compute.instanceSettings.get",
+"compute.instances.get",
+"compute.projects.get"
+]
+}
+}
+}

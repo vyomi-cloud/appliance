@@ -42,6 +42,7 @@ import ResourceEvents from "../../kit/ResourceEvents.jsx";
 import Diagnose from "../../kit/Diagnose.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import AppInsights from "../../kit/AppInsights.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 /** Resource menu: [id, label] | {group, items}. Matches the real Web App blade's nav exactly
  * (labels double as the "{name} | Label" page titles the captured spec records). */
@@ -107,7 +108,7 @@ export default function WebAppBlade({ params, query }) {
       overview: () => <Overview a={a} reload={reload} self={self} />,
       defender: () => <ResourceRecommendations resourceId={a.id} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
-      iam: () => <AccessControl a={a} />,
+      iam: () => <ResourceIam a={a} capId="azure.appservices.webapp.iam" />,
       tags: () => <Tags a={a} reload={reload} />,
       slots: () => <Slots rg={rg} name={name} />,
       deploymentcenter: () => <DeploymentCenter a={a} onChanged={reload} />,
@@ -293,71 +294,6 @@ function SwapDialog({ open, onClose, rg, name, onDone }) {
 // Roles stays subscription-wide, matching real Azure (built-in role definitions are listed
 // tenant-wide too). Check access / My access / Deny assignments / Classic administrators stay
 // honest gaps — Vyomi never evaluates or denies a console action based on a role assignment.
-function AccessControl({ a }) {
-  const [tab, setTab] = useState("checkaccess");
-  const assignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
-  const definitions = useAsync(() => api.listRoleDefinitions(), []);
-  return (
-    <>
-      <div className="vy-panel-title">{a.name} | Access control (IAM)</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Access control commands">
-        <ToolbarButton icon={<ArrowUpload20Regular />} as="a" href="#/appservices">Add</ToolbarButton>
-        <ToolbarButton onClick={() => {}}>Download role assignments</ToolbarButton>
-        <ToolbarButton onClick={() => {}}>Edit columns</ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={() => { assignments.reload(); definitions.reload(); }}>Refresh</ToolbarButton>
-        <ToolbarButton disabled>Remove</ToolbarButton>
-        <ToolbarButton onClick={() => {}}>Feedback</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control tabs">
-        <Tab value="checkaccess">Check access</Tab>
-        <Tab value="roleassignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="denyassignments">Deny assignments</Tab>
-        <Tab value="classicadministrators">Classic administrators</Tab>
-      </TabList>
-      {tab === "checkaccess" && (
-        <div style={{ marginTop: 12 }}>
-          <MyAccess a={a} />
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => {}}>Check access</Button></section>
-        </div>
-      )}
-      {tab === "roleassignments" && (
-        <div style={{ marginTop: 12 }}>
-          <CapabilityContainer id="azure.appservices.webapp.iam" title="Role assignments">
-            <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by name or email" aria-label="Search by name or email" />
-            <table className="vy-grid"><thead><tr><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
-              <tbody>
-                {assignments.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (assignments.data || []).map((r) => (
-                  <tr key={r.name}><td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td><td>{r.properties?.roleDefinitionId?.split("/").pop()}</td><td>{r.properties?.scope}</td><td>None</td></tr>
-                ))}
-                {!assignments.loading && !(assignments.data || []).length && <tr><td colSpan={5} className="vy-muted">No role assignments found for this scope.</td></tr>}
-              </tbody>
-            </table>
-          </CapabilityContainer>
-        </div>
-      )}
-      {tab === "roles" && (
-        <div style={{ marginTop: 12 }}>
-          <CapabilityContainer id="azure.appservices.webapp.iam" title="Roles">
-            <table className="vy-grid"><thead><tr><th>Role</th><th>Type</th><th>Description</th><th>Assignments</th></tr></thead>
-              <tbody>
-                {definitions.loading ? <tr><td colSpan={4}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
-                  <tr key={r.name}><td>{r.properties?.roleName}</td><td>{r.properties?.type}</td><td>{r.properties?.description}</td><td>{r.assignmentCount}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </CapabilityContainer>
-        </div>
-      )}
-      {tab === "denyassignments" && (
-        <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>
-      )}
-      {tab === "classicadministrators" && (
-        <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>
-      )}
-    </>
-  );
-}
 
 // ── Tags ─────────────────────────────────────────────────────────────────────────────────
 function Tags({ a, reload }) {

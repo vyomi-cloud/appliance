@@ -1,0 +1,96 @@
+{
+"cloud":"gcp",
+"service":"speakerid",
+"permissions":{
+"speakerid.phrases.create":{
+"stage":"SUPPORTED"
+},
+"speakerid.phrases.delete":{
+"stage":"SUPPORTED"
+},
+"speakerid.phrases.get":{
+"stage":"SUPPORTED"
+},
+"speakerid.phrases.list":{
+"stage":"SUPPORTED"
+},
+"speakerid.settings.get":{
+"stage":"SUPPORTED"
+},
+"speakerid.settings.update":{
+"stage":"SUPPORTED"
+},
+"speakerid.speakers.create":{
+"stage":"SUPPORTED"
+},
+"speakerid.speakers.delete":{
+"stage":"SUPPORTED"
+},
+"speakerid.speakers.get":{
+"stage":"SUPPORTED"
+},
+"speakerid.speakers.list":{
+"stage":"SUPPORTED"
+},
+"speakerid.speakers.verify":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/speakerid.admin":{
+"title":"Speaker ID Admin",
+"desc":"Grants full access to all Speaker ID resources, including project settings.",
+"permissions":[
+"speakerid.phrases.create",
+"speakerid.phrases.delete",
+"speakerid.phrases.get",
+"speakerid.phrases.list",
+"speakerid.settings.get",
+"speakerid.settings.update",
+"speakerid.speakers.create",
+"speakerid.speakers.delete",
+"speakerid.speakers.get",
+"speakerid.speakers.list",
+"speakerid.speakers.verify"
+]
+},
+"roles/speakerid.editor":{
+"title":"Speaker ID Editor",
+"desc":"Grants access to read and write all Speaker ID resources.",
+"permissions":[
+"speakerid.phrases.create",
+"speakerid.phrases.delete",
+"speakerid.phrases.get",
+"speakerid.phrases.list",
+"speakerid.settings.get",
+"speakerid.speakers.create",
+"speakerid.speakers.delete",
+"speakerid.speakers.get",
+"speakerid.speakers.list",
+"speakerid.speakers.verify"
+]
+},
+"roles/speakerid.verifier":{
+"title":"Speaker ID Verifier",
+"desc":"Grants read access to all Speaker ID resources, and allows verification.",
+"permissions":[
+"speakerid.phrases.get",
+"speakerid.phrases.list",
+"speakerid.speakers.get",
+"speakerid.speakers.list",
+"speakerid.speakers.verify"
+]
+},
+"roles/speakerid.viewer":{
+"title":"Speaker ID Viewer",
+"desc":"Grants read access to all Speaker ID resources.",
+"permissions":[
+"speakerid.phrases.get",
+"speakerid.phrases.list",
+"speakerid.settings.get",
+"speakerid.speakers.get",
+"speakerid.speakers.list"
+]
+}
+}
+}

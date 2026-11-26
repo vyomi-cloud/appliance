@@ -1,0 +1,54 @@
+{
+"cloud":"gcp",
+"service":"firebaseperformance",
+"permissions":{
+"firebase.clients.get":{
+"stage":"SUPPORTED"
+},
+"firebase.clients.list":{
+"stage":"SUPPORTED"
+},
+"firebase.projects.get":{
+"stage":"SUPPORTED"
+},
+"firebaseperformance.config.update":{
+"stage":"SUPPORTED"
+},
+"firebaseperformance.data.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/firebaseperformance.admin":{
+"title":"Firebase Performance Reporting Admin",
+"desc":"Full access to firebaseperformance resources.",
+"permissions":[
+"firebase.clients.get",
+"firebase.clients.list",
+"firebase.projects.get",
+"firebaseperformance.config.update",
+"firebaseperformance.data.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/firebaseperformance.viewer":{
+"title":"Firebase Performance Reporting Viewer",
+"desc":"Read-only access to firebaseperformance resources.",
+"permissions":[
+"firebase.clients.get",
+"firebase.clients.list",
+"firebase.projects.get",
+"firebaseperformance.data.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

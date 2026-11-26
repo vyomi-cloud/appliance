@@ -1279,7 +1279,7 @@ def simulate_xml(engine, action_name: str, docs: list, actions: list, resources:
     return _envelope(action_name, f"<EvaluationResults>{''.join(results)}</EvaluationResults><IsTruncated>false</IsTruncated>")
 
 
-def _simulate_principal_policy(store, params):
+def _simulate_principal_policy_legacy(store, params):
     source = str(params.get("PolicySourceArn", "")).strip()
     if not source:
         raise IamError("ValidationError", "PolicySourceArn is required.", 400)
@@ -1309,7 +1309,7 @@ def _parse_policy_input(raw) -> dict:
     return d
 
 
-def _simulate_custom_policy(store, params):
+def _simulate_custom_policy_legacy(store, params):
     """SimulateCustomPolicy: evaluate caller-supplied policy documents (no stored principal needed)."""
     docs = [_parse_policy_input(d) for d in _members(params, "PolicyInputList")]
     if not docs:
@@ -1332,6 +1332,163 @@ def _simulate_custom_policy(store, params):
     rdoc = _parse_policy_input(params["ResourcePolicy"]) if params.get("ResourcePolicy") else None
     return _envelope("SimulateCustomPolicy", "<EvaluationResults>"
                      + _evaluation_results(store, actions, resources, docs, boundary, rdoc, caller, ctx) + "</EvaluationResults>")
+
+
+# ── Simulate*Policy / GetContextKeysFor*Policy over the faithful engine (core/iam_engine/analyze_aws.py) ──
+# The decisions come from aws_eval over the REAL state (identity + group policies, boundary, attached SCP/RCP, resource policies of
+# S3/SQS/SNS/KMS/Lambda/Secrets...). The legacy per-statement evaluator above stays as the fallback when the engine package is not
+# vendored (it is in every shipped bundle).
+def _context_entries_full(params: dict) -> list[dict]:
+    out, i = [], 1
+    while params.get(f"ContextEntries.member.{i}.ContextKeyName") is not None:
+        out.append({"ContextKeyName": params[f"ContextEntries.member.{i}.ContextKeyName"],
+                    "ContextKeyType": params.get(f"ContextEntries.member.{i}.ContextKeyType") or "string",
+                    "ContextKeyValues": _members(params, f"ContextEntries.member.{i}.ContextKeyValues")})
+        i += 1
+    return out
+
+
+def _input_docs(params: dict, base: str) -> list[dict]:
+    out = []
+    for n, raw in enumerate(_members(params, base), 1):
+        text = raw if isinstance(raw, str) else json.dumps(raw)
+        out.append({"id": f"{base}.{n}", "text": text, "document": _parse_policy_input(raw), "kind": "none"})
+    return out
+
+
+def _sim_result_xml(r: dict) -> str:
+    def pos(tag, p):
+        return f"<{tag}>" + _el("Line", p["Line"]) + _el("Column", p["Column"]) + f"</{tag}>"
+    ms = "".join("<member>" + _el("SourcePolicyId", m["SourcePolicyId"]) + _el("SourcePolicyType", m["SourcePolicyType"])
+                 + (pos("StartPosition", m["StartPosition"]) + pos("EndPosition", m["EndPosition"]) if "StartPosition" in m else "") + "</member>"
+                 for m in r["MatchedStatements"])
+    x = "<member>" + _el("EvalActionName", r["EvalActionName"]) + _el("EvalResourceName", r["EvalResourceName"]) + _el("EvalDecision", r["EvalDecision"])
+    x += f"<MatchedStatements>{ms}</MatchedStatements>"
+    if r["MissingContextValues"]:                                  # element omitted when empty (the established shape; test_iam_sweepiam2_core)
+        x += "<MissingContextValues>" + "".join(_el("member", k) for k in r["MissingContextValues"]) + "</MissingContextValues>"
+    if "OrganizationsDecisionDetail" in r:
+        x += "<OrganizationsDecisionDetail>" + _el("AllowedByOrganizations", str(r["OrganizationsDecisionDetail"]["AllowedByOrganizations"]).lower()) + "</OrganizationsDecisionDetail>"
+    if "PermissionsBoundaryDecisionDetail" in r:
+        x += "<PermissionsBoundaryDecisionDetail>" + _el("AllowedByPermissionsBoundary", str(r["PermissionsBoundaryDecisionDetail"]["AllowedByPermissionsBoundary"]).lower()) + "</PermissionsBoundaryDecisionDetail>"
+    if "OrganizationsDecisionDetail" in r:                          # per-layer map only when more than the identity layer decided
+        x += "<EvalDecisionDetails><entry>" + _el("key", "iam") + _el("value", r["EvalDecision"]) + "</entry></EvalDecisionDetails>"
+    return x + "</member>"
+
+
+def _sim_envelope(name: str, results: list[dict]) -> IamResponse:
+    return _envelope(name, "<EvaluationResults>" + "".join(_sim_result_xml(r) for r in results) + "</EvaluationResults><IsTruncated>false</IsTruncated>")
+
+
+def _sim_state(store):
+    from core import iam_state_adapters as _ad
+    return _ad.aws_state(store)
+
+
+def _acct_of_arn(arn: str) -> str:
+    parts = (arn or "").split(":")
+    return parts[4] if len(parts) > 4 and parts[4].isdigit() else ""
+
+
+def _simulate_principal_policy(store, params):
+    try:
+        from core.iam_engine import analyze_aws as _an
+        state = _sim_state(store)
+    except Exception:
+        return _simulate_principal_policy_legacy(store, params)
+    source = str(params.get("PolicySourceArn", "")).strip()
+    if not source:
+        raise IamError("ValidationError", "PolicySourceArn is required.", 400)
+    actions = _members(params, "ActionNames")
+    if not actions:
+        raise IamError("ValidationError", "ActionNames is required.", 400)
+    resources = _members(params, "ResourceArns") or ["*"]
+    acct = store.account_id
+    if ":group/" in source:
+        gname = source.rsplit("/", 1)[-1]
+        grp = store.get_group(gname)
+        if not grp:
+            raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
+        principal = {"arn": str(params.get("CallerArn", "")).strip() or f"arn:aws:iam::{acct}:user/{gname}", "type": "user", "account": acct,
+                     "policies": [dict(p, kind="group" if not p["id"].startswith("arn:") else None) for p in (state["groups"].get(gname) or {}).get("policies", [])]}
+    else:
+        identity, _docs, _b = _resolve_policy_docs(store, source)
+        if identity["type"] == "unknown":
+            raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
+        rec = state["principals"].get(identity["arn"]) or {}
+        pols = [dict(p, kind=identity["type"] if not p["id"].startswith("arn:") else None) for p in rec.get("policies", [])]
+        principal = {"arn": str(params.get("CallerArn", "")).strip() or identity["arn"], "type": identity["type"], "account": acct, "policies": pols,
+                     "boundary": rec.get("boundary") or [], "groups": rec.get("groups") or [], "tags": rec.get("tags") or {}}
+        if identity["type"] == "user" and _has_mfa(store, identity["name"]):
+            principal["mfa"] = True
+    ctx = _context_entries_full(params)
+    if principal.get("mfa") and not any(c["ContextKeyName"].lower() == "aws:multifactorauthpresent" for c in ctx):
+        ctx.append({"ContextKeyName": "aws:MultiFactorAuthPresent", "ContextKeyType": "boolean", "ContextKeyValues": ["true"]})
+    owner = str(params.get("ResourceOwner", "")).strip()
+    results = _an.simulate(principal, actions, resources, ctx, state, source_docs=_input_docs(params, "PolicyInputList"),
+                           boundary_docs=_input_docs(params, "PermissionsBoundaryPolicyInputList"),
+                           resource_policy=params.get("ResourcePolicy") or None, resource_owner=_acct_of_arn(owner))
+    return _sim_envelope("SimulatePrincipalPolicy", results)
+
+
+def _simulate_custom_policy(store, params):
+    try:
+        from core.iam_engine import analyze_aws as _an
+        state = _sim_state(store)
+    except Exception:
+        return _simulate_custom_policy_legacy(store, params)
+    docs = _input_docs(params, "PolicyInputList")
+    if not docs:
+        raise IamError("ValidationError", "PolicyInputList is required.", 400)
+    actions = _members(params, "ActionNames")
+    if not actions:
+        raise IamError("ValidationError", "ActionNames is required.", 400)
+    resources = _members(params, "ResourceArns") or ["*"]
+    acct = store.account_id
+    caller = str(params.get("CallerArn", "")).strip() or f"arn:aws:iam::{acct}:user/simulated"
+    principal = {"arn": caller, "type": "user", "account": acct, "policies": []}
+    # a custom simulation is the supplied documents only: the account's attached SCPs / resource policies are not part of it
+    state = dict(state, principals={}, groups={}, resource_policies={}, scps=[], rcps=[], resource_policy_requires_grant=[])
+    results = _an.simulate(principal, actions, resources, _context_entries_full(params), state, source_docs=docs,
+                           boundary_docs=_input_docs(params, "PermissionsBoundaryPolicyInputList"),
+                           resource_policy=params.get("ResourcePolicy") or None, resource_owner=_acct_of_arn(str(params.get("ResourceOwner", "")).strip()),
+                           with_org=False)
+    return _sim_envelope("SimulateCustomPolicy", results)
+
+
+def _context_keys_envelope(name: str, docs: list[dict]) -> IamResponse:
+    try:
+        from core.iam_engine import analyze_aws as _an
+        keys = _an.context_keys([d["document"] for d in docs])
+    except ImportError:
+        keys = []
+    return _envelope(name, "<ContextKeyNames>" + "".join(_el("member", k) for k in keys) + "</ContextKeyNames>")
+
+
+def _get_context_keys_for_custom_policy(store, params):
+    docs = _input_docs(params, "PolicyInputList")
+    if not docs:
+        raise IamError("ValidationError", "PolicyInputList is required.", 400)
+    return _context_keys_envelope("GetContextKeysForCustomPolicy", docs)
+
+
+def _get_context_keys_for_principal_policy(store, params):
+    source = str(params.get("PolicySourceArn", "")).strip()
+    if not source:
+        raise IamError("ValidationError", "PolicySourceArn is required.", 400)
+    if ":group/" in source:
+        g = store.get_group(source.rsplit("/", 1)[-1])
+        if not g:
+            raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
+        docs = [{"document": p["document"]} for p in (_sim_state(store)["groups"].get(source.rsplit("/", 1)[-1]) or {}).get("policies", [])]
+    else:
+        identity, stored, boundary = _resolve_policy_docs(store, source)
+        if identity["type"] == "unknown":
+            raise IamError("NoSuchEntity", f"Entity {source} not found.", 404)
+        docs = [{"document": d} for d in stored]
+        if boundary:
+            docs.append({"document": boundary})
+    docs += _input_docs(params, "PolicyInputList")
+    return _context_keys_envelope("GetContextKeysForPrincipalPolicy", docs)
 
 
 # ── Organizations policies (SCP/RCP) — Vyomi-only ───────────────────────────
@@ -1805,6 +1962,9 @@ def _principal_names_for_last_accessed(store, arn: str) -> list[str]:
     if ":group/" in arn:
         g = store.get_group(arn.split(":group/", 1)[1])
         return list(g["members"]) if g else []
+    if ":role/" in arn:
+        name = arn.split(":role/", 1)[1].rsplit("/", 1)[-1]
+        return [name] if store.get_role(name) else []
     if ":policy/" in arn:
         if not store.get_policy(arn):
             return []
@@ -1816,9 +1976,43 @@ def _principal_names_for_last_accessed(store, arn: str) -> list[str]:
     return []
 
 
+def _audit_ring() -> list[dict]:
+    try:
+        from core.iam_engine import audit as _audit
+        return _audit.default_log.list(1000, cloud="aws")
+    except Exception:
+        return []
+
+
+def _audit_entries(store) -> list[dict]:
+    """Allowed AWS decisions of the faithful-IAM decision ring (recorded while a level is audit|enforce) as activity entries. This is the only
+    attribution of ROLE sessions (the activity log above sees IAM users' access keys only). Empty when the engine package / ring is absent."""
+    out: list[dict] = []
+    try:
+        from core.iam_engine import audit as _audit
+        logs = [_audit.default_log]
+        try:
+            from core.iam_engine import nano_bridge as _nb
+            logs.append(_nb.audit_log())
+        except Exception:
+            pass
+        for log in logs:
+            for r in log.list(1000, cloud="aws"):
+                act, pr = str(r.get("action") or ""), str(r.get("principal") or "")
+                if r.get("decision") != "allow" or ":" not in act or not pr.startswith("arn:"):
+                    continue
+                m = re.match(r"^arn:([^:]*):sts::(\d*):assumed-role/([^/]+)/", pr)
+                arn = f"arn:{m.group(1)}:iam::{m.group(2)}:role/{m.group(3)}" if m else pr
+                svc, _, name = act.partition(":")
+                out.append({"principal_arn": arn, "service": svc, "action": name, "time": str(r.get("time") or "")})
+    except Exception:
+        return []
+    return out
+
+
 def _service_last_accessed_report(store, names: list[str]) -> list[dict]:
     per_service: dict[str, dict] = {}
-    for entry in store.activity:
+    for entry in list(store.activity) + _audit_entries(store):
         principal_name = entry["principal_arn"].rsplit("/", 1)[-1]
         if principal_name not in names:
             continue
@@ -2029,6 +2223,19 @@ def _finding(analyzer, kind, resource_type, resource, principals, extra=None):
 
 
 def _compute_findings(store, analyzer, s3_store=None) -> list[dict]:
+    """One generator for the console view and the native `accessanalyzer` REST service: core/iam_engine/access_analyzer.py (external access
+    over every resource policy the engine is fed + role trust policies; unused access from the activity log AND the decision ring).
+    The legacy S3/trust-only scan below remains as the fallback when the engine package is not vendored."""
+    try:
+        from core.iam_engine import access_analyzer as _aa
+        from core import iam_state_adapters as _ad, iam_resource_policies as _rp
+        state = _ad.aws_state(store)
+        if s3_store is not None:
+            state = dict(state, resource_policies=_rp.ResourcePolicyMap({**dict(state.get("resource_policies") or {}),
+                                                                         **dict(_rp.aws_resource_policies({"s3": s3_store}))}))
+        return _aa.compute(analyzer, {"store": store, "state": state, "audit": _audit_ring()})
+    except ImportError:
+        pass
     out = []
     if analyzer["type"] == "ACCOUNT":
         for r in store.roles.values():
@@ -3070,6 +3277,7 @@ _OPS = {
     "DeleteAccountAlias": _delete_account_alias,
     "GenerateCredentialReport": _generate_credential_report, "GetCredentialReport": _get_credential_report,
     "SimulatePrincipalPolicy": _simulate_principal_policy, "SimulateCustomPolicy": _simulate_custom_policy,
+    "GetContextKeysForPrincipalPolicy": _get_context_keys_for_principal_policy, "GetContextKeysForCustomPolicy": _get_context_keys_for_custom_policy,
     # Vyomi-only (see the functions' docstrings above): SCP/RCP + account access requests.
     "CreateOrgPolicy": _create_org_policy, "ListOrgPolicies": _list_org_policies,
     "DescribeOrgPolicy": _describe_org_policy, "DeleteOrgPolicy": _delete_org_policy,

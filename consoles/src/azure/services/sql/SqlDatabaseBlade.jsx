@@ -38,10 +38,12 @@ import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
 import AiSearchIntegration from "../../kit/AiSearchIntegration.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
   { id: "activitylog", label: "Activity log" },
+  { id: "iam", label: "Access control (IAM)" },
   { id: "tags", label: "Tags" },
   { id: "diagnose", label: "Diagnose and solve problems" },
   { id: "gettingstarted", label: "Getting started" },
@@ -114,6 +116,7 @@ export default function SqlDatabaseBlade({ params }) {
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={a.name} />,
+      iam: () => <ResourceIam a={a} capId="azure.sql.database.iam" />,
       tde: () => <Tde a={a} reload={reload} />,
       datadiscovery: () => <DataDiscovery a={a} />,
       datamasking: () => <DataMasking a={a} />,

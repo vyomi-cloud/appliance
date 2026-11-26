@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"fcmdata",
+"permissions":{
+"fcmdata.deliverydata.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

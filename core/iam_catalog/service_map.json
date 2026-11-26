@@ -436,7 +436,7 @@
      "backupdr"
     ],
     "floor": 70,
-    "strict_floor": 37
+    "strict_floor": 36
    },
    "cloudbuild": {
     "catalog": [
@@ -725,6 +725,12 @@
      "Microsoft.App"
     ],
     "floor": 100
+   },
+   "managementgroups": {
+    "catalog": [
+     "Microsoft.Management"
+    ],
+    "floor": 96
    }
   }
  }

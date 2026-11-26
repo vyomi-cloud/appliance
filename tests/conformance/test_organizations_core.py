@@ -107,9 +107,11 @@ def run():
     org(r, "AttachPolicy", PolicyId=tp["Id"], TargetId=root["Id"])
     _check("duplicate attachment", err(r, "AttachPolicy", "DuplicatePolicyAttachmentException", PolicyId=tp["Id"], TargetId=root["Id"]))
     _check("policy in use cannot be deleted", err(r, "DeletePolicy", "PolicyInUseException", PolicyId=tp["Id"]))
+    # AWS attaches FullAWSAccess to every OU/account by default; an allow-list is built by attaching the allow policy, then detaching the default
+    _check("new OU carries FullAWSAccess by default", oc.FULL_ACCESS_ID in oc._org(r.iam)["attachments"][prod["Id"]])
     org(r, "AttachPolicy", PolicyId=p1["Id"], TargetId=prod["Id"])
+    org(r, "DetachPolicy", PolicyId=oc.FULL_ACCESS_ID, TargetId=prod["Id"])
     org(r, "AttachPolicy", PolicyId=p2["Id"], TargetId=sub["Id"])
-    org(r, "AttachPolicy", PolicyId=oc.FULL_ACCESS_ID, TargetId=sub["Id"])
     tg = org(r, "ListTargetsForPolicy", PolicyId=p1["Id"])[1]["Targets"]
     _check("ListTargetsForPolicy", tg == [{"TargetId": prod["Id"], "Arn": prod["Arn"], "Name": "Production", "Type": "ORGANIZATIONAL_UNIT"}])
     _check("last SCP cannot be detached", err(r, "DetachPolicy", "ConstraintViolationException", PolicyId=p1["Id"], TargetId=prod["Id"]))

@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"subscribewithgoogledeveloper",
+"permissions":{
+"subscribewithgoogledeveloper.tools.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

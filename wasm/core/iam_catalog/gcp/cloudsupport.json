@@ -1,0 +1,172 @@
+{
+"cloud":"gcp",
+"service":"cloudsupport",
+"permissions":{
+"billing.resourceAssociations.list":{
+"stage":"SUPPORTED"
+},
+"cloudasset.assets.searchAllResources":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.create":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.delete":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.get":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.getUserRoles":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.list":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.purchase":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.update":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.accounts.updateUserRoles":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.operations.get":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.properties.get":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.techCases.create":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.techCases.escalate":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.techCases.get":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.techCases.list":{
+"stage":"SUPPORTED"
+},
+"cloudsupport.techCases.update":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.organizations.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/cloudsupport.admin":{
+"title":"Support Administrator",
+"desc":"Allows management of a support account and support cases. See the Cloud Support documentation for more information.",
+"permissions":[
+"cloudsupport.accounts.create",
+"cloudsupport.accounts.delete",
+"cloudsupport.accounts.get",
+"cloudsupport.accounts.getIamPolicy",
+"cloudsupport.accounts.getUserRoles",
+"cloudsupport.accounts.list",
+"cloudsupport.accounts.purchase",
+"cloudsupport.accounts.setIamPolicy",
+"cloudsupport.accounts.update",
+"cloudsupport.accounts.updateUserRoles",
+"cloudsupport.operations.get",
+"cloudsupport.properties.get",
+"cloudsupport.techCases.create",
+"cloudsupport.techCases.escalate",
+"cloudsupport.techCases.get",
+"cloudsupport.techCases.list",
+"cloudsupport.techCases.update",
+"resourcemanager.organizations.get"
+]
+},
+"roles/cloudsupport.advisorySupportEditor":{
+"title":"Advisory Support Editor",
+"desc":"Full read-write access to advisory support cases applicable for Cloud Customer Care.",
+"permissions":[
+"cloudasset.assets.searchAllResources",
+"cloudsupport.properties.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/cloudsupport.advisorySupportViewer":{
+"title":"Advisory Support Viewer",
+"desc":"Read-only access to advisory support cases applicable for Cloud Customer Care.",
+"permissions":[
+"cloudsupport.properties.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/cloudsupport.supportSubscriptionEditor":{
+"title":"Support Subscription Editor",
+"desc":"Full read-write access to support event subscriptions.",
+"permissions":[
+"resourcemanager.organizations.get"
+]
+},
+"roles/cloudsupport.supportSubscriptionViewer":{
+"title":"Support Subscription Viewer",
+"desc":"Read-only access to support event subscriptions.",
+"permissions":[
+"resourcemanager.organizations.get"
+]
+},
+"roles/cloudsupport.techSupportEditor":{
+"title":"Tech Support Editor",
+"desc":"Full read-write access to technical support cases (applicable for Cloud Customer Care and Maps support). See the Cloud Support documentation for more information.",
+"permissions":[
+"billing.resourceAssociations.list",
+"cloudasset.assets.searchAllResources",
+"cloudsupport.properties.get",
+"cloudsupport.techCases.create",
+"cloudsupport.techCases.escalate",
+"cloudsupport.techCases.get",
+"cloudsupport.techCases.list",
+"cloudsupport.techCases.update",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/cloudsupport.techSupportViewer":{
+"title":"Tech Support Viewer",
+"desc":"Read-only access to technical support cases (applicable for Cloud Customer Care and Maps support). See the Cloud Support documentation for more information.",
+"permissions":[
+"cloudsupport.properties.get",
+"cloudsupport.techCases.get",
+"cloudsupport.techCases.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/cloudsupport.viewer":{
+"title":"Support Viewer",
+"desc":"Read-only access to details of a support account. This does not allow viewing cases. See the Cloud Support documentation for more information.",
+"permissions":[
+"cloudsupport.accounts.get",
+"cloudsupport.accounts.getIamPolicy",
+"cloudsupport.accounts.getUserRoles",
+"cloudsupport.accounts.list",
+"cloudsupport.operations.get",
+"cloudsupport.properties.get",
+"cloudsupport.techCases.get",
+"cloudsupport.techCases.list"
+]
+}
+}
+}

@@ -1,0 +1,6 @@
+{
+"cloud":"gcp",
+"service":"cloudhub",
+"permissions":{},
+"roles":{}
+}

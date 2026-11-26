@@ -1172,8 +1172,27 @@ def _vm_size_entry(name: str, shape: dict) -> dict:
     }
 
 
+def _compute_sizes():
+    try:
+        from core import compute_sizes
+    except ImportError:
+        import compute_sizes                       # type: ignore
+    return compute_sizes
+
+
 def _vm_sizes() -> list:
-    return [_vm_size_entry(name, shape) for name, shape in sorted(instance_catalog.AZURE.items())]
+    cs = _compute_sizes()
+    rows = {r["name"]: r for r in cs.size_table("azure")}     # Nano / Mesh: only what the substrate can run; offline: every size
+    sub = cs.substrate()
+    out = []
+    for name, shape in sorted(instance_catalog.AZURE.items()):
+        if name not in rows:
+            continue
+        e = _vm_size_entry(name, shape)
+        if cs.restricted(sub):
+            e.update({"vyomiSubstrate": sub, "vyomiRunVcpu": rows[name]["run_vcpu"], "vyomiRunMemoryMB": rows[name]["run_mem_mb"]})
+        out.append(e)
+    return out
 
 
 def _ok(body, status=200, headers=None):
@@ -1321,6 +1340,15 @@ class AzureArm:
                     return _err(404, "ResourceNotFound", "The autoscale setting was not found.")
                 return _ok({"value": autoscale_engine.history(st)})
         out = self._handle_raw(method, path, query, body)
+        if m != "GET" and ("/microsoft.authorization/" in pl or "/microsoft.managedidentity/" in pl):   # IAM activity feed (core/iam_events_core.py)
+            try:
+                try:
+                    from core import iam_events_core as _iev
+                except ImportError:   # pragma: no cover - Pyodide flat layout
+                    import iam_events_core as _iev  # type: ignore
+                _iev.record_azure(m, str(path), (out or {}).get("status", 200) if isinstance(out, dict) else 200, None, json.dumps(body or {}).encode())
+            except Exception:
+                pass
         if "/managedclusters/" in pl:                  # the KEDA operator loop runs after a kubectl / cluster change
             try:
                 for c in [r for r in self.state.values() if isinstance(r, dict) and str(r.get("_type", "")).lower() == "microsoft.containerservice/managedclusters"]:
@@ -1356,6 +1384,11 @@ class AzureArm:
                 base.update(op.get("result") or {})
                 base["status"] = "Succeeded"    # a resource body's own "status" (e.g. plan "Ready") must not hide the LRO status
             return _ok(base)
+        if "/providers/microsoft.management/" in path.split("?", 1)[0].lower():     # management groups (core/azure_mgmt_groups_core.py)
+            from core import azure_mgmt_groups_core as _mgc
+            _r = _mgc.handle(self.state, method, path, query, body)
+            if _r is not None:
+                return _r
         bare = path.split("?", 1)[0].rstrip("/")
         # Only the TOP-LEVEL account listings: a child collection named "subscriptions" (API Management
         # service/{n}/subscriptions) or "tenants" under a resource must reach its own engine.
@@ -2257,6 +2290,9 @@ class AzureArm:
             blocked = self._policy_block(sub, rg, full_type, payload, names[-1] if names else '', self.state.get(key))
             if blocked:
                 return blocked
+            blocked = self._vm_size_block(full_type, payload)
+            if blocked:
+                return blocked
             blocked = self._quota_block(sub, full_type, key, payload)
             if blocked:
                 return blocked
@@ -2533,6 +2569,13 @@ class AzureArm:
             if str((r.get("properties") or {}).get("enforcementMode", "Default")).lower() == "donotenforce":
                 continue
             out.append(r)
+        try:        # assignments at the management groups above this subscription apply to it too
+            from core import azure_mgmt_groups_core as _mgc
+            for r in _mgc.policy_assignments_above(self.state, sub):
+                if str((r.get("properties") or {}).get("enforcementMode", "Default")).lower() != "donotenforce":
+                    out.append(r)
+        except Exception:
+            pass
         return out
 
     def _policy_skip(self, defn, res):
@@ -2652,6 +2695,19 @@ class AzureArm:
             r = billing_ext.quota_dispatch(self.state, method, sub, namespace, loc, chain[4:], payload, lambda n: usage.get(n, 0), defaults)
             return {"status": r["status"], "headers": {}, "body": r["body"]}
         return None
+
+    def _vm_size_block(self, full_type, payload):
+        """Nano / Mesh: a VM size the substrate cannot run is refused with ARM's own SkuNotAvailable (409) instead of creating a VM
+        that silently gets less. Offline appliances are not restricted."""
+        if full_type.lower() != "microsoft.compute/virtualmachines":
+            return None
+        size = ((payload or {}).get("properties") or {}).get("hardwareProfile", {}).get("vmSize")
+        cs = _compute_sizes()
+        if not size or cs.is_allowed("azure", size):
+            return None
+        loc = str((payload or {}).get("location") or DEFAULT_LOCATION)
+        return _err(409, "SkuNotAvailable", f"The requested VM size for resource 'Following SKUs have failed for Capacity Restrictions: {size}' "
+                    f"is currently not available in location '{loc}'. " + cs.rejection("azure", size))
 
     def _quota_err(self, label, loc, limit):
         return _err(403, "QuotaExceeded",
@@ -4021,6 +4077,15 @@ class AzureArm:
         # systemData.createdAt/lastModifiedAt: real ARM returns this on every resource; the
         # Overview "Created"/"Updated" fields some blades show read it back.
         rec["systemData"] = {"createdAt": rec.get("_created", _now()), "lastModifiedAt": _now()}
+        if full_type.lower() == "microsoft.authorization/roleassignments":
+            # ARM role assignments carry their own audit properties (createdOn/updatedOn/createdBy/updatedBy), kept across updates
+            _rp, _sd = rec["properties"], rec["systemData"]
+            if _aks_old and _aks_old.get("_created"):
+                rec["_created"] = _aks_old["_created"]          # a full PUT rebuilds the record; the assignment keeps its creation time
+            _sd["createdAt"] = _rp["createdOn"] = rec["_created"]
+            _rp["updatedOn"] = _sd["lastModifiedAt"]
+            _rp["createdBy"] = "00000000-0000-0000-0000-000000000000"
+            _rp["updatedBy"] = "00000000-0000-0000-0000-000000000000"
 
         if full_type.lower() == "microsoft.network/networkinterfaces":
             bad = self._nic_ips(key, rec)

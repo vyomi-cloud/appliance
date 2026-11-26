@@ -27,13 +27,14 @@ import DeleteModal from "../../kit/DeleteModal.jsx";
 import { LastAccessedTab } from "./LastAccessed.jsx";
 import { EnforcementPanel } from "./Enforcement.jsx";
 import * as api from "./api.js";
+import PolicyAttachTable from "../../kit/PolicyAttachTable.jsx";
 
 function RolePermissionsTab({ roleName }) {
   const notify = useNotify();
   const p = useAsync(() => Promise.all([api.listAttachedRolePolicies(roleName), api.listRolePolicies(roleName), api.listPolicies()]), [roleName]);
   const role = useAsync(() => api.getRole(roleName), [roleName]);
   const [attachModal, setAttachModal] = useState(false);
-  const [attachArn, setAttachArn] = useState("");
+  const [attachArn, setAttachArn] = useState([]);
   const [inlineModal, setInlineModal] = useState(null);
   const [boundaryModal, setBoundaryModal] = useState(false);
   const [boundaryArn, setBoundaryArn] = useState("");
@@ -70,13 +71,9 @@ function RolePermissionsTab({ roleName }) {
       <Modal visible={attachModal} onDismiss={() => setAttachModal(false)} header="Add permissions"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setAttachModal(false)}>Cancel</Button>
-          <Button variant="primary" disabled={!attachArn} onClick={async () => { await api.attachRolePolicy(roleName, attachArn); notify.success("Policy attached."); setAttachModal(false); setAttachArn(""); p.reload(); }}>Attach policy</Button>
+          <Button variant="primary" disabled={!attachArn.length} onClick={async () => { for (const arn of attachArn) await api.attachRolePolicy(roleName, arn); notify.success("Policy attached."); setAttachModal(false); setAttachArn([]); p.reload(); }}>Attach policy</Button>
         </SpaceBetween></Box>}>
-        <FormField label="Policy">
-          <Select selectedOption={attachArn ? { value: attachArn, label: allPolicies.find((x) => x.Arn === attachArn)?.PolicyName } : null}
-            onChange={({ detail }) => setAttachArn(detail.selectedOption.value)}
-            options={allPolicies.map((pl) => ({ value: pl.Arn, label: pl.PolicyName }))} placeholder="Choose a policy" />
-        </FormField>
+        <PolicyAttachTable policies={allPolicies} value={attachArn} onChange={setAttachArn} attached={(attached || []).map((a) => a.PolicyArn)} />
       </Modal>
       <Modal visible={!!inlineModal} onDismiss={() => setInlineModal(null)} size="large" header="Create inline policy"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">

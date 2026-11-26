@@ -15,8 +15,9 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { Essentials, ErrorBar, Glyph, Loading, fmtDate } from "../../kit/common.jsx";
 import { remember, forget } from "../../kit/recent.js";
 import * as api from "./api.js";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
-const MENU = [{ id: "overview", label: "Overview" }, { id: "explorer", label: "Service Bus Explorer" }];
+const MENU = [{ id: "overview", label: "Overview" }, { id: "iam", label: "Access control (IAM)" }, { id: "explorer", label: "Service Bus Explorer" }];
 const fmtSize = (mb) => (mb >= 1024 && mb % 1024 === 0 ? `${mb / 1024} GB` : `${mb || 0} MB`);
 
 export default function QueueBlade({ params }) {
@@ -33,11 +34,11 @@ export default function QueueBlade({ params }) {
   else if (q.error) body = <><ErrorBar error={q.error} title="Failed to load the queue" /><Link href={nsHref}>Back to Queues</Link></>;
   else {
     const a = q.data, reload = q.reload;
-    body = panel === "explorer" ? <Explorer queue={queue} /> : <Overview a={a} reload={reload} rg={rg} ns={name} nsHref={nsHref} />;
+    body = panel === "iam" ? <ResourceIam a={a} capId="azure.servicebus.namespace.iam" /> : panel === "explorer" ? <Explorer queue={queue} /> : <Overview a={a} reload={reload} rg={rg} ns={name} nsHref={nsHref} />;
   }
 
   return (
-    <ResourceBlade title={panel === "overview" ? queue : `${queue} | Service Bus Explorer`} subtitle="Queue" glyph={<Glyph id="servicebus" />} closeHref={nsHref}
+    <ResourceBlade title={panel === "overview" ? queue : `${queue} | ${panel === "iam" ? "Access control (IAM)" : "Service Bus Explorer"}`} subtitle="Queue" glyph={<Glyph id="servicebus" />} closeHref={nsHref}
       menu={MENU} active={panel} hrefFor={(id) => (id === "overview" ? self : `${self}/${id}`)}>
       {body}
     </ResourceBlade>

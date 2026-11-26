@@ -1128,18 +1128,18 @@
       "WebApps_ListFunctions",
       "WebApps_CreateOrUpdateSlot"
      ],
-     "capabilities": 40,
+     "capabilities": 41,
      "capability_service": "functionapp",
      "data_plane": "metadata only (function exec not yet wired; see post-MVP roadmap)",
      "id": "functionapp",
      "level_counts": {
       "nano": {
        "full": 7,
-       "limited": 33
+       "limited": 34
       },
       "offline": {
        "full": 8,
-       "limited": 32
+       "limited": 33
       }
      },
      "levels": {
@@ -1343,18 +1343,18 @@
       "Databases_List",
       "FirewallRules_CreateOrUpdate"
      ],
-     "capabilities": 28,
+     "capabilities": 29,
      "capability_service": "sql",
      "data_plane": "postgres:16-alpine (each Microsoft.Sql/servers/databases backed by a real Postgres DB via gcp_sql_engine)",
      "id": "sql",
      "level_counts": {
       "nano": {
        "full": 6,
-       "limited": 22
+       "limited": 23
       },
       "offline": {
        "full": 6,
-       "limited": 22
+       "limited": 23
       }
      },
      "levels": {
@@ -1594,17 +1594,17 @@
      "status": "v4"
     },
     {
-     "capabilities": 4,
+     "capabilities": 5,
      "id": "aisearch",
      "level_counts": {
       "nano": {
        "full": 1,
-       "limited": 2,
+       "limited": 3,
        "not_simulated": 1
       },
       "offline": {
        "full": 1,
-       "limited": 3
+       "limited": 4
       }
      },
      "levels": {
@@ -1645,14 +1645,14 @@
      "status": "v4"
     },
     {
-     "capabilities": 11,
+     "capabilities": 12,
      "id": "common",
      "level_counts": {
       "nano": {
-       "limited": 11
+       "limited": 12
       },
       "offline": {
-       "limited": 11
+       "limited": 12
       }
      },
      "levels": {
@@ -1848,14 +1848,14 @@
      "status": "v4"
     },
     {
-     "capabilities": 1,
+     "capabilities": 2,
      "id": "streamanalytics",
      "level_counts": {
       "nano": {
-       "limited": 1
+       "limited": 2
       },
       "offline": {
-       "limited": 1
+       "limited": 2
       }
      },
      "levels": {

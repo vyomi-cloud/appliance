@@ -8,10 +8,10 @@ import { SERVICES } from "../services/registry.js";
 import ServiceIcon from "../../common/icons/ServiceIcon.jsx";
 import { LOGO } from "./logo.js";
 
-const BAR = { background: "#0f141a", color: "#fff", height: 40, display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 12px",
+const BAR = { background: "#fafafa", color: "#0f141a", borderBottom: "1px solid #d5dbdb", height: 40, display: "flex", alignItems: "center", gap: 4, padding: "0 8px 0 12px",
   fontFamily: '"Open Sans","Helvetica Neue",Roboto,Arial,sans-serif', fontSize: 14, position: "relative" };
-const ICONBTN = { background: "none", border: 0, color: "#fff", height: 40, minWidth: 40, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", borderRadius: 4, padding: "0 8px" };
-const SEP = { width: 1, height: 20, background: "#414d5c", margin: "0 6px" };
+const ICONBTN = { background: "none", border: 0, color: "#0f141a", height: 40, minWidth: 40, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", borderRadius: 4, padding: "0 8px" };
+const SEP = { width: 1, height: 20, background: "#c6c6cd", margin: "0 6px" };
 const MENU = { position: "absolute", top: 40, right: 0, minWidth: 240, background: "#192534", color: "#fff", border: "1px solid #414d5c", borderRadius: 8,
   boxShadow: "0 4px 20px rgba(0,0,0,.45)", padding: "8px 0", zIndex: 2000, fontSize: 14 };
 const ITEM = { display: "block", width: "100%", textAlign: "left", background: "none", border: 0, color: "#fff", padding: "6px 16px", cursor: "pointer", fontSize: 14, textDecoration: "none" };
@@ -26,7 +26,7 @@ function Pop({ open, onClose, children, style }) {
     document.addEventListener("keydown", esc);
     return () => { document.removeEventListener("mousedown", on); document.removeEventListener("keydown", esc); };
   }, [open]);
-  return open ? <div ref={ref} style={{ ...MENU, ...style }}>{children}</div> : null;
+  return open ? <div ref={ref} className="vy-pop" style={{ ...MENU, ...style }}>{children}</div> : null;
 }
 
 function Search() {
@@ -43,13 +43,13 @@ function Search() {
   const go = (s) => { location.hash = `/${s.id}`; setQ(""); setOpen(false); input.current?.blur(); };
   return (
     <div style={{ position: "relative", flex: "0 1 520px", marginLeft: 6 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 30, border: "1px solid #8c8c94", borderRadius: 8, padding: "0 10px", background: "#0f141a" }}>
-        <Icon name="search" variant="inverted" />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, height: 30, border: "1px solid #8c8c94", borderRadius: 8, padding: "0 10px", background: "#fff" }}>
+        <Icon name="search" />
         <input ref={input} value={q} placeholder="Search" aria-label="Search"
           onChange={(e) => { setQ(e.target.value); setOpen(true); }} onFocus={() => setOpen(true)}
           onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) go(hits[0]); if (e.key === "Escape") { setOpen(false); e.target.blur(); } }}
-          style={{ flex: 1, background: "none", border: 0, outline: "none", color: "#fff", fontSize: 14, fontStyle: q ? "normal" : "italic" }} />
-        <span style={{ color: "#b6bec9", fontSize: 12, whiteSpace: "nowrap" }}>[Option+S]</span>
+          style={{ flex: 1, background: "none", border: 0, outline: "none", color: "#0f141a", fontSize: 14, fontStyle: q ? "normal" : "italic" }} />
+        <span style={{ color: "#5f6b7a", fontSize: 12, whiteSpace: "nowrap" }}>[Option+S]</span>
       </div>
       <Pop open={open && !!t} onClose={() => setOpen(false)} style={{ left: 0, right: "auto", width: "100%", top: 34 }}>
         <div style={{ padding: "4px 16px 8px", fontWeight: 700 }}>Services</div>
@@ -73,24 +73,23 @@ export default function TopBar({ onServices, region, regions, onRegion, mode, de
   const regionLabel = regions.find(([r]) => r === region)?.[1] || region;
   const unread = notifications.length;
   return (
-    <div style={BAR} role="banner" className="vy-dark-chrome">
-      {/* The bar and services drawer are dark in both visual modes, but Cloudscape's "inverted"
-          icon colour flips with the theme — pin chrome icons to white. */}
-      <style>{`.vy-dark-chrome [class*="awsui_icon_"] { color: #fff !important; }`}</style>
+    <div style={BAR} role="banner" className="vy-light-chrome">
+      {/* Light bar like the 2026 console; pin icon colour regardless of visual mode. */}
+      <style>{`.vy-dark-chrome [class*="awsui_icon_"] { color: #fff !important; } .vy-light-chrome [class*="awsui_icon_"] { color: #0f141a !important; } .vy-light-chrome [role="menu"] [class*="awsui_icon_"], .vy-light-chrome .vy-pop [class*="awsui_icon_"] { color: #fff !important; }`}</style>
       <a href="#/" aria-label="vyomi.cloud AWS — Console Home" style={{ display: "inline-flex", alignItems: "center", marginRight: 6 }}>
         <img src={LOGO} alt="vyomi.cloud | AWS" height={26} style={{ display: "block" }} />
       </a>
       <span style={SEP} />
-      <button style={ICONBTN} aria-label="Services" title="Services" onClick={onServices}><Icon name="grid-view" variant="inverted" /></button>
+      <button style={ICONBTN} aria-label="Services" title="Services" onClick={onServices}><Icon name="grid-view" /></button>
       <Search />
       <div style={{ flex: 1 }} />
       <button style={ICONBTN} aria-label="CloudShell" title="CloudShell"
         onClick={() => onNotice("CloudShell isn't simulated in Vyomi. Use your own terminal: every SDK and CLI works against this endpoint.", "CloudShell")}>
-        <Icon name="command-prompt" variant="inverted" />
+        <Icon name="command-prompt" />
       </button>
       <div style={{ position: "relative" }}>
         <button style={ICONBTN} aria-label="Notifications" title="Notifications" onClick={() => toggle("bell")}>
-          <Icon name="notification" variant="inverted" />
+          <Icon name="notification" />
           {unread > 0 && <span style={{ position: "absolute", top: 6, right: 4, background: "#d91515", color: "#fff", borderRadius: 8, fontSize: 10, minWidth: 16, height: 16, lineHeight: "16px", textAlign: "center", padding: "0 3px" }}>{unread}</span>}
         </button>
         <Pop open={menu === "bell"} onClose={() => setMenu(null)} style={{ width: 360 }}>
@@ -104,9 +103,9 @@ export default function TopBar({ onServices, region, regions, onRegion, mode, de
           )) : <div style={{ padding: "6px 16px", color: "#b6bec9" }}>No notifications in this session.</div>}
         </Pop>
       </div>
-      <button style={ICONBTN} aria-label="Help" title="Help" onClick={onHelp}><Icon name="support" variant="inverted" /></button>
+      <button style={ICONBTN} aria-label="Help" title="Help" onClick={onHelp}><Icon name="support" /></button>
       <div style={{ position: "relative" }}>
-        <button style={ICONBTN} aria-label="Settings" title="Settings" onClick={() => toggle("gear")}><Icon name="settings" variant="inverted" /></button>
+        <button style={ICONBTN} aria-label="Settings" title="Settings" onClick={() => toggle("gear")}><Icon name="settings" /></button>
         <Pop open={menu === "gear"} onClose={() => setMenu(null)}>
           <div style={{ padding: "4px 16px", fontWeight: 700 }}>Visual mode</div>
           {["light", "dark"].map((m) => <button key={m} style={ITEM} onClick={() => { onMode(m); setMenu(null); }}>{mode === m ? "✓ " : "  "}{m === "light" ? "Light" : "Dark"}</button>)}
@@ -116,7 +115,7 @@ export default function TopBar({ onServices, region, regions, onRegion, mode, de
       </div>
       <span style={SEP} />
       <div style={{ position: "relative" }}>
-        <button style={{ ...ICONBTN, gap: 6, fontSize: 13 }} aria-label="Region" onClick={() => toggle("region")}>{regionLabel} <Icon name="caret-down-filled" variant="inverted" size="small" /></button>
+        <button style={{ ...ICONBTN, gap: 6, fontSize: 13 }} aria-label="Region" onClick={() => toggle("region")}>{regionLabel} <Icon name="caret-down-filled" size="small" /></button>
         <Pop open={menu === "region"} onClose={() => setMenu(null)} style={{ width: 300 }}>
           {regions.map(([id, label]) => (
             <button key={id} style={{ ...ITEM, display: "flex", justifyContent: "space-between", fontWeight: id === region ? 700 : 400 }} onClick={() => { onRegion(id); setMenu(null); }}>
@@ -126,7 +125,7 @@ export default function TopBar({ onServices, region, regions, onRegion, mode, de
         </Pop>
       </div>
       <div style={{ position: "relative" }}>
-        <button style={{ ...ICONBTN, gap: 6, fontSize: 13 }} aria-label="Account" onClick={() => toggle("acct")}>Vyomi (local) <Icon name="caret-down-filled" variant="inverted" size="small" /></button>
+        <button style={{ ...ICONBTN, gap: 6, fontSize: 13 }} aria-label="Account" onClick={() => toggle("acct")}>Vyomi (local) <Icon name="caret-down-filled" size="small" /></button>
         <Pop open={menu === "acct"} onClose={() => setMenu(null)}>
           <div style={{ padding: "4px 16px 8px", color: "#b6bec9", fontSize: 12 }}>Account ID 123456789012 (simulated)</div>
         </Pop>

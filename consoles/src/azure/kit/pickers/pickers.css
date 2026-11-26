@@ -1,0 +1,33 @@
+/* Azure RBAC pickers: full-height "blades" that slide over the console like the portal's, plus the member picker's two-pane layout. */
+.vy-blade-scrim { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1000; display: flex; justify-content: flex-end; }
+.vy-blade-scrim.vy-l2 { z-index: 1100; }
+.vy-pblade { background: var(--colorNeutralBackground1); height: calc(100% - 44px); display: flex; flex-direction: column; box-shadow: -4px 0 16px rgba(0,0,0,.25); max-width: 100vw;
+  /* keep the footer buttons (Select / Add / Review + assign) clear of the fixed Vyomi dock (44px, z-index 1600) and, on Nano, the status footer (#nano-foot, 35px) */
+  margin-bottom: 44px; }
+body:has(#nano-foot) .vy-pblade { height: calc(100% - 80px); margin-bottom: 80px; }
+.vy-pblade > header { display: flex; align-items: flex-start; padding: 16px 24px 8px; gap: 12px; }
+.vy-pblade > header h1 { font-size: 24px; font-weight: 600; margin: 0; flex: 1; line-height: 1.2; }
+.vy-pblade > header p { margin: 4px 0 0; font-size: 13px; color: var(--colorNeutralForeground2); font-weight: 400; }
+.vy-pblade .vy-pbody { flex: 1; min-height: 0; overflow: auto; padding: 0 24px 16px; border-top: 1px solid var(--colorNeutralStroke2); }
+.vy-pblade > footer { display: flex; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--colorNeutralStroke2); }
+.vy-pblade .vy-ptabs { padding: 0 24px; }
+.vy-info { display: flex; gap: 8px; align-items: center; background: var(--colorBrandBackground2, #ebf3fc); padding: 10px 14px; margin: 16px 0; font-size: 14px; }
+.vy-members { display: flex; min-height: 0; height: 100%; }
+.vy-members .vy-mleft { flex: 1; min-width: 0; padding: 0 20px 0 0; }
+.vy-members .vy-mright { width: 300px; flex: none; border-left: 1px solid var(--colorNeutralStroke2); padding: 16px 0 0 24px; }
+.vy-members h2 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
+.vy-mrow { display: grid; grid-template-columns: 40px 48px minmax(120px, 1.2fr) minmax(90px, 1fr) minmax(120px, 1.4fr); align-items: center; padding: 10px 0; border-bottom: 1px solid var(--colorNeutralStroke2); font-size: 14px; }
+.vy-mrow.head { font-weight: 600; padding: 12px 0; }
+.vy-avatar { width: 34px; height: 34px; border-radius: 50%; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.vy-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.vy-pick-grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+.vy-pick-grid th { text-align: left; font-weight: 600; padding: 8px 8px; border-bottom: 1px solid var(--colorNeutralStroke2); position: sticky; top: 0; background: var(--colorNeutralBackground1); }
+.vy-pick-grid td { padding: 7px 8px; border-bottom: 1px solid var(--colorNeutralStroke2); vertical-align: top; }
+.vy-pick-grid tr.sel { background: var(--colorNeutralBackground1Selected); }
+.vy-code { background: var(--colorNeutralBackground3); border: 1px solid var(--colorNeutralStroke2); border-radius: 4px; padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+.vy-ptree { font-size: 13px; }
+.vy-ptree .row { display: flex; align-items: center; gap: 6px; padding: 4px 6px; cursor: pointer; border-radius: 3px; }
+.vy-ptree .row:hover { background: var(--colorNeutralBackground1Hover); }
+.vy-ptree .row.sel { background: var(--colorNeutralBackground1Selected); font-weight: 600; }
+.vy-req { color: var(--colorPaletteRedForeground1, #b10e1c); }
+body:has(#nano-foot) .vy-blade-scrim { bottom: 34px; }   /* Nano: the fixed relay-tunnel bar (34px) would cover the blade footer buttons */

@@ -1,0 +1,18 @@
+{
+"cloud":"gcp",
+"service":"bigqueryspark",
+"permissions":{
+"iam.serviceAccounts.getAccessToken":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/bigqueryspark.serviceAgent":{
+"title":"BigQuery Spark Service Agent",
+"desc":"Gives BigQuery Spark access to the service accounts in the user project.",
+"permissions":[
+"iam.serviceAccounts.getAccessToken"
+]
+}
+}
+}

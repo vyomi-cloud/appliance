@@ -218,8 +218,9 @@ def list_regions(project):
 
 
 def machine_type_view(project, zone, name):
+    from core import compute_sizes as _cs
     shape = MACHINE_SHAPES.get(name)
-    if not shape:
+    if not shape or not _cs.is_allowed("gcp", name):      # Nano / Mesh list only what the substrate can run
         return None
     family = name.split("-")[0].upper()
     return {
@@ -227,6 +228,7 @@ def machine_type_view(project, zone, name):
         "description": "%s machine type with %d vCPUs and %s GB of memory" % (family, shape["vcpu"], round(shape["ram_mb"] / 1024, 2)),
         "guestCpus": shape["vcpu"], "memoryMb": shape["ram_mb"], "zone": zone, "isSharedCpu": shape["family"] == "burstable",
         "selfLink": _selflink("projects/%s/zones/%s/machineTypes/%s" % (project, zone, name)),
+        **({"vyomiSubstrate": _cs.substrate()} if _cs.restricted() else {}),
     }
 
 
@@ -298,6 +300,9 @@ def insert_instance(store, project, zone, payload):
     mt_name, mt_link = _mt_full(project, zone, payload.get("machineType") or "e2-medium")
     if mt_name not in MACHINE_SHAPES:
         raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'machineType': %r." % mt_name)
+    from core import compute_sizes as _cs
+    if not _cs.is_allowed("gcp", mt_name):
+        raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.machineType': '%s'. %s" % (mt_link, _cs.rejection("gcp", mt_name)))
     from core import gcp_compute_ext_core as _ext
     _ext.check_instance_placement(store, project, zone, payload, name)
     nets = [_last(n.get("network") or "default") for n in (payload.get("networkInterfaces") or [{}])]
@@ -531,6 +536,9 @@ def set_instance_field(store, project, zone, name, verb, payload):
         mt_name, mt_link = _mt_full(project, zone, (payload.get("machineType") or ""))
         if mt_name not in MACHINE_SHAPES:
             raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'machineType': %r." % mt_name)
+        from core import compute_sizes as _cs
+        if not _cs.is_allowed("gcp", mt_name):
+            raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'machineType': '%s'. %s" % (mt_link, _cs.rejection("gcp", mt_name)))
         inst["machineType"] = mt_link
     elif verb == "setTags":
         inst["tags"] = {"items": payload.get("items") or [], "fingerprint": _fingerprint(payload)}

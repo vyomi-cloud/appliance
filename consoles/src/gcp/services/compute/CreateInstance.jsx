@@ -14,6 +14,7 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 import { getProject } from "../../project.js";
 import ScrollTable from "../../kit/ScrollTable.jsx";
 
@@ -190,10 +191,11 @@ export default function CreateInstance() {
             </ScrollTable>
           </Paper>
         </Sub>
+        {sizesNote(sizeSubstrate(machineTypes)) && <Typography variant="body2" color="text.secondary" data-testid="compute-sizes-note">{sizesNote(sizeSubstrate(machineTypes))}</Typography>}
         <FormControl sx={{ minWidth: 420 }}>
           <InputLabel id="mt-l">Machine type</InputLabel>
           <Select labelId="mt-l" label="Machine type" value={machineType} onChange={(e) => setMachineType(e.target.value)}>
-            {series.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {Math.round(m.memoryMb / 1024)} GB memory)</MenuItem>)}
+            {series.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {+(m.memoryMb / 1024).toFixed(2)} GB memory)</MenuItem>)}
           </Select>
         </FormControl>
       </Step>

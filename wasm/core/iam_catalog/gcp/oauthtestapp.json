@@ -1,0 +1,13 @@
+{
+"cloud":"gcp",
+"service":"oauthtestapp",
+"permissions":{
+"oauthtestapp.userwhitelist.read":{
+"stage":"SUPPORTED"
+},
+"oauthtestapp.userwhitelist.write":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

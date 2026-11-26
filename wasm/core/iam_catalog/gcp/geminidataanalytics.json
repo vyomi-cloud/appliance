@@ -1,0 +1,168 @@
+{
+"cloud":"gcp",
+"service":"geminidataanalytics",
+"permissions":{
+"geminidataanalytics.dataAgents.chat":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.create":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.delete":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.get":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.list":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.dataAgents.update":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.locations.chat":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.locations.get":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.locations.list":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.locations.useDataEngineeringAgent":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.operations.cancel":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.operations.delete":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.operations.get":{
+"stage":"SUPPORTED"
+},
+"geminidataanalytics.operations.list":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/geminidataanalytics.admin":{
+"title":"Gemini Data Analytics Admin",
+"desc":"Admin role for Gemini Data Analytics",
+"permissions":[
+"geminidataanalytics.dataAgents.chat",
+"geminidataanalytics.dataAgents.create",
+"geminidataanalytics.dataAgents.delete",
+"geminidataanalytics.dataAgents.get",
+"geminidataanalytics.dataAgents.getIamPolicy",
+"geminidataanalytics.dataAgents.list",
+"geminidataanalytics.dataAgents.setIamPolicy",
+"geminidataanalytics.dataAgents.update",
+"geminidataanalytics.locations.chat",
+"geminidataanalytics.locations.get",
+"geminidataanalytics.locations.list",
+"geminidataanalytics.locations.useDataEngineeringAgent",
+"geminidataanalytics.operations.cancel",
+"geminidataanalytics.operations.delete",
+"geminidataanalytics.operations.get",
+"geminidataanalytics.operations.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/geminidataanalytics.dataAgentCreator":{
+"title":"Gemini Data Analytics Data Agent Creator",
+"desc":"Create access to Gemini Data Analytics resources.",
+"permissions":[
+"geminidataanalytics.dataAgents.create",
+"geminidataanalytics.locations.chat",
+"geminidataanalytics.operations.get"
+]
+},
+"roles/geminidataanalytics.dataAgentEditor":{
+"title":"Gemini Data Analytics Data Agent Editor",
+"desc":"Chat and Edit access to Gemini Data Analytics resources.",
+"permissions":[
+"geminidataanalytics.dataAgents.chat",
+"geminidataanalytics.dataAgents.get",
+"geminidataanalytics.dataAgents.list",
+"geminidataanalytics.dataAgents.update",
+"geminidataanalytics.operations.get"
+]
+},
+"roles/geminidataanalytics.dataAgentOwner":{
+"title":"Gemini Data Analytics Data Agent Owner",
+"desc":"Full access to existing Gemini Data Analytics resources.",
+"permissions":[
+"geminidataanalytics.dataAgents.chat",
+"geminidataanalytics.dataAgents.delete",
+"geminidataanalytics.dataAgents.get",
+"geminidataanalytics.dataAgents.getIamPolicy",
+"geminidataanalytics.dataAgents.list",
+"geminidataanalytics.dataAgents.setIamPolicy",
+"geminidataanalytics.dataAgents.update",
+"geminidataanalytics.locations.get",
+"geminidataanalytics.locations.list",
+"geminidataanalytics.operations.cancel",
+"geminidataanalytics.operations.delete",
+"geminidataanalytics.operations.get",
+"geminidataanalytics.operations.list"
+]
+},
+"roles/geminidataanalytics.dataAgentStatelessUser":{
+"title":"Gemini Data Analytics Stateless Chat User",
+"desc":"Stateless access to Gemini Data Analytics chat.",
+"permissions":[
+"geminidataanalytics.locations.chat",
+"geminidataanalytics.locations.useDataEngineeringAgent"
+]
+},
+"roles/geminidataanalytics.dataAgentUser":{
+"title":"Gemini Data Analytics Data Agent User",
+"desc":"Chat and View access to Gemini Data Analytics resources.",
+"permissions":[
+"geminidataanalytics.dataAgents.chat",
+"geminidataanalytics.dataAgents.get",
+"geminidataanalytics.dataAgents.list"
+]
+},
+"roles/geminidataanalytics.dataAgentViewer":{
+"title":"Gemini Data Analytics Data Agent Viewer",
+"desc":"Readonly access to Gemini Data Analytics resources.",
+"permissions":[
+"geminidataanalytics.dataAgents.get",
+"geminidataanalytics.dataAgents.list"
+]
+},
+"roles/geminidataanalytics.viewer":{
+"title":"Gemini Data Analytics Viewer",
+"desc":"Viewer role for Gemini Data Analytics",
+"permissions":[
+"geminidataanalytics.dataAgents.chat",
+"geminidataanalytics.dataAgents.get",
+"geminidataanalytics.dataAgents.getIamPolicy",
+"geminidataanalytics.dataAgents.list",
+"geminidataanalytics.locations.chat",
+"geminidataanalytics.locations.get",
+"geminidataanalytics.locations.list",
+"geminidataanalytics.locations.useDataEngineeringAgent",
+"geminidataanalytics.operations.get",
+"geminidataanalytics.operations.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

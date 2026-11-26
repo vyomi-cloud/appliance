@@ -94,6 +94,40 @@ export function routeOf(req) {
 /** Which cloud does a wire request belong to? null = not SDK/CLI traffic (no credentials) or exempt (Entra) => never gated. */
 export const cloudOf = (req) => routeOf(req).cloud;
 
+// IAM analysis routes (mirror of core/iam_engine/analyze_wire.match; a test keeps the two in step): Access Analyzer REST, Policy Troubleshooter,
+// Cloud Asset analyzeIamPolicy, Azure checkAccess / permissions / filtered role assignments / PIM schedules, and the IAM Query simulate actions.
+const AA_PATH = /^\/(?:analyzer|finding|findingv2|policy\/(?:validation|check-no-new-access|check-access-not-granted|check-no-public-access)|resource\/scan)(?:\/|$)/;
+const GCP_TS = /^\/v[13]\/iam:troubleshoot$/, GCP_AN = /^\/v1\/(?:projects|folders|organizations)\/[^/:]+:analyzeIamPolicy$/;
+const AZ_AUTHZ = /\/providers\/microsoft\.authorization\/(checkaccess|customrolechecks|permissions|roleassignments|roleeligibilityschedules|roleeligibilityscheduleinstances|roleassignmentschedules|roleassignmentscheduleinstances|roleeligibilityschedulerequests|roleassignmentschedulerequests)\/?$/i;
+// PIM single-resource routes (core/iam_engine/azure_pim.py): PUT a request, GET a request / schedule, POST a request's /cancel
+const AZ_PIM = /\/providers\/microsoft\.authorization\/(roleeligibilityschedulerequests|roleassignmentschedulerequests|roleeligibilityschedules|roleassignmentschedules)\/[^/]+(\/cancel)?\/?$/i;
+const SIM_ACTIONS = /(?:^|&)Action=(?:SimulatePrincipalPolicy|SimulateCustomPolicy|GetContextKeysForPrincipalPolicy|GetContextKeysForCustomPolicy)(?:&|$)/;
+/** -> "analyze" (answer from the engine) | "engine" (IAM Query simulate: mount the engine, then dispatch normally) | null. Cheap and synchronous. */
+export function analysisRoute(req) {
+  const h = {}; for (const k of Object.keys(req.headers || {})) h[k.toLowerCase()] = req.headers[k];
+  const p = stripWire(req.path).split("?", 1)[0], m = String(req.method || "GET").toUpperCase(), q = req.query || {};
+  if ((/access-analyzer\/aws4_request/.test(h.authorization || "") || /^access-analyzer\./i.test(h.host || "")) && AA_PATH.test(p)) return "analyze";
+  if (m === "POST" && GCP_TS.test(p)) return "analyze";
+  if (m === "GET" && GCP_AN.test(p)) return "analyze";
+  if (m === "GET" && /^\/metadata\/identity\/oauth2\/token$/i.test(p)) return "analyze";                                   // managed-identity token (IMDS)
+  if (m === "POST" && /\/oauth2(?:\/v2\.0)?\/token$/i.test(p)) { let t = ""; try { t = atob(req.body_b64 || ""); } catch (_) {} if (/(?:^|&)client_assertion=/.test(t)) return "analyze"; }
+  const pim = AZ_PIM.exec(p);
+  if (pim) { const isReq = /schedulerequests$/i.test(pim[1]); return (m === "GET" || (isReq && (m === "PUT" || (m === "POST" && pim[2])))) ? "analyze" : null; }
+  const a = AZ_AUTHZ.exec(p);
+  if (a) {
+    const res = a[1].toLowerCase();
+    if (res === "customrolechecks") return m === "POST" ? "analyze" : null;
+    if (res === "checkaccess") { if (m !== "POST") return null; let t = ""; try { t = atob(req.body_b64 || ""); } catch (_) {} return /"subject"/i.test(t) && /"actions"/i.test(t) ? "analyze" : null; }
+    if (res === "roleassignments") return m === "GET" && (q["$filter"] || /[?&]\$filter=/.test(String(req.path))) ? "analyze" : null;
+    return m === "GET" ? "analyze" : null;
+  }
+  if (m === "POST" && /^AWS4-/.test(h.authorization || "") && /\/iam\/aws4_request/.test(h.authorization || "")) {
+    let t = ""; try { t = atob(req.body_b64 || ""); } catch (_) {}
+    if (SIM_ACTIONS.test(t)) return "engine";
+  }
+  return null;
+}
+
 const DENY_503 = (cloud) => ({
   status: 503, headers: { "content-type": "application/json" },
   body_b64: btoa(JSON.stringify({ __type: "ServiceUnavailable", message: "IAM enforcement is on for this space but the engine could not run; failing closed (" + cloud + ")." })),
@@ -202,6 +236,29 @@ export function createIamHook(o) {
     }
   }
 
+  /** An IAM analysis route (see analysisRoute). null = dispatch normally; object = {status, headers, body_b64} to answer with. The engine is mounted on
+   *  demand (these are explicit API calls, independent of the enforcement mode); catalogs the analysis reads are prefetched like the gate's. */
+  async function analyze(req) {
+    const kind = analysisRoute(req);
+    if (!kind) return null;
+    if (!ready.settled) await ready;
+    stats.analyze_calls = (stats.analyze_calls || 0) + 1;
+    try {
+      await mountEngine();
+      if (kind === "engine") return null;                         // simulate: iam_core now finds core.iam_engine; the router serves the request
+      for (let i = 0; i < 6; i++) {
+        const out = JSON.parse(bridge.analyze(JSON.stringify({ method: req.method, path: req.path, query: req.query || {}, headers: req.headers || {}, body_b64: req.body_b64 || "" })));
+        if (out.need) { await feed(out.need); if (out.need.every(([c, s]) => !((manifest.catalogs[c] || []).includes(s)))) throw new Error("catalog missing from bundle: " + JSON.stringify(out.need)); continue; }
+        if (out.error) throw new Error(out.error);
+        return out.resp || null;
+      }
+      throw new Error("catalog prefetch did not converge");
+    } catch (e) {
+      stats.errors++; log("iam analyze error: " + (e && e.message || e));
+      return { status: 500, headers: { "content-type": "application/json" }, body_b64: btoa(JSON.stringify({ message: "IAM analysis failed: " + (e && e.message || e), error: { code: 500, message: String(e && e.message || e) } })) };
+    }
+  }
+
   /** /api/iam/<cloud>/... (IamApi.handle). Always mounts the engine (an explicit API call, not request traffic). -> {status, body} */
   async function api(method, path, query, body) {
     if (!ready.settled) await ready;
@@ -222,13 +279,14 @@ export function createIamHook(o) {
     docs[cloud] = doc; await metaPut(KEY(cloud), doc);
     try { bc && bc.postMessage({ cloud, doc }); } catch (_) {}
   }
-  return { guard, api, ready, stats, settings: (c) => docs[c] || null, setSettings };
+  return { guard, api, analyze, ready, stats, settings: (c) => docs[c] || null, setSettings };
 }
 
 /** Request shape helpers for the two callers. */
 export const fromWireParams = (p) => ({ method: p.method, path: p.path, query: p.query, headers: p.headers, body_b64: p.body_b64 });
 export async function guardWire(hook, params) {
   if (!hook) return null;
+  if (analysisRoute(params)) { const a = await hook.analyze(fromWireParams(params)); if (a) return a; }       // IAM analysis APIs: answered by the engine, any mode
   const cloud = cloudOf(params);
   return cloud ? hook.guard(cloud, fromWireParams(params)) : null;
 }

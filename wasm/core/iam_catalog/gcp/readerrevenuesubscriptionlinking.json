@@ -1,0 +1,55 @@
+{
+"cloud":"gcp",
+"service":"readerrevenuesubscriptionlinking",
+"permissions":{
+"readerrevenuesubscriptionlinking.readerEntitlements.get":{
+"stage":"SUPPORTED"
+},
+"readerrevenuesubscriptionlinking.readerEntitlements.update":{
+"stage":"SUPPORTED"
+},
+"readerrevenuesubscriptionlinking.readers.delete":{
+"stage":"SUPPORTED"
+},
+"readerrevenuesubscriptionlinking.readers.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/readerrevenuesubscriptionlinking.admin":{
+"title":"Subscription Linking Admin",
+"desc":"Full access to publication reader resources",
+"permissions":[
+"readerrevenuesubscriptionlinking.readerEntitlements.get",
+"readerrevenuesubscriptionlinking.readerEntitlements.update",
+"readerrevenuesubscriptionlinking.readers.delete",
+"readerrevenuesubscriptionlinking.readers.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/readerrevenuesubscriptionlinking.entitlementsViewer":{
+"title":"Subscription Linking Entitlements Viewer",
+"desc":"This role can view all publication reader entitlements",
+"permissions":[
+"readerrevenuesubscriptionlinking.readerEntitlements.get"
+]
+},
+"roles/readerrevenuesubscriptionlinking.viewer":{
+"title":"Subscription Linking Viewer",
+"desc":"This role can view all publication reader resources",
+"permissions":[
+"readerrevenuesubscriptionlinking.readerEntitlements.get",
+"readerrevenuesubscriptionlinking.readers.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

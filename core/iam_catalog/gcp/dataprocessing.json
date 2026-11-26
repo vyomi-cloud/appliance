@@ -1,0 +1,95 @@
+{
+"cloud":"gcp",
+"service":"dataprocessing",
+"permissions":{
+"billing.accounts.get":{
+"stage":"SUPPORTED"
+},
+"billing.accounts.list":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.datasources.get":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.datasources.list":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.datasources.update":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.featurecontrols.list":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.featurecontrols.update":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.groupcontrols.get":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.groupcontrols.list":{
+"stage":"SUPPORTED"
+},
+"dataprocessing.groupcontrols.update":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/dataprocessing.admin":{
+"title":"Data Processing Controls Resource Admin",
+"desc":"Data processing controls admin who can fully manage data processing controls settings and view all datasource data.",
+"permissions":[
+"billing.accounts.get",
+"billing.accounts.list",
+"dataprocessing.datasources.get",
+"dataprocessing.datasources.list",
+"dataprocessing.datasources.update",
+"dataprocessing.featurecontrols.list",
+"dataprocessing.featurecontrols.update",
+"dataprocessing.groupcontrols.get",
+"dataprocessing.groupcontrols.list",
+"dataprocessing.groupcontrols.update"
+]
+},
+"roles/dataprocessing.dataSourceManager":{
+"title":"Data Processing Controls Data Source Manager",
+"desc":"Data processing controls data source manager who can get, list, and update the underlying data.",
+"permissions":[
+"dataprocessing.datasources.list",
+"dataprocessing.datasources.update"
+]
+},
+"roles/dataprocessing.editor":{
+"title":"Dataprocessing Editor",
+"desc":"Editor role for dataprocessing",
+"permissions":[
+"dataprocessing.datasources.get",
+"dataprocessing.datasources.list",
+"dataprocessing.datasources.update",
+"dataprocessing.featurecontrols.list",
+"dataprocessing.groupcontrols.get",
+"dataprocessing.groupcontrols.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/dataprocessing.viewer":{
+"title":"Dataprocessing Viewer",
+"desc":"Viewer role for dataprocessing",
+"permissions":[
+"dataprocessing.datasources.get",
+"dataprocessing.datasources.list",
+"dataprocessing.featurecontrols.list",
+"dataprocessing.groupcontrols.get",
+"dataprocessing.groupcontrols.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

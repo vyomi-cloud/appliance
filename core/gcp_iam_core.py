@@ -315,6 +315,12 @@ def org_policy_enforced(rm_store, project: str, constraint_id: str) -> bool:
     service-account state but must honour the same project's org policies."""
     if rm_store is None:
         return False
+    try:        # hierarchy-aware (organization > folder > project inheritance, reset, dry-run excluded): core/gcp_orgpolicy_core.py
+        from core import gcp_orgpolicy_core as _op
+        if getattr(rm_store, "projects", None) is not None and (getattr(rm_store, "folders", None) or getattr(rm_store, "org_policies", None)):
+            return _op.enforced(rm_store, "projects/" + str(project), constraint_id)
+    except Exception:
+        pass
     policies = getattr(rm_store, "org_policies", None) or {}
     pol = policies.get(f"projects/{project}/policies/constraints/{constraint_id}")
     if not pol:
@@ -1143,7 +1149,23 @@ def dispatch(store: IamStore, method: str, path: str,
              query: dict | None = None, headers: dict | None = None,
              body: bytes = b"", rm_store=None, logger=None, iamc_store=None) -> GcpIamResponse:
     """Single routing point for the native GCP IAM REST API — what unmodified
-    google-cloud-iam / google-cloud-resource-manager clients speak."""
+    google-cloud-iam / google-cloud-resource-manager clients speak. Every IAM write is also recorded as a Cloud Audit Logs Admin Activity
+    event (core/iam_events_core.py) so the console's IAM activity page and `/api/iam/gcp/events` show real history."""
+    resp = _dispatch(store, method, path, query, headers, body, rm_store, logger, iamc_store)
+    try:
+        try:
+            from core import iam_events_core as _ev
+        except ImportError:   # pragma: no cover - Pyodide flat layout
+            import iam_events_core as _ev  # type: ignore
+        _ev.record_gcp(method, path, resp.status, headers, body)
+    except Exception:
+        pass
+    return resp
+
+
+def _dispatch(store: IamStore, method: str, path: str,
+              query: dict | None = None, headers: dict | None = None,
+              body: bytes = b"", rm_store=None, logger=None, iamc_store=None) -> GcpIamResponse:
     query = query or {}
     method = method.upper()
 

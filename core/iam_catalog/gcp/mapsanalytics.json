@@ -1,0 +1,16 @@
+{
+"cloud":"gcp",
+"service":"mapsanalytics",
+"permissions":{
+"mapsanalytics.metricData.query":{
+"stage":"SUPPORTED"
+},
+"mapsanalytics.metricData.queryMobilitySolutionsOverageData":{
+"stage":"SUPPORTED"
+},
+"mapsanalytics.metricMetadata.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

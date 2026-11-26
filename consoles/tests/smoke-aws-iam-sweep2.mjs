@@ -24,7 +24,7 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " - " + String(detail).slice(0, 160) : ""}`); };
 
 await mkdir(OUT, { recursive: true });
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch({ channel: "chrome" }).catch(() => pw.chromium.launch());
 const page = await browser.newPage({ viewport: { width: 1440, height: 1300 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
@@ -130,15 +130,15 @@ await page.getByRole("button", { name: "Attach", exact: true }).click();
 await page.getByRole("cell", { name: ouId }).waitFor({ timeout: 10000 });
 const scpId = (await org("ListPolicies", { Filter: "SERVICE_CONTROL_POLICY" })).json.Policies.find((p) => p.Name === SCP).Id;
 check("Attach -> native ListTargetsForPolicy", ((await org("ListTargetsForPolicy", { PolicyId: scpId })).json.Targets || []).some((t) => t.TargetId === ouId));
-// the OU still has no FullAWSAccess, and this is its only SCP: AWS refuses to detach the last one
+// every target carries FullAWSAccess (as in real AWS), so detaching our SCP is allowed: the OU keeps its default SCP
 await page.getByRole("button", { name: "Detach" }).click();
-await page.getByText(/at least one SCP/i).first().waitFor({ timeout: 10000 });
-check("Detaching the last SCP of a target is refused (ConstraintViolation shown in the UI)", true);
+await page.getByRole("cell", { name: ouId }).waitFor({ state: "detached", timeout: 10000 });
+check("Detaching a non-last SCP works (the OU keeps FullAWSAccess)", !((await org("ListTargetsForPolicy", { PolicyId: scpId })).json.Targets || []).some((t) => t.TargetId === ouId));
 check("SCP detail: the service access report is real now (no gap badge; see smoke-aws-accessreport)", (await badges()) === 0);
 await shot("iam2-scp-detail");
 await org("DetachPolicy", { PolicyId: scpId, TargetId: ouId }).catch(() => {});
 await go("#/iam/service-control-policies", "Service control policies (SCPs)");
-await org("AttachPolicy", { PolicyId: "p-FullAWSAccess", TargetId: ouId });
+await org("AttachPolicy", { PolicyId: "p-FullAWSAccess", TargetId: ouId }).catch(() => {});   // already attached by default
 await org("DetachPolicy", { PolicyId: scpId, TargetId: ouId });
 await go("#/iam/service-control-policies", "Service control policies (SCPs)");
 await page.getByRole("row", { name: new RegExp(SCP) }).getByRole("radio").click({ force: true });
@@ -178,7 +178,7 @@ await page.getByRole("cell", { name: acct.Id }).waitFor({ timeout: 10000 });
 check("Assign delegated administrator -> native ListDelegatedAdministrators", ((await org("ListDelegatedAdministrators", { ServicePrincipal: "iam.amazonaws.com" })).json.DelegatedAdministrators || []).some((a) => a.Id === acct.Id));
 await go("#/iam/account-settings", "Account settings");
 await page.getByText("Centralized root access for member accounts").first().waitFor({ timeout: 15000 });
-check("Account settings: centralized root access is real and shows the delegated admin; only Role manager is a gap", (await body()).includes(ACCT) && (await badges()) === 1);
+check("Account settings: centralized root access is real and shows the delegated admin; no gap badge left (Role manager is real)", (await body()).includes(ACCT) && (await badges()) === 0);
 await shot("iam2-account-settings");
 
 // ── 6. cleanup from the UI side: remove + close
@@ -256,8 +256,14 @@ await iamq("PutUserPolicy", { UserName: SU, PolicyName: "ip", PolicyDocument: JS
 await go("#/iam/policy-simulator", "Policy simulator");
 check("Policy simulator has no Not-simulated badge (arbitrary condition keys are real)", (await badges()) === 0);
 await page.getByRole("button", { name: /Choose a user or role/ }).click();
-await page.getByRole("option", { name: `User: ${SU}` }).click();
-await page.getByRole("textbox", { name: "Action name" }).fill("s3:GetObject");
+await page.getByPlaceholder("Search users and roles").fill(SU);
+await page.getByRole("option", { name: new RegExp(`^\\s*${SU}\\b`) }).first().click();
+await page.getByRole("button", { name: /Choose a service/ }).first().click();
+await page.getByPlaceholder("Search services").fill("S3");
+await page.getByRole("option", { name: "S3", exact: true }).click();
+await page.getByRole("button", { name: /^Action\b/ }).first().click();
+await page.getByPlaceholder("Filter actions").fill("GetObject");
+await page.getByRole("option", { name: /^GetObject\b/ }).first().click();
 await page.getByRole("button", { name: "Add actions" }).click();
 await page.getByRole("button", { name: "Simulate" }).click();
 await page.getByText(/missing context values: aws:SourceIp/).waitFor({ timeout: 10000 });

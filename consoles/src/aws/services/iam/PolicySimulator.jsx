@@ -20,6 +20,7 @@ import { useNotify } from "../../../common/notify.jsx";
 import Textarea from "@cloudscape-design/components/textarea";
 import { asList } from "../../../common/wire.js";
 import * as api from "./api.js";
+import { PermissionPicker, PrincipalPicker, ResourceArnPicker } from "../../kit/PermissionPicker.jsx";
 
 const decisionType = (d) => (d === "allowed" ? "success" : "error");
 
@@ -29,6 +30,7 @@ export default function PolicySimulator() {
   const [principal, setPrincipal] = useState(null);
   const [actions, setActions] = useState([]);
   const [newAction, setNewAction] = useState("");
+  const [pickSvc, setPickSvc] = useState(null);
   const [resources, setResources] = useState(["*"]);
   const [newResource, setNewResource] = useState("");
   const [mfaPresent, setMfaPresent] = useState(false);
@@ -68,7 +70,7 @@ export default function PolicySimulator() {
         <Container header={<Header variant="h2">Principal</Header>}>
           <SpaceBetween size="m">
             <FormField label="Principal">
-              <Select selectedOption={principal} onChange={({ detail }) => setPrincipal(detail.selectedOption)} options={options} placeholder="Choose a user or role" />
+              <PrincipalPicker value={principal?.value || ""} onChange={(v) => setPrincipal({ value: v })} ariaLabel="Principal" />
             </FormField>
             <FormField label="Identities" description="Select an identity to simulate">
               <Button disabled={!principal}>Add identity</Button>
@@ -97,14 +99,15 @@ export default function PolicySimulator() {
         <Container header={<Header variant="h2" counter={`(${(results || []).length})`} actions={
           <SpaceBetween direction="horizontal" size="xs">
             <Button disabled={!actions.length} onClick={() => setActions([])}>Remove all</Button>
-            <Button onClick={() => { if (newAction) { setActions([...actions, newAction]); setNewAction(""); } }}>Add actions</Button>
+            <Button onClick={() => { if (pickSvc && newAction) { setActions([...new Set([...actions, `${pickSvc}:${newAction}`])]); setNewAction(""); } }}>Add actions</Button>
           </SpaceBetween>
         }>Simulation results</Header>}>
           <SpaceBetween size="m">
-            <SpaceBetween direction="horizontal" size="xs">
-              <Input value={newAction} onChange={({ detail }) => setNewAction(detail.value)} placeholder="e.g. s3:GetObject" ariaLabel="Action name" />
-              <Input value={newResource} onChange={({ detail }) => setNewResource(detail.value)} placeholder="Resource ARN (default *)" ariaLabel="Resource ARN" />
-              <Button onClick={() => { if (newResource) { setResources([...new Set([...resources, newResource])]); setNewResource(""); } }}>Add resource</Button>
+            <SpaceBetween size="s">
+              <PermissionPicker service={pickSvc} action={newAction} onChange={({ service, action }) => { setPickSvc(service); setNewAction(action); }} actionDescription="Verbatim IAM action from the service reference" />
+              <ResourceArnPicker service={pickSvc} action={newAction} value={newResource} onChange={setNewResource} />
+              <Button disabled={!newResource} onClick={() => { setResources([...new Set([...resources.filter((r) => r !== "*"), newResource])]); setNewResource(""); }}>Add resource</Button>
+              {resources.length > 0 && <Box variant="small" color="text-body-secondary">Resources: {resources.join(", ")}</Box>}
             </SpaceBetween>
             <Table variant="embedded"
               items={(results || []).map((r, i) => ({ id: i, service: (r.EvalActionName || "").split(":")[0], action: r.EvalActionName, resourceType: "-", resource: r.EvalResourceName, conditions: r._cond, missing: r._missing, result: r.EvalDecision }))}

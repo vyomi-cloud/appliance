@@ -24,6 +24,7 @@ import { follow, href, navigate } from "../../../common/router.js";
 import { ErrorAlert } from "../../kit/common.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 
 const opt = (v) => ({ value: v, label: v });
 
@@ -178,7 +179,7 @@ export function CreateLaunchTemplate() {
             </FormField>
           </Container>
           <Container header={<Header variant="h2">Instance type</Header>}>
-            <FormField label="Instance type">
+            <FormField label="Instance type" description={sizesNote(sizeSubstrate(cat.data?.types)) || undefined}>
               <Select selectedOption={instanceType ? opt(instanceType) : { value: "", label: "Don't include in launch template" }} onChange={({ detail }) => setInstanceType(detail.selectedOption.value)}
                 options={[{ value: "", label: "Don't include in launch template" }, ...(cat.data?.types || []).map((t) => opt(t.InstanceType))]} ariaLabel="Instance type" />
             </FormField>

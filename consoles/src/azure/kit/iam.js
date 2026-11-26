@@ -10,8 +10,8 @@ export const listRoleAssignments = async () => (await restJson("GET", authzPath(
 export const listRoleDefinitions = async () => (await restJson("GET", authzPath("roleDefinitions"), { query: { "api-version": AUTHZ_API } })).value || [];
 export const putRoleAssignment = (name, body) => restJson("PUT", authzPath(`roleAssignments/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API }, body });
 export const deleteRoleAssignment = (name) => restJson("DELETE", authzPath(`roleAssignments/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API } });
-export const checkAccess = (principalId, action, scope) =>
-  restJson("POST", authzPath("checkAccess"), { query: { "api-version": AUTHZ_API }, body: { principalId, actions: [{ id: action }], resource: { id: scope } } });
+export const checkAccess = (principalId, action, scope, isDataAction = false) =>
+  restJson("POST", authzPath("checkAccess"), { query: { "api-version": AUTHZ_API }, body: { principalId, actions: [{ id: action, isDataAction }], resource: { id: scope } } });
 /** Scope inheritance (mirrors core/azure_iam_core.py's `_scope_covers`): an assignment at a
  * broader scope (subscription/resource group) covers this account too. */
 export const scopeCovers = (assignmentScope, resourceId) => {
@@ -20,3 +20,5 @@ export const scopeCovers = (assignmentScope, resourceId) => {
   return a === "/" || a === r || r.startsWith(a + "/");
 };
 
+export const putRoleDefinition = (name, body) => restJson("PUT", authzPath(`roleDefinitions/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API }, body });
+export const deleteRoleDefinition = (name) => restJson("DELETE", authzPath(`roleDefinitions/${encodeURIComponent(name)}`), { query: { "api-version": AUTHZ_API } });

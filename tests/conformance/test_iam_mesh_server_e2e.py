@@ -58,3 +58,33 @@ def test_aws_enforcement_through_the_real_server(client):
     for a in ({"Action": "DeleteAccessKey", "UserName": uname, "AccessKeyId": akid}, {"Action": "DeleteUserPolicy", "UserName": uname, "PolicyName": "q"},
               {"Action": "DeleteUser", "UserName": uname}):
         _call(c, "test", "iam", dict(a, Version="2010-05-08"))
+
+
+def test_aws_request_derived_condition_keys_reach_the_gate(client):
+    """Conditions on keys the REQUEST carries (s3:prefix, aws:RequestedRegion) evaluate against the live request, not a missing context
+    (found by the Mesh verification run: such policies denied everything)."""
+    c = client
+    uname = "ctx-" + uuid.uuid4().hex[:8]
+    bucket = "ctxb-" + uuid.uuid4().hex[:8]
+    assert _call(c, "test", "iam", {"Action": "CreateUser", "UserName": uname, "Version": "2010-05-08"}).status_code == 200
+    akid = re.search(r"<AccessKeyId>(.*?)</AccessKeyId>", _call(c, "test", "iam", {"Action": "CreateAccessKey", "UserName": uname, "Version": "2010-05-08"}).text).group(1)
+    pol = {"Version": "2012-10-17", "Statement": [
+        {"Effect": "Allow", "Action": "s3:ListBucket", "Resource": f"arn:aws:s3:::{bucket}", "Condition": {"StringLike": {"s3:prefix": "home/*"}}},
+        {"Effect": "Allow", "Action": "sqs:ListQueues", "Resource": "*", "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-1"}}}]}
+    _call(c, "test", "iam", {"Action": "PutUserPolicy", "UserName": uname, "PolicyName": "p", "PolicyDocument": json.dumps(pol), "Version": "2010-05-08"})
+    assert c.put(f"/{bucket}", headers={"Authorization": _sig("test", "s3")}).status_code == 200
+    try:
+        assert c.put("/api/iam/aws/enforcement", json={"space": "enforce"}).status_code == 200
+        hdr = {"Authorization": _sig(akid, "s3"), "X-Amz-Date": "20261123T000000Z"}
+        assert c.get(f"/{bucket}?list-type=2&prefix=home/", headers=hdr).status_code == 200
+        assert c.get(f"/{bucket}?list-type=2&prefix=other/", headers=hdr).status_code == 403
+        assert c.get(f"/{bucket}?list-type=2", headers=hdr).status_code == 403
+        assert _call(c, akid, "sqs", {"Action": "ListQueues", "Version": "2012-11-05"}).status_code == 200            # signed for us-east-1
+        eu = _sig(akid, "sqs").replace("/us-east-1/", "/eu-west-1/")
+        assert c.post("/", data={"Action": "ListQueues", "Version": "2012-11-05"}, headers={"Authorization": eu, "X-Amz-Date": "20261123T000000Z"}).status_code == 403
+    finally:
+        c.put("/api/iam/aws/enforcement", json={"space": "off"})
+        c.delete(f"/{bucket}", headers={"Authorization": _sig("test", "s3")})
+        for a in ({"Action": "DeleteAccessKey", "UserName": uname, "AccessKeyId": akid}, {"Action": "DeleteUserPolicy", "UserName": uname, "PolicyName": "p"},
+                  {"Action": "DeleteUser", "UserName": uname}):
+            _call(c, "test", "iam", dict(a, Version="2010-05-08"))

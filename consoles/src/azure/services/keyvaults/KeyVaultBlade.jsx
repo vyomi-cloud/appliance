@@ -33,6 +33,7 @@ import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -83,7 +84,7 @@ export default function KeyVaultBlade({ params, query }) {
       tasks: () => <TasksPanel a={a} />,
       diagnose: () => <Diagnose id={a.id} name={a.name} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      iam: () => <AccessControlIam a={a} />,
+      iam: () => <ResourceIam a={a} capId="azure.keyvaults.iam" />,
       tags: () => <Tags a={a} reload={reload} />,
       events: () => <ResourceEvents scopeId={a.id} kind="keyvault" title={`${a.name} | Events`} />,
       accesspolicies: () => <AccessPolicies a={a} reload={reload} />,
@@ -206,117 +207,6 @@ function PropertyList({ a }) {
 // Vyomi has exactly one simulated signed-in principal (api.CALLER_PRINCIPAL_ID), so there's
 // no identity to resolve — it shows that principal's own grant on THIS vault directly, the
 // same RBAC-vs-access-policy switch azure.keyvaults.access_configuration enforces. ─────────
-function AccessControlIam({ a }) {
-  const [tab, setTab] = useState("check");
-  const [dlg, setDlg] = useState(null);
-  const [principal, setPrincipal] = useState(api.CALLER_PRINCIPAL_ID);
-  const [action, setAction] = useState("Microsoft.KeyVault/vaults/write");
-  const [decision, setDecision] = useState(null);
-  const roleAssignments = useAsync(() => api.listRoleAssignments(a.id), [a.id]);
-  const roleDefinitions = useAsync(() => api.listRoleDefinitions(), []);
-  const rbac = !!a.properties?.enableRbacAuthorization;
-  const myRoles = (roleAssignments.data || []).filter((r) => r.properties?.principalId === api.CALLER_PRINCIPAL_ID).map((r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop());
-  const myPolicy = (a.properties?.accessPolicies || []).find((p) => p.objectId === api.CALLER_PRINCIPAL_ID);
-  return (
-    <CapabilityContainer id="azure.keyvaults.iam" title="Access control (IAM)">
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
-        <Tab value="check">Check access</Tab>
-        <Tab value="assignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="deny">Deny assignments</Tab>
-        <Tab value="classic">Classic administrators</Tab>
-      </TabList>
-      {tab === "check" && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <section className="vy-section"><h3>My access</h3>
-            <Button onClick={() => setDlg("mine")}>View my access</Button>
-          </section>
-          <section className="vy-section"><h3>Check access</h3>
-            <Button onClick={() => { setDecision(null); setDlg("check"); }}>Check access</Button>
-          </section>
-        </div>
-      )}
-      {tab === "assignments" && (
-        <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Role assignments</div>
-          <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
-            items={roleAssignments.data || []} loading={roleAssignments.loading} error={roleAssignments.error} onRefresh={roleAssignments.reload}
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.principalId },
-              { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
-              { key: "role", label: "Role", value: (r) => r.properties?.roleName || (r.properties?.roleDefinitionId || "").split("/").pop() },
-              { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
-              { key: "condition", label: "Condition", value: () => "None" },
-            ]}
-          />
-        </div>
-      )}
-      {tab === "roles" && (
-        <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Roles</div>
-          <BrowseGrid resourceName="role" rowKey={(r) => r.id} filterPlaceholder="Search by role name, description, permission, or ID"
-            items={roleDefinitions.data || []} loading={roleDefinitions.loading} error={roleDefinitions.error} onRefresh={roleDefinitions.reload}
-            columns={[
-              { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
-              { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
-              { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
-              { key: "category", label: "Category", value: () => "General" },
-              { key: "details", label: "Details", value: () => "View" },
-            ]}
-          />
-        </div>
-      )}
-      {tab === "deny" && (
-        <div style={{ marginTop: 12 }}>
-          <div className="vy-panel-title">Deny assignments</div>
-          <DenyAssignmentsPanel a={a} />
-        </div>
-      )}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
-      <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
-        <DialogSurface aria-label="Access check">
-          <DialogBody>
-            <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent>
-              {dlg === "mine" ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <p style={{ fontSize: 13 }}>Vyomi has one simulated signed-in principal ({api.CALLER_PRINCIPAL_ID}) — this is its own access on this vault, exactly as azure.keyvaults.access_configuration enforces it.</p>
-                  {rbac ? (
-                    <section className="vy-section"><b>Permission model: Azure role-based access control</b>
-                      <div>{myRoles.length ? `Role assignments: ${myRoles.join(", ")}` : "No role assignment covers this vault — every Keys/Secrets/Certificates call is denied."}</div>
-                    </section>
-                  ) : (
-                    <section className="vy-section"><b>Permission model: Vault access policy</b>
-                      <div>{myPolicy ? `Keys: ${(myPolicy.permissions?.keys || []).join(", ") || "--"} · Secrets: ${(myPolicy.permissions?.secrets || []).join(", ") || "--"} · Certificates: ${(myPolicy.permissions?.certificates || []).join(", ") || "--"}` : "No access policy entry covers this vault — every Keys/Secrets/Certificates call is denied."}</div>
-                    </section>
-                  )}
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 360 }}>
-                  <Field label="Find">
-                    <Input value={principal} onChange={(_, d) => setPrincipal(d.value)} placeholder="Principal (object) id" aria-label="Principal ID" />
-                  </Field>
-                  <Field label="Action"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
-                  <Button appearance="primary" disabled={!principal} onClick={async () => {
-                    const [r] = await api.checkAccess(a.id, principal, action);
-                    setDecision(r);
-                  }}>Check access</Button>
-                  {decision && (
-                    <section className="vy-section">
-                      <b>{decision.accessDecision}</b>
-                      {decision.roles?.length > 0 && <div>Granted by: {decision.roles.join(", ")}</div>}
-                    </section>
-                  )}
-                </div>
-              )}
-            </DialogContent>
-            <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </CapabilityContainer>
-  );
-}
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────
 export function TagRows({ tags, onChange, resource }) {

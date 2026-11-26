@@ -136,6 +136,26 @@ def test_azure_data_plane_blob_dataactions(env):
     assert c.get(blob, headers=_as(env["reader"])).status_code == 200
 
 
+def test_azure_abac_condition_on_blob_data_plane(env):
+    """A role assignment with an ABAC condition on the container name is evaluated against the live request's container (found by the Mesh
+    verification run: the gate supplied no attribute context, so every conditional assignment denied)."""
+    c, acct, sa = env["c"], env["acct"], env["sa"]
+    cond = ("((!(ActionMatches{'Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read'})) OR "
+            "(@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'cont1'))")
+    who = "oid-abac-" + env["uid"]
+    r = c.put(f"{sa}/providers/Microsoft.Authorization/roleAssignments/{uuid.uuid4()}?api-version=2022-04-01",
+              json={"properties": {"principalId": who, "roleDefinitionId": ROLE(BLOB_READER), "scope": sa, "condition": cond, "conditionVersion": "2.0"}})
+    assert r.status_code in (200, 201), r.text
+    assert c.put(f"/azure-data/blob/{acct}/cont2?restype=container").status_code == 201
+    assert c.put(f"/azure-data/blob/{acct}/cont2/b2.txt", content=b"hi", headers={"x-ms-blob-type": "BlockBlob"}).status_code == 201
+    _settings(c, space="enforce")
+    try:
+        assert c.get(f"/azure-data/blob/{acct}/cont1/b1.txt", headers=_as(who)).status_code == 200
+        assert c.get(f"/azure-data/blob/{acct}/cont2/b2.txt", headers=_as(who)).status_code == 403
+    finally:
+        _settings(c, space="off")
+
+
 def test_azure_legacy_enforce_rbac_flag_still_works(env):
     from core import app_context
     c = env["c"]

@@ -1,0 +1,22 @@
+{
+"cloud":"gcp",
+"service":"generativelanguage",
+"permissions":{
+"storage.buckets.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/generativelanguage.serviceAgent":{
+"title":"Generative Language Service Agent",
+"desc":"Grants Generative Language Service Agent permissions required to read data from GCS buckets.",
+"permissions":[
+"storage.buckets.get",
+"storage.objects.get"
+]
+}
+}
+}

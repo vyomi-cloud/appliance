@@ -23,10 +23,11 @@ import { ErrorAlert, fmtDate, NotSimulated, NotSimulatedContainer, PageHeader } 
 import { Link, hashHref } from "../../link.jsx";
 import { getProject } from "../../project.js";
 import * as api from "./api.js";
+import ResourcePermissionsPanel from "../../kit/ResourcePermissionsPanel.jsx";
 import { Revisions } from "../run/ServiceDetail.jsx";
 
 const TABS = [["observability", "Observability"], ["revisions", "Revisions"], ["source", "Source"],
-  ["networking", "Networking"], ["security", "Security"], ["triggers", "Triggers"], ["yaml", "YAML"]];
+  ["networking", "Networking"], ["security", "Security"], ["permissions", "Permissions"], ["triggers", "Triggers"], ["yaml", "YAML"]];
 
 export default function ServiceDetail({ params, query }) {
   const { region, name } = params;
@@ -73,6 +74,7 @@ export default function ServiceDetail({ params, query }) {
       {svc.data && tab === "source" && <Source region={region} name={name} service={svc.data} reload={svc.reload} notify={notify} />}
       {svc.data && tab === "networking" && <Networking region={region} name={name} service={svc.data} reload={svc.reload} notify={notify} />}
       {svc.data && tab === "security" && <Security region={region} name={name} policy={pol} reload={reloadAll} notify={notify} />}
+      {svc.data && tab === "permissions" && <ResourcePermissionsPanel kind="run-service" args={{ region, name }} onChanged={pol.reload} />}
       {svc.data && tab === "triggers" && <Triggers region={region} name={name} />}
       {svc.data && tab === "yaml" && <Yaml region={region} name={name} service={svc.data} />}
       <DeleteDialog open={del} onClose={() => setDel(false)} title="Delete service?" confirmText={name}

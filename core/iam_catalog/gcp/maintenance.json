@@ -1,0 +1,50 @@
+{
+"cloud":"gcp",
+"service":"maintenance",
+"permissions":{
+"maintenance.locations.get":{
+"stage":"SUPPORTED"
+},
+"maintenance.locations.list":{
+"stage":"SUPPORTED"
+},
+"maintenance.resourceMaintenances.get":{
+"stage":"SUPPORTED"
+},
+"maintenance.resourceMaintenances.list":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/maintenance.admin":{
+"title":"Maintenance Admin",
+"desc":"Admin role for maintenance",
+"permissions":[
+"maintenance.locations.get",
+"maintenance.locations.list",
+"maintenance.resourceMaintenances.get",
+"maintenance.resourceMaintenances.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/maintenance.viewer":{
+"title":"Maintenance API Viewer",
+"desc":"Readonly access to Maintenance API resources.",
+"permissions":[
+"maintenance.locations.get",
+"maintenance.locations.list",
+"maintenance.resourceMaintenances.get",
+"maintenance.resourceMaintenances.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

@@ -184,11 +184,18 @@ def _inventory_fn():
     return _inventory
 
 
+def _trail():
+    """CloudTrail ring of the AWS wire router living in THIS interpreter (the relay worker's `_ROUTER`); [] when the bridge runs elsewhere."""
+    import sys
+    r = getattr(sys.modules.get("__main__"), "_ROUTER", None)
+    return list(getattr(r, "trail_events", None) or [])
+
+
 def _api(cloud):
     if cloud not in _apis:
         from core.iam_engine import api
         _apis[cloud] = api.IamApi(settings_store=NanoSettingsStore(cloud), state_fn=lambda c: state_and_principal(c, {}, "")[0],
-                                  catalog_fn=catalog_loader.load, inventory_fn=_inventory_fn, audit_log=audit_log())
+                                  catalog_fn=catalog_loader.load, inventory_fn=_inventory_fn, audit_log=audit_log(), trail_fn=_trail)
     return _apis[cloud]
 
 
@@ -287,4 +294,70 @@ def check(req_json, settings_json):
     except catalog_loader.CatalogUnavailable as e:
         return json.dumps({"need": _needs(e)})
     except Exception as e:      # never raise into the dispatch path; the JS side decides open/closed from the modes
+        return json.dumps({"error": f"{type(e).__name__}: {e}"})
+
+
+# ----------------------------------------------------------------------------- analysis routes (core/iam_engine/analyze_wire.py)
+class _NanoHost:
+    """What analyze_wire needs from the in-browser stores (Mesh equivalent: core/iam_analyze_host.py)."""
+
+    def aws(self):
+        from core import iam_state_adapters as ad
+        store = _registry()["iam"]
+        return {"store": store, "state": ad.aws_state(store), "audit": audit_log().list(1000), "region": "us-east-1"}
+
+    def state(self, cloud, headers, query, path):
+        return state_and_principal(cloud, headers, query)
+
+    def azure_arm(self):
+        arm = _registry().get("az_arm")
+        return getattr(arm, "state", None)
+
+
+_AWS_ACTION = re.compile(r"\b([a-z][a-z0-9-]*):[A-Za-z*?]")
+
+
+def _analysis_needs(route, body_text):
+    """Catalogs the analysis reads that are not loaded yet: AWS = every service prefix named in the request body; GCP = the service of the
+    permission asked about (the engine's own role catalogs are named by NeedCatalogs from the state adapter)."""
+    need = []
+
+    def add(cloud, svc):
+        if svc in _known.get(cloud, ()) and (cloud, svc) not in _have and [cloud, svc] not in need:
+            need.append([cloud, svc])
+
+    if route[0] == "aws":
+        for p in sorted(set(_AWS_ACTION.findall(body_text or ""))):
+            add("aws", p.lower())
+    elif route[0] == "gcp":
+        try:
+            perm = (json.loads(body_text or "{}").get("accessTuple") or {}).get("permission") or ""
+        except Exception:
+            perm = ""
+        if perm:
+            add("gcp", perm.split(".")[0])
+    return need
+
+
+def analyze(req_json):
+    """-> json {"match": false} | {"resp": {status, headers, body_b64}} | {"need": [[cloud, svc]..]} | {"error": str}.
+    Answers the IAM analysis wire routes (Access Analyzer, Policy Troubleshooter, analyzeIamPolicy, Azure checkAccess / permissions / ...)."""
+    try:
+        from core.iam_engine import analyze_wire
+        r = json.loads(req_json)
+        body = base64.b64decode(r.get("body_b64") or "")
+        headers = {str(k).lower(): v for k, v in (r.get("headers") or {}).items()}
+        route = analyze_wire.match(r.get("method", "GET"), r.get("path", "/"), r.get("query") or {}, headers, body)
+        if route is None:
+            return json.dumps({"match": False})
+        need = _analysis_needs(route, body.decode("utf-8", "replace"))
+        if need:
+            return json.dumps({"need": need})
+        spec = {"method": r.get("method", "GET"), "path": r.get("path", "/"), "query": r.get("query") or {}, "headers": headers, "body": body}
+        out = analyze_wire.handle(route, spec, _NanoHost())
+        return json.dumps({"resp": {"status": out["status"], "headers": out.get("headers") or {},
+                                    "body_b64": base64.b64encode(bytes(out["body"])).decode()}})
+    except catalog_loader.CatalogUnavailable as e:
+        return json.dumps({"need": _needs(e)})
+    except Exception as e:
         return json.dumps({"error": f"{type(e).__name__}: {e}"})

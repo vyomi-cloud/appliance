@@ -15,6 +15,9 @@ export const getIamPolicy = (resource = projectResource()) => restJson("POST", `
 export const setIamPolicy = (policy, resource = projectResource()) => restJson("POST", `/v1/${resource}:setIamPolicy`, { body: { policy } });
 export const testIamPermissions = (permissions, member, resource = projectResource()) =>
   restJson("POST", `/v1/${resource}:testIamPermissions`, { body: { permissions, member } });
+// Policy Troubleshooter v3 (the faithful engine: allow + deny + PAB, hierarchy inheritance and IAM conditions evaluated for the named resource).
+export const troubleshoot = (principal, fullResourceName, permission) =>
+  restJson("POST", "/v3/iam:troubleshoot", { body: { accessTuple: { principal, fullResourceName, permission } } });
 export async function listPolicyActivity() {
   const r = await restJson("GET", `/v1/projects/${getProject()}/policyActivity`);
   return r.activity || [];
@@ -251,7 +254,9 @@ export const PREDEFINED_ROLE_TITLES = {
   "roles/cloudsql.admin": "Cloud SQL Admin", "roles/compute.admin": "Compute Admin",
   "roles/logging.viewer": "Logs Viewer", "roles/monitoring.viewer": "Monitoring Viewer",
 };
-export const roleTitle = (roleId) => PREDEFINED_ROLE_TITLES[roleId] || roleId?.split("/").pop() || roleId;
+/** Filled by catalog.js once the verbatim catalog has loaded. */
+export const ROLE_TITLES = {};
+export const roleTitle = (roleId) => PREDEFINED_ROLE_TITLES[roleId] || ROLE_TITLES[roleId] || roleId?.split("/").pop() || roleId;
 
 // Role resource names ("projects/p/roles/x", "roles/x") contain "/" and can't be a
 // single hash-route path segment (the router re-joins decoded parts with "/", which

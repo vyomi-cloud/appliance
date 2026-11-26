@@ -110,14 +110,14 @@ function resolve(m, route) {
   return { content: <NotSimulated feature={`The page ${route.path}`} />, nav: m.nav, crumbs: [] };
 }
 
-applyAwsTheme();   // orange primary actions, as in the native console
+applyAwsTheme();   // the console's 2026 refresh: flat bordered cards, black primary buttons (kit/theme.js)
 
 export default function App() {
   const route = useRoute();
   const notify = useNotify();
   const [region, setRegionState] = useState(pref("region", "us-east-1"));
   const [mode, setMode] = useState(pref("mode", "light"));
-  const [density, setDensity] = useState(pref("density", "comfortable"));
+  const [density, setDensity] = useState(pref("density", "compact"));
   const [navOpen, setNavOpen] = useState(true);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);

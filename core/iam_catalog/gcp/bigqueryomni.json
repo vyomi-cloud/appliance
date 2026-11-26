@@ -1,0 +1,22 @@
+{
+"cloud":"gcp",
+"service":"bigqueryomni",
+"permissions":{
+"bigquery.jobs.create":{
+"stage":"SUPPORTED"
+},
+"bigquery.tables.updateData":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/bigqueryomni.serviceAgent":{
+"title":"BigQuery Omni Service Agent",
+"desc":"Gives BigQuery Omni access to tables in user projects.",
+"permissions":[
+"bigquery.jobs.create",
+"bigquery.tables.updateData"
+]
+}
+}
+}

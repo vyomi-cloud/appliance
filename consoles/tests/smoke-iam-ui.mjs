@@ -44,10 +44,19 @@ async function open(cloud, mode, viewport, hash) {
     if (u.pathname.includes("/_wire/api/iam/")) {
       iamCalls.push(u.pathname);
       const rq = r.request();
+      const cm = u.pathname.match(/\/api\/iam\/(aws|azure|gcp)\/catalog\/([\w.-]+)$/);   // the real verbatim catalogs feed every picker
+      if (cm) { const f = new URL(`../../core/iam_catalog/${cm[1]}/${cm[2]}.json`, import.meta.url).pathname; return existsSync(f) ? r.fulfill({ status: 200, contentType: "application/json", body: await readFile(f, "utf8") }) : r.fulfill({ status: 404, contentType: "application/json", body: "{}" }); }
       const resp = await mock.fetcher(u.pathname + u.search, { method: rq.method(), body: rq.postData() });
       return r.fulfill({ status: resp.status, contentType: "application/json", body: await resp.text() });
     }
+    if (r.request().method() === "POST" && /Action=(ListUsers|ListRoles)/.test(r.request().postData() || "")) {
+      const a = /Action=(\w+)/.exec(r.request().postData())[1];
+      return r.fulfill({ status: 200, contentType: "text/xml", body: a === "ListUsers" ? `<ListUsersResponse><ListUsersResult><Users><member><UserName>alice</UserName><Arn>arn:aws:iam::000000000000:user/alice</Arn></member></Users></ListUsersResult></ListUsersResponse>` : `<ListRolesResponse><ListRolesResult><Roles/></ListRolesResult></ListRolesResponse>` });
+    }
     const SUBID = "00000000-0000-0000-0000-cloudlearn01";
+    const gj = (o) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(o) });
+    if (u.pathname.endsWith("/v1.0/users")) return gj({ value: [{ id: "11111111-1111-1111-1111-111111111111", displayName: "Asha Rao", userPrincipalName: "asha@vyomi.cloud" }] });
+    if (/\/v1\.0\/(groups|servicePrincipals)$/.test(u.pathname) || u.pathname.endsWith("/userAssignedIdentities")) return gj({ value: [] });
     if (r.request().method() === "GET" && u.pathname.endsWith(`/subscriptions/${SUBID}`)) return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: `/subscriptions/${SUBID}`, subscriptionId: SUBID, displayName: "Vyomi subscription", state: "Enabled" }) });
     if (r.request().method() === "GET" && /storageAccounts\/iamsa$/.test(u.pathname)) return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: `/subscriptions/${SUBID}/resourceGroups/rg1/providers/Microsoft.Storage/storageAccounts/iamsa`, name: "iamsa", type: "Microsoft.Storage/storageAccounts", location: "eastus", kind: "StorageV2", sku: { name: "Standard_LRS" }, properties: { provisioningState: "Succeeded", primaryEndpoints: {} } }) });
     if (r.request().method() === "GET" && u.pathname.includes("roleAssignments")) return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ value: [] }) });
@@ -79,8 +88,12 @@ for (const mode of ["mesh", "nano"]) {
   await shot(t.page, `aws-${mode}-audit`);
   check(tag("aws: audit would-deny badge"), (await t.page.getByText("Would deny", { exact: true }).count()) >= 1);
   await t.page.goto(`${BASE}${t.prefix}/v4/aws/#/iam/effective-access`);
-  await t.page.getByLabel("Principal ARN").fill("arn:aws:iam::000000000000:user/alice");
-  await t.page.getByLabel("Action", { exact: true }).fill("s3:DeleteBucket");
+  await t.page.getByRole("button", { name: /Choose a user or role/ }).click();
+  await t.page.getByRole("option", { name: /^alice/ }).click();
+  await t.page.getByRole("button", { name: /Choose a service/ }).first().click();
+  await t.page.getByRole("option", { name: /^S3/ }).first().click();
+  await t.page.getByRole("button", { name: /Choose an action/ }).click();
+  await t.page.getByRole("option", { name: /^DeleteBucket(\s|$)/ }).first().click();
   await t.page.getByRole("button", { name: "Evaluate" }).click();
   await t.page.getByTestId("iam-eval-result").waitFor();
   check(tag("aws: effective access denied + reason"), /Denied/.test(await t.page.getByTestId("iam-eval-result").innerText()));
@@ -109,8 +122,10 @@ for (const mode of ["mesh", "nano"]) {
   await t.page.getByText("Would deny").first().waitFor();
   await shot(t.page, `gcp-${mode}-audit`);
   await t.page.goto(`${BASE}${t.prefix}/v4/gcp/#/iam-admin/effective-access`);
-  await t.page.getByLabel("Principal").fill("user:alice@example.com");
+  await t.page.getByLabel("Principal", { exact: true }).fill("user:alice@example.com");
+  await t.page.getByLabel("Principal", { exact: true }).press("Enter");   // GCP principal picker: free-solo chip, committed with Enter
   await t.page.getByLabel("Permission").fill("storage.buckets.delete");
+  await t.page.getByRole("combobox", { name: "Permission" }).press("Escape");   // close the free-solo suggestion popper
   await t.page.getByRole("button", { name: "Check access" }).click();
   await t.page.getByTestId("iam-eval-result").waitFor();
   check(tag("gcp: effective access denied"), /Denied/.test(await t.page.getByTestId("iam-eval-result").innerText()));
@@ -134,8 +149,15 @@ for (const mode of ["mesh", "nano"]) {
     check(tag(`azure ${label}: address path`), t.iamCalls.length > 0 && t.iamCalls.every((p) => p.startsWith(`${t.prefix}/_wire/api/iam/azure/`)), t.iamCalls[0]);
     await shot(t.page, `azure-${mode}-${label.replace(" ", "")}-enforcement`);
     await t.page.getByRole("tab", { name: "Effective access" }).click();
-    await t.page.getByLabel("Principal object ID").fill("11111111-1111-1111-1111-111111111111");
-    await t.page.getByLabel("Action", { exact: true }).fill("Microsoft.Storage/storageAccounts/delete");
+    await t.page.getByRole("button", { name: "Select principal" }).click();            // Azure Effective access: member picker, not free text
+    await t.page.getByTestId("member-row-Asha Rao").click();
+    await t.page.getByRole("button", { name: "Select", exact: true }).click();
+    await t.page.getByRole("button", { name: "Select action" }).click();               // action picker fed by the provider catalog
+    await t.page.getByLabel("Search for a resource provider").fill("Microsoft.Stor");
+    await t.page.getByTestId("provider-Microsoft.Storage").click();
+    await t.page.getByLabel("Search for an action").fill("storageAccounts/delete");
+    await t.page.getByLabel("Microsoft.Storage/storageAccounts/delete", { exact: true }).check();
+    await t.page.getByRole("button", { name: "Select", exact: true }).click();
     await t.page.getByRole("button", { name: "Check access" }).click();
     await t.page.getByTestId("iam-eval-result").waitFor();
     check(tag(`azure ${label}: effective access denied`), /Denied/.test(await t.page.getByTestId("iam-eval-result").innerText()));

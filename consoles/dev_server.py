@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import re
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -56,6 +57,21 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("content-length") or 0)
         body = self.rfile.read(n) if n else b""
         rest = u.path[len("/_wire"):] or "/"
+        gm = re.match(r"^/api/iam/(aws|gcp|azure)/governance/(.+)$", rest)
+        if gm:   # same handler Mesh/Nano serve (core/iam_governance), over this server's in-memory stores
+            import json as _j
+            from core import iam_governance as _gov
+            try:
+                pl = _j.loads(body) if body.strip() else None
+            except ValueError:
+                pl = None
+            ctx = {"aws": {"iam": ROUTER.iam, "s3": ROUTER.s3}, "gcp": {"rm": ROUTER.gcp_rm, "gcp_iam": ROUTER.gcp_iam},
+                   "azure": {"arm_state": ARM.state, "rbac": ROUTER.iam}}[gm.group(1)]
+            st, obj = _gov.handle(gm.group(1), gm.group(2), self.command, dict(parse_qsl(u.query, keep_blank_values=True)), pl, ctx=ctx)
+            data = _j.dumps(obj).encode()
+            self.send_response(st); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data))); self.end_headers()
+            self.wfile.write(data)
+            return
         if rest.startswith("/subscriptions/") or rest.startswith("/providers/Microsoft.ResourceGraph/") or rest.startswith("/api/azure/operations/"):
             return self._arm(rest, dict(parse_qsl(u.query, keep_blank_values=True)), body)
         try:
@@ -150,6 +166,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"active_tier": DEV_TIER["tier"] or "max", "primary_cloud": DEV_TIER["primary"], "kubernetes_locked": K8S_GATE.ui_verdicts()})
         if self.path.startswith("/_dev/ec2-counters"):
             return self._dev_counters()
+        if u.path.startswith("/_wire/api/iam/") and "/catalog/" in u.path:   # IAM pickers' verbatim catalogs (appliance: routes IamApi; Nano: SW)
+            from core.iam_engine import catalog_loader
+            from core.iam_engine.api import IamApi
+            if catalog_loader._reader is None:
+                catalog_loader.set_reader(catalog_loader.filesystem_reader(str(ROOT / "core" / "iam_catalog")))
+            code, obj = IamApi(catalog_fn=catalog_loader.load).handle(self.command, u.path[len("/_wire"):], dict(parse_qsl(u.query)))
+            return self._json(obj, code)
         if self.path.startswith("/_wire"):
             return self._wire()
         return self._static()

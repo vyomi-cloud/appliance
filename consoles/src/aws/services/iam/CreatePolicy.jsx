@@ -15,33 +15,39 @@ import Box from "@cloudscape-design/components/box";
 import TagEditor from "@cloudscape-design/components/tag-editor";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
-import { ErrorAlert, NotSimulatedContainer } from "../../kit/common.jsx";
+import Alert from "@cloudscape-design/components/alert";
+import SegmentedControl from "@cloudscape-design/components/segmented-control";
+import { ErrorAlert } from "../../kit/common.jsx";
+import { useCatalogs, loadCatalog } from "../../kit/PermissionPicker.jsx";
+import { statementsToPolicy, policyToStatements, newStatement, validatePolicy } from "../../kit/iamPolicy.js";
+import { useIamApi } from "../../../common/iamEnforceHooks.js";
+import { VisualEditor, JsonEditor } from "./PolicyEditor.jsx";
 import * as api from "./api.js";
 
-const DEFAULT_DOC = JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Action: "s3:ListAllMyBuckets", Resource: "*" }] }, null, 2);
-const SERVICES = ["S3", "DynamoDB", "KMS", "IAM", "EC2", "Lambda"];
+const EMPTY_DOC = JSON.stringify({ Version: "2012-10-17", Statement: [{ Sid: "Statement1", Effect: "Allow", Action: [], Resource: [] }] }, null, 2);
 
-function PermissionsStep({ s, set, jsonErr }) {
+function PermissionsStep({ s, set, jsonErr, cats, api2 }) {
+  const switchTo = async (editor) => {
+    if (editor === s.editor) return;
+    if (editor === "JSON") {
+      const doc = s.stmts.some((x) => x.service) ? JSON.stringify(statementsToPolicy(s.stmts, cats), null, 2) : s.doc;
+      return set({ editor, doc, convErr: null });
+    }
+    try {
+      const d = JSON.parse(s.doc);
+      const stmts = await policyToStatements(d, (svc) => loadCatalog(api2, svc));
+      set({ editor, stmts: stmts.length ? stmts : [newStatement()], convErr: null });
+    } catch (e) { set({ convErr: `Can't show this policy in the visual editor: ${e.message}` }); }
+  };
   return (
     <SpaceBetween size="l">
-      <Container header={<Header variant="h2">Policy editor</Header>}>
+      <Container header={<Header variant="h2" actions={
+        <SegmentedControl selectedId={s.editor} onChange={({ detail }) => switchTo(detail.selectedId)} label="Policy editor mode" options={[{ id: "Visual", text: "Visual" }, { id: "JSON", text: "JSON" }]} />}>Policy editor</Header>}>
         <SpaceBetween size="m">
-          <RadioGroup value={s.editor} onChange={({ detail }) => set({ editor: detail.value })} items={[{ value: "Visual", label: "Visual" }, { value: "JSON", label: "JSON" }]} />
-          {s.editor === "Visual" ? (
-            <NotSimulatedContainer title="Visual policy editor"
-              note="Vyomi doesn't model the service/actions/resources/conditions picker — switch to the JSON editor above to write the policy document directly." />
-          ) : (
-            <>
-              <FormField label="Service" description="Visual editor: Select a service, then actions, resources and conditions">
-                <Select selectedOption={s.service ? { value: s.service, label: s.service } : null} onChange={({ detail }) => set({ service: detail.selectedOption.value })}
-                  options={SERVICES.map((v) => ({ value: v, label: v }))} placeholder="Choose a service" />
-              </FormField>
-              <FormField label="Policy document" errorText={jsonErr}>
-                <Textarea rows={16} value={s.doc} onChange={({ detail }) => set({ doc: detail.value })} spellcheck={false} />
-              </FormField>
-              <Button onClick={() => {}}>Add more permissions</Button>
-            </>
-          )}
+          {s.convErr && <Alert type="warning" statusIconAriaLabel="Warning">{s.convErr}</Alert>}
+          {s.editor === "Visual"
+            ? <VisualEditor stmts={s.stmts} setStmts={(stmts) => set({ stmts })} />
+            : <><JsonEditor doc={s.doc} setDoc={(doc) => set({ doc })} />{jsonErr && <Box color="text-status-error">{jsonErr}</Box>}</>}
         </SpaceBetween>
       </Container>
     </SpaceBetween>
@@ -77,25 +83,29 @@ export default function CreatePolicy() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [jsonErr, setJsonErr] = useState(null);
-  const [s, setS] = useState({ editor: "JSON", service: "", doc: DEFAULT_DOC, name: "", description: "", tags: [] });
+  const [s, setS] = useState({ editor: "Visual", stmts: [newStatement()], doc: EMPTY_DOC, name: "", description: "", tags: [], convErr: null });
   const set = (patch) => setS((prev) => ({ ...prev, ...patch }));
+  const api2 = useIamApi("aws");
+  const cats = useCatalogs(s.stmts.map((x) => x.service).filter(Boolean));
+  const doc = s.editor === "Visual" ? JSON.stringify(statementsToPolicy(s.stmts, cats), null, 2) : s.doc;
 
   const finish = async () => {
-    try { JSON.parse(s.doc); } catch (e) { setJsonErr(`Policy document is not valid JSON: ${e.message}`); setIdx(0); return; }
+    try { JSON.parse(doc); } catch (e) { setJsonErr(`Policy document is not valid JSON: ${e.message}`); setIdx(0); return; }
+    if (validatePolicy(doc, cats).errors.length) { setJsonErr("Fix the errors in the policy before creating it."); setIdx(0); return; }
     setJsonErr(null); setBusy(true); setError(null);
     try {
       const tags = s.tags.filter((t) => !t.markedForRemoval && t.key);
-      await api.createPolicy({ PolicyName: s.name, PolicyDocument: s.doc, Description: s.description, ...api.tagsParams(tags) });
+      await api.createPolicy({ PolicyName: s.name, PolicyDocument: doc, Description: s.description, ...api.tagsParams(tags) });
       notify.success(`Policy "${s.name}" created.`);
       navigate("iam", "policies", s.name);
     } catch (e) { setError(e); setIdx(1); } finally { setBusy(false); }
   };
 
   const steps = [
-    { title: "Specify permissions", content: <PermissionsStep s={s} set={set} jsonErr={jsonErr} /> },
+    { title: "Specify permissions", content: <PermissionsStep s={s} set={set} jsonErr={jsonErr} cats={cats} api2={api2} /> },
     { title: "Review and create", content: <>
       {error && <Box padding={{ bottom: "s" }}><ErrorAlert error={error} header="Couldn't create policy" /></Box>}
-      <ReviewStep s={s} set={set} />
+      <ReviewStep s={{ ...s, doc }} set={set} />
     </> },
   ];
 
@@ -103,7 +113,13 @@ export default function CreatePolicy() {
     <Box padding={{ top: "l" }}>
       <Wizard
         activeStepIndex={idx}
-        onNavigate={({ detail }) => setIdx(detail.requestedStepIndex)}
+        onNavigate={({ detail }) => {
+          if (detail.requestedStepIndex > idx) {
+            const bad = validatePolicy(doc, cats).errors;
+            if (bad.length || !JSON.parse(doc).Statement?.length) { setJsonErr(bad[0]?.message || "Add at least one permission statement."); return; }
+          }
+          setJsonErr(null); setIdx(detail.requestedStepIndex);
+        }}
         onCancel={() => navigate("iam", "policies")}
         onSubmit={finish}
         isLoadingNextStep={busy}
