@@ -34,7 +34,7 @@
 
   function mount(host, opts) {
     opts = opts || {};
-    var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, store = {};
+    var base = opts.base || "", cloud = opts.cloud || "aws", course = null, sel = null, inCourse = false, hasApi = false, edition = "nano", store = {};
     var root = el("div", { className: "vl" });
     host.replaceChildren(root);
     var KEY = function () { return "vyomi.labs." + cloud; };
@@ -48,7 +48,7 @@
       /* Two editions of one course: "mesh" = every chapter step (appliance or Mesh runner), "nano" = only the steps that run in this browser. ?edition=nano|mesh forces one. */
       var q = (location.search.match(/[?&]edition=(nano|mesh)\b/) || [])[1];
       return fetch("/api/health").then(function (h) { hasApi = h.ok; }).catch(function () { hasApi = false; }).then(function () {
-        var edition = q || (hasApi || meshRoute() ? "mesh" : "nano");
+        edition = q || (hasApi || meshRoute() ? "mesh" : "nano");
         return fetch(base + "data/" + c + (edition === "nano" ? "-nano" : "") + ".json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("no " + edition); return r.json(); })
           .catch(function () { return fetch(base + "data/" + c + ".json", { cache: "no-store" }).then(function (r) { return r.json(); }); });
       }).then(function (d) { course = d; }).then(function () { render(); });
@@ -80,7 +80,7 @@
       return el("div", { className: "vl-page" },
         el("header", { className: "vl-cathead" }, el("div", {}, el("h1", { textContent: "Vyomi Labs" }), el("p", { className: "vl-muted", textContent: "Hands-on courses. Build real applications on " + course.cloud_name + " services running in your simulator." })), cloudTabs,
           (course.plan || []).length ? el("p", { className: "vl-disclaimer" }, icon("M12 8v5M12 16.500v.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z", 16),
-            el("span", {}, el("b", { textContent: cloud === "aws" ? "AWS chapters deploy in your browser. " : "Deploying needs a Mesh. " }), (cloud === "aws" ? "On the free Nano edition every step that has an in-browser engine runs here; a step that calls a model asks you to load one (WebGPU browser), and only steps with no engine yet need a Mesh, included with the " : "Courses that deploy code run it inside a Mesh, which is included with the "), el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. You can always read every lesson, browse and edit the code, and download the project.")) : null),
+            el("span", {}, el("b", { textContent: cloud === "aws" && edition === "nano" ? "AWS chapters deploy in your browser. " : "Deploying needs a Mesh. " }), (cloud === "aws" && edition === "nano" ? "On the free Nano edition every step that has an in-browser engine runs here; a step that calls a model asks you to load one (WebGPU browser), and only steps with no engine yet need a Mesh, included with the " : "Courses that deploy code run it inside a Mesh, which is included with the "), el("span", { className: "vl-planchip", textContent: course.plan.join(" \u00b7 ").toUpperCase() }), " plans. You can always read every lesson, browse and edit the code, and download the project.")) : null),
         el("div", { className: "vl-cgrid" }, card, el("div", { className: "vl-ccard soon" }, el("b", { textContent: "More hands-on courses are on the way" }), el("span", { className: "vl-muted", textContent: "New courses appear here as they are published." }))));
     }
 
