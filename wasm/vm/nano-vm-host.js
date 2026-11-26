@@ -30,6 +30,11 @@
   const enabled = () => { try { return localStorage.getItem("nano_vm_compute") === "1"; } catch (_) { return false; } };
   const relayBase = () => { try { return (localStorage.getItem("nano_local_ext") || "http://127.0.0.1:8090").replace(/\/$/, ""); } catch (_) { return "http://127.0.0.1:8090"; } };
 
+  // images.json: what each bootable image is (kept in step with core/compute_sizes.py NANO_CATALOG); loaded once, used for honest Connect text.
+  const FALLBACK_IMG = { alpine: { label: "Alpine Linux 3.21 (i386)", kind: "agent", summary: "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git", min_mem_mb: 0 } };
+  let imagesInfo = FALLBACK_IMG;
+  fetch(VM_BASE + "images.json", { cache: "no-cache" }).then((r) => r.json()).then((j) => { if (j && j.images) imagesInfo = j.images; }).catch(() => {});
+  const imgOf = (it) => imagesInfo[(it && it.image) || "alpine"] || imagesInfo.alpine || FALLBACK_IMG.alpine;
   const vmId = (cloud, ref) => cloud === "aws" ? String(ref) : (cloud === "gcp" ? "gce-" : "az-") + ref;
   const readReg = () => { try { return JSON.parse(localStorage.getItem(REG_KEY) || "{}"); } catch (_) { return {}; } };
   const writeReg = (r) => { try { localStorage.setItem(REG_KEY, JSON.stringify(r)); } catch (_) {} };
@@ -173,7 +178,7 @@
     const k = await accountKey();
     const keys = [k.pub, ...(it.keys || [])].join("\n");
     return call(it.id, { type: "launch", id: it.id, cloud: it.cloud, user: it.user, pubkey: keys, hostname: it.name || it.ref,
-                         mem_mb: it.mem_mb || 512, relay: relayBase() });
+                         mem_mb: it.mem_mb || 512, relay: relayBase(), image: it.image || "" });
   }
 
   // ── reconcile: stores → VMs ─────────────────────────────────────────────
@@ -277,6 +282,12 @@
                 `The in-browser VM is ${st ? st.state : "starting"}${st && st.detail ? " (" + st.detail + ")" : ""}; retry in a few seconds.` } });
       }
       const ext = relayBase();
+      const im = imgOf(it), memNote = im.min_mem_mb && it.mem_mb < im.min_mem_mb ? ` (the ${im.label} image needs at least ${im.min_mem_mb} MB, so the VM was given ${im.min_mem_mb} MB instead of the ${it.mem_mb} MB the size lists)` : "";
+      if (im.kind === "console") {
+        return { ok: true, instance_id: ref, provisioned: false, console_only: true, backend: "nano-v86", auth_mode: "none", ssh: null, alternatives: [], lxc: null,
+          runtime: { engine: "v86", os: im.summary, arch: "i686", mem_mb: it.mem_mb, image: st.image, image_key: st.image_key, where: "this browser tab (in-browser VM)", tunnel: ext },
+          note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM): ${im.summary}. It has no SSH server and no command agent, so there is no ssh command and no exec API: the browser shell below (serial console, root) is the only way in.` };
+      }
       if (!st.host_port) {
         const h = await tunnelHealth();
         const old = h && !(h.features || []).includes("vm-tcp");
@@ -301,11 +312,11 @@
         },
         alternatives: [],
         lxc: null,
-        runtime: { engine: "v86", os: "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git", arch: "i686", mem_mb: it.mem_mb, image: st.image,
+        runtime: { engine: "v86", os: im.summary, arch: "i686", mem_mb: it.mem_mb, image: st.image, image_key: st.image_key,
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `In-browser toolchain (Alpine Linux 3.21, 32-bit x86): Python 3, pip, apk, git. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the mesh (Pro/Max).`,
+              `In-browser image (${im.summary})${memNote}. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked, so apt (deb.debian.org) needs that host added to the relay allow-list first. Other languages run on the mesh (Pro/Max).`,
       };
     }
     return http(400, { detail: "unknown op " + op });
@@ -373,7 +384,8 @@
         h("div", { style: S.title }, "In-browser VM"),
         h("div", { style: S.sub }, { aws: "Instance ID", gcp: "Instance", azure: "Virtual machine" }[cloud] + ": " + ref),
         h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86). " +
-          "Whatever cloud image the record names, the guest is always Alpine Linux 3.21, 32-bit x86 (Python 3, pip, apk, git), not the real Amazon Linux / Ubuntu / Debian / Windows image; the login user follows the cloud (" + userHint + ").")));
+          "The guest is the Vyomi Nano image this instance was launched with (see the line below), not the real Amazon Linux / Ubuntu / Windows image its cloud record may name; the login user follows the cloud (" + userHint + ")."),
+        h("div", { style: S.sub, "data-nano-image-summary": "1" }, "Image: " + imgOf(readReg()[vmId(cloud, ref)]).summary)));
       let r, j = null;
       try { r = await fetch(apiBase() + P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
       if (!wrap.isConnected) return;   // a newer paint (React remount / repaint) owns the host now; never steal its shell
@@ -392,6 +404,10 @@
         wrap.append(box);
         if (err === "InstanceNotReady") setTimeout(() => { if (wrap.isConnected) paint(); }, 3000);
         if (err !== "TunnelRequired") return;
+      } else if (j.console_only) {
+        wrap.append(h("div", { style: S.box + ";" + S.warn, "data-nano-console-only": "1" },
+          h("div", { style: S.title }, "Serial console only"),
+          h("div", { style: S.sub }, j.note || "This image has no SSH server."))); 
       } else {
         const s = j.ssh || {}, rt = j.runtime || {};
         wrap.append(h("div", { style: S.box + ";" + S.ok },
@@ -406,7 +422,7 @@
       // Browser shell: a real terminal (xterm.js) on the VM's serial console (ttyS0 -> /bin/sh). No tunnel needed.
       wrap.append(shellBox(cloud, ref));
       wrap.append(h("div", { style: S.sub }, "Limits: 32-bit x86 only; RAM is the VM's disk (Stop saves it, Terminate discards it); " +
-        "a background tab runs the VM several times slower; toolchain is git + Python (pip, apk) — package downloads need vyomi-tunnel running (allow-listed hosts only). Other languages run on the mesh."));
+        "a background tab runs the VM several times slower; what each image contains is stated above; package downloads need the egress relay (allow-listed hosts only). Other languages run on the mesh."));
     }
     paint();
     return wrap;
@@ -429,7 +445,7 @@
     const fsBtn = h("button", { style: S.btn + ";float:right", title: "Full screen (Esc to exit)", "data-nano-shell-fs": "1" }, "Full screen");
     const box = h("div", { style: S.box },
       h("div", { style: S.title }, "Shell", fsBtn),
-      h("div", { style: S.sub }, "A real terminal on the VM's console (root, Alpine). Works without vyomi-tunnel. Click inside and type."),
+      h("div", { style: S.sub }, "A real terminal on the VM's console (root). Works without vyomi-tunnel. Click inside and type."),
       holder);
     // Full screen: the terminal box fills the display and the grid is re-fitted to it (and back on exit).
     const fit = () => {

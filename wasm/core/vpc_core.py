@@ -2528,10 +2528,15 @@ def _nano_images() -> bool:
     return _cs.images_restricted()
 
 
-def _nano_ami_spec() -> dict:
+def _nano_ami_specs() -> list:
+    """Every Nano catalog image as an AMI spec (core/compute_sizes.py NANO_CATALOG): the runnable i386 ones + the listed-but-disabled Phase B ones."""
     from core import compute_sizes as _cs
-    a = _cs.NANO_IMAGES["aws"]
-    return {"name": a["name"], "arch": a["arch"], "platform": a["platform"], "description": a.get("description", a["name"])}
+    return [{"name": a["name"], "arch": a["arch"], "platform": a["platform"], "description": a["description"], "nano_key": a["key"]}
+            for a in _cs.nano_image_specs("aws")]
+
+
+def _nano_ami_spec(key: str = "alpine") -> dict:
+    return next(sp for sp in _nano_ami_specs() if sp["nano_key"] == key)
 
 
 def _ami_id_for(spec: dict) -> str:
@@ -2541,13 +2546,14 @@ def _ami_id_for(spec: dict) -> str:
 def _seed_amis(m: dict) -> None:
     # Re-seed if the flag survived but the images did not (a half-restored model made RunInstances raise StopIteration).
     nano = _nano_images()
-    if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()) and (not nano or _ami_id_for(_nano_ami_spec()) in m["images"]):
-        if nano:        # a restored store keeps its image row: refresh the description so it always states what the guest contains
-            _n = m["images"].get(_ami_id_for(_nano_ami_spec()))
-            if _n: _n["description"] = _nano_ami_spec()["description"]
+    specs = _nano_ami_specs() if nano else []
+    if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()) and all(_ami_id_for(sp) in m["images"] for sp in specs):
+        for sp in specs:        # a restored store keeps its image rows: refresh description + catalog key so they always state what the guest contains
+            _n = m["images"].get(_ami_id_for(sp))
+            if _n: _n["description"] = sp["description"]; _n["nano_key"] = sp["nano_key"]
         return
     m["seeded_amis"] = True
-    for spec in (([_nano_ami_spec()] + _QUICKSTART_AMIS) if nano else _QUICKSTART_AMIS):
+    for spec in (specs + _QUICKSTART_AMIS):
         # STABLE ids (like a real region's quickstart AMIs): a store that is re-created (Nano reload, worker restart, a model
         # restored without its images) must hand out the SAME ids, or a launch form that listed AMIs earlier gets
         # InvalidAMIID.NotFound on RunInstances.
@@ -2559,6 +2565,7 @@ def _seed_amis(m: dict) -> None:
             "public": True, "state": "available", "architecture": spec["arch"], "platform": spec["platform"],
             "root_device_type": "ebs", "root_device_name": "/dev/xvda", "virtualization_type": "hvm",
             "creation_date": _now(), "source": "quickstart", "tags": {}, "launch_permissions": [],
+            **({"nano_key": spec["nano_key"]} if spec.get("nano_key") else {}),
             "block_devices": [{"device_name": "/dev/xvda", "snapshot_id": "snap-" + uuid.uuid4().hex[:12],
                                "size": 8, "volume_type": "gp3", "delete_on_termination": True}],
         }
@@ -2566,14 +2573,25 @@ def _seed_amis(m: dict) -> None:
 
 def _default_ami_id(m: dict) -> str:
     _seed_amis(m)
-    if _nano_images():          # the in-browser VM boots one guest: Alpine (see core/compute_sizes.py NANO_IMAGES)
+    if _nano_images():          # Nano: Alpine is the default image (core/compute_sizes.py NANO_DEFAULT_KEY)
         return _ami_id_for(_nano_ami_spec())
     return next(i["id"] for i in m["images"].values() if i["name"].startswith("Amazon Linux"))
 
 
 def _image_runs(image: dict) -> bool:
-    """Nano boots 32-bit x86 only: an AMI is runnable when it is i386. Everything else (Mesh / offline) runs as before."""
-    return (not _nano_images()) or str(image.get("architecture")) == "i386"
+    """Nano boots 32-bit x86 only AND only the catalog images flagged runnable. Everything else (Mesh / offline) runs as before."""
+    if not _nano_images():
+        return True
+    from core import compute_sizes as _cs
+    if str(image.get("architecture")) != "i386":
+        return False
+    k = image.get("nano_key")
+    return _cs.nano_image_runnable(k) if k else True        # a customer AMI copied/created from a Nano VM has no catalog key
+
+
+def _image_reason(image: dict) -> str:
+    from core import compute_sizes as _cs
+    return _cs.nano_image_reason(image.get("nano_key"))
 
 
 def _taggable_collections(m: dict) -> list:
@@ -3254,7 +3272,7 @@ def _describe_images(store, params):
     if owners:
         rows = [i for i in rows if ("self" in owners and i["owner_id"] == OWNER_ID) or i["owner_id"] in owners]
     # Nano lists every image and flags the ones its VM cannot boot (vyomiRunnable=false); RunInstances still refuses them
-    items = "".join(_image_xml(i)[:-len("</item>")] + (f"<vyomiSubstrate>nano</vyomiSubstrate><vyomiRunnable>{str(_image_runs(i)).lower()}</vyomiRunnable>" if _nano_images() else "") + "</item>" for i in rows)
+    items = "".join(_image_xml(i)[:-len("</item>")] + (f"<vyomiSubstrate>nano</vyomiSubstrate><vyomiRunnable>{str(_image_runs(i)).lower()}</vyomiRunnable>" + (f"<vyomiReason>{_xml_escape(_image_reason(i))}</vyomiReason>" if _image_reason(i) else "") if _nano_images() else "") + "</item>" for i in rows)
     return _envelope("DescribeImages", f"<imagesSet>{items}</imagesSet>")
 
 

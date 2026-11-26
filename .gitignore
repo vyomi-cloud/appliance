@@ -96,3 +96,7 @@ kubescape-artifacts/
 # Claude Code runtime files (rewritten by every session; never commit)
 .claude/*.lock
 .claude/settings.local.json
+
+# Nano non-default VM images are large and lazy-fetched: built/published separately (wasm/vm/tools/, wasm/vm/images.json), not committed
+wasm/vm/image/debian/
+wasm/vm/image/buildroot/

@@ -49,7 +49,10 @@ const wjson = (path, method, body) => page.evaluate(async ([u, m, b]) => { const
 const SUB = "00000000-0000-0000-0000-cloudlearn01";
 A.azure = {
   home: "#/",
-  async runnable() { return [{ id: "vyomi:alpine-nano:3.21-i386", name: "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", ref: { publisher: "vyomi", offer: "alpine-nano", sku: "3.21-i386", version: "latest" } }]; },   // the console's image list (no core catalog for Azure images)
+  async runnable() {   // the console's image select (consoles/src/common/computeSizes.js NANO_CATALOG): every runnable reference
+    return [["Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", "alpine-nano", "3.21-i386"], ["Debian GNU/Linux 12 (32-bit x86) - Vyomi Nano", "debian-nano", "12-i386"], ["Buildroot 2024.05 (32-bit x86, minimal) - Vyomi Nano", "buildroot-nano", "2024-i386"]]
+      .map(([name, offer, sku]) => ({ id: `vyomi:${offer}:${sku}`, name, ref: { publisher: "vyomi", offer, sku, version: "latest" } }));
+  },   // the console's image list (no core catalog for Azure images)
   async create(img) {
     const n = Date.now() % 100000, RG = `vmrg${n}`, VM = `vm${n}`;
     await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}?api-version=2021-04-01`, "PUT", { location: "eastus" });
@@ -90,19 +93,20 @@ A.gcp = {
   openShell: async () => {},
 };
 const cl = A[CLOUD];
-// EVERY image the catalog flags runnable on Nano must give a working Python 3, pip, apk and git (owner requirement 2026-11-26, NANO_TOOLS in
-// core/compute_sizes.py). Data-driven: a future runnable image is booted and probed too, and cannot be enabled without passing.
-const TOOLS = [
-  ["python3 --version", /^Python 3\.\d+\.\d+/m],
-  ["python3 -c 'print(sum(range(1,11))*6)'", /^330$/m],
-  ["pip --version", /^pip \d+\.\d+/m],
-  ["apk --version", /^apk-tools \d+/m],
-  ["git --version", /^git version \d+\.\d+/m],
-  ["cat /etc/os-release | head -2", /^NAME="?Alpine Linux"?$/m],
-];
-async function probeTools(label) {
+// Each runnable image is booted and probed against exactly what it CLAIMS (core/compute_sizes.py NANO_CATALOG `claims` / `summary`); no image claims what it lacks.
+const keyOf = (img) => (/debian/i.test(img.name + img.id) ? "debian" : /buildroot/i.test(img.name + img.id) ? "buildroot" : "alpine");
+const PY = [["python3 --version", /^Python 3\.\d+\.\d+/m], ["python3 -c 'print(sum(range(1,11))*6)'", /^330$/m], ["pip --version", /^pip \d+\.\d+/m], ["git --version", /^git version \d+\.\d+/m]];
+const TOOLS = {
+  alpine: [...PY, ["apk --version", /^apk-tools \d+/m], ["cat /etc/os-release | head -2", /^NAME="?Alpine Linux"?$/m]],
+  debian: [...PY, ["dpkg --version | head -1", /Debian .dpkg. package management program/m], ["apt --version", /^apt \d+\.\d+/m],
+           ["cat /etc/os-release | head -3", /^PRETTY_NAME="Debian GNU\/Linux 12 \(bookworm\)"$/m], ["uname -m", /^i[36]86$/m]],
+  buildroot: [["cat /etc/os-release | head -3", /^NAME=Buildroot$/m], ["busybox 2>&1 | head -1", /^BusyBox v\d/m], ["uname -m", /^i[36]86$/m],
+              ["for t in git python3 pip apk apt; do command -v $t >/dev/null 2>&1 && echo HAS-$t; done; echo none-checked", /^none-checked$/m],
+              ["command -v git python3 pip apk apt | wc -l", /^0$/m]],     // the image claims none of them, and has none
+};
+async function probeTools(label, key) {
   const term = page.locator(".vy-term").first();
-  for (const [cmd, re] of TOOLS) {
+  for (const [cmd, re] of TOOLS[key]) {
     const mark = "T" + Math.random().toString(36).slice(2, 7);
     await term.click();
     await page.keyboard.type(`echo ${mark}-begin; ${cmd}; echo ${mark}-end\r`, { delay: 25 });
@@ -118,8 +122,9 @@ async function probeTools(label) {
 await page.goto(UI + cl.home);
 await ready();
 check("Nano backend ready", true);
-const IMAGES = await cl.runnable();
-check("the catalog flags at least one runnable image", IMAGES.length >= 1, IMAGES.map((i) => i.name).join(" | "));
+let IMAGES = await cl.runnable();
+check("the catalog flags exactly the three runnable images (Alpine, Debian, Buildroot)", IMAGES.length === 3 && ["alpine", "debian", "buildroot"].every((k) => IMAGES.some((i) => keyOf(i) === k)), IMAGES.map((i) => i.name).join(" | "));
+if (process.env.ONLY) IMAGES = IMAGES.filter((i) => process.env.ONLY.split(",").includes(keyOf(i)));   // dev aid: ONLY=debian,buildroot
 const vmId = await cl.create(IMAGES[0]);
 check("instance created through the wire", !!vmId, vmId);
 
@@ -166,7 +171,7 @@ else {
     check("shell: typed command ran in the VM (echo -> hi-from-42)", true);
   } catch { check("shell: typed command ran in the VM", false, (await page.locator(".vy-term").first().innerText()).slice(-200)); }
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-shell.png` });
-  await probeTools(`[${IMAGES[0].name}]`);
+  await probeTools(`[${IMAGES[0].name}]`, keyOf(IMAGES[0]));
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-tools.png` });
   // a power repaint (the event the host fires on a state change) must not yank the open shell
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("nano-vm-power", { detail: { id: null, state: "running" } })));
@@ -180,15 +185,21 @@ if (CLOUD === "azure" && BOOT) {
   await page.locator(".vy-term").first().waitFor({ timeout: 60000 }).catch(() => {});
   check("azure Serial console blade is the in-browser shell (not Not-simulated)", (await page.locator(".vy-term").count()) === 1 && !/Coming soon/i.test(await page.locator("body").innerText()));
 }
-// every further runnable image (none today): create, boot, shell, same tool probe
+// every further runnable image: create, boot, shell, the tool probe for what THAT image claims
 for (const img of IMAGES.slice(1)) {
   if (!BOOT) break;
+  const t0 = Date.now();
   const id2 = await cl.create(img);
-  await page.goto(UI + cl.list); await ready();
-  try { await page.waitForFunction(() => /\brunning\b/i.test(document.body.innerText || "") && !document.querySelector("[data-vy-pending]"), null, { timeout: 240000, polling: 2000 }); } catch {}
   await page.goto(UI + cl.connect(id2)); await ready(); await cl.openShell(page);
-  await page.locator(".vy-term").first().waitFor({ timeout: 60000 });
-  await probeTools(`[${img.name}]`);
+  try { await page.locator(".vy-term").first().waitFor({ timeout: 280000 }); check(`[${img.name}] boots to a shell on ${CLOUD}`, true, `${Math.round((Date.now() - t0) / 1000)} s`); }
+  catch { check(`[${img.name}] boots to a shell on ${CLOUD}`, false, "no shell within 280 s"); await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-${keyOf(img)}-fail.png` }); continue; }
+  await probeTools(`[${img.name}]`, keyOf(img));
+  await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-${keyOf(img)}-tools.png` });
+  // the Connect text must be accurate per image
+  const txt = await page.locator("body").innerText();
+  const want = keyOf(img) === "debian" ? /Debian GNU\/Linux 12 \(bookworm\), 32-bit x86: Python 3, pip, apt\/dpkg, git/ : keyOf(img) === "buildroot" ? /Buildroot 2024\.05, 32-bit x86, minimal: busybox shell only/ : /Alpine Linux 3\.21, 32-bit x86: Python 3, pip, apk, git/;
+  check(`[${img.name}] Connect page states exactly what the image contains`, want.test(txt), (txt.match(/Image: [^\n]*/) || [""])[0]);
+  if (keyOf(img) === "buildroot") check(`[${img.name}] Connect page says serial console only (no ssh claimed)`, /Serial console only/.test(txt) && !/SSH from your terminal/.test(txt));
 }
 check("no uncaught page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

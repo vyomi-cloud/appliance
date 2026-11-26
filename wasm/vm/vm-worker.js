@@ -15,8 +15,12 @@
  * Stop = save_state into IndexedDB + halt; Start = restore that state;
  * Terminate = halt + delete the saved state.
  *
+ * Images: ./images.json lists every guest this worker can boot (Alpine = default, Debian 12 i386, Buildroot = busybox console only). The launch
+ * message names one (`image`); only that image's files are fetched, and only when an instance of it is first launched in this browser (the golden
+ * snapshot is then cached per image + RAM size). Unknown / missing image -> Alpine.
+ *
  * Page → worker messages (each may carry rid; the reply echoes it):
- *   {type:"launch", id, cloud, user, pubkey, hostname, mem_mb, relay, prefer_port}
+ *   {type:"launch", id, cloud, user, pubkey, hostname, mem_mb, relay, prefer_port, image}
  *   {type:"start"} {type:"stop"} {type:"terminate"} {type:"status"}
  *   {type:"exec", command, user, timeout_ms}
  *   {type:"serial-in", data}           → interactive serial console (ttyS0)
@@ -25,7 +29,16 @@
 importScripts("engine/libv86.js");
 
 const HERE = new URL("./", self.location.href).href;
-const IMAGE_VERSION = "alpine3.21-i386-v5";
+let IMAGES = null;           // images.json (fetched once per worker)
+let IMG = null;              // the image this worker's instance boots: {key, version, dir, kernel, initrd, kind, provision, min_mem_mb, ...}
+let IMAGE_VERSION = "alpine3.21-i386-v5";
+async function loadImage(key) {
+  if (!IMAGES) { try { IMAGES = await (await fetch(HERE + "images.json", { cache: "no-cache" })).json(); } catch (_) { IMAGES = { default: "alpine", images: { alpine: { key: "alpine", version: "alpine3.21-i386-v5", dir: "image", kernel: "vmlinuz", initrd: "rootfs.cpio.gz", kind: "agent", provision: "alpine" } } }; } }
+  const k = IMAGES.images[key] ? key : IMAGES.default;
+  IMG = { key: k, ...IMAGES.images[k] }; IMAGE_VERSION = IMG.version;
+  return IMG;
+}
+const imgUrl = (f) => (IMG.base_url ? IMG.base_url.replace(/\/$/, "") + "/" : HERE + IMG.dir + "/") + f;
 const DB_NAME = "nano-vm", DB_STORE = "blobs";
 const CMDLINE = "console=ttyS0 rdinit=/init quiet tsc=reliable mitigations=off random.trust_cpu=on";
 
@@ -47,7 +60,7 @@ function setState(s, d) {
 function statusObj() {
   return { id: inst && inst.id, state, detail, host_port: hostPort, relay: !!(relay && relay.readyState === 1),
            user: inst && inst.user, cloud: inst && inst.cloud, mem_mb: inst && inst.mem_mb, timings,
-           image: IMAGE_VERSION };
+           image: IMAGE_VERSION, image_key: IMG && IMG.key, kind: IMG && IMG.kind };
 }
 
 // ── IndexedDB blob store (golden snapshot + per-instance saved state) ──────
@@ -92,7 +105,7 @@ async function pickEgress() {
 function makeEmulator(opts) {
   return new V86({
     wasm_path: HERE + "engine/v86.wasm",
-    memory_size: (inst.mem_mb || 512) * 1024 * 1024,
+    memory_size: Math.max(inst.mem_mb || 512, (IMG && IMG.min_mem_mb) || 0) * 1024 * 1024,
     vga_memory_size: 2 * 1024 * 1024,
     bios: { url: HERE + "bios/seabios.bin" },
     vga_bios: { url: HERE + "bios/vgabios.bin" },
@@ -110,8 +123,9 @@ function makeEmulator(opts) {
 let agentLine = "";
 const agentWait = new Map();     // rid -> {resolve, timer}
 let agentReady = null, agentReadyResolve = null;
+let serTail = "";
 function resetAgent() {
-  agentLine = "";
+  agentLine = ""; serTail = "";
   agentReady = new Promise((r) => (agentReadyResolve = r));
 }
 function onAgentByte(b) {
@@ -156,6 +170,7 @@ function wire(e) {
   let buf = "", flushT = null;
   e.add_listener("serial0-output-byte", (b) => {
     buf += String.fromCharCode(b);
+    if (IMG && IMG.kind === "console" && agentReadyResolve) { serTail = (serTail + String.fromCharCode(b)).slice(-200); if (/[#$] $/.test(serTail)) { agentReadyResolve(); } }
     if (!flushT) flushT = setTimeout(() => { broadcast({ type: "serial-out", id: inst && inst.id, data: buf }); buf = ""; flushT = null; }, 30);
   });
 }
@@ -169,18 +184,25 @@ async function destroyEmu() {
 
 // The golden snapshot: one cold boot per browser per (image, memory size).
 async function golden() {
-  const key = `golden:${IMAGE_VERSION}:${inst.mem_mb}`;
+  const key = `golden:${IMAGE_VERSION}:${Math.max(inst.mem_mb || 0, IMG.min_mem_mb || 0)}`;
   const run = async () => {
     const hit = await idb("get", key).catch(() => null);
     if (hit) return hit;
     const t0 = performance.now();
     resetAgent();
     await pickEgress();
-    const e = makeEmulator({ bzimage: { url: HERE + "image/vmlinuz" }, initrd: { url: HERE + "image/rootfs.cpio.gz" }, cmdline: CMDLINE });
+    setState("booting", IMG.lazy ? `first launch of ${IMG.label || IMG.key} in this browser: downloading the image (${Math.round((IMG.bytes || 0) / 1e6)} MB, once)` : "first launch in this browser: cold-booting the VM image (once)");
+    const files = { bzimage: { url: imgUrl(IMG.kernel) }, cmdline: IMG.cmdline || CMDLINE };
+    if (IMG.initrd) files.initrd = { url: imgUrl(IMG.initrd) };
+    if (IMG.lazy) {           // fetched on first launch only (never at boot); a clear error when the bundle does not carry the image
+      const probe = await fetch(files.bzimage.url, { method: "HEAD" }).catch(() => null);
+      if (!probe || !probe.ok) throw new Error(`image '${IMG.key}' is not available in this Nano bundle (${files.bzimage.url} answered ${probe ? probe.status : "no response"}); it is published separately`);
+    }
+    const e = makeEmulator(files);
     emu = e; wire(e);
     setState("booting", "first launch in this browser: cold-booting the VM image (once)");
     await Promise.race([agentReady, new Promise((_, rj) => setTimeout(() => rj(new Error("cold boot timed out")), 240000))]);
-    await agentPing(60000);                              // the agent answers commands before we snapshot it
+    if (IMG.kind !== "console") await agentPing(60000);  // the agent answers commands before we snapshot it
     await new Promise((r) => setTimeout(r, 1000));    // let dropbear finish starting
     timings.cold_boot_ms = Math.round(performance.now() - t0);
     const raw = await e.save_state();
@@ -201,27 +223,30 @@ async function bootFrom(gzState) {
   emu = makeEmulator({ initial_state: { buffer: raw } });
   wire(emu);
   await waitReady(emu);
-  await agentPing(30000);
+  if (IMG.kind !== "console") await agentPing(30000);
   timings.restore_ms = Math.round(performance.now() - t0);
 }
 
 function sq(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }
 async function provision() {
+  if (IMG.kind === "console") return;        // busybox-only image: no agent, no sshd; the serial console is the only way in
   const u = inst.user, rnd = new Uint8Array(64); crypto.getRandomValues(rnd);
   const seed = btoa(String.fromCharCode(...rnd));
   const host = (inst.hostname || inst.id).replace(/[^a-zA-Z0-9-]/g, "-").slice(0, 63);
+  const debian = IMG.provision === "debian";
   const script = [
     `date -s @${Math.floor(Date.now() / 1000)} >/dev/null 2>&1`,
     `echo ${sq(seed)} | base64 -d > /dev/urandom`,
     `hostname ${sq(host)}; echo ${sq(host)} > /etc/hostname`,
     `grep -q ${sq(host)} /etc/hosts || echo "127.0.1.1 ${host}" >> /etc/hosts`,
-    `id -u ${u} >/dev/null 2>&1 || adduser -D -s /bin/sh ${u}`,
+    debian ? `id -u ${u} >/dev/null 2>&1 || useradd -m -s /bin/bash ${u}` : `id -u ${u} >/dev/null 2>&1 || adduser -D -s /bin/sh ${u}`,
     `sed -i "s#^${u}:!:#${u}:*:#" /etc/shadow`,
-    `addgroup ${u} wheel 2>/dev/null; true`,
+    debian ? `groupadd -f wheel; usermod -aG wheel ${u}; true` : `addgroup ${u} wheel 2>/dev/null; true`,
     `mkdir -p /home/${u}/.ssh && printf '%s\\n' ${sq(inst.pubkey || "")} > /home/${u}/.ssh/authorized_keys`,
     `chown -R ${u}:${u} /home/${u}/.ssh && chmod 700 /home/${u}/.ssh && chmod 600 /home/${u}/.ssh/authorized_keys`,
     `mkdir -p /etc/vyomi && printf '%s\\n' ${sq(JSON.stringify({ instance_id: inst.id, cloud: inst.cloud, user: u }))} > /etc/vyomi/instance.json`,
-    `rm -f /etc/dropbear/dropbear_*_host_key; killall dropbear 2>/dev/null; sleep 0.3; /usr/sbin/dropbear -R -p 22`,
+    debian ? `rm -f /etc/dropbear/dropbear_*_host_key; pkill -x dropbear 2>/dev/null; sleep 0.3; /usr/sbin/dropbear -R -p 22`
+           : `rm -f /etc/dropbear/dropbear_*_host_key; killall dropbear 2>/dev/null; sleep 0.3; /usr/sbin/dropbear -R -p 22`,
   ].join("\n");
   const r = await agentExec(script, "root", 60000);
   if (r.exit_code !== 0) throw new Error("provisioning failed: " + r.stdout.slice(-300));
@@ -314,7 +339,8 @@ function serial(fn) { const p = busy.then(fn, fn); busy = p.catch(() => {}); ret
 
 async function doLaunch(m) {
   inst = { id: m.id, cloud: m.cloud || "aws", user: m.user || "ec2-user", pubkey: m.pubkey || "",
-           hostname: m.hostname || m.id, mem_mb: m.mem_mb || 256, relay: m.relay || "", prefer_port: m.prefer_port || 0 };
+           hostname: m.hostname || m.id, mem_mb: m.mem_mb || 256, relay: m.relay || "", prefer_port: m.prefer_port || 0, image: m.image || "" };
+  await loadImage(inst.image);
   const saved = await idb("get", "state:" + inst.id).catch(() => null);
   try {
     setState("booting", saved ? "resuming saved state" : "restoring VM image");
@@ -346,6 +372,7 @@ async function doStop() {
 }
 async function doStart() {
   if (state === "running") return;
+  if (!IMG && inst) await loadImage(inst.image);
   const saved = await idb("get", "state:" + inst.id).catch(() => null);
   if (!saved) return doLaunch(inst);
   setState("booting", "resuming saved state");
@@ -375,6 +402,7 @@ self.onconnect = (ev) => {
       if (m.type === "serial-in") { if (emu) emu.serial0_send(m.data || ""); return reply({ ok: true }); }
       if (m.type === "exec") {
         if (state !== "running" || !emu) return reply({ ok: false, error: "InstanceNotRunning", state });
+        if (IMG && IMG.kind === "console") return reply({ ok: false, error: `the ${IMG.label || IMG.key} image has no command agent (busybox console only); use the serial shell` });
         const r = await agentExec(m.command || "", m.user || (inst && inst.user), m.timeout_ms || 60000);
         return reply({ ok: true, ...r });
       }

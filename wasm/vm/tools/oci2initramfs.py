@@ -7,7 +7,7 @@ straight to a cpio stream, so nothing from the image is ever extracted to disk (
   e.g.  oci2initramfs.py i386/debian bookworm-slim 386 debian.cpio.gz --init init-debian.sh \
             --from-cpio ../../wasm/vm/image/rootfs.cpio.gz --keep-cpio-prefix lib/modules
 
-SPIKE tool (no production use)."""
+Used by wasm/vm/tools/build-debian-image.py (imported as a module); taken from the v4/spike-nano-vm-images branch."""
 import sys, io, json, gzip, tarfile, urllib.request, argparse, stat, time
 
 def http(url, token=None, accept=None):
@@ -104,4 +104,5 @@ def main():
     t0 = time.time(); gz = gzip.compress(buf.getvalue(), 6)
     open(a.out, "wb").write(gz)
     sys.stderr.write(f"files={len(fs)} raw={len(buf.getvalue())/1e6:.1f} MB gz={len(gz)/1e6:.1f} MB ({time.time()-t0:.0f}s gzip)\n")
-main()
+if __name__ == "__main__":
+    main()

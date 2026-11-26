@@ -118,17 +118,81 @@ def size_table(cloud: str, sub: str | None = None) -> list[dict]:
 # honestly offer is that guest, named per cloud's own conventions. Mesh / offline keep their full catalogs.
 NANO_GUEST = {"os": "Alpine Linux 3.21", "bits": 32, "arch": "i386", "engine": "v86", "vcpu": 1,
               "code": "wasm/vm/build-image.sh (image), wasm/vm/vm-worker.js (engine), wasm/vm/nano-vm-host.js (runtime facts)"}
-# What the guest image really contains (wasm/vm/build-image.sh PKGS: python3 + py3-pip, apk-tools, git). Every runnable Nano image MUST provide exactly
-# these tools (python3, pip, apk, git); tests assert them inside the booted VM per runnable image (consoles/tests/smoke-nano-browservm.mjs).
-NANO_TOOLS = ("Python 3", "pip", "apk", "git")
-NANO_SUMMARY = "Alpine Linux 3.21, 32-bit x86: " + ", ".join(NANO_TOOLS)
-NANO_IMAGES = {
-    "aws": {"name": "Alpine Linux 3.21 (i386) - Vyomi Nano", "arch": "i386", "platform": "", "description": NANO_SUMMARY},
-    "gcp": {"project": "vyomi-nano-cloud", "family": "alpine-3-21-i386", "name": "alpine-3-21-i386-nano",
-            "description": NANO_SUMMARY},
-    "azure": {"publisher": "vyomi", "offer": "alpine-nano", "sku": "3.21-i386", "version": "latest",
-              "display": "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", "description": NANO_SUMMARY},
-}
+# Every image the in-browser VM can boot (wasm/vm/images.json is the machine-readable twin: files, sizes, sha256). Each states HONESTLY what it contains:
+# `claims` is the 4-tool contract the browser tests check per image inside the booted VM (nothing is claimed that the image lacks).
+# Alpine is the default for any unspecified image. Not-yet-runnable images (Phase B, 64-bit emulation) stay listed and DISABLED with `reason`.
+PHASE_B_REASON = "x86_64/riscv64 emulation: coming later (needs legal review, ~90-200 MB download)"
+NANO_CATALOG = [
+    {"key": "alpine", "runnable": True, "default": True, "os": "Alpine Linux", "version": "3.21", "os_id": "alpine", "arch": "i386", "bits": 32,
+     "claims": {"python": True, "pip": True, "git": True, "pkg": "apk"},
+     "tools": ("Python 3", "pip", "apk", "git"),
+     "summary": "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git",
+     "aws": {"name": "Alpine Linux 3.21 (i386) - Vyomi Nano", "quick": "Alpine Linux"},
+     "gcp": {"project": "vyomi-nano-cloud", "family": "alpine-3-21-i386", "name": "alpine-3-21-i386-nano", "os": "Alpine Linux", "version": "Alpine Linux 3.21 (32-bit x86)"},
+     "azure": {"publisher": "vyomi", "offer": "alpine-nano", "sku": "3.21-i386", "version": "latest", "display": "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano"}},
+    {"key": "debian", "runnable": True, "default": False, "os": "Debian GNU/Linux", "version": "12", "os_id": "debian", "arch": "i386", "bits": 32,
+     "claims": {"python": True, "pip": True, "git": True, "pkg": "apt"},
+     "tools": ("Python 3", "pip", "apt/dpkg", "git"),
+     "summary": "Debian GNU/Linux 12 (bookworm), 32-bit x86: Python 3, pip, apt/dpkg, git",
+     "aws": {"name": "Debian 12 (i386) - Vyomi Nano", "quick": "Debian"},
+     "gcp": {"project": "vyomi-nano-cloud", "family": "debian-12-i386", "name": "debian-12-i386-nano", "os": "Debian GNU/Linux (Vyomi Nano)", "version": "Debian GNU/Linux 12 (bookworm, 32-bit x86)"},
+     "azure": {"publisher": "vyomi", "offer": "debian-nano", "sku": "12-i386", "version": "latest", "display": "Debian GNU/Linux 12 (32-bit x86) - Vyomi Nano"}},
+    {"key": "buildroot", "runnable": True, "default": False, "os": "Buildroot Linux", "version": "2024.05", "os_id": "buildroot", "arch": "i386", "bits": 32,
+     "claims": {"python": False, "pip": False, "git": False, "pkg": None},
+     "tools": ("busybox shell",),
+     "summary": "Buildroot 2024.05, 32-bit x86, minimal: busybox shell only (no git, Python, pip or package manager)",
+     "aws": {"name": "Buildroot 2024.05 (i386, minimal) - Vyomi Nano", "quick": "Buildroot"},
+     "gcp": {"project": "vyomi-nano-cloud", "family": "buildroot-2024-i386", "name": "buildroot-2024-i386-nano", "os": "Buildroot Linux (Vyomi Nano)", "version": "Buildroot 2024.05 (32-bit x86, minimal: busybox only)"},
+     "azure": {"publisher": "vyomi", "offer": "buildroot-nano", "sku": "2024-i386", "version": "latest", "display": "Buildroot 2024.05 (32-bit x86, minimal) - Vyomi Nano"}},
+    # Phase B: listed, never runnable here (container2wasm/Bochs x86_64 and TinyEMU riscv64: needs legal review, 90-200 MB download, no snapshot yet).
+    {"key": "debian64", "runnable": False, "default": False, "os": "Debian GNU/Linux", "version": "12", "os_id": "debian", "arch": "x86_64", "bits": 64,
+     "claims": {}, "tools": (), "reason": PHASE_B_REASON,
+     "summary": "Debian 12, 64-bit x86_64 (emulated, container2wasm/Bochs). " + PHASE_B_REASON + ". A riscv64 build (TinyEMU) is planned the same way; riscv64 is not a native architecture of AWS, GCP or Azure.",
+     "aws": {"name": "Debian 12 (x86_64, emulated) - Vyomi Nano", "quick": "Debian"},
+     "gcp": {"project": "vyomi-nano-cloud", "family": "debian-12-x86-64-emulated", "name": "debian-12-x86-64-emulated-nano", "os": "Debian GNU/Linux x86_64 (emulated, Vyomi Nano)", "version": "Debian GNU/Linux 12 (64-bit x86_64, emulated)"},
+     "azure": {"publisher": "vyomi", "offer": "debian-nano", "sku": "12-x86_64-emulated", "version": "latest", "display": "Debian GNU/Linux 12 (64-bit x86_64, emulated) - Vyomi Nano"}},
+]
+NANO_BY_KEY = {e["key"]: e for e in NANO_CATALOG}
+NANO_DEFAULT_KEY = "alpine"
+# Back-compat: the default (Alpine) image, as before. NANO_TOOLS / NANO_SUMMARY describe the DEFAULT image only; every image has its own `tools` / `summary`.
+NANO_TOOLS = NANO_CATALOG[0]["tools"]
+NANO_SUMMARY = NANO_CATALOG[0]["summary"]
+
+
+def _spec(cloud: str, e: dict) -> dict:
+    c = dict(e[cloud])
+    c["description"] = e["summary"]
+    if cloud == "aws":
+        c["arch"] = e["arch"]; c["platform"] = ""
+    return c
+
+
+NANO_IMAGES = {c: _spec(c, NANO_CATALOG[0]) for c in ("aws", "gcp", "azure")}
+
+
+def nano_image_specs(cloud: str) -> list:
+    """Every Nano catalog image for a cloud (runnable or not), as {key, runnable, reason, summary, ...cloud fields}."""
+    return [{"key": e["key"], "runnable": e["runnable"], "reason": e.get("reason", ""), **_spec(cloud, e)} for e in NANO_CATALOG]
+
+
+def nano_image_key(hint) -> str | None:
+    """Catalog key a cloud's image name / family / sourceImage / imageReference text refers to, or None (not a Nano catalog image)."""
+    h = str(hint or "").lower()
+    if not h:
+        return None
+    for e in NANO_CATALOG:
+        names = {e["aws"]["name"].lower(), e["gcp"]["family"], e["gcp"]["name"], e["azure"]["offer"] + ":" + e["azure"]["sku"], e["azure"]["sku"] if e["azure"]["offer"] in h else "\0"}
+        if any(n in h for n in names):
+            return e["key"]
+    return None
+
+
+def nano_image_runnable(key) -> bool:
+    return bool((NANO_BY_KEY.get(key) or {}).get("runnable"))
+
+
+def nano_image_reason(key) -> str:
+    return (NANO_BY_KEY.get(key) or {}).get("reason", "")
 
 
 def images_restricted() -> bool:
@@ -137,18 +201,22 @@ def images_restricted() -> bool:
 
 
 def image_rejection(cloud: str, what: str) -> str:
-    return (f"The image '{what}' cannot run on {label('nano')}: it boots only {NANO_GUEST['os']} (32-bit x86, i386) inside your browser. "
+    return (f"The image '{what}' cannot run on {label('nano')}: it boots only the Vyomi Nano 32-bit x86 images ("
+            + ", ".join(e["os"] + " " + e["version"] for e in NANO_CATALOG if e["runnable"]) + ") inside your browser. "
             f"Launch a Mesh for the full image catalog.")
 
 
 def azure_image_allowed(ref: dict | None) -> bool:
-    """True when an imageReference is the Nano guest (or absent / not an image-from-marketplace reference)."""
+    """True when an imageReference is a RUNNABLE Nano image (or absent / not an image-from-marketplace reference)."""
     if not images_restricted() or not ref:
         return True
     if ref.get("id") or ref.get("sharedGalleryImageId") or ref.get("communityGalleryImageId"):
         return True                                 # a customer image (made from a Nano VM) is not a marketplace reference
-    a = NANO_IMAGES["azure"]
-    return all(str(ref.get(k) or "").lower() == a[k] for k in ("publisher", "offer", "sku"))
+    for e in NANO_CATALOG:
+        a = e["azure"]
+        if e["runnable"] and all(str(ref.get(k) or "").lower() == a[k] for k in ("publisher", "offer", "sku")):
+            return True
+    return False
 
 
 def lists_all(sub: str | None = None) -> bool:
