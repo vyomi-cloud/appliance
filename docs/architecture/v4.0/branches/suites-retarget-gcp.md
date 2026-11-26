@@ -1,6 +1,6 @@
 # v4/suites-retarget-gcp
 
-Owner: Claude session (suites retarget, GCP) - Started: 2026-11-26 - Base: origin/v4-on-main (0b97c20e0) - Status: in progress, pushed
+Owner: Claude session (suites retarget, GCP) - Started: 2026-11-26 - Base: origin/v4-on-main (0b97c20e0) - Status: done, pushed
 
 ## Purpose
 `tests/conformance/hourly/suites.json` carried about 35 GCP suites marked `pending` because their scripts drove the decommissioned
@@ -28,7 +28,7 @@ in Playwright and the native REST wire (`/_wire`, what gcloud and the SDKs call)
 | nano-ui-gcp-apigw-monitoring-tabs | A | groups `apigw,alerting`: API config added natively shows on the v4 API detail page, config carries the real service config | run: PASS |
 | nano-ui-gcp-artifactregistry | A | group `artifactregistry`: create, v4 list, native format, delete | run: PASS |
 | nano-ui-gcp-iamcredentials | A | group `iamcreds`: generateAccessToken / generateIdToken / signBlob real-shaped, unknown SA refused, SA listed in v4 | run: PASS |
-| nightly-gcp-roundtrip | B | replaced by `nightly-gcp-v4-roundtrip` | roundtrip run, see below |
+| nightly-gcp-roundtrip | B | replaced by `nightly-gcp-v4-roundtrip` | roundtrip: NANO=1 full run 85 pass, 1 fail, 1 skip (see Testing) |
 | nano-ui-gcp-eventarc-delivery | B | `nightly-gcp-v4-roundtrip` eventarc: UI CRUD, trigger detail, object upload fires trigger, delivery listed | roundtrip run |
 | nano-ui-gcp-create-defaults | B | roundtrip step A (every service created through its real v4 form) + `grid` | roundtrip + grid run |
 | bidi-gcp-cli-ui / -sdk-ui / -api-ui | B | UI <-> native wire both ways = `nightly-gcp-v4-roundtrip` and `nightly-gcp-compute-vertex-bidi` (CLI, SDK and API share that wire) | roundtrip run |
@@ -51,3 +51,9 @@ in Playwright and the native REST wire (`/_wire`, what gcloud and the SDKs call)
 Run from a clean checkout with Playwright from another tree: `NODE_PATH=<dir with playwright> PLAYWRIGHT_BROWSERS_PATH=<browsers>`
 then `NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-gcp-v4-intents.mjs` (all default groups), or
 `python3 tests/conformance/hourly/run_suites.py --target nano --only <ids>`.
+
+## Run evidence (2026-11-26, headless Chromium, genuine Nano)
+- `run_suites.py --target nano --only <13 retargeted ids>`: 13/13 green (7+14+5+4+2+8+6+7+6+6+4+11+6 checks). The full script (every default group) ran 72/72.
+- `NANO=1 nightly-gcp-v4-roundtrip.mjs` (full): 85 pass, 1 fail, 1 skip (KMS has no delete) while three other browsers ran in parallel;
+  the one failure (apigateway Try-it, `inputValue` timeout) was a load flake: rerun `ONLY=apigateway-apis,eventarc` is 23 pass, 0 fail.
+- No console build was needed: `consoles/dev_server.py` and Nano serve the committed `wasm/v4` bundles.
