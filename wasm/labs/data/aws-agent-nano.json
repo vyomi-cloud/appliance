@@ -305,7 +305,7 @@
    "icon": "M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 2.8A3 3 0 0 0 5 13a3.2 3.2 0 0 0 3 4.5A3 3 0 0 0 12 20V4a3 3 0 0 0-3 0zM15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 2.8A3 3 0 0 1 19 13a3.2 3.2 0 0 1-3 4.5A3 3 0 0 1 12 20",
    "prereq": [
     "A browser with WebGPU (current Chrome or Edge) and about 1 GB of free disk for the first model download.",
-    "When a step needs a model, Deploy asks you to load one: pick Qwen2.5 1.5B, or any model listed as supported in the picker."
+    "When a step needs a model, Deploy asks you to load one. Pick Qwen2.5 1.5B: it is the only one of the four in-browser models that passes every block of this course. The three smaller ones were measured and fail the protocol and evaluation gates, so the course does not support them."
    ],
    "setup": [
     {

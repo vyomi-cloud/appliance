@@ -47,7 +47,7 @@ CH = [
   services=["Amazon Bedrock Runtime", "WebLLM (in your browser)"], docs=["bedrock"], ops=[("bedrock", "ListFoundationModels")], needs=[1],
   about="Nano has no server. The model that answers is one of four small open models that your browser loads and runs on your graphics chip. Your code calls it with the same Bedrock Converse call you would use on AWS.",
   why=["A small model is fast and free, but it cannot be trusted to format tool calls on its own", "A strict protocol turns an unreliable writer into a reliable chooser", "Measuring the protocol tells you which models can run the agent"],
-  prereq=["A browser with WebGPU (current Chrome or Edge) and about 1 GB of free disk for the first model download.", "When a step needs a model, Deploy asks you to load one: pick Qwen2.5 1.5B, or any model listed as supported in the picker."],
+  prereq=["A browser with WebGPU (current Chrome or Edge) and about 1 GB of free disk for the first model download.", "When a step needs a model, Deploy asks you to load one. Pick Qwen2.5 1.5B: it is the only one of the four in-browser models that passes every block of this course. The three smaller ones were measured and fail the protocol and evaluation gates, so the course does not support them."],
   simplified=["The model runs in your browser, so its quality is that of a small model: it is good at choosing between a few actions and weak at long free-form answers. The protocol is built around that."],
   checks=["the parser and validator accept good replies and reject bad ones with a reason", "the model answers a chat turn", "the model picks the right first action for three questions", "the protocol is reliable on twelve questions"],
   blocks=[

@@ -30,8 +30,20 @@ project folder); the existing course and its aws-nano edition are unchanged. Fin
 | Grading is plain code; the 15-question EVAL set was tuned on, a separate 8-question HOLDOUT was written after tuning and run once | Honest generalisation figure |
 
 ## Measured results
-See `docs/labs/nano-agent-evidence/` (`logs/course-<model>.jsonl` = every block per model; `step1-prototype/` = the agent-only runs on the 15-set and the holdout).
-Only a model that passes every block of every chapter is listed as supported. No caveats on unsupported models.
+Headless Chrome (WebGPU, Apple Metal), every runnable block of the course in order, on the generated course data; logs in `docs/labs/nano-agent-evidence/logs/course-<model>.jsonl`, summary in `results.json`.
+A model is supported only if all 16 runnable blocks pass. No caveats on unsupported models.
+
+| Model | Ch1 | Ch2 | Ch3 | Ch4 | Ch5 | Ch6 | Ch7 | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| Qwen2.5 1.5B | 2/2 | 3/3 | 3/3 | 1/1 | 2/2 | 2/2 | 3/3 | supported (16/16) |
+| Qwen2.5 0.5B | 2/2 | 1/3 | 3/3 | 0/1 | 2/2 | 2/2 | 2/3 | unsupported (protocol, memory, evaluation gate) |
+| Llama 3.2 1B | 2/2 | 1/3 | 2/3 | 1/1 | 2/2 | 1/2 | 2/3 | unsupported (protocol, first agent, guarded agent, safety questions) |
+| SmolLM2 360M | 2/2 | 1/3 | 2/3 | 0/1 | 2/2 | 1/2 | 1/3 | unsupported (protocol, agent, memory, guarded agent, deploy, safety) |
+
+Agent only, outside the Lambda (`step1-prototype/`): 15-question tuned set Qwen 1.5B 15/15, 0.5B 10/15, Llama 5/15, SmolLM2 2/15. Held-out 8 questions (written after tuning, run once) Qwen 1.5B 8/8, 0.5B 5/8, Llama 3/8, SmolLM2 3/8.
+Deployed as a Nano Lambda and graded by the chapter 7 harness: Qwen 1.5B 15/15 across docs, record, ticket, multi-step, refuse, injection and memory.
+Retrieval (chapter 5): keyword, dense and hybrid each put the right document first for 13/13 questions; highest score of an unsupported question: keyword 0.25, dense 0.40, hybrid 0.28 against the 0.38 threshold.
+A first run of chapter 4 failed on a wrong assertion in `try_memory.py` (not the agent); kept as `course-qwen2.5-1.5b.run1-try_memory-assert-bug.jsonl`, fixed, and the full run repeated 16/16.
 
 ## Known limits
 - The retrieval threshold was tuned on a small set. The holdout is 8 questions: a small sample.
