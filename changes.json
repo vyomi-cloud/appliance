@@ -1,9 +1,29 @@
 {
- "at": "2026-11-26T20:34:19+00:00",
+ "at": "2026-11-26T21:34:16+00:00",
  "baseline": false,
- "changes": [],
+ "changes": [
+  {
+   "cloud": "aws",
+   "service": "Amazon RDS",
+   "kind": "announcement",
+   "key": "feed:aws:a88832e31eed",
+   "title": "Amazon RDS for PostgreSQL supports minor versions 18.7, 17.12, 16.16, 15.20, and 14.25 ",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-rds-postgresql-18-7-17-12-16-16-15-20-14-25/",
+   "detail": "Amazon Relational Database Service (RDS) for PostgreSQL now supports the latest minor versions 18.7, 17.12, 16.16, 15.20, and 14.25. We recommend that you upgrade to the latest minor versions to address Common Vulnerabilities and Exposures (CVEs) in prior versions of PostgreSQL, and to benefit from the bug fixes and improvements added by the PostgreSQL community. You can upgrade your databases during scheduled maintenance windows using automatic minor version upgrades. To simplify operations at scale, enable automatic minor version upgrades and use the AWS Organizations Upgrade Rollout Policy ",
+   "actionable": false
+  },
+  {
+   "cloud": "gcp",
+   "service": "Compute Engine",
+   "kind": "announcement",
+   "key": "feed:gcp:573fad722397",
+   "title": "Compute Engine: Feature (November 25, 2026)",
+   "link": "https://docs.cloud.google.com/release-notes#November_25_2026",
+   "detail": "Generally available : When you create an on-demand reservation by using the Google Cloud console, you can purchase and attach a hardware resource-based commitment that matches the numbers and types of the reserved resources. After the commitment activates, you receive applicable committed use discounts (CUDs) based on your eligible resource usage. For more information, see Purchase a commitment while creating a reservation .",
+   "actionable": false
+  }
+ ],
  "errors": [
-  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
-  "maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out"
  ]
 }
