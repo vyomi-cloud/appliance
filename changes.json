@@ -1,17 +1,9 @@
 {
- "at": "2026-11-26T02:33:51+00:00",
+ "at": "2026-11-26T03:33:54+00:00",
  "baseline": false,
- "changes": [
-  {
-   "cloud": "aws",
-   "service": "CloudWatch",
-   "kind": "announcement",
-   "key": "feed:aws:99e722d10977",
-   "title": "Amazon SageMaker HyperPod now supports NCCL profiling for training jobs",
-   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-sagemaker-hyperpod-nccl-profiler/",
-   "detail": "Amazon SageMaker HyperPod now supports NVIDIA Collective Communications Library (NCCL) profiling with the HyperPod NCCL Profiler, giving you visibility into communication performance across the nodes and GPUs in a distributed training job. SageMaker HyperPod helps you scale generative AI model development across hundreds or thousands of AI accelerators. Previously, one throttled GPU or degraded link could slow the whole job without an error, and finding it meant stopping the job to run NCCL tests. Now, the HyperPod NCCL profiler loads as a plugin in your training job and sends per-rank bandwid",
-   "actionable": false
-  }
- ],
- "errors": []
+ "changes": [],
+ "errors": [
+  "maven/software.amazon.awssdk:dynamodb: The read operation timed out",
+  "maven/com.azure:azure-storage-blob: The read operation timed out"
+ ]
 }
