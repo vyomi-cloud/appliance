@@ -27,8 +27,8 @@ print("steps:", [s["action"] for s in r["steps"]])
 print("reply:", r["text"])
 assert r["type"] == "answer" and "degraded" in r["text"].lower(), r
 
-# 4. Short-term: the session remembers what was said.
+# 4. Short-term: the session remembers what was said (one exchange so far in session ch4-s2).
 ctx, n = load_context("ch4-s2", "ch4-priya")
-assert n == 2 and "status of my usual asset" in ctx, (n, ctx)
+assert n == 1 and "status of my usual asset" in ctx, (n, ctx)
 print("conversation notes in this session:", n)
 print("memory ok")

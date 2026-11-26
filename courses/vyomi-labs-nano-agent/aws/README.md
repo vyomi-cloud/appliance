@@ -13,8 +13,8 @@ Each chapter has its own folder with the exact code the course shows and deploys
 | Chapter | Folder | Steps |
 |---|---|---|
 | 1. The agent loop | [01-the-agent-loop/](01-the-agent-loop) | 2 |
-| 2. A model in your browser | [02-a-model-in-your-browser/](02-a-model-in-your-browser) | 4 |
-| 3. Tools | [03-tools/](03-tools) | 7 |
+| 2. A model in your browser | [02-a-model-in-your-browser/](02-a-model-in-your-browser) | 5 |
+| 3. Tools | [03-tools/](03-tools) | 6 |
 | 4. Memory | [04-memory/](04-memory) | 3 |
 | 5. Knowledge (RAG) | [05-knowledge-rag/](05-knowledge-rag) | 4 |
 | 6. Guardrails | [06-guardrails/](06-guardrails) | 4 |

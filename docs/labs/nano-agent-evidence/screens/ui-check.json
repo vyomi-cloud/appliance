@@ -1,0 +1,58 @@
+{
+ "cards": [
+  {
+   "course": "vl-ccard",
+   "title": "Build Your First Agent (Nano)"
+  },
+  {
+   "course": "vl-ccard has-ribbon",
+   "title": "Build the Enterprise Facilities agent on AWS (Nano, free)"
+  }
+ ],
+ "heading": "Vyomi Labs: Build Your First Agent (Nano)",
+ "chapters": [
+  {
+   "h": "The agent loop",
+   "chars": 5938,
+   "codeBlocks": 4,
+   "hasNeedsMesh": false
+  },
+  {
+   "h": "A model in your browser",
+   "chars": 5408,
+   "codeBlocks": 10,
+   "hasNeedsMesh": false
+  },
+  {
+   "h": "Tools",
+   "chars": 9570,
+   "codeBlocks": 12,
+   "hasNeedsMesh": false
+  },
+  {
+   "h": "Memory",
+   "chars": 6522,
+   "codeBlocks": 6,
+   "hasNeedsMesh": false
+  },
+  {
+   "h": "Knowledge (RAG)",
+   "chars": 8623,
+   "codeBlocks": 8,
+   "hasNeedsMesh": false
+  },
+  {
+   "h": "Guardrails",
+   "chars": 7826,
+   "codeBlocks": 8,
+   "hasNeedsMesh": false
+  },
+  {
+   "h": "Deploy and evaluate",
+   "chars": 6149,
+   "codeBlocks": 8,
+   "hasNeedsMesh": false
+  }
+ ],
+ "errors": []
+}

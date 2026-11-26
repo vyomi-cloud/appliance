@@ -51,6 +51,7 @@ CH = [
   simplified=["The model runs in your browser, so its quality is that of a small model: it is good at choosing between a few actions and weak at long free-form answers. The protocol is built around that."],
   checks=["the parser and validator accept good replies and reject bad ones with a reason", "the model answers a chat turn", "the model picks the right first action for three questions", "the protocol is reliable on twelve questions"],
   blocks=[
+   ("Create the AWS clients", "One file that creates the Bedrock, S3, DynamoDB and SQS clients, so every module shares them. Later chapters reuse it.", "aws.py", "aws.py", None, None),
    ("Write the model client", "The Converse call, the action list, the parser, the schema check and the one retry. Read parse_action and validate_action first.", "llmx.py", "llmx.py", None, None),
    ("Test the protocol without a model", "Feed the parser replies a small model really produces: clean, wrapped in prose or a code fence, unclosed, with an invented action, with a bad id.", "protocol_test.py", "protocol_test.py", "python protocol_test.py", "protocol tests passed"),
    ("Talk to the model", "A plain chat turn, then three questions through the protocol. This step needs a model: Deploy will offer to load one.", "try_model.py", "try_model.py", "python try_model.py", "valid actions: 3 of 3"),
@@ -80,7 +81,6 @@ CH = [
   checks=["the bucket, two tables and the queue exist", "search finds the boiler procedure and returns nothing for an unsupported question", "a record is found and a missing one is reported", "a ticket reaches the queue once even when requested twice", "the first agent picks the right tool for two questions"],
   blocks=[
    ("Describe the data", "The six handbook documents (one carries a planted instruction, for chapter 6), the asset and work-order records and the resource names.", "data.py", "data.py", None, None),
-   ("Create the AWS clients", "One file that creates the S3, DynamoDB, SQS and Bedrock clients, so every module shares them.", "aws.py", "aws.py", None, None),
    ("Create the resources", "A bucket for the handbook, a table for records and tickets, a table for memory and a queue for tickets. Safe to run again.", "seed.py", "seed.py", "python seed.py", "documents: 7"),
    ("Write the three tools", "search_docs (keyword search over the S3 documents), lookup_record and file_ticket. The ticket id comes from the request, so asking twice files once.", "tools.py", "tools_v1.py", None, None),
    ("Test the tools by hand", "No model yet: call each tool directly and check what it returns, including what it must refuse.", "try_tools.py", "try_tools.py", "python try_tools.py", "tools ok"),
