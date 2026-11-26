@@ -1,0 +1,9 @@
+PROBE model vyomi.smollm2-360m
+PROBE 0 end_turn None 'The status of asset B-12 is "In Transit".'
+PROBE 1 end_turn None 'The status of asset B-12 is "In Transit".'
+PROBE 2 end_turn None 'The status of asset B-12 is "In Transit".'
+PROBE 3 end_turn None 'The status of asset B-12 is "In Transit".'
+PROBE 4 end_turn None 'The status of asset B-12 is "down".'
+PROBE 5 end_turn None 'The status of asset B-12 is "In Transit".'
+PROBE 6 end_turn None 'The status of asset B-12 is "In Transit".'
+PROBE 7 end_turn None 'The status of asset B-12 is "In Transit".'

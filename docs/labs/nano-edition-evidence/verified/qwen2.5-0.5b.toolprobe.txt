@@ -1,0 +1,9 @@
+PROBE model vyomi.smollm2-360m
+PROBE 0 ERR An error occurred (ModelErrorException) when calling the Converse operation (reached max retries: 0): The model did not 
+PROBE 1 ERR An error occurred (ModelErrorException) when calling the Converse operation (reached max retries: 0): The model did not 
+PROBE 2 end_turn None 'asset_status:B-12'
+PROBE 3 end_turn None 'asset_status:B-12'
+PROBE 4 end_turn None 'asset_status(asset_id:B-12)}'
+PROBE 5 ERR An error occurred (ModelErrorException) when calling the Converse operation (reached max retries: 0): The model did not 
+PROBE 6 end_turn None 'asset_status:B-12'
+PROBE 7 end_turn None 'asset_status:B-12'

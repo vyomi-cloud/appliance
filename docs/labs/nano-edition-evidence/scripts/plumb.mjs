@@ -3,7 +3,11 @@ const EV=SP+"/ev/out";
 const PORT=process.env.PORT||8957, DATA=process.env.DATA||"aws-nano.json"; const MODEL=process.env.MODEL||""; const prof=process.env.PROF||SP+"/m/prof-plumb"; const out=process.env.OUT||EV+"/nano-plumbing-nomodel.jsonl";
 const only=(process.env.CH||"").split(",").filter(Boolean).map(Number);
 fs.writeFileSync(out,"");
-const ctx=await launch(prof); const p=await ctx.newPage();
+const ctx=await launch(prof);
+if(process.env.HF_VIA_NODE){ // some HF CDN shards fail in headless Chrome (ERR_FAILED); fetch them from Node and hand the bytes to the page
+  await ctx.route(/huggingface\.co\/mlc-ai\/.*\/resolve\//,async route=>{ try{ const r=await route.fetch({maxRedirects:10,timeout:600000}); await route.fulfill({response:r,headers:{...r.headers(),"access-control-allow-origin":"*"}}); }catch(e){ await route.abort(); } });
+}
+const p=await ctx.newPage();
 if(process.env.CLEAR){ // reuse one profile for the model cache, but start every run from an empty Nano store (IndexedDB, OPFS, localStorage); Cache Storage (webllm/*) is kept
   await p.goto(`http://localhost:${PORT}/nano/labs/`);
   console.log("cleared",JSON.stringify(await p.evaluate(async()=>{ const r={idb:[],opfs:0}; for(const d of (await indexedDB.databases())){ await new Promise(res=>{const q=indexedDB.deleteDatabase(d.name); q.onsuccess=q.onerror=q.onblocked=()=>res();}); r.idb.push(d.name);} try{ const root=await navigator.storage.getDirectory(); for await (const [n] of root.entries()){ await root.removeEntry(n,{recursive:true}); r.opfs++; } }catch(e){} try{localStorage.clear();sessionStorage.clear();}catch(e){} r.caches=await caches.keys(); return r; })));

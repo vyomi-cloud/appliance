@@ -1,0 +1,9 @@
+PROBE model vyomi.smollm2-360m
+PROBE 0 tool_use {'toolUseId': 'call_f17986ff3c914199913712c5', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 1 tool_use {'toolUseId': 'call_56973f3d7c5a4bc8abd8e54d', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 2 tool_use {'toolUseId': 'call_214fc5fdb0934d7cb4de4635', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 3 tool_use {'toolUseId': 'call_61b7b1cda06049249cd62542', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 4 tool_use {'toolUseId': 'call_0dcc2a37e1904fd994480e0b', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 5 tool_use {'toolUseId': 'call_7bb393ca8b59499599d05cbe', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 6 tool_use {'toolUseId': 'call_308819528734447e85463d66', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''
+PROBE 7 tool_use {'toolUseId': 'call_5c522be348b84141bdea9b13', 'name': 'asset_status', 'input': {'asset_id': 'B-12'}} ''

@@ -13,11 +13,14 @@ await A.waitForTimeout(2500);
 const fr=A.frames().find(x=>x.url().includes("/labs/"));
 await fr.waitForSelector(".vl-deploybtn",{timeout:60000});
 await fr.evaluate(()=>document.querySelector(".vl-deploybtn").click());
-const res={layer:LAYER,events:[]}; const t0=Date.now(); let pickerSeen=false; let n=0;
+const res={layer:LAYER,events:[]}; const t0=Date.now(); let pickerSeen=false, lastPick=""; let n=0;
 while(Date.now()-t0<1500000){
   await A.waitForTimeout(2000);
   const st=await fr.evaluate(()=>({btn:document.querySelector(".vl-deploybtn").textContent, dis:document.querySelector(".vl-deploybtn").disabled, picker:!!document.querySelector(".vl-modelpick"), pickText:(document.querySelector(".vl-modelpick")||{}).innerText||"", btns:[...document.querySelectorAll(".vl-modelpick button")].map(b=>b.innerText.replace(/\n/g," ")+(b.disabled?" [disabled]":""))}));
-  if(st.picker && !pickerSeen){ pickerSeen=true; res.pickerText=st.pickText; res.pickerButtons=st.btns; await A.screenshot({path:`${SP}/ev/out/ui-${LAYER}-picker.png`});
+  if(process.env.DEBUG) console.log('dbg',LAYER,Math.round((Date.now()-t0)/1000)+'s',st.btn,st.dis,st.picker,JSON.stringify(await fr.evaluate(()=>[...document.querySelectorAll('.vl-dchip')].map(c=>c.textContent))));
+  if(!st.picker) pickerSeen=false;
+  if(st.picker && !MODEL){ await fr.evaluate(()=>{ const b=[...document.querySelectorAll('.vl-modelpick button')].find(x=>/Skip/.test(x.innerText)); b&&b.click(); }); }
+  if(st.picker && !pickerSeen){ pickerSeen=true; res.pickers=(res.pickers||0)+1; if(!res.pickerText){res.pickerText=st.pickText; res.pickerButtons=st.btns;} await A.screenshot({path:`${SP}/ev/out/ui-${LAYER}-picker.png`});
     if(MODEL){ await fr.evaluate((m)=>{ const b=[...document.querySelectorAll(".vl-modelpick button")].find(x=>x.innerText.includes(m)); b&&b.click(); },MODEL); res.events.push("picked "+MODEL); }
     else { await fr.evaluate(()=>{ const b=[...document.querySelectorAll(".vl-modelpick button")].find(x=>/Skip/.test(x.innerText)); b&&b.click(); }); res.events.push("skipped"); } }
   if(!st.dis && /Deploy again/.test(st.btn)) break;
