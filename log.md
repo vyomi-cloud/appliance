@@ -1,3 +1,13 @@
+### Upstream watch — 2026-11-26T16:34:15+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Sources that failed this run (2): maven/com.azure:azure-cosmos: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-26T15:34:16+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3008,3 @@ Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 
 **12 change(s), 1 actionable.**
 - 🔧 `lifecycle` Google Kubernetes Engine: No channel (deprecated) (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Change (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Change (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Change (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Change (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Change (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Change (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Extended channel (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Rapid channel (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Regular channel (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
-- · `announcement` Google Kubernetes Engine: Security (November 13, 2026) ([link](https://docs.cloud.google.com/release-notes#November_13_2026))
