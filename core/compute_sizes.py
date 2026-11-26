@@ -116,12 +116,16 @@ def size_table(cloud: str, sub: str | None = None) -> list[dict]:
 # honestly offer is that guest, named per cloud's own conventions. Mesh / offline keep their full catalogs.
 NANO_GUEST = {"os": "Alpine Linux 3.21", "bits": 32, "arch": "i386", "engine": "v86", "vcpu": 1,
               "code": "wasm/vm/build-image.sh (image), wasm/vm/vm-worker.js (engine), wasm/vm/nano-vm-host.js (runtime facts)"}
+# What the guest image really contains (wasm/vm/build-image.sh PKGS: python3 + py3-pip, apk-tools, git). Every runnable Nano image MUST provide exactly
+# these tools (python3, pip, apk, git); tests assert them inside the booted VM per runnable image (consoles/tests/smoke-nano-browservm.mjs).
+NANO_TOOLS = ("Python 3", "pip", "apk", "git")
+NANO_SUMMARY = "Alpine Linux 3.21, 32-bit x86: " + ", ".join(NANO_TOOLS)
 NANO_IMAGES = {
-    "aws": {"name": "Alpine Linux 3.21 (i386) - Vyomi Nano", "arch": "i386", "platform": ""},
+    "aws": {"name": "Alpine Linux 3.21 (i386) - Vyomi Nano", "arch": "i386", "platform": "", "description": NANO_SUMMARY},
     "gcp": {"project": "vyomi-nano-cloud", "family": "alpine-3-21-i386", "name": "alpine-3-21-i386-nano",
-            "description": "Alpine Linux 3.21 (32-bit x86), the guest every Vyomi Nano in-browser VM runs"},
+            "description": NANO_SUMMARY},
     "azure": {"publisher": "vyomi", "offer": "alpine-nano", "sku": "3.21-i386", "version": "latest",
-              "display": "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano"},
+              "display": "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", "description": NANO_SUMMARY},
 }
 
 

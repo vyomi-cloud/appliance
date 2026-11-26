@@ -19,7 +19,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { nanoVmOn } from "../../../common/NanoVmPanel.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGE_SUMMARY, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import { WINDOWS_IMAGES_REASON, windowsDisabled } from "../../../common/windowsImages.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
@@ -157,7 +157,7 @@ export default function LaunchInstance({ query }) {
                 </FormField>
                 {windowsDisabled(images.find((i) => i.imageId === effectiveAmiId)) && <Alert type="warning">{WINDOWS_IMAGES_REASON} Pick another Quick Start option to launch.</Alert>}
                 {macOs && <Alert type="info">macOS requires a Dedicated Host, which Vyomi doesn't model — pick another Quick Start option to launch.</Alert>}
-                <FormField label="Amazon Machine Image (AMI)" description="Free tier eligible">
+                <FormField label="Amazon Machine Image (AMI)" description={nano ? IMAGE_SUMMARY : "Free tier eligible"}>
                   <Select selectedOption={effectiveAmiId ? opt(effectiveAmiId, images.find((i) => i.imageId === effectiveAmiId)?.name || effectiveAmiId) : null}
                     onChange={({ detail }) => setAmiId(detail.selectedOption.value)}
                     options={searchedImages.map((i) => ({ ...opt(i.imageId, `${i.name} (${i.imageId})`), ...(windowsDisabled(i) ? { disabled: true, description: WINDOWS_IMAGES_REASON } : runnableRow(i) ? {} : { disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }) }))} loadingText="Loading AMIs" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Amazon Machine Image (AMI)" />

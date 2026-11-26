@@ -15,12 +15,41 @@ const results = [];
 const check = (n, ok, extra = "") => { results.push(!!ok); console.log(`${ok ? "PASS" : "FAIL"} ${n}${ok ? "" : "  " + extra}`); };
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
-const NOTE = /only Alpine Linux 3\.21 \(32-bit x86\) can run here/;
+const SUMMARY = 'Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git';   // exactly what the one runnable image contains (core/compute_sizes.py NANO_SUMMARY)
+const NOTE = /Alpine Linux 3\.21, 32-bit x86: Python 3, pip, apk, git/;
 const REASON = "Not available on Nano: runs only in a Mesh";
 // sizes a Nano VM can run (core/compute_sizes.py) - everything else must be listed AND disabled
 const AWS_RUN = ["t2.nano", "t3.nano", "t3a.nano", "t2.micro", "t3.micro", "t3a.micro"], GCP_RUN = ["f1-micro", "e2-micro"], AZ_RUN = ["Standard_B1ls", "Standard_B1s"];
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
 const SUBS = { nano: `${NANO}/nano/v4`, mesh: `${MESH}/v4` };
+
+// ── Regression: the AMI list must load on a FRESH browser profile (owner report "Amazon Machine Image (AMI) is not loading") ──
+// Cause: on a first visit the service-worker register()/update() job sat ~60 s (nano-boot.js awaited it), so the page's one-shot catalog call was
+// held by the worker for 60 s and then answered HTTP 500 "no client to run the in-browser backend"; the picker stayed empty for good.
+// (1) deterministic: the FIRST DescribeImages / DescribeInstanceTypes answer is forced to that 500; the console must wait for the backend and retry.
+// (2) the time from navigation to an enabled "Launch instance" is printed (a fresh profile used to take 60 - 180 s; now about 5 s, more only when the Pyodide CDN is slow).
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1500 } });
+  await ctx.addInitScript(() => {
+    const orig = window.fetch.bind(window); window.__forced500 = 0;
+    window.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (/\/_wire\/?$/.test(url) && /Action=(DescribeImages|DescribeInstanceTypes)\b/.test(String(init?.body || "")) && window.__forced500 < 2)
+        { window.__forced500++; return new Response(JSON.stringify({ ok: false, error: "Error: no client to run the in-browser backend" }), { status: 500, headers: { "content-type": "application/json" } }); }
+      return orig(input, init);
+    };
+  });
+  const page = await ctx.newPage(); const t0 = Date.now();
+  await page.goto(`${NANO}/nano/v4/aws/#/ec2/launch-instance`);
+  const btn = page.getByRole("button", { name: "Launch instance" }).last();
+  let loaded = true; try { await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => /Launch instance/.test(b.innerText) && !b.disabled), null, { timeout: 240000 }); } catch { loaded = false; }
+  const secs = ((Date.now() - t0) / 1000).toFixed(1);
+  console.log(`INFO fresh profile: Launch instance enabled after ${secs}s (loaded=${loaded})`);
+  const forced = await page.evaluate(() => window.__forced500);
+  check("[nano] AMI list loads on a fresh profile even when the first catalog calls are answered 500 'no client' (retried after the backend is up)", loaded && forced === 2 && /Alpine Linux 3\.21/.test(await page.getByLabel("Amazon Machine Image (AMI)").first().innerText()), `loaded=${loaded} forced=${forced}`);
+  await page.screenshot({ path: `${OUT}/aws-nano-fresh-profile.png` });
+  await ctx.close();
+}
 
 for (const [sub, root] of Object.entries(SUBS)) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1500 } });
@@ -48,6 +77,7 @@ for (const [sub, root] of Object.entries(SUBS)) {
   await page.getByLabel("Instance type").first().click(); await page.waitForTimeout(400);
   const types = await optionStates(); await page.keyboard.press("Escape");
   const awsSel = { ami: await page.getByLabel("Amazon Machine Image (AMI)").first().innerText(), arch: await page.getByLabel("Architecture").first().innerText(), type: await page.getByLabel("Instance type").first().innerText() };
+  const awsBody = await page.locator("body").innerText();
   await page.screenshot({ path: `${OUT}/aws-${sub}.png`, fullPage: false });
   if (sub === "nano") {
     check("[nano] aws note shown", await page.getByText(NOTE).count() > 0);
@@ -68,13 +98,15 @@ for (const [sub, root] of Object.entries(SUBS)) {
     const ims = (await wireAws("Action=DescribeImages&Version=2016-11-15")).t;
     const x86 = ims.match(/<imageId>(ami-\w+)<\/imageId>(?:(?!<imageId>).)*?<architecture>x86_64<\/architecture>/s)?.[1];
     const bad = await wireAws(`Action=RunInstances&Version=2016-11-15&MinCount=1&MaxCount=1&InstanceType=t3.micro&ImageId=${x86}`);
+    check("[nano] aws DescribeImages describes the runnable AMI exactly as the summary", new RegExp(`<name>Alpine Linux 3\\.21 \\(i386\\) - Vyomi Nano</name><description>${SUMMARY}</description>`).test(ims), ims.slice(0, 200));
+    check("[nano] aws AMI field states what the image contains", awsBody.includes(SUMMARY));
     check("[nano] aws RunInstances with a listed-but-disabled x86 AMI is still refused natively (Unsupported 400)", bad.s === 400 && /<Code>Unsupported<\/Code>/.test(bad.t), bad.t.slice(0, 160));
     const bigT = await wireAws("Action=RunInstances&Version=2016-11-15&MinCount=1&MaxCount=1&InstanceType=m5.2xlarge");
     check("[nano] aws RunInstances with a disabled size is still refused (Unsupported 400)", bigT.s === 400 && /<Code>Unsupported<\/Code>/.test(bigT.t), bigT.t.slice(0, 160));
   } else {
     check("[mesh] aws no Nano note", await page.getByText(NOTE).count() === 0);
-    check("[mesh] aws Quick Start keeps the full list, nothing disabled", ["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"].every((n) => quick.some((q) => q.t.includes(n))) && !quick.some((q) => q.off) && !quick.some((q) => /Alpine/.test(q.t)), JSON.stringify(quick));
-    check("[mesh] aws AMI list is the full catalog, nothing disabled", ["Amazon Linux", "Ubuntu", "Windows Server", "Red Hat", "SUSE", "Debian"].every((n) => amis.some((a) => a.t.includes(n))) && !amis.some((a) => /Alpine/.test(a.t)) && !disabledOf(amis).length, JSON.stringify(amis));
+    check("[mesh] aws Quick Start keeps the full list, nothing disabled except Windows (disable-windows-images)", ["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"].every((n) => quick.some((q) => q.t.includes(n))) && quick.every((q) => !q.off || /Windows/.test(q.t)) && !quick.some((q) => /Alpine/.test(q.t)), JSON.stringify(quick));
+    check("[mesh] aws AMI list is the full catalog, nothing disabled except Windows", ["Amazon Linux", "Ubuntu", "Windows Server", "Red Hat", "SUSE", "Debian"].every((n) => amis.some((a) => a.t.includes(n))) && !amis.some((a) => /Alpine/.test(a.t)) && disabledOf(amis).every((a) => /Windows/.test(a)), JSON.stringify(amis));
     check("[mesh] aws Architecture offers x86 and Arm, enabled", same(archs.map((a) => a.t), ["64-bit (x86)", "64-bit (Arm)"]) && !disabledOf(archs).length, JSON.stringify(archs));
     check("[mesh] aws sizes unchanged (the Mesh runnable list, none disabled)", !disabledOf(types).length && !types.some((t) => t.t.startsWith("m5.2xlarge")), JSON.stringify(types.map((t) => t.t)));
   }
@@ -154,7 +186,7 @@ for (const [sub, root] of Object.entries(SUBS)) {
     check("[nano] azure VM PUT with a disabled size is still refused (409 SkuNotAvailable)", badSz.s === 409 && /SkuNotAvailable/.test(badSz.t), badSz.t.slice(0, 160));
   } else {
     check("[mesh] azure no Nano note", await page.getByText(NOTE).count() === 0);
-    check("[mesh] azure Image keeps the catalog, nothing disabled", imgs.length === 3 && imgs.some((i) => /Ubuntu/.test(i.t)) && imgs.some((i) => /Windows/.test(i.t)) && !imgs.some((i) => i.off), JSON.stringify(imgs));
+    check("[mesh] azure Image keeps the catalog, nothing disabled except Windows", imgs.length === 3 && imgs.some((i) => /Ubuntu/.test(i.t)) && imgs.some((i) => /Windows/.test(i.t)) && imgs.every((i) => !i.off || /Windows/.test(i.t)), JSON.stringify(imgs));
     check("[mesh] azure VM architecture offers Arm64 and x64, enabled", azArch.length === 2 && !azArch.some((a) => a.off), JSON.stringify(azArch));
     check("[mesh] azure sizes: none disabled", !azSizes.some((i) => i.off), JSON.stringify(azSizes));
   }

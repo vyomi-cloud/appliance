@@ -1,3 +1,4 @@
+import "../common/nanoWireRetry.js";
 import "@cloudscape-design/global-styles/index.css";
 import { createRoot } from "react-dom/client";
 import { NotifyProvider } from "../common/notify.jsx";

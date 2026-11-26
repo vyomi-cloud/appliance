@@ -17,7 +17,7 @@ const BOOT = process.env.BOOT !== "0";
 const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " - " + String(detail).slice(0, 200) : ""}`); };
 await mkdir(OUT, { recursive: true });
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1300 } });
 const page = await ctx.newPage();
 const errors = [];
@@ -28,10 +28,15 @@ const ready = () => page.waitForFunction(() => window.__vyomiNanoReady === true,
 const A = {
   aws: {
     home: "#/ec2",
-    async create() {
+    async create(img) {
       const ec2 = (action, params) => page.evaluate(async ([u, a, p]) => (await fetch(u + "/", { method: "POST", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0", "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ Action: a, Version: "2016-11-15", ...p }).toString() })).text(), [WIRE, action, params]);
-      const ami = (await ec2("DescribeImages", {})).match(/<imageId>(ami-\w+)<\/imageId>/)[1];
+      const ami = (img && img.id) || (await this.runnable())[0].id;
       return (await ec2("RunInstances", { ImageId: ami, MinCount: "1", MaxCount: "1", InstanceType: "t3.micro" })).match(/<instanceId>(i-\w+)<\/instanceId>/)[1];
+    },
+    // every image the core flags runnable (DescribeImages vyomiRunnable=true): each one must boot and pass the toolchain check below
+    async runnable() {
+      const x = await page.evaluate(async (u) => (await (await fetch(u + "/", { method: "POST", headers: { authorization: "AWS4-HMAC-SHA256 Credential=X/20261030/us-east-1/ec2/aws4_request, SignedHeaders=host, Signature=0", "content-type": "application/x-www-form-urlencoded" }, body: "Action=DescribeImages&Version=2016-11-15" })).text()), WIRE);
+      return [...x.matchAll(/<item><imageId>(ami-\w+)<\/imageId>.*?<name>([^<]*)<\/name>.*?<vyomiRunnable>(true|false)<\/vyomiRunnable>/gs)].filter((m) => m[3] === "true").map((m) => ({ id: m[1], name: m[2] }));
     },
     detail: (id) => `#/ec2/instances/${id}`,
     connect: (id) => `#/ec2/instances/${id}`,
@@ -44,12 +49,13 @@ const wjson = (path, method, body) => page.evaluate(async ([u, m, b]) => { const
 const SUB = "00000000-0000-0000-0000-cloudlearn01";
 A.azure = {
   home: "#/",
-  async create() {
+  async runnable() { return [{ id: "vyomi:alpine-nano:3.21-i386", name: "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", ref: { publisher: "vyomi", offer: "alpine-nano", sku: "3.21-i386", version: "latest" } }]; },   // the console's image list (no core catalog for Azure images)
+  async create(img) {
     const n = Date.now() % 100000, RG = `vmrg${n}`, VM = `vm${n}`;
     await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}?api-version=2021-04-01`, "PUT", { location: "eastus" });
     const r = await wjson(`/subscriptions/${SUB}/resourceGroups/${RG}/providers/Microsoft.Compute/virtualMachines/${VM}?api-version=2023-09-01`, "PUT",
       { location: "eastus", properties: { hardwareProfile: { vmSize: "Standard_B1s" }, osProfile: { computerName: VM, adminUsername: "azureuser", linuxConfiguration: { disablePasswordAuthentication: true } },
-        storageProfile: { imageReference: { publisher: "vyomi", offer: "alpine-nano", sku: "3.21-i386", version: "latest" }, osDisk: { createOption: "FromImage", osType: "Linux" } } } });
+        storageProfile: { imageReference: (img && img.ref) || { publisher: "vyomi", offer: "alpine-nano", sku: "3.21-i386", version: "latest" }, osDisk: { createOption: "FromImage", osType: "Linux" } } } });
     if (r.status >= 300) throw new Error("create VM failed: " + r.text);
     this.rg = RG; return VM;
   },
@@ -61,11 +67,19 @@ A.azure = {
 };
 A.gcp = {
   home: "#/",
-  async create() {
+  async runnable() {
+    const out = [];
+    for (const prj of ["debian-cloud", "ubuntu-os-cloud", "cos-cloud", "rocky-linux-cloud", "vyomi-nano-cloud"]) {
+      const j = (await wjson(`/compute/v1/projects/${prj}/global/images`, "GET")).body || {};
+      for (const i of j.items || []) if (i.vyomiRunnable === true) out.push({ id: `projects/${prj}/global/images/${i.name}`, name: i.name });
+    }
+    return out;
+  },
+  async create(img) {
     await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
     const project = "nano-project";   // Nano's one project (core/gcp_project.NANO_PROJECT)
     const name = `vm-${Date.now() % 100000}`, zone = "us-central1-a";
-    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: "e2-micro", disks: [{ boot: true, initializeParams: { diskSizeGb: "10", sourceImage: "projects/vyomi-nano-cloud/global/images/family/alpine-3-21-i386" } }] });
+    const r = await wjson(`/compute/v1/projects/${project}/zones/${zone}/instances`, "POST", { name, machineType: "e2-micro", disks: [{ boot: true, initializeParams: { diskSizeGb: "10", sourceImage: (img && img.id) || "projects/vyomi-nano-cloud/global/images/family/alpine-3-21-i386" } }] });
     if (r.status >= 300) throw new Error("create instance failed: " + r.text);
     this.zone = zone; return name;
   },
@@ -76,10 +90,37 @@ A.gcp = {
   openShell: async () => {},
 };
 const cl = A[CLOUD];
+// EVERY image the catalog flags runnable on Nano must give a working Python 3, pip, apk and git (owner requirement 2026-11-26, NANO_TOOLS in
+// core/compute_sizes.py). Data-driven: a future runnable image is booted and probed too, and cannot be enabled without passing.
+const TOOLS = [
+  ["python3 --version", /^Python 3\.\d+\.\d+/m],
+  ["python3 -c 'print(sum(range(1,11))*6)'", /^330$/m],
+  ["pip --version", /^pip \d+\.\d+/m],
+  ["apk --version", /^apk-tools \d+/m],
+  ["git --version", /^git version \d+\.\d+/m],
+  ["cat /etc/os-release | head -2", /^NAME="?Alpine Linux"?$/m],
+];
+async function probeTools(label) {
+  const term = page.locator(".vy-term").first();
+  for (const [cmd, re] of TOOLS) {
+    const mark = "T" + Math.random().toString(36).slice(2, 7);
+    await term.click();
+    await page.keyboard.type(`echo ${mark}-begin; ${cmd}; echo ${mark}-end\r`, { delay: 25 });
+    let out = "";
+    try {
+      await page.waitForFunction((m) => new RegExp(`^${m}-end$`, "m").test(document.querySelector(".vy-term")?.innerText || ""), mark, { timeout: 120000 });
+      const all = await term.innerText(); out = all.slice(all.lastIndexOf(mark + "-begin\n") + mark.length + 7, all.lastIndexOf(mark + "-end"));
+    } catch { out = "(timeout) " + (await term.innerText()).slice(-200); }
+    check(`${label}: \`${cmd}\` -> ${re}`, re.test(out), out.trim().slice(0, 120));
+    console.log(`   OUT ${cmd}: ${out.trim().replace(/\s+/g, " ").slice(0, 160)}`);
+  }
+}
 await page.goto(UI + cl.home);
 await ready();
 check("Nano backend ready", true);
-const vmId = await cl.create();
+const IMAGES = await cl.runnable();
+check("the catalog flags at least one runnable image", IMAGES.length >= 1, IMAGES.map((i) => i.name).join(" | "));
+const vmId = await cl.create(IMAGES[0]);
 check("instance created through the wire", !!vmId, vmId);
 
 // 1. flag off -> honest panel
@@ -125,17 +166,29 @@ else {
     check("shell: typed command ran in the VM (echo -> hi-from-42)", true);
   } catch { check("shell: typed command ran in the VM", false, (await page.locator(".vy-term").first().innerText()).slice(-200)); }
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-shell.png` });
+  await probeTools(`[${IMAGES[0].name}]`);
+  await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-tools.png` });
   // a power repaint (the event the host fires on a state change) must not yank the open shell
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("nano-vm-power", { detail: { id: null, state: "running" } })));
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `${OUT}/browservm-${CLOUD}-repaint.png` });
   if (process.env.DBG) console.log(await page.evaluate(() => JSON.stringify({ terms: document.querySelectorAll(".vy-term").length, html: (document.querySelector(".vy-term")?.innerHTML || "").slice(0, 600), shells: document.querySelectorAll("[data-nano-shell]").length })));
-  check("shell survives a power-state repaint (session kept)", /^hi-from-42$/m.test(await page.locator(".vy-term").first().innerText().catch(() => "")));
+  check("shell survives a power-state repaint (session kept)", /^hi-from-42$|^T\w+-end$/m.test(await page.locator(".vy-term").first().innerText().catch(() => "")));
 }
 if (CLOUD === "azure" && BOOT) {
   await page.goto(UI + `#/vms/${cl.rg}/${vmId}/serialconsole`); await ready();
   await page.locator(".vy-term").first().waitFor({ timeout: 60000 }).catch(() => {});
   check("azure Serial console blade is the in-browser shell (not Not-simulated)", (await page.locator(".vy-term").count()) === 1 && !/Coming soon/i.test(await page.locator("body").innerText()));
+}
+// every further runnable image (none today): create, boot, shell, same tool probe
+for (const img of IMAGES.slice(1)) {
+  if (!BOOT) break;
+  const id2 = await cl.create(img);
+  await page.goto(UI + cl.list); await ready();
+  try { await page.waitForFunction(() => /\brunning\b/i.test(document.body.innerText || "") && !document.querySelector("[data-vy-pending]"), null, { timeout: 240000, polling: 2000 }); } catch {}
+  await page.goto(UI + cl.connect(id2)); await ready(); await cl.openShell(page);
+  await page.locator(".vy-term").first().waitFor({ timeout: 60000 });
+  await probeTools(`[${img.name}]`);
 }
 check("no uncaught page errors", errors.length === 0, errors.join(" | "));
 await browser.close();

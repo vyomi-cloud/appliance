@@ -301,11 +301,11 @@
         },
         alternatives: [],
         lxc: null,
-        runtime: { engine: "v86", os: "Alpine Linux 3.21 (i386, 32-bit)", arch: "i686", mem_mb: it.mem_mb, image: st.image,
+        runtime: { engine: "v86", os: "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git", arch: "i686", mem_mb: it.mem_mb, image: st.image,
                    where: "this browser tab (in-browser VM)", tunnel: ext },
         note: `This instance is a real Linux VM running inside your browser (v86, 32-bit x86, ${it.mem_mb} MB RAM). ` +
               `vyomi-tunnel forwards ${"127.0.0.1"}:${port} on this machine to its SSH port, so the command works from your terminal while this Nano tab is open. ` +
-              `In-browser toolchain: git, Python 3, pip and apk. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the mesh (Pro/Max).`,
+              `In-browser toolchain (Alpine Linux 3.21, 32-bit x86): Python 3, pip, apk, git. Package and git downloads go through Vyomi's allow-listed egress (the hosted relay, or your local vyomi-tunnel if the hosted one is unreachable) (pypi, Alpine, GitHub, GitLab); other hosts are blocked. Other languages run on the mesh (Pro/Max).`,
       };
     }
     return http(400, { detail: "unknown op " + op });
@@ -372,8 +372,8 @@
       wrap.append(h("div", { style: S.box },
         h("div", { style: S.title }, "In-browser VM"),
         h("div", { style: S.sub }, { aws: "Instance ID", gcp: "Instance", azure: "Virtual machine" }[cloud] + ": " + ref),
-        h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86, Alpine Linux). " +
-          "The cloud's image is not booted: the OS is Alpine, the login user follows the cloud (" + userHint + ").")));
+        h("div", { style: S.sub }, "In Vyomi Nano this instance is a real Linux VM running inside this browser tab (v86, 32-bit x86). " +
+          "Whatever cloud image the record names, the guest is always Alpine Linux 3.21, 32-bit x86 (Python 3, pip, apk, git), not the real Amazon Linux / Ubuntu / Debian / Windows image; the login user follows the cloud (" + userHint + ").")));
       let r, j = null;
       try { r = await fetch(apiBase() + P.ci); j = await r.json(); } catch (e) { r = { status: 0 }; }
       if (!wrap.isConnected) return;   // a newer paint (React remount / repaint) owns the host now; never steal its shell
