@@ -614,6 +614,28 @@ def _vm_mem(itype: str) -> int:
     return 1024 if any(x in t for x in ("xlarge", "standard_b2", "standard_d", "e2-standard", "n2-")) else 512
 
 
+def _aws_image_key(model: dict, inst: dict) -> str:
+    """Which Nano catalog image (core/compute_sizes.py NANO_CATALOG) an EC2 instance's AMI is; Alpine (the default) when it is none of them."""
+    from core import compute_sizes as cs
+    img = (model.get("images") or {}).get(str(inst.get("image_id") or "")) or {}
+    return img.get("nano_key") or cs.nano_image_key(img.get("name")) or cs.NANO_DEFAULT_KEY
+
+
+def _gcp_image_key(store, inst: dict) -> str:
+    from core import compute_sizes as cs
+    try:
+        from core import gcp_compute_instances_core as g
+        return g.nano_image_key_of(store, inst)
+    except Exception:
+        return cs.NANO_DEFAULT_KEY
+
+
+def _azure_image_key(props: dict) -> str:
+    from core import compute_sizes as cs
+    ref = (props.get("storageProfile") or {}).get("imageReference") or {}
+    return cs.nano_image_key(":".join(str(ref.get(k) or "") for k in ("publisher", "offer", "sku"))) or cs.NANO_DEFAULT_KEY
+
+
 def _wire_vms() -> list:
     """EC2 + GCE instances created through the native wire (v4 consoles, SDK, CLI): the vpc_core model's instances
     and the Compute Engine core's instances, as the same desired-state items the host reconciles."""
@@ -624,7 +646,8 @@ def _wire_vms() -> list:
     except Exception:
         return out
     try:
-        for iid, r in (vpc_core._model(reg["vpc_net"]).get("instances") or {}).items():
+        _model = vpc_core._model(reg["vpc_net"])
+        for iid, r in (_model.get("instances") or {}).items():
             st = str(r.get("state") or "running").lower()
             img = str(r.get("image_id") or "").lower()
             user = "ubuntu" if "ubuntu" in img or "ubuntu" in str(r.get("platform_details") or "").lower() else "ec2-user"
@@ -632,6 +655,7 @@ def _wire_vms() -> list:
                         "desired": "terminate" if st in ("terminated", "shutting-down") else
                                    "stop" if st in ("stopped", "stopping") else "run",
                         "user": user, "mem_mb": _vm_mem(r.get("instance_type")), "keys": [],
+                        "image": _aws_image_key(_model, r),
                         "key_name": r.get("key_name") or "", "instance_type": r.get("instance_type") or ""})
     except Exception:
         pass
@@ -650,7 +674,7 @@ def _wire_vms() -> list:
             mt = str(r.get("machineType") or "").rsplit("/", 1)[-1]
             out.append({"cloud": "gcp", "id": "gce-" + n, "ref": n, "name": n,
                         "desired": "stop" if st in ("TERMINATED", "STOPPED", "STOPPING", "SUSPENDED", "SUSPENDING") else "run",
-                        "user": user or "gcpuser", "mem_mb": _vm_mem(mt), "keys": keys,
+                        "user": user or "gcpuser", "mem_mb": _vm_mem(mt), "keys": keys, "image": _gcp_image_key(reg.get("gcp_compute_vm"), r),
                         "instance_type": mt, "zone": str(r.get("zone") or "").rsplit("/", 1)[-1]})
     except Exception:
         pass
@@ -717,6 +741,7 @@ def _vms_list(backends: Backends) -> dict:
         items.append({"cloud": "azure", "id": "az-" + n, "ref": n, "name": n,
                       "desired": "stop" if ps.endswith(("stopped", "deallocated")) else "run",
                       "user": osp.get("adminUsername") or "azureuser", "mem_mb": _vm_mem(size), "keys": keys,
+                      "image": _azure_image_key(props),
                       "instance_type": size, "resource_id": rec.get("id") or rid})
     return {"ok": True, "items": items}
 
