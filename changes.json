@@ -1,39 +1,14 @@
 {
- "at": "2026-11-26T00:34:02+00:00",
+ "at": "2026-11-26T01:33:55+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.116.1",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.116.0 \u2192 v1.116.1",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.74.2",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.74.1 \u2192 v1.74.2",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.53.1",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.53.0 \u2192 v1.53.1",
-   "actionable": false
-  },
-  {
    "cloud": "azure",
-   "service": "Virtual Network",
-   "kind": "announcement",
-   "key": "feed:azure:fbb241bfa24b",
-   "title": "[In preview] Public Preview: ECMP Nexthop ",
-   "link": "https://azure.microsoft.com/updates?id=582326",
-   "detail": "Equal-Cost Multi-Path (ECMP) routing for Azure Virtual Network is now available in public preview, enabling customers to distribute traffic across multiple network appliances using a single user-defined route (UDR). Customers can configure 2 to 16 next-h",
+   "service": "authorization",
+   "kind": "spec-commit",
+   "key": "azure:authorization:d27dd83932",
+   "title": "Azure authorization: Preserve C# resource names for Billing, Authorization, and Marketplace (#48433)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/d27dd8393238a2bdf4c71a7b824aa3dcd4e97295",
    "actionable": false
   }
  ],

@@ -1,3 +1,12 @@
+### Upstream watch — 2026-11-26T01:33:55+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `spec-commit` Azure authorization: Preserve C# resource names for Billing, Authorization, and Marketplace (#48433) ([link](https://github.com/Azure/azure-rest-api-specs/commit/d27dd8393238a2bdf4c71a7b824aa3dcd4e97295))
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-26T00:34:02+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,15 +3007,3 @@ Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and
 Sources that failed this run (9): maven/software.amazon.awssdk:s3: The read operation timed out; maven/software.amazon.awssdk:sqs: The read operation timed out; maven/com.google.cloud:google-cloud-firestore: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-appcontainers: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-cognitiveservices: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-dns: The read operation timed out; maven/com.azure.resourcemanager:azure-resourcemanager-loganalytics: The read operation timed out
 
 Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-13T21:10:25+00:00
-
-Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**16 change(s), 12 actionable.**
-- 🔧 `operation-added` AWS ec2: new operation AssociateNetworkingFlexCostAllocationPolicy
-- 🔧 `operation-added` AWS ec2: new operation CreateNetworkingFlexCostAllocationPolicy
-- 🔧 `operation-added` AWS ec2: new operation DeleteNetworkingFlexCostAllocationPolicies
-- 🔧 `operation-added` AWS ec2: new operation DescribeNetworkingFlexCostAllocationPolicies
-- 🔧 `operation-added` AWS ec2: new operation DescribeNetworkingFlexCostAllocationPolicyAssociations
-- 🔧 `operation-added` AWS ec2: new operation DisassociateNetworkingFlexCostAllocationPolicy
