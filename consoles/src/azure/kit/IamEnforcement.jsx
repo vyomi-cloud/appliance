@@ -8,6 +8,7 @@ import { Badge, Button, Field, Input, Radio, RadioGroup, Select, Spinner } from 
 import { MODES, MODE_LABEL, MODE_HELP, SOURCE_LABEL, auditLabel, filterAudit, reasonText } from "../../common/iamEnforce.js";
 import { useAudit, useEnforcement, useIamApi } from "../../common/iamEnforceHooks.js";
 import BrowseGrid from "./BrowseGrid.jsx";
+import { ActionField, PrincipalField } from "./pickers/index.js";
 import { ErrorBar, InfoBar, KV } from "./common.jsx";
 
 const CLOUD = "azure";
@@ -52,22 +53,23 @@ export function EnforcementPanel({ a }) {
 
 export function EffectiveAccess({ a }) {
   const api = useIamApi(CLOUD);
-  const [principal, setPrincipal] = useState("");
+  const [principal, setPrincipal] = useState(null);
   const [action, setAction] = useState("");
+  const [isData, setIsData] = useState(false);
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const run = async () => {
     setBusy(true); setErr(null); setRes(null);
-    try { setRes(await api.evaluate({ principal: { object_id: principal }, action: action.trim(), resource: a.id })); }
+    try { setRes(await api.evaluate({ principal: { object_id: principal.id, type: principal.principalType }, action, resource: a.id, data: isData })); }
     catch (e) { setErr(e); } finally { setBusy(false); }
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 12 }}>
       <section className="vy-section" style={{ maxWidth: 720 }}><h3>Effective access</h3>
         <p style={{ fontSize: 13 }}>Check whether a principal can perform an action on {a.name}, using the engine that enforces requests (scope inheritance, deny assignments, not-actions, conditions).</p>
-        <Field label="Principal (object ID)"><Input value={principal} onChange={(_, d) => setPrincipal(d.value)} aria-label="Principal object ID" /></Field>
-        <Field label="Action or data action" hint="Verbatim, e.g. Microsoft.Storage/storageAccounts/read"><Input value={action} onChange={(_, d) => setAction(d.value)} aria-label="Action" /></Field>
+        <PrincipalField label="Principal" value={principal} onChange={setPrincipal} required />
+        <ActionField label="Action or data action" value={action} onChange={(v, d) => { setAction(v); setIsData(!!d); }} required />
         <div style={{ marginTop: 8 }}><Button appearance="primary" disabled={!principal || !action || busy} onClick={run}>Check access</Button></div>
       </section>
       {err && <ErrorBar error={err} title="Evaluation failed" />}

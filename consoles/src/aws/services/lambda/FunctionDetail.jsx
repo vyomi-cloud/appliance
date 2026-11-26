@@ -23,6 +23,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ErrorAlert, fmtBytes, fmtDate, KeyValue } from "../../kit/common.jsx";
 import RdsDatabases from "./RdsDatabases.jsx";
 import * as api from "./api.js";
+import ResourcePermissions from "./ResourcePermissions.jsx";
 
 const EVENT_KEY = (name) => `vyomi.lambda.testEvents.${name}`;
 
@@ -359,14 +360,7 @@ function ConfigurationTab({ name, cfg, reload }) {
         onConfirm={async () => { await api.deleteEventSourceMapping(delTrigger.UUID); notify.success("Trigger removed."); setDelTrigger(null); triggers.reload(); }} />
 
       <KeyValue title="Permissions" items={[["Execution role", cfg.Role], ["Role name", (cfg.Role || "").split("/").pop()]]} />
-      <Table variant="container" header={<Header variant="h2">Resource-based policy statements</Header>}
-        items={policy.data?.Statement || []}
-        columnDefinitions={[
-          { id: "sid", header: "Statement ID", cell: (s) => s.Sid }, { id: "p", header: "Principal", cell: (s) => JSON.stringify(s.Principal) },
-          { id: "org", header: "Principal organization ID", cell: (s) => s.Condition?.StringEquals?.["aws:PrincipalOrgID"] || "-" },
-          { id: "cond", header: "Conditions", cell: (s) => s.Condition ? JSON.stringify(s.Condition) : "-" }, { id: "action", header: "Action", cell: (s) => s.Action },
-        ]}
-        empty={<Box textAlign="center" color="inherit"><b>No resource-based policy statements</b></Box>} />
+      <ResourcePermissions name={name} revision={cfg.RevisionId} />
 
       <CapabilityContainer id="lambda.destinations" title="Destinations" actions={<Button onClick={() => setEditAsync(true)}>Edit</Button>}>
         <Table variant="embedded"

@@ -1,0 +1,16 @@
+{
+"cloud":"gcp",
+"service":"navigationconnect",
+"permissions":{
+"navigationconnect.trips.cancel":{
+"stage":"SUPPORTED"
+},
+"navigationconnect.trips.create":{
+"stage":"SUPPORTED"
+},
+"navigationconnect.trips.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

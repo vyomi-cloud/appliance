@@ -1,0 +1,50 @@
+{
+"cloud":"gcp",
+"service":"flow",
+"permissions":{
+"aiplatform.endpoints.predict":{
+"stage":"SUPPORTED"
+},
+"aiplatform.interactions.create":{
+"stage":"SUPPORTED"
+},
+"aiplatform.interactions.get":{
+"stage":"SUPPORTED"
+},
+"logging.logEntries.create":{
+"stage":"SUPPORTED"
+},
+"logging.logEntries.route":{
+"stage":"SUPPORTED"
+},
+"serviceusage.services.use":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/aisandbox.serviceAgent":{
+"title":"FlowService Service Agent",
+"desc":"Grants FlowService Service Agent permissions to manage resources in the consumer project.",
+"permissions":[
+"aiplatform.endpoints.predict",
+"aiplatform.interactions.create",
+"aiplatform.interactions.get",
+"logging.logEntries.create",
+"logging.logEntries.route",
+"serviceusage.services.use"
+]
+},
+"roles/flow.serviceAgent":{
+"title":"Flow Service Agent",
+"desc":"Grants Flow Service Agent permissions to manage resources in the consumer project.",
+"permissions":[
+"aiplatform.endpoints.predict",
+"aiplatform.interactions.create",
+"aiplatform.interactions.get",
+"logging.logEntries.create",
+"logging.logEntries.route",
+"serviceusage.services.use"
+]
+}
+}
+}

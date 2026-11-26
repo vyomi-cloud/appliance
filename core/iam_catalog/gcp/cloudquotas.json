@@ -1,0 +1,43 @@
+{
+"cloud":"gcp",
+"service":"cloudquotas",
+"permissions":{
+"cloudquotas.quotas.get":{
+"stage":"SUPPORTED"
+},
+"cloudquotas.quotas.update":{
+"stage":"SUPPORTED"
+},
+"monitoring.timeSeries.list":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/cloudquotas.admin":{
+"title":"Cloud Quotas Admin",
+"desc":"Full access to Cloud Quotas resources.",
+"permissions":[
+"cloudquotas.quotas.get",
+"cloudquotas.quotas.update",
+"monitoring.timeSeries.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/cloudquotas.viewer":{
+"title":"Cloud Quotas Viewer",
+"desc":"Readonly access to Cloud Quotas resources.",
+"permissions":[
+"cloudquotas.quotas.get",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

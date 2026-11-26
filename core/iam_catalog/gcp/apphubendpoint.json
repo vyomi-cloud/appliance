@@ -1,0 +1,8 @@
+{
+"cloud":"gcp",
+"service":"apphubendpoint",
+"permissions":{
+"apphubendpoint.locations.lookup":{}
+},
+"roles":{}
+}

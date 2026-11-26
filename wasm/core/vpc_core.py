@@ -2440,6 +2440,13 @@ _AZS = ["us-east-1a", "us-east-1b", "us-east-1c"]
 _STATE_CODE = {"pending": 0, "running": 16, "shutting-down": 32, "terminated": 48, "stopping": 64, "stopped": 80}
 
 _INSTANCE_TYPES = {
+    "c6i.large": dict(vcpu=2, mem=4.0, arch=["x86_64"], family="c6i", net="Up to 12.5 Gigabit", free_tier=False, hypervisor="nitro"),
+    "t2.nano": dict(vcpu=1, mem=0.5, arch=["i386", "x86_64"], family="t2", net="Low", free_tier=False, hypervisor="xen", current_gen=False),
+    "t2.medium": dict(vcpu=2, mem=4.0, arch=["x86_64"], family="t2", net="Low to Moderate", free_tier=False, hypervisor="xen", current_gen=False),
+    "t3.nano": dict(vcpu=2, mem=0.5, arch=["x86_64"], family="t3", net="Up to 5 Gigabit", free_tier=False, hypervisor="nitro"),
+    "t3a.nano": dict(vcpu=2, mem=0.5, arch=["x86_64"], family="t3a", net="Up to 5 Gigabit", free_tier=False, hypervisor="nitro"),
+    "t3a.small": dict(vcpu=2, mem=2.0, arch=["x86_64"], family="t3a", net="Up to 5 Gigabit", free_tier=False, hypervisor="nitro"),
+    "t3a.medium": dict(vcpu=2, mem=4.0, arch=["x86_64"], family="t3a", net="Up to 5 Gigabit", free_tier=False, hypervisor="nitro"),
     "t2.micro": dict(vcpu=1, mem=1.0, arch=["i386", "x86_64"], family="t2", net="Low to Moderate", free_tier=True, hypervisor="xen"),
     "t3.micro": dict(vcpu=2, mem=1.0, arch=["x86_64"], family="t3", net="Up to 5 Gigabit", free_tier=True, hypervisor="nitro"),
     "t3.small": dict(vcpu=2, mem=2.0, arch=["x86_64"], family="t3", net="Up to 5 Gigabit", free_tier=False, hypervisor="nitro"),
@@ -2730,6 +2737,7 @@ def _check_allowed_images(m: dict, image: dict) -> None:
 
 
 def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
+    _check_instance_type_runs(str(params.get("InstanceType") or "t3.micro"))
     image_id = str(params.get("ImageId") or _default_ami_id(m))
     image = m["images"].get(image_id)
     if image is None:
@@ -3048,6 +3056,7 @@ def _modify_instance_attribute(store, params):
     if "InstanceInitiatedShutdownBehavior.Value" in params:
         inst["shutdown_behavior"] = str(params["InstanceInitiatedShutdownBehavior.Value"])
     if "InstanceType.Value" in params:
+        _check_instance_type_runs(str(params["InstanceType.Value"]))
         inst["instance_type"] = str(params["InstanceType.Value"])
     if "EbsOptimized.Value" in params:
         inst["ebs_optimized"] = str(params["EbsOptimized.Value"]).lower() == "true"
@@ -4035,7 +4044,7 @@ def _describe_tags(store, params):
 
 
 # ── instance types / availability zones / EBS defaults ─────────────────
-def _instance_type_xml(name: str, spec: dict) -> str:
+def _instance_type_xml(name: str, spec: dict, extra: str = "") -> str:
     return ("<item>"
             f"<instanceType>{_xml_escape(name)}</instanceType><currentGeneration>{str(spec.get('current_gen', True)).lower()}</currentGeneration>"
             f"<freeTierEligible>{str(spec['free_tier']).lower()}</freeTierEligible><bareMetal>false</bareMetal>"
@@ -4046,13 +4055,23 @@ def _instance_type_xml(name: str, spec: dict) -> str:
             f"<processorInfo><supportedArchitectures>{''.join(f'<item>{a}</item>' for a in spec['arch'])}</supportedArchitectures></processorInfo>"
             f"<networkInfo><networkPerformance>{_xml_escape(spec['net'])}</networkPerformance></networkInfo>"
             f"<ebsInfo><ebsOptimizedSupport>default</ebsOptimizedSupport></ebsInfo>"
-            "</item>")
+            f"{extra}</item>")
+
+
+def _check_instance_type_runs(itype: str) -> None:
+    """Nano / Mesh: a size the substrate cannot run is refused with EC2's own `Unsupported` (400, not retried by SDKs)."""
+    from core import compute_sizes as _cs
+    if itype and not _cs.is_allowed("aws", itype):
+        raise VpcError("Unsupported", f"Your requested instance type ({itype}) is not supported on this substrate. " + _cs.rejection("aws", itype), 400)
 
 
 def _describe_instance_types(store, params):
+    from core import compute_sizes as _cs
     types = [v for k, v in params.items() if k.startswith("InstanceType.")]
-    rows = {k: v for k, v in _INSTANCE_TYPES.items() if not types or k in types}
-    return _envelope("DescribeInstanceTypes", f"<instanceTypeSet>{''.join(_instance_type_xml(k, v) for k, v in rows.items())}</instanceTypeSet>")
+    ok = _cs.allowed_names("aws")          # None on an unrestricted appliance; the Nano / Mesh runnable set otherwise
+    rows = {k: v for k, v in _INSTANCE_TYPES.items() if (not types or k in types) and (ok is None or k in ok)}
+    mark = f"<vyomiSubstrate>{_cs.substrate()}</vyomiSubstrate>" if ok is not None else ""
+    return _envelope("DescribeInstanceTypes", f"<instanceTypeSet>{''.join(_instance_type_xml(k, v, mark) for k, v in rows.items())}</instanceTypeSet>")
 
 
 def _describe_availability_zones(store, params):

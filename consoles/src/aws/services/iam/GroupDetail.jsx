@@ -22,6 +22,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import DeleteModal from "../../kit/DeleteModal.jsx";
 import { LastAccessedTab } from "./LastAccessed.jsx";
 import * as api from "./api.js";
+import PolicyAttachTable from "../../kit/PolicyAttachTable.jsx";
 
 function UsersTab({ groupName }) {
   const notify = useNotify();
@@ -67,7 +68,7 @@ function GroupPermissionsTab({ groupName }) {
   const notify = useNotify();
   const p = useAsync(() => Promise.all([api.listAttachedGroupPolicies(groupName), api.listGroupPolicies(groupName), api.listPolicies()]), [groupName]);
   const [attachModal, setAttachModal] = useState(false);
-  const [attachArn, setAttachArn] = useState("");
+  const [attachArn, setAttachArn] = useState([]);
   const [inlineModal, setInlineModal] = useState(null);
   if (p.loading) return <Spinner />;
   const [attached, inlineNames, allPolicies] = p.data;
@@ -84,13 +85,9 @@ function GroupPermissionsTab({ groupName }) {
       <Modal visible={attachModal} onDismiss={() => setAttachModal(false)} header="Attach policies"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">
           <Button variant="link" onClick={() => setAttachModal(false)}>Cancel</Button>
-          <Button variant="primary" disabled={!attachArn} onClick={async () => { await api.attachGroupPolicy(groupName, attachArn); notify.success("Policy attached."); setAttachModal(false); setAttachArn(""); p.reload(); }}>Attach policy</Button>
+          <Button variant="primary" disabled={!attachArn.length} onClick={async () => { for (const arn of attachArn) await api.attachGroupPolicy(groupName, arn); notify.success("Policy attached."); setAttachModal(false); setAttachArn([]); p.reload(); }}>Attach policy</Button>
         </SpaceBetween></Box>}>
-        <FormField label="Policy">
-          <Select selectedOption={attachArn ? { value: attachArn, label: allPolicies.find((x) => x.Arn === attachArn)?.PolicyName } : null}
-            onChange={({ detail }) => setAttachArn(detail.selectedOption.value)}
-            options={allPolicies.map((pl) => ({ value: pl.Arn, label: pl.PolicyName }))} placeholder="Choose a policy" />
-        </FormField>
+        <PolicyAttachTable policies={allPolicies} value={attachArn} onChange={setAttachArn} attached={(attached || []).map((a) => a.PolicyArn)} />
       </Modal>
       <Modal visible={!!inlineModal} onDismiss={() => setInlineModal(null)} size="large" header="Create inline policy"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs">

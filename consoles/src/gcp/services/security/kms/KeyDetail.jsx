@@ -18,6 +18,7 @@ import ResourceTable from "../../../kit/ResourceTable.jsx";
 import { CapabilityBadge, CapabilityContainer } from "../../../kit/Capability.jsx";
 import { ErrorAlert, fmtDate, KeyValue, PageHeader, Section } from "../../../kit/common.jsx";
 import { Link, hashHref } from "../../../link.jsx";
+import ResourcePermissionsPanel from "../../../kit/ResourcePermissionsPanel.jsx";
 import * as api from "./api.js";
 
 const TABS = [["versions", "Versions"], ["overview", "Overview"], ["permissions", "Permissions"]];
@@ -249,38 +250,9 @@ const ROLES = [
 const roleName = (r) => ROLES.find(([v]) => v === r)?.[1] || r;
 
 function Permissions({ loc, keyRing, k }) {
-  const notify = useNotify();
-  const [sel, setSel] = useState([]);
-  const [grant, setGrant] = useState(false);
-  const pol = useAsync(() => api.getIamPolicy(loc, keyRing, k), [loc, keyRing, k]);
-  const rows = (pol.data?.bindings || []).flatMap((b) => b.members.map((m) => ({ key: `${m}|${b.role}`, member: m, role: b.role })));
-  const writePolicy = async (bindings) => { await api.setIamPolicy(loc, keyRing, k, { ...pol.data, bindings }); pol.reload(); };
-
   return (
-    <CapabilityContainer id="gcp.kms.key.permissions" title="Permissions"
-      description="Principals with access to this key."
-      actions={<>
-        <Button startIcon={<AddIcon />} onClick={() => setGrant(true)}>Grant access</Button>
-        <Button startIcon={<DeleteIcon />} disabled={!sel.length} onClick={async () => {
-          const drop = new Set(sel);
-          const next = (pol.data?.bindings || []).map((b) => ({ ...b, members: b.members.filter((m) => !drop.has(`${m}|${b.role}`)) })).filter((b) => b.members.length);
-          await writePolicy(next); notify.success(`Removed ${sel.length} role binding${sel.length === 1 ? "" : "s"}`); setSel([]);
-        }}>Remove access</Button>
-      </>}>
-      {pol.error && <ErrorAlert error={pol.error} />}
-      <ResourceTable resourceName="principals" items={rows} rowKey={(r) => r.key} loading={pol.loading} selectable selected={sel} onSelectedChange={setSel} dense
-        filterPlaceholder="Filter principals"
-        columns={[
-          { id: "member", header: "Principal", sortField: "member", cell: (r) => r.member },
-          { id: "role", header: "Role", sortValue: (r) => roleName(r.role), cell: (r) => roleName(r.role) },
-        ]}
-        empty={<Typography variant="body2" color="text.secondary">No principals have been granted access to this key.</Typography>} />
-      {grant && <GrantDialog onClose={() => setGrant(false)} onSave={async (member, role) => {
-        const bs = (pol.data?.bindings || []).map((b) => ({ ...b, members: [...b.members] }));
-        const hit = bs.find((b) => b.role === role);
-        if (hit) { if (!hit.members.includes(member)) hit.members.push(member); } else bs.push({ role, members: [member] });
-        await writePolicy(bs); notify.success(`Granted ${roleName(role)} to ${member}`);
-      }} />}
+    <CapabilityContainer id="gcp.kms.key.permissions" title="Permissions" description="Principals with access to this key.">
+      <ResourcePermissionsPanel kind="kms-key" args={{ loc, keyRing, name: k }} />
     </CapabilityContainer>
   );
 }

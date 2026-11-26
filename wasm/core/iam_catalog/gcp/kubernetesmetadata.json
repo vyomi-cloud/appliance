@@ -1,0 +1,52 @@
+{
+"cloud":"gcp",
+"service":"kubernetesmetadata",
+"permissions":{
+"kubernetesmetadata.metadata.config":{
+"stage":"SUPPORTED"
+},
+"kubernetesmetadata.metadata.publish":{
+"stage":"SUPPORTED"
+},
+"kubernetesmetadata.metadata.snapshot":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/kubernetesmetadata.admin":{
+"title":"Kubernetesmetadata Admin",
+"desc":"Admin role for kubernetesmetadata",
+"permissions":[
+"kubernetesmetadata.metadata.config",
+"kubernetesmetadata.metadata.publish",
+"kubernetesmetadata.metadata.snapshot",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/kubernetesmetadata.publisher":{
+"title":"Metadata Publisher",
+"desc":"Publisher of Kubernetes clusters metadata",
+"permissions":[
+"kubernetesmetadata.metadata.config",
+"kubernetesmetadata.metadata.publish",
+"kubernetesmetadata.metadata.snapshot"
+]
+},
+"roles/kubernetesmetadata.viewer":{
+"title":"Kubernetesmetadata Viewer",
+"desc":"Viewer role for kubernetesmetadata",
+"permissions":[
+"kubernetesmetadata.metadata.config",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+}
+}
+}

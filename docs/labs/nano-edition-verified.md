@@ -1,5 +1,16 @@
 # Vyomi Labs (AWS) Nano edition: verified end to end
 
+FINAL RUN 2026-11-26 on `v4/labs-integration-final` (origin/v4/labs-integration merged with origin/v4-on-main, which adds chapter 14 "Design the RAG"). Headless Chrome with WebGPU, Nano preview on its own port, no Mesh anywhere. Raw logs in `docs/labs/nano-edition-evidence/final/` (`nomodel.jsonl`, `q15.jsonl` block level; `ui-nomodel.json`, `ui-q15.json` Deploy button; `labrun_*_rt.txt` in-process course runs). Drivers: `docs/labs/nano-edition-evidence/scripts/`.
+
+## 0. Final numbers (14 chapters, chapter 14 included)
+- Data: AWS Mesh 85 blocks / Nano 63 (49 runnable); GCP 89 / 83; Azure 95 / 89. Chapter 14's three blocks (loader, starting `rag-design.json`, `show_design.py`) are pure Python and carry both editions; no nano_note needed.
+- Nano block level, AWS, 49 runnable blocks: no model 46/49 (ch1 `try_models`, `fail_models` and ch11 `retrieve_and_generate` need a model and say so); Qwen2.5 1.5B 49/49. Chapter 14 is 3/3 in both, and the later chapters that read the saved design (12, 6, 11) pass in both.
+- Deploy button, all 14 chapters from the button: no model 12 "Deployed", ch10 and ch11 stop at the picker ("needs a model"); Qwen2.5 1.5B picked: all 14 "Deployed".
+- `?edition=mesh` loads `aws.json` (banner "Mesh, enterprise"); default, `?edition=nano` and gcp load `<cloud>-nano.json`.
+- Not re-run on the final code: SmolLM2 360M, Qwen2.5 0.5B, Llama 3.2 1B (section 2 keeps their earlier numbers for 13 chapters). The RAG Studio consoles themselves were checked only by their unit tests (`consoles/src/*/studio*.test.mjs`, `ragstudio.test.mjs`), not driven in the browser.
+- Mesh edition in-process course runs (`python -m vyomilabs.labrun <cloud> 10 3 7 14 12 6 11 9 4 5 1 2 8 13`, `VYOMILABS_HAS_RUNTIME=1`, Python 3.13): AWS 62 pass / 1 fail (`cedar_enforce.py`: Cedar ENFORCE hides the tools from tools/list in this in-process server, a Mesh-only block that needs the full appliance); GCP 55 / 1 fail (`add_policy.py`, fails identically on the pre-merge branch); Azure 59 / 1 fail (`call_container_app.py`, known 503 from the sandbox). Remaining blocks are BLOCKED in-process (need `--endpoint`: AWS 6, others 0-1).
+
+## Earlier measurement (13 chapters, before the merge)
 Measured 2026-11-26 on `v4/labs-integration-verify` (from `origin/v4/labs-integration`), headless Chrome with WebGPU, Nano preview on its own port, no Mesh anywhere. Raw per-block logs and UI JSON: `docs/labs/nano-edition-evidence/verified/`. Drivers: `docs/labs/nano-edition-evidence/scripts/` (`plumb.mjs` block runner, `ui.mjs` Deploy-button driver, `sum.py`).
 
 ## 1. Edition selection

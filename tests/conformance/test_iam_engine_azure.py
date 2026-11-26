@@ -420,3 +420,19 @@ def test_empty_state_implicit_deny():
 def test_no_forbidden_imports():
     src = open(os.path.join(ROOT, "core", "iam_engine", "azure_eval.py")).read()
     assert "fastapi" not in src and "import socket" not in src
+
+
+# ---------------- plane not stated by the caller (/api/iam/azure/evaluate, the Effective access view): both planes are tried
+def test_unstated_plane_grants_a_data_action_and_honours_abac():
+    cond = ("((!(ActionMatches{'%s'})) OR (@Resource[Microsoft.Storage/storageAccounts/blobServices/containers:name] StringEquals 'logs'))" % BLOB_READ)
+    st = {"role_assignments": [ra("2a2b9908-6ea1-4ae2-8e65-a410df84e7d1", SA, condition=cond, condition_version="2.0")]}   # Storage Blob Data Reader
+    mk = lambda name, **kw: az.evaluate(request("azure", {"object_id": U, "type": "User"}, BLOB_READ, SA,
+                                                {"resource": {"Microsoft.Storage/storageAccounts/blobServices/containers:name": name}}, **kw), st)
+    assert mk("logs")["allowed"] is True                      # no data= key at all
+    assert mk("secrets")["allowed"] is False                  # the ABAC condition still decides
+    assert mk("logs", data=False)["allowed"] is False         # an explicit control-plane request is not widened
+
+
+def test_unstated_plane_still_sees_a_deny_assignment():
+    st = {"role_assignments": [ra(READER, SA)], "deny_assignments": [deny(scope=SA, principals=[{"id": U, "type": "User"}], permissions=[{"actions": ["Microsoft.Storage/storageAccounts/read"]}])]}
+    assert az.evaluate(request("azure", {"object_id": U, "type": "User"}, "Microsoft.Storage/storageAccounts/read", SA), st)["allowed"] is False

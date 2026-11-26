@@ -465,5 +465,11 @@
     "tests": [
       "tests/conformance/test_azure_functions_runtime_sdk.py"
     ]
-  }
+  },
+ "azure.functionapp.iam": {
+  "title": "Access control (IAM) on a function app",
+  "level": { "nano": "limited", "offline": "limited" },
+  "limitations": ["Role assignments, role definitions and Check access are real ARM resources and a real evaluation scoped to this resource id (core/azure_iam_core.py), but the simulator only enforces them when IAM enforcement is switched on for the resource."],
+  "tests": ["tests/conformance/test_azure_arm_core.py"]
+ }
 }

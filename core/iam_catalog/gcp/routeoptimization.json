@@ -1,0 +1,81 @@
+{
+"cloud":"gcp",
+"service":"routeoptimization",
+"permissions":{
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+},
+"routeoptimization.locations.use":{
+"stage":"SUPPORTED"
+},
+"routeoptimization.operations.create":{
+"stage":"SUPPORTED"
+},
+"routeoptimization.operations.get":{
+"stage":"SUPPORTED"
+},
+"storage.buckets.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.create":{
+"stage":"SUPPORTED"
+},
+"storage.objects.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.list":{
+"stage":"SUPPORTED"
+},
+"storage.objects.update":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/routeoptimization.admin":{
+"title":"Routeoptimization Admin",
+"desc":"Admin role for routeoptimization",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"routeoptimization.locations.use",
+"routeoptimization.operations.create",
+"routeoptimization.operations.get"
+]
+},
+"roles/routeoptimization.editor":{
+"title":"Route Optimization Editor",
+"desc":"This role can create long-running operations via BatchOptimizeTours.",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"routeoptimization.locations.use",
+"routeoptimization.operations.create",
+"routeoptimization.operations.get"
+]
+},
+"roles/routeoptimization.serviceAgent":{
+"title":"Route Optimization Service Agent",
+"desc":"Grants Route Optimization Service Account access to read and write GCS objects in the host project.",
+"permissions":[
+"storage.buckets.get",
+"storage.objects.create",
+"storage.objects.get",
+"storage.objects.list",
+"storage.objects.update"
+]
+},
+"roles/routeoptimization.viewer":{
+"title":"Route Optimization Viewer",
+"desc":"This role can view any long-running Operations.",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"routeoptimization.locations.use",
+"routeoptimization.operations.get"
+]
+}
+}
+}

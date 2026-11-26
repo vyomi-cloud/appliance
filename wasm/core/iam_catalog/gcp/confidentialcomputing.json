@@ -1,0 +1,77 @@
+{
+"cloud":"gcp",
+"service":"confidentialcomputing",
+"permissions":{
+"confidentialcomputing.challenges.create":{
+"stage":"SUPPORTED"
+},
+"confidentialcomputing.challenges.verify":{
+"stage":"SUPPORTED"
+},
+"confidentialcomputing.challenges.verifygke":{
+"stage":"SUPPORTED"
+},
+"confidentialcomputing.locations.get":{
+"stage":"SUPPORTED"
+},
+"confidentialcomputing.locations.list":{
+"stage":"SUPPORTED"
+},
+"logging.logEntries.create":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/confidentialcomputing.admin":{
+"title":"Confidentialcomputing Admin",
+"desc":"Admin role for confidentialcomputing",
+"permissions":[
+"confidentialcomputing.challenges.create",
+"confidentialcomputing.challenges.verify",
+"confidentialcomputing.challenges.verifygke",
+"confidentialcomputing.locations.get",
+"confidentialcomputing.locations.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/confidentialcomputing.gkeWorkloadUser":{
+"title":"Confidential GKE Workload User",
+"desc":"Grants the ability to generate a GKE attestation token and run a workload in a GKE cluster.",
+"permissions":[
+"confidentialcomputing.challenges.create",
+"confidentialcomputing.challenges.verifygke",
+"confidentialcomputing.locations.get",
+"confidentialcomputing.locations.list",
+"logging.logEntries.create"
+]
+},
+"roles/confidentialcomputing.viewer":{
+"title":"Confidentialcomputing Viewer",
+"desc":"Viewer role for confidentialcomputing",
+"permissions":[
+"confidentialcomputing.locations.get",
+"confidentialcomputing.locations.list",
+"resourcemanager.projects.get",
+"resourcemanager.projects.list"
+]
+},
+"roles/confidentialcomputing.workloadUser":{
+"title":"Confidential Space Workload User",
+"desc":"Grants the ability to generate an attestation token and run a workload in a VM. Intended for service accounts that run on Confidential Space VMs.",
+"permissions":[
+"confidentialcomputing.challenges.create",
+"confidentialcomputing.challenges.verify",
+"confidentialcomputing.locations.get",
+"confidentialcomputing.locations.list",
+"logging.logEntries.create"
+]
+}
+}
+}

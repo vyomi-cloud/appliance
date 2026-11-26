@@ -1,0 +1,290 @@
+{
+ "1": {
+  "layer": "1",
+  "events": [],
+  "ms": 25899,
+  "rows": [
+   "1 | Sign users in with Cognito | python cognito_setup.py | passed",
+   "2 | Add a rate-limiting web ACL | python waf.py | passed",
+   "3 | Put an API Gateway in front of the knowledge tool | python api_gateway.py | passed",
+   "4 | Call the API with a token | python call_with_token.py | passed",
+   "5 | Call the API without a token | python call_without_token.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nsigned in as maria.ops@example.com\nid token is a JWT: True (1001 chars)\n",
+   "web ACL arn:aws:wafv2:us-east-1:123456789012:regional/webacl/facilities-acl/c338ba9c-932e-47eb-9265-282e2024ebd9\n",
+   "api c79d9baeb1 stage prod, Cognito authorizer, WAF attached\n",
+   "HTTP 200 | results: 3 | top source: s3://facilities-docs/docs/boiler-sop.md\n",
+   "anonymous call rejected with HTTP 401 (401 or 403: True )\n"
+  ],
+  "summary": "Deployed."
+ },
+ "2": {
+  "layer": "2",
+  "events": [],
+  "ms": 12799,
+  "rows": [
+   "1 | Test the input guardrail | python input_guardrail.py | passed",
+   "2 | Read the approver inbox | python inbox_channel.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nbenign question: NONE\nprompt injection: GUARDRAIL_INTERVENED\ndenied word: GUARDRAIL_INTERVENED\n",
+   "inbox delivered: inbox smoke test\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon SNS\nBedrock Guardrails"
+ },
+ "3": {
+  "layer": "3",
+  "events": [],
+  "ms": 14049,
+  "rows": [
+   "1 | Install the one dependency | install.sh | saved",
+   "2 | Write the gateway client | mcp_client.py | saved",
+   "3 | Write the supervisor and the three sub-agents | agents.py | saved",
+   "4 | Write the AgentCore entrypoint | agent_main.py | saved",
+   "5 | Package the agent and create the runtime | python deploy_runtime.py | passed",
+   "6 | Write a small helper to call the agent | ask_agent.py | saved",
+   "7 | Invoke the hosted supervisor from two sessions | python invoke_agent.py | passed",
+   "8 | Stop a session | python stop_session.py | passed"
+  ],
+  "logs": [
+   "",
+   "",
+   "",
+   "",
+   "uploaded s3://facilities-docs/agent-runtime/facilities-supervisor.zip (6773 bytes)\ncreated runtime facilities_supervisor-Q26GfDYCnv\nruntime status READY\n",
+   "",
+   "hosted in another process: True\nroute: ['facilities', 'maintenance', 'analytics']\nspans: supervisor.plan, agent:facilities, agent:maintenance, agent:analytics, supervisor.synthesize\ntools: [('kb_search', 'unavailable'), ('asset_status', 'unavailable'), ('work_order_stats', 'unavailable')]\nanswer: I could not reach my tools yet, so I have nothing grounded to answer with.\ndifferent sessions use different processes: True\nthe same session reuses its process: True\n",
+   "stopped session b; runtime still READY\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock AgentCore"
+ },
+ "4": {
+  "layer": "4",
+  "events": [],
+  "ms": 21610,
+  "rows": [
+   "1 | Create the gateway and register the tools | python gateway.py | passed",
+   "2 | List the tools over MCP | python mcp_list.py | passed",
+   "3 | Call a tool through the gateway | python mcp_call.py | passed",
+   "4 | Restrict tool use with a Cedar policy | python cedar_policy.py | passed",
+   "5 | Ask the agent again, now through the gateway | python agent_via_gateway.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\ngateway facilities-gateway-kl19jrctkg READY\n2 targets ['READY', 'READY']\n",
+   "MCP tools/list: ['asset-status___asset_status', 'kb-search___kb_search']\n",
+   "tools/call asset-status___asset_status -> found: True | status: RUNNING | isError: False\n",
+   "policy engine facilities_policies-ykcai8hw9l with a Cedar permit policy\n",
+   "tool calls: [('kb_search', 'agentcore-gateway'), ('asset_status', 'agentcore-gateway'), ('work_order_stats', 'dynamodb')]\ncited sources: ['s3://facilities-docs/docs/boiler-sop.md', 's3://facilities-docs/docs/fire-safety-sop.md', 's3://facilities-docs/docs/hvac-maintenance-manual.md']\ntools reached through the gateway: True\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock AgentCore Gateway"
+ },
+ "5": {
+  "layer": "5",
+  "events": [],
+  "ms": 39609,
+  "rows": [
+   "1 | Create the approver inbox | python approver_inbox.py | passed",
+   "2 | Create the approval state machine | python state_machine.py | passed",
+   "3 | Let the agent ask for a work order | python request_work_order.py | passed",
+   "4 | Approve the request | python approve.py | passed",
+   "5 | Reject a request | python reject.py | passed",
+   "6 | Read the execution history | python history.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\ntopic arn:aws:sns:us-east-1:123456789012:approver-inbox\nqueue https://sqs.us-east-1.amazonaws.com/123456789012/approver-inbox-queue\nrequest-approval now publishes to the inbox\n",
+   "state machine arn:aws:states:us-east-1:123456789012:stateMachine:work-order-approval\n",
+   "agent submitted request: req-f8c8a255cb PENDING_APPROVAL\nexecution status: RUNNING\nledger status: PENDING\nwork orders written before approval: 0\n",
+   "approval request in the inbox: req-f8c8a255cb - Work order for B-12: Boiler B-12 is at 34 psi. What does the\nexecution SUCCEEDED -> WO-A255CB\nledger: EXECUTED\nwork order: OPEN\n",
+   "execution FAILED\nwork orders written despite rejection: 0\n",
+   "history: ExecutionStarted, ChoiceStateEntered, ChoiceStateExited, TaskStateEntered, TaskScheduled, TaskStarted, ExecutionSucceeded\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAWS Step Functions\nAmazon DynamoDB\nAmazon SNS\nAmazon SQS"
+ },
+ "6": {
+  "layer": "6",
+  "events": [],
+  "ms": 12827,
+  "rows": [
+   "1 | Search the knowledge base | python search.py | passed",
+   "2 | Rerank the hits | python rerank.py | passed",
+   "3 | Write the knowledge-search tool | kb_search.py | saved",
+   "4 | Deploy and call the tool | python deploy_kb_search.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nboiler question, top hit: s3://facilities-docs/docs/boiler-sop.md score 1.0\n  text: # SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi\nAHU question, top hit: s3://facilities-docs/docs/hvac-maintenance-manual.md\nevery hit has text and a source: True\n",
+   "rerank returned 2 results; best index 0 -> the elevator SOP\n",
+   "",
+   "deployed facilities-kb-search\ntool returned 3 cited results; first source: s3://facilities-docs/docs/boiler-sop.md\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock Knowledge Bases"
+ },
+ "7": {
+  "layer": "7",
+  "events": [],
+  "ms": 14292,
+  "rows": [
+   "1 | Create the three tables | python tables.py | passed",
+   "2 | Seed the data | python seed.py | passed",
+   "3 | Write the read-only tool | asset_status.py | saved",
+   "4 | Write the approval-request tool | request_approval.py | saved",
+   "5 | Write the work-order tool | create_work_order.py | saved",
+   "6 | Deploy the three Lambda functions | python deploy_tools.py | passed",
+   "7 | Call the read-only tool | python call_tools.py | passed",
+   "8 | Failure lab: hostile input and a replayed approval | python tool_contract.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\ncreated facilities-assets\ncreated facilities-work-orders\ncreated approval-ledger\n",
+   "seeded facilities-assets 3\nseeded facilities-work-orders 3\n",
+   "",
+   "",
+   "",
+   "deployed facilities-asset-status\ndeployed facilities-request-approval\ndeployed facilities-create-work-order\n",
+   "found: True | status: RUNNING | open work orders: 1\n",
+   "read tool: 8 hostile or malformed inputs refused\nwrite tool: 4 invalid requests refused\nidempotent: replay returned WO-RACT01 (replayed=True) and the table holds 1 row\ntool contract verified\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon DynamoDB\nAWS Lambda"
+ },
+ "8": {
+  "layer": "8",
+  "events": [],
+  "ms": 15137,
+  "rows": [
+   "1 | Trace an agent run | python trace_agent.py | passed",
+   "2 | List the evaluators | python evaluators.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nsent 8 segments\nread trace back with 8 segments; sub-agent spans: ['agent:analytics', 'agent:facilities', 'agent:maintenance']\ntrace listed by GetTraceSummaries: True\nmetrics: ['AgentLatencyMs', 'ToolCalls']\nstructured log carries the trace id: True\n",
+   "evaluators available: 13\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon CloudWatch"
+ },
+ "9": {
+  "layer": "9",
+  "events": [],
+  "ms": 15107,
+  "rows": [
+   "1 | Create the memory | python memory_create.py | passed",
+   "2 | Write and replay a conversation | python memory_events.py | passed",
+   "3 | Recall long-term records | python memory_recall.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nmemory facilities_memory-4pxzoaeetc ACTIVE\n",
+   "2 conversational events written for maria, 1 for joe\nreplayed 2 events for session s1\n",
+   "long-term records for maria: 2 -> ['I prefer P1 work orders for any boiler pressure fault.', 'I am the duty engineer for site HQ-1.']\nisolation holds: joe sees 1 of his own record(s), none of maria's; an unknown actor sees 0\nretention: events expire after 30 days\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock AgentCore Memory"
+ },
+ "10": {
+  "layer": "10",
+  "events": [
+   "skipped"
+  ],
+  "pickers": 1,
+  "pickerText": "This step needs a language model\n\nPick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser.\n\nQwen2.5 1.5B is the one that follows the course (routing, tool calls, citations). The smaller ones only prove the plumbing: they load fast, but their answers are poor. Needs about 2 GB of free disk and a GPU with enough memory.\n\nSmolLM2 360M\n~0.3 GB\nplumbing only\nQwen2.5 0.5B\n~0.4 GB\nplumbing only\nLlama 3.2 1B\n~0.7 GB\nplumbing only\nQwen2.5 1.5B\n~1 GB\nrecommended\nSkip, continue without a model",
+  "pickerButtons": [
+   "SmolLM2 360M ~0.3 GB plumbing only",
+   "Qwen2.5 0.5B ~0.4 GB plumbing only",
+   "Llama 3.2 1B ~0.7 GB plumbing only",
+   "Qwen2.5 1.5B ~1 GB recommended",
+   "Skip, continue without a model"
+  ],
+  "ms": 12333,
+  "rows": [
+   "1 | Write the model client | vymodels.py | saved",
+   "2 | Try all three calls | python try_models.py | needs a model",
+   "3 | Meter, retry and limit the model client | chaos.py | saved",
+   "4 | Failure lab: throttling and a spent budget | python fail_models.py | needs a model"
+  ],
+  "logs": [
+   "",
+   "    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/botocore/client.py\", line 1094, in _make_api_call\n    raise error_class(parsed_response, operation_name)\nbotocore.errorfactory.ModelNotReadyException: An error occurred (ModelNotReadyException) when calling the Converse operation (reached max retries: 0): No in-browser model is loaded. Pick one and load it: in Vyomi Labs use 'Load a model', or open your console's local-model control (Amazon Bedrock > Overview > Local model on AWS, Vertex AI on Google Cloud, Azure OpenAI on Azure). It needs a WebGPU browser and is cleared when the page reloads.\n\n",
+   "",
+   "    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/botocore/client.py\", line 1094, in _make_api_call\n    raise error_class(parsed_response, operation_name)\nbotocore.errorfactory.ModelNotReadyException: An error occurred (ModelNotReadyException) when calling the Converse operation (reached max retries: 0): No in-browser model is loaded. Pick one and load it: in Vyomi Labs use 'Load a model', or open your console's local-model control (Amazon Bedrock > Overview > Local model on AWS, Vertex AI on Google Cloud, Azure OpenAI on Azure). It needs a WebGPU browser and is cleared when the page reloads.\n\n"
+  ],
+  "summary": "0 step(s) ran in your browser, 2 need a model.\n\nDeploy again and pick a model when asked to run the steps that call one.\n\nSee it running in the space:\nAmazon Bedrock\nAmazon Bedrock"
+ },
+ "11": {
+  "layer": "11",
+  "events": [
+   "skipped"
+  ],
+  "pickers": 1,
+  "pickerText": "This step needs a language model\n\nPick one to load into this browser. It runs on your own GPU; nothing is sent anywhere. The download happens once and is cached by the browser.\n\nQwen2.5 1.5B is the one that follows the course (routing, tool calls, citations). The smaller ones only prove the plumbing: they load fast, but their answers are poor. Needs about 2 GB of free disk and a GPU with enough memory.\n\nSmolLM2 360M\n~0.3 GB\nplumbing only\nQwen2.5 0.5B\n~0.4 GB\nplumbing only\nLlama 3.2 1B\n~0.7 GB\nplumbing only\nQwen2.5 1.5B\n~1 GB\nrecommended\nSkip, continue without a model",
+  "pickerButtons": [
+   "SmolLM2 360M ~0.3 GB plumbing only",
+   "Qwen2.5 0.5B ~0.4 GB plumbing only",
+   "Llama 3.2 1B ~0.7 GB plumbing only",
+   "Qwen2.5 1.5B ~1 GB recommended",
+   "Skip, continue without a model"
+  ],
+  "ms": 23171,
+  "rows": [
+   "1 | Create the guardrail | python guardrail.py | passed",
+   "2 | Filter an answer on the way out | python output_guardrail.py | passed",
+   "3 | Ask the agent for a grounded, cited answer | python grounded_answer.py | passed",
+   "4 | Let the knowledge base generate the answer | python retrieve_and_generate.py | needs a model"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nguardrail 6443eb799568\n",
+   "clean answer: NONE\nleaky answer: GUARDRAIL_INTERVENED -> Close the main steam valve. Contact the duty engineer at {EMAIL}.\nemail removed: True\n",
+   "route: ['facilities', 'maintenance', 'analytics']\ncited sources: ['s3://facilities-docs/docs/boiler-sop.md', 's3://facilities-docs/docs/fire-safety-sop.md', 's3://facilities-docs/docs/hvac-maintenance-manual.md']\nanswer: SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1:  [1] Asset B-12 status RUNNING; open work orders: ['WO-000102 Quarterly PRV inspection', 'WO-RACT01 Inspect the boiler PRV']. Work orders: 4 total; by status/priority {\"CLOSED\": {\"P3\": 1}, \"OPEN\": {\"P2\": 3}}.\ngrounded in the boiler SOP: True\nagent answer passes the output guardrail: True\n",
+   "    return func(*args, **kwargs)\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/lib/python3.12/site-packages/botocore/client.py\", line 1094, in _make_api_call\n    raise error_class(parsed_response, operation_name)\nbotocore.errorfactory.DependencyFailedException: An error occurred (DependencyFailedException) when calling the RetrieveAndGenerate operation: No in-browser model is loaded. Pick one and load it: in Vyomi Labs use 'Load a model', or open your console's local-model control (Amazon Bedrock > Overview > Local model on AWS, Vertex AI on Google Cloud, Azure OpenAI on Azure). It needs a WebGPU browser and is cleared when the page reloads. (the local model has not been started)\n\n"
+  ],
+  "summary": "3 step(s) ran in your browser, 1 need a model.\n\nDeploy again and pick a model when asked to run the steps that call one.\n\nSee it running in the space:\nBedrock Guardrails"
+ },
+ "12": {
+  "layer": "12",
+  "events": [],
+  "ms": 26896,
+  "rows": [
+   "1 | Upload the documents | python upload_docs.py | passed",
+   "2 | Create the vector store | python vector_store.py | passed",
+   "3 | Create the knowledge base and its data source | python knowledge_base.py | passed",
+   "4 | Ingest the documents | python ingest.py | passed",
+   "5 | Write the re-index function | ingest_docs.py | saved",
+   "6 | Wire the S3 event to the function | python event_driven.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nuploaded 4 documents to s3://facilities-docs/docs/\n",
+   "collection facilities-kb arn:aws:aoss:us-east-1:123456789012:collection/dlh0cl9l0r\n",
+   "knowledge base 6650PEGGN7\ndata source VU2LK1AO4F\n",
+   "ingestion COMPLETE | documents scanned: 4\n",
+   "",
+   "new upload started ingestion job #2 through S3 event -> Lambda\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAmazon S3\nBedrock Knowledge Bases"
+ },
+ "13": {
+  "layer": "13",
+  "events": [],
+  "ms": 16760,
+  "rows": [
+   "1 | Create a key and protect an approval record | python kms_protect.py | passed",
+   "2 | Turn on CloudTrail | python trail.py | passed",
+   "3 | Audit the approval | python audit.py | passed"
+  ],
+  "logs": [
+   "Loading the AWS SDK for Python (first run only)...\nkey 36686ea2250f4a3eb2b2a61112b65959 with alias and rotation: True\nciphertext hides the work order: True\ndecrypt with the right context: WO-000104\nwrong context refused\nSSE-KMS object written\n",
+   "trail facilities-trail logging: True\n",
+   "CloudTrail saw: ['CreateStateMachine', 'DescribeExecution', 'GetExecutionHistory', 'ListExecutions', 'ListStateMachines', 'SendTaskFailure', 'SendTaskSuccess', 'StartExecution']\nledger statuses: ['EXECUTED', 'PENDING'] | executed: ['WO-RACT01', 'WO-A255CB']\napproval is fully audited: True\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nAWS KMS"
+ },
+ "14": {
+  "layer": "14",
+  "events": [],
+  "ms": 4024,
+  "rows": [
+   "1 | Write the design loader | rag_design.py | saved",
+   "2 | Save the starting design | rag-design.json | saved",
+   "3 | Check the design | python show_design.py | passed"
+  ],
+  "logs": [
+   "",
+   "",
+   "design file: /home/pyodide/rag-design.json\nname: facilities-rag | cloud: aws\nchunking: FIXED_SIZE | maxTokens 200 | overlap 10 %\nembedding: the model this simulator hosts | dimensions model default\nretrieve: topK 3 | vector search | hybridWeight 0.5 | filter None\nrerank: off\ngenerate: refuse below a grounding score of 0\nsources: 1 | golden questions: 2\ndesign OK\n"
+  ],
+  "summary": "Deployed.\nSee it running in the space:\nBedrock RAG Studio"
+ }
+}

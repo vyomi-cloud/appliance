@@ -1,0 +1,15 @@
+import { open, check, BASE, SHOTS, done } from "../lib.mjs";
+const { browser, page, errs } = await open();
+const PN = process.env.PN, USER = process.env.USER_NAME;
+await page.goto(`${BASE}/v4/aws/#/iam/users/${USER}`);
+await page.getByRole("button", { name: "Add permissions" }).first().click();
+const dlg = page.getByRole("dialog");
+await dlg.getByLabel("Filter policies").fill(PN);
+await page.waitForTimeout(500);
+await dlg.getByRole("row", { name: new RegExp(PN) }).getByRole("checkbox").check();
+await dlg.getByRole("button", { name: "Attach policy" }).click();
+await page.waitForTimeout(2000);
+await page.screenshot({ path: `${SHOTS}/aws-a1-attached.png` });
+check("policy shown attached on user page", await page.getByText(PN).count() > 0);
+console.log(errs);
+await browser.close();

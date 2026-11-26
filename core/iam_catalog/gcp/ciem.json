@@ -1,0 +1,26 @@
+{
+"cloud":"gcp",
+"service":"ciem",
+"permissions":{
+"cloudasset.assets.exportIamPolicy":{
+"stage":"SUPPORTED"
+},
+"cloudasset.assets.exportResource":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.organizations.get":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/ciem.serviceAgent":{
+"title":"CIEM Service Agent",
+"desc":"Gives CIEM Service Account permission to access GCP resources",
+"permissions":[
+"cloudasset.assets.exportIamPolicy",
+"cloudasset.assets.exportResource",
+"resourcemanager.organizations.get"
+]
+}
+}
+}

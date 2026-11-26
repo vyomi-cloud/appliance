@@ -1,0 +1,91 @@
+{
+"cloud":"gcp",
+"service":"telemetry",
+"permissions":{
+"logging.logEntries.create":{
+"stage":"SUPPORTED"
+},
+"monitoring.timeSeries.create":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.get":{
+"stage":"SUPPORTED"
+},
+"resourcemanager.projects.list":{
+"stage":"SUPPORTED"
+},
+"telemetry.consumers.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"telemetry.consumers.setIamPolicy":{
+"stage":"SUPPORTED"
+},
+"telemetry.consumers.writeLogs":{
+"stage":"SUPPORTED"
+},
+"telemetry.consumers.writeMetrics":{
+"stage":"SUPPORTED"
+},
+"telemetry.consumers.writeTraces":{
+"stage":"SUPPORTED"
+},
+"telemetry.traces.write":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/telemetry.admin":{
+"title":"Telemetry Admin",
+"desc":"Admin role for telemetry",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"telemetry.consumers.getIamPolicy",
+"telemetry.consumers.setIamPolicy",
+"telemetry.consumers.writeLogs",
+"telemetry.consumers.writeMetrics",
+"telemetry.consumers.writeTraces",
+"telemetry.traces.write"
+]
+},
+"roles/telemetry.editor":{
+"title":"Telemetry Editor",
+"desc":"Editor role for telemetry",
+"permissions":[
+"resourcemanager.projects.get",
+"resourcemanager.projects.list",
+"telemetry.traces.write"
+]
+},
+"roles/telemetry.logsWriter":{
+"title":"Cloud Telemetry Logs Writer",
+"desc":"Access to write logs.",
+"permissions":[
+"logging.logEntries.create"
+]
+},
+"roles/telemetry.metricsWriter":{
+"title":"Cloud Telemetry Metrics Writer",
+"desc":"Access to write metrics.",
+"permissions":[
+"monitoring.timeSeries.create"
+]
+},
+"roles/telemetry.tracesWriter":{
+"title":"Cloud Telemetry Traces Writer",
+"desc":"Access to write trace spans.",
+"permissions":[
+"telemetry.traces.write"
+]
+},
+"roles/telemetry.writer":{
+"title":"Cloud Telemetry Writer",
+"desc":"Full access to write all telemetry data.",
+"permissions":[
+"logging.logEntries.create",
+"monitoring.timeSeries.create",
+"telemetry.traces.write"
+]
+}
+}
+}

@@ -1,0 +1,122 @@
+[vyomi] deploy dir /var/lib/cloudlearn/deployments is not writable; instance workspaces go to /private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/808d2878-fee3-409c-8be9-52dbc4c4b641/scratchpad/wt/deployments
+rds: pyarrow missing — StartExportTask will fail (no Parquet engine)
+[wire_ingress] unified engine for: ['azure_acr', 'azure_blob', 'azure_cosmos', 'azure_graph', 'azure_keyvault', 'azure_servicebus', 'azure_table', 'dynamodb', 'events', 'gcp_compute', 'gcp_firestore', 'gcp_iam', 'gcp_kms', 'gcp_pubsub', 'gcp_secrets', 'gcs', 'guardduty', 'iam', 'kms', 'lambda', 'rds', 's3', 'scheduler', 'schemas', 'secretsmanager', 'securityhub', 'sns', 'sqs']
+Service Bus AMQP port 60074 unavailable: [Errno 48] error while attempting to bind on address ('127.0.0.1', 60074): [errno 48] address already in use
+== chapter 10
+  saved  install10.sh
+  saved  azlab.py
+  PASS  python create_openai.py  -> deployments: ['chat', 'embed']
+  saved  vymodels.py
+  PASS  python try_models.py  -> embed: vector of 768 numbers
+  PASS  python try_more.py  -> unknown deployment -> 404 DeploymentNotFound
+== chapter 3
+  saved  install3.sh
+  PASS  python foundry_agents.py  -> supervisor run: requires_action | messages on the thread: 1
+  saved  agent_graph.py
+  saved  app.py
+  PASS  python try_graph.py  -> answer: Stub model reply (deterministic): Boiler B-12 is at 34 psi. What does the SOP sa
+  PASS  python deploy_container_app.py  -> container app facilities-supervisor state: Succeeded
+  FAIL  python call_container_app.py  -> 
+    olders/ls/m88_d41j5sz14pg5skbfr4980000gn/T/vy-labrun-uvlvyf4c/call_container_app.py", line 11, in ask
+    r.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/808d2878-fee3-409c-8be9-52dbc4c4b641/scratchpad/v313/lib/python3.13/site-packages/requests/models.py", line 1167, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 503 Server Error: Service Unavailable for url: https://localhost:60073/azure-data/containerapps/facilities-supervisor/query
+
+== chapter 7
+  saved  install7.sh
+  saved  azdata.py
+  PASS  python create_search.py  -> search service facilities-search ready; data-plane address: https://localhost:60073/azure-data/searc
+  PASS  python seed.py  -> created approvalledger (empty)
+  saved  fn_kb_search.py
+  saved  fn_asset_status.py
+  saved  fn_approval_decision.py
+  saved  fn_create_work_order.py
+  PASS  python deploy_tools.py  -> host key listed through ARM: True
+  PASS  python call_tools.py  -> found: True | status: RUNNING | work orders: 1
+  PASS  python tool_contract.py  -> tool contract verified: 5 of 5 poisoned calls refused
+== chapter 14
+  saved  rag_design.py
+  saved  rag-design.json
+  PASS  python show_design.py  -> design OK
+== chapter 12
+  saved  install12.sh
+  saved  boiler-sop.md
+  saved  elevator-sop.md
+  saved  fire-safety-sop.md
+  saved  hvac-maintenance-manual.md
+  PASS  python upload_docs.py  -> read back: # SOP-101 Boiler plant operation (Site HQ-1, Building A)
+  PASS  python kb_index.py  -> index facilities-kb fields: ['id', 'source', 'title', 'content', 'content_vector']
+  PASS  python indexer.py  -> indexer last run: success | documents: 4
+  PASS  python check_search.py  -> 'boiler pressure' -> boiler-sop.md
+  saved  fn_ingest_docs.py
+  PASS  python deploy_ingest.py  -> function app facilities-ingest deployed; event subscription blob-created: Succeeded
+  PASS  python new_doc.py  -> new upload became searchable as: water-leak-sop.md
+== chapter 6
+  saved  install6.sh
+  PASS  python inspect_index.py  -> semantic configurations: ['sem']
+  PASS  python embed_docs.py  -> embedded and merged 5 documents
+  saved  kb.py
+  PASS  python try_search.py  -> every hit has a source: True
+  PASS  python apply_design.py  -> kb-search now returns 3 passages
+== chapter 11
+  saved  install11.sh
+  saved  respond.py
+  PASS  python try_respond.py  -> grounded: True
+  PASS  python guard.py  -> harmful completion allowed: False | flagged categories: ['Violence']
+[engine] MinIO (http://cloudlearn-minio:9000) not reachable — object bytes stay in the appliance state store only (persistent); write-through resumes when it returns
+  PASS  python file_search.py  -> run: completed | annotation types: ['file_citation']
+  PASS  python on_your_data.py  -> On Your Data citations: 5
+== chapter 9
+  saved  install9.sh
+  PASS  python short_term.py  -> run: completed | thread now holds 3 messages (2 user + 1 assistant)
+  saved  memory.py
+  PASS  python try_memory.py  -> after forget: []
+  PASS  python no_managed_memory.py  -> memory routes answer: [404, 404] -> no managed long-term memory API
+== chapter 4
+  saved  install4.sh
+  saved  gw.py
+  PASS  python create_gateway.py  -> gateway facilities-apim | catalogue: ['asset-status', 'create-work-order', 'kb-search'] | subscripti
+  PASS  python call_gateway.py  -> without a key: 401
+  PASS  python policies.py  -> write tool with x-approval-id: reaches the function -> 200 {'ok': False, 'error': 'refused: unknown 
+  PASS  python mcp_server.py  -> MCP tools/call asset-status -> isError: False | status: RUNNING
+== chapter 5
+  saved  install5.sh
+  PASS  python create_bus.py  -> namespace facilities-bus | topic work-order-approval | subscription approver-inbox
+  saved  approval.py
+  PASS  python park_request.py  -> unauthorised approver: decision must be APPROVE or REJECT from an authorised approver | ledger still
+  PASS  python approve_request.py  -> second call idempotent: True | work orders for B-12 from this request: 1
+  PASS  python reject_request.py  -> decision with a stale ETag refused: 412
+  PASS  python expiry.py  -> approval expiry verified
+== chapter 1
+  saved  install1.sh
+  PASS  python entra.py  -> app registration facilities-users client_id: 9f7ce324-e6c7-4f0a-93bf-7d9ddb3addc1 | user: maria.ops@
+  PASS  python sign_in.py  -> signature verified against the tenant keys | signed in as: maria.ops@facilities.example.com
+  PASS  python protect_gateway.py  -> application token -> caller seen by the tool is the app id: True
+  PASS  python waf.py  -> Application Gateway WAF policy facilitieswafgw mode: Prevention
+== chapter 2
+  saved  install2.sh
+  PASS  python screen_input.py  -> threat flagged: True | categories: {'Violence': 4}
+  PASS  python content_filter.py  -> benign prompt reaches the model: True
+  PASS  python inbox.py  -> redelivered after complete: 0
+== chapter 8
+  saved  install8.sh
+  PASS  python create_observability.py  -> workspace facilities-law customerId: e3da42f4-1e46-5424-bdf5-c55f00656f4c | application insights fac
+  saved  full_agent.py
+  PASS  python run_agent.py  -> approval request parked: True | spans recorded: 9
+  PASS  python export_telemetry.py  -> exported 10 spans, 1 log line and the metric facilities.tool_calls = 4 | trace id 7acd3cc5a9fbadf30b
+  PASS  python query_telemetry.py  -> facilities.tool_calls total: 4
+  PASS  python custom_table.py  -> calls per tool: {'asset_status': 2, 'kb_search': 1, 'work_order_stats': 1}
+  PASS  python platform_metrics.py  -> platform metrics returned: ['Transactions']
+  PASS  python cost_meter.py  -> cost limit verified
+== chapter 13
+  saved  install13.sh
+  PASS  python create_vault.py  -> vault facilities-kv created; uri advertised by ARM: https://localhost:60073/azure-data/keyvault/faci
+  PASS  python make_key.py  -> key ledger-key type JsonWebKeyType.RSA | listed: ['ledger-key']
+  PASS  python envelope.py  -> direct encrypt/decrypt round trip: True
+  PASS  python audit.py  -> events for resource group rg-facilities: True
+  PASS  python key_rotation.py  -> key rotation verified
+  PASS  python audit_chain.py  -> audit chain verified
+  PASS  python ship_it.py  -> ship it verified: template exported with 35 resources; review it, then az deployment group create
+1 FAILED

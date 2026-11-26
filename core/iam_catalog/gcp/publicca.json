@@ -1,0 +1,10 @@
+{
+"cloud":"gcp",
+"service":"publicca",
+"permissions":{
+"publicca.externalAccountKeys.create":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

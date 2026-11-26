@@ -69,6 +69,7 @@ function useSaver(capId, reload) {
 }
 
 import { EnforcementPanel } from "../iam/Enforcement.jsx";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 export default function Permissions({ bucket }) {
   const pab = useAsync(() => api.getPublicAccessBlock(bucket), [bucket]);
@@ -80,7 +81,7 @@ export default function Permissions({ bucket }) {
     <SpaceBetween size="l">
       <Overview pab={pab} pol={pol} />
       <PublicAccess bucket={bucket} state={pab} />
-      <Policy bucket={bucket} state={pol} />
+      <ResourcePolicyTab kind="s3-bucket" args={{ bucket }} onChanged={pol.reload} />
       <Ownership bucket={bucket} state={own} />
       <Acl bucket={bucket} state={acl} />
       <Cors bucket={bucket} state={cors} />

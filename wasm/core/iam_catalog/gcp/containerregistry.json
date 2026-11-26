@@ -1,0 +1,30 @@
+{
+"cloud":"gcp",
+"service":"containerregistry",
+"permissions":{
+"pubsub.topics.publish":{
+"stage":"SUPPORTED"
+},
+"storage.objects.get":{
+"stage":"SUPPORTED"
+},
+"storage.objects.getIamPolicy":{
+"stage":"SUPPORTED"
+},
+"storage.objects.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/containerregistry.ServiceAgent":{
+"title":"Container Registry Service Agent",
+"desc":"Access for Container Registry",
+"permissions":[
+"pubsub.topics.publish",
+"storage.objects.get",
+"storage.objects.getIamPolicy",
+"storage.objects.list"
+]
+}
+}
+}

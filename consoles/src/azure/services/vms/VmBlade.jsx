@@ -39,6 +39,8 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -121,7 +123,7 @@ export default function VmBlade({ params }) {
       tasks: () => <TasksPanel a={a} />,
       extensions: () => <Extensions a={a} />,
       overview: () => <Overview a={a} reload={reload} self={self} />,
-      iam: () => <AccessControlIam a={a} />,
+      iam: () => <ResourceIam a={a} capId="azure.vms.iam" />,
       tags: () => <Tags a={a} reload={reload} />,
       properties: () => <Properties a={a} />,
       locks: () => <Locks a={a} />,
@@ -361,72 +363,6 @@ function PropertiesTabPanel({ a, nic, pip }) {
 // generic Microsoft.Authorization/roleAssignments extension-resource engine the Cosmos DB
 // account blade uses (azure.vms.iam); assignments are still created at the subscription scope.
 // Check access / My access / Deny assignments / Classic administrators stay honest gaps. ──────
-function AccessControlIam({ a }) {
-  const [tab, setTab] = useState("check");
-  const [dlg, setDlg] = useState(null);
-  const assignments = useAsync(() => api.listRoleAssignments(a.resourceGroup, a.name), [a.resourceGroup, a.name]);
-  const roles = useAsync(() => api.listRoleDefinitions(), []);
-  return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
-        <Tab value="check">Check access</Tab>
-        <Tab value="assignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="deny">Deny assignments</Tab>
-        <Tab value="classic">Classic administrators</Tab>
-      </TabList>
-      {tab === "check" && (
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 16 }}>
-          <MyAccess a={a} />
-          <section className="vy-section"><h3>Check access</h3><Button onClick={() => setDlg("check")}>Check access</Button></section>
-        </div>
-      )}
-      {tab === "assignments" && (
-        <div style={{ marginTop: 12 }}>
-          <CapabilityContainer id="azure.vms.iam" title="Role assignments">
-            <BrowseGrid resourceName="role assignment" rowKey={(r) => r.id} filterPlaceholder="Search by name or email"
-              items={assignments.data || []} loading={assignments.loading} error={assignments.error} onRefresh={assignments.reload}
-              columns={[
-                { key: "name", label: "Name", value: (r) => r.properties?.principalId },
-                { key: "type", label: "Type", value: (r) => r.properties?.principalType || "--" },
-                { key: "role", label: "Role", value: (r) => r.properties?.roleDefinitionId?.split("/").pop() || r.properties?.roleName },
-                { key: "scope", label: "Scope", value: (r) => r.properties?.scope || "/" },
-                { key: "condition", label: "Condition", value: () => "None" },
-              ]}
-            />
-          </CapabilityContainer>
-        </div>
-      )}
-      {tab === "roles" && (
-        <div style={{ marginTop: 12 }}>
-          <CapabilityContainer id="azure.vms.iam" title="Roles">
-            <BrowseGrid resourceName="role" rowKey={(r) => r.id || r.name} filterPlaceholder="Search by role name, description, permission, or ID"
-              items={roles.data || []} loading={roles.loading} error={roles.error} onRefresh={roles.reload}
-              columns={[
-                { key: "name", label: "Name", value: (r) => r.properties?.roleName || r.name },
-                { key: "description", label: "Description", value: (r) => r.properties?.description || "--" },
-                { key: "type", label: "Type", value: (r) => r.properties?.type || "BuiltInRole" },
-                { key: "category", label: "Category", value: () => "General" },
-              ]}
-            />
-          </CapabilityContainer>
-        </div>
-      )}
-      {tab === "deny" && <div style={{ marginTop: 12 }}><DenyAssignmentsPanel a={a} /></div>}
-      {tab === "classic" && <div style={{ marginTop: 12 }}><ClassicAdminsPanel /></div>}
-      <Dialog open={!!dlg} onOpenChange={(_, d) => !d.open && setDlg(null)}>
-        <DialogSurface aria-label="Access check">
-          <DialogBody>
-            <DialogTitle>{dlg === "mine" ? "My access" : "Check access"}</DialogTitle>
-            <DialogContent><NotSimulated feature="Per-identity role-assignment resolution for this resource" note={`The virtual machine's resource id is ${a.id}.`} /></DialogContent>
-            <DialogActions><Button onClick={() => setDlg(null)}>Close</Button></DialogActions>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
-    </>
-  );
-}
 
 // ── Tags ───────────────────────────────────────────────────────────────────────────────
 export function TagRows({ tags, onChange, resource }) {
@@ -595,6 +531,7 @@ function Size({ a, reload }) {
   };
   return (
     <CapabilityContainer id="azure.vms.size" title={`${a.name} | Size`} actions={<ToolbarButton disabled={busy || sel === a.properties?.hardwareProfile?.vmSize} onClick={resize}>{busy ? "Resizing..." : "Resize"}</ToolbarButton>}>
+      {sizesNote(sizeSubstrate(sizes.data)) && <div style={{ fontSize: 12, opacity: 0.75, margin: "4px 0" }}>{sizesNote(sizeSubstrate(sizes.data))}</div>}
       <div className="vy-filters"><Input size="small" style={{ width: 260 }} placeholder="Search by VM size..." value={filter} onChange={(_, d) => setFilter(d.value)} aria-label="Search by VM size..." /></div>
       {sizes.loading && !sizes.data ? <Loading /> : (
       <Table size="small" aria-label="VM sizes" className="vy-grid">

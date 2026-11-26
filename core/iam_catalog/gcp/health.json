@@ -1,0 +1,74 @@
+{
+"cloud":"gcp",
+"service":"health",
+"permissions":{
+"health.subscribers.create":{
+"stage":"SUPPORTED"
+},
+"health.subscribers.delete":{
+"stage":"SUPPORTED"
+},
+"health.subscribers.list":{
+"stage":"SUPPORTED"
+},
+"health.subscribers.update":{
+"stage":"SUPPORTED"
+},
+"health.subscriptions.create":{
+"stage":"SUPPORTED"
+},
+"health.subscriptions.delete":{
+"stage":"SUPPORTED"
+},
+"health.subscriptions.get":{
+"stage":"SUPPORTED"
+},
+"health.subscriptions.list":{
+"stage":"SUPPORTED"
+},
+"health.subscriptions.update":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/health.admin":{
+"title":"Google Health API Admin",
+"desc":"Admin access to Google Health API resources.",
+"permissions":[
+"health.subscribers.create",
+"health.subscribers.delete",
+"health.subscribers.list",
+"health.subscribers.update",
+"health.subscriptions.create",
+"health.subscriptions.delete",
+"health.subscriptions.get",
+"health.subscriptions.list",
+"health.subscriptions.update"
+]
+},
+"roles/health.editor":{
+"title":"Google Health API Editor",
+"desc":"Edit access to Google Health API resources.",
+"permissions":[
+"health.subscribers.create",
+"health.subscribers.delete",
+"health.subscribers.list",
+"health.subscribers.update",
+"health.subscriptions.create",
+"health.subscriptions.delete",
+"health.subscriptions.get",
+"health.subscriptions.list",
+"health.subscriptions.update"
+]
+},
+"roles/health.viewer":{
+"title":"Google Health API Viewer",
+"desc":"Read-only access to Google Health API resources.",
+"permissions":[
+"health.subscribers.list",
+"health.subscriptions.get",
+"health.subscriptions.list"
+]
+}
+}
+}

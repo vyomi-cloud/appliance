@@ -130,7 +130,7 @@ os.environ["VYOMI_MESH_MODE"] = "0"
 check("memory: non-mesh behaviour unchanged (flat 1024)", server._docker_instance_memory_mb({"instance_type": "t3.large", "cloud": "aws"}) == 1024)
 os.environ["VYOMI_MESH_MODE"] = "1"
 r = run(1, "t3.large")
-check("an 8 GB instance type cannot fit the 1400 MB share -> InsufficientInstanceCapacity", r.status_code == 500 and "InsufficientInstanceCapacity" in r.text, r.text[:200])
+check("an 8 GB instance type is not a size this Mesh can run -> Unsupported (core/compute_sizes)", r.status_code == 400 and "Unsupported" in r.text, r.text[:200])
 
 # (2) admission RESERVES atomically
 reset_ledger()
@@ -189,7 +189,7 @@ vmr = server._azure_state_for_tests() if hasattr(server, "_azure_state_for_tests
 resize = c.put(f"{VM}/vmr1?api-version=2023-09-01",
                json={"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B2s"}}})   # 4096 > 1400
 ae = (resize.json().get("error") or {}) if resize.headers.get("content-type", "").startswith("application/json") else {}
-check("Azure VM resize beyond the share -> 409 AllocationFailed", resize.status_code == 409 and ae.get("code") == "AllocationFailed", f"{resize.status_code} {resize.text[:200]}")
+check("Azure VM resize to a size this Mesh cannot run -> 409 SkuNotAvailable (core/compute_sizes)", resize.status_code == 409 and ae.get("code") == "SkuNotAvailable", f"{resize.status_code} {resize.text[:200]}")
 resize = c.put(f"{VM}/vmr1?api-version=2023-09-01",
                json={"location": "eastus", "properties": {"hardwareProfile": {"vmSize": "Standard_B1s"}}})
 check("Azure VM same-size update still allowed", resize.status_code != 409, resize.status_code)

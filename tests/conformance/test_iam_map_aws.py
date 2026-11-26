@@ -258,3 +258,11 @@ def test_coverage_cli():
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     out = subprocess.run([sys.executable, "-m", "core.iam_engine.map_aws", "--coverage"], cwd=root, capture_output=True, text=True, timeout=300)
     assert out.returncode == 0 and "TOTAL" in out.stdout
+
+
+def test_s3_entries_carry_request_condition_keys():
+    from core.iam_engine import map_aws
+    r = map_aws.required({"method": "GET", "path": "/bkt", "query": "list-type=2&prefix=home%2F&delimiter=%2F", "headers": {}, "host": "localhost"})
+    assert r and r[0]["service"] == "s3" and r[0]["context"] == {"s3:prefix": "home/", "s3:delimiter": "/"}
+    put = map_aws.required({"method": "PUT", "path": "/bkt/k", "query": "", "headers": {"x-amz-acl": "public-read"}, "host": "localhost"})
+    assert put and put[0]["context"] == {"s3:x-amz-acl": "public-read"}

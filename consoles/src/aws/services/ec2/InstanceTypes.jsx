@@ -31,7 +31,7 @@ export function InstanceTypes() {
           { id: "free", header: "Free tier eligible", cell: (x) => (x.FreeTierEligible ? "Yes" : "No") },
           { id: "vcpu", header: "vCPUs", cell: (x) => x.VCpuCount },
           { id: "arch", header: "Architecture", cell: (x) => x.Architectures.join(", ") },
-          { id: "mem", header: "Memory (GiB)", cell: (x) => (x.MemoryMiB / 1024).toFixed(0) },
+          { id: "mem", header: "Memory (GiB)", cell: (x) => +(x.MemoryMiB / 1024).toFixed(2) },
           { id: "storage", header: "Storage (GB)", cell: () => "EBS only" },
           { id: "storagetype", header: "Storage type", cell: () => "EBS only" },
           { id: "net", header: "Network performance", cell: (x) => x.NetworkPerformance },

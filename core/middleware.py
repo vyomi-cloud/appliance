@@ -163,6 +163,7 @@ async def _iam_gate_response(request, cloud: str, route=None):
             if acct:
                 hr["headers"]["x-vyomi-data-account"] = acct     # the simulator's /openai/... carries no account in the URL
         if cloud == "aws":
+            hr["context"] = _ad.aws_request_context(hr, getattr(request.client, "host", "") or "", request.url.scheme)
             res = _ad.aws_resolve(hr, settings)      # signed -> the signer; unsigned S3 to an existing bucket -> anonymous; else None (console, static)
             if res is None:
                 return None
@@ -670,8 +671,38 @@ async def provider_api_alias_middleware(request, call_next):
     return response
 
 
+_ANALYSIS_HINT = re.compile(r"^/(?:_wire/)?(?:analyzer|finding(?:v2)?|policy/|resource/scan|v[13]/iam:troubleshoot|v1/(?:projects|folders|organizations)/[^/:]+:analyzeIamPolicy)|/providers/Microsoft\.Authorization/|^/metadata/identity/oauth2/token|/oauth2(?:/v2\.0)?/token$",
+                            re.I)
+
+
+async def _iam_analysis_response(request, path: str):
+    """IAM analysis APIs (Access Analyzer REST, Policy Troubleshooter, analyzeIamPolicy, Azure checkAccess / permissions / filtered role
+    assignments / PIM schedules): answered by core/iam_engine over the live state (core/iam_analyze_host.py). Anything else -> None."""
+    if not _ANALYSIS_HINT.search(path):
+        return None
+    try:
+        from core import iam_analyze_host as _iah
+        body = await request.body() if request.method in ("POST", "PUT", "PATCH") else b""
+        qp = request.query_params
+        out = _iah.pre(request.method, path, {k: (qp.getlist(k) if len(qp.getlist(k)) > 1 else qp.get(k)) for k in qp.keys()}, dict(request.headers), body)
+    except Exception:
+        return None
+    if out is None:
+        return None
+    from fastapi.responses import Response
+    return Response(content=out["body"], status_code=out["status"], headers={k: v for k, v in (out.get("headers") or {}).items()})
+
+
 async def _provider_api_alias(request, call_next):
     path = _collapse_doubled_version(request)
+    try:    # the IAM activity feed names the caller of a write even in cores that never see the headers (core/iam_events_core.py)
+        from core import iam_events_core as _iev
+        _iev.CALLER.set({k: v for k, v in request.headers.items() if k.lower() in ("x-cloudlearn-principal", "authorization")})
+    except Exception:
+        pass
+    _analysis = await _iam_analysis_response(request, path)
+    if _analysis is not None:
+        return _analysis
     _gcp_capture_public_base(request)
     if _is_azure_native_path(path):
         provider = "azure"

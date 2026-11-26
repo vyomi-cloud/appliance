@@ -23,6 +23,7 @@ import LambdaTriggerModal from "./LambdaTriggerModal.jsx";
 import ConnectPipeModal from "./ConnectPipeModal.jsx";
 import QueueMetrics from "./QueueMetrics.jsx";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 export default function QueueDetail({ params, query }) {
   const name = params.name;
@@ -67,7 +68,7 @@ export default function QueueDetail({ params, query }) {
           { id: "dlq", label: "Dead-letter queue", content: <DlqTab name={name} attrs={attrs} /> },
           { id: "monitor", label: "Monitoring", content: <MonitoringTab name={name} attrs={attrs} /> },
           { id: "tags", label: "Tagging", content: <TaggingTab name={name} url={url} /> },
-          { id: "policy", label: "Access policy", content: <AccessPolicyTab name={name} attrs={attrs} /> },
+          { id: "policy", label: "Access policy", content: <ResourcePolicyTab kind="sqs-queue" args={{ url, arn: attrs.QueueArn }} onChanged={t.reload} /> },
           { id: "encryption", label: "Encryption", content: <EncryptionTab name={name} attrs={attrs} /> },
           { id: "redrive-tasks", label: "Dead-letter queue redrive tasks", content: <RedriveTasksTab name={name} url={url} attrs={attrs} /> },
         ]} />

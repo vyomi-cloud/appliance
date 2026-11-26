@@ -28,10 +28,12 @@ import SharedExportTemplate from "../../kit/ExportTemplate.jsx";
 import SharedActivityLog from "../../kit/ActivityLog.jsx";
 import { ClassicAdminsPanel, DenyAssignmentsPanel, MyAccess } from "../../kit/IamExtras.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
   { id: "activitylog", label: "Activity log" },
+  { id: "iam", label: "Access control (IAM)" },
   { id: "accesscontrol", label: "Access control (IAM)" },
   { id: "tags", label: "Tags" },
   { id: "diagnose", label: "Diagnose and solve problems" },
@@ -66,6 +68,7 @@ export default function TopicBlade({ params, query }) {
       accesskeys: () => <AccessKeys t={t} />,
       properties: () => <Properties t={t} />,
       activitylog: () => <SharedActivityLog scope={t.id} name={t.name} />,
+      iam: () => <ResourceIam a={t} capId="azure.eventgrid.topic.iam" />,
       accesscontrol: () => <Iam name={name} a={t} />,
       locks: () => <Locks rg={rg} topic={name} />,
       diagnose: () => <Diagnose t={t} rg={rg} name={name} />,

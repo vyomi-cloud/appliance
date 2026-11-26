@@ -12,13 +12,16 @@ import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table from "@cloudscape-design/components/table";
+import { PermissionPicker, PrincipalPicker, ResourceArnPicker } from "../../kit/PermissionPicker.jsx";
 import { reasonText } from "../../../common/iamEnforce.js";
 import { useIamApi } from "../../../common/iamEnforceHooks.js";
 
 export default function EffectiveAccess() {
   const api = useIamApi("aws");
   const [principal, setPrincipal] = useState("");
-  const [action, setAction] = useState("");
+  const [service, setService] = useState(null);
+  const [name, setName] = useState("");
+  const action = service && name ? `${service}:${name}` : "";
   const [resource, setResource] = useState("*");
   const [res, setRes] = useState(null);
   const [err, setErr] = useState(null);
@@ -33,9 +36,9 @@ export default function EffectiveAccess() {
       <SpaceBetween size="l">
         <Container header={<Header variant="h2" actions={<Button variant="primary" loading={busy} disabled={!principal || !action} onClick={run}>Evaluate</Button>}>Request</Header>}>
           <SpaceBetween size="m">
-            <FormField label="Principal ARN" description="A user or role ARN"><Input value={principal} onChange={({ detail }) => setPrincipal(detail.value)} placeholder="arn:aws:iam::000000000000:user/alice" ariaLabel="Principal ARN" /></FormField>
-            <FormField label="Action" description="Verbatim IAM action"><Input value={action} onChange={({ detail }) => setAction(detail.value)} placeholder="s3:GetObject" ariaLabel="Action" /></FormField>
-            <FormField label="Resource ARN"><Input value={resource} onChange={({ detail }) => setResource(detail.value)} placeholder="arn:aws:s3:::my-bucket/*" ariaLabel="Resource ARN" /></FormField>
+            <FormField label="Principal" description="A user or role in this account"><PrincipalPicker value={principal} onChange={setPrincipal} ariaLabel="Principal" /></FormField>
+            <PermissionPicker service={service} action={name} onChange={({ service: sv, action: a }) => { setService(sv); setName(a); }} actionDescription="Verbatim IAM action from the service reference" />
+            <FormField label="Resource ARN" description="Choose a resource type to prefill the ARN format"><ResourceArnPicker service={service} action={name} value={resource} onChange={setResource} /></FormField>
           </SpaceBetween>
         </Container>
         {err && <Alert type="error" header="Evaluation failed">{err.message}</Alert>}

@@ -3,7 +3,7 @@
  * references (and, when requested, a real Microsoft.Network/publicIPAddresses resource the NIC's
  * IP configuration points at, and/or a network security group + its inbound rule) — see api.js's
  * toVmBody/toNicBody/toPublicIpBody/toNsgBody and core/capabilities/azure/vms.json. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Checkbox, Input, Link, Radio, RadioGroup, Select, Textarea } from "@fluentui/react-components";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
@@ -13,6 +13,7 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 import { TagRows } from "./VmBlade.jsx";
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,13}[a-zA-Z0-9]$/;
@@ -47,6 +48,9 @@ export default function CreateVirtualMachine() {
   const checked = (k) => (_, d) => setF((x) => ({ ...x, [k]: !!d.checked }));
   const rg = newRg ?? f.resourceGroup;
   const sizes = useAsync(() => api.listSizesForLocation(f.location), [f.location]);
+  const sizeNote = sizesNote(sizeSubstrate(sizes.data));
+  // Nano / Mesh list only the sizes they can run: keep the selection on one of them
+  useEffect(() => { const d = sizes.data; if (d && d.length && !d.some((s) => s.name === f.size)) setF((x) => ({ ...x, size: d[0].name })); }, [sizes.data]);
 
   const basicsErrors = () => {
     const e = [];
@@ -110,6 +114,7 @@ export default function CreateVirtualMachine() {
         <FormRow label="Run with Azure Spot discount"><Checkbox checked={f.spot} onChange={checked("spot")} aria-label="Run with Azure Spot discount" /></FormRow>
         <FormRow label="Size" required htmlFor="vm-size">
           <Select id="vm-size" value={f.size} onChange={set("size")} aria-label="Size">{(sizes.data || []).map((s) => <option key={s.name} value={s.name}>{s.name} ({s.numberOfCores} vcpu, {s.memoryInMB / 1024} GiB memory)</option>)}</Select>
+          {sizeNote && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }} data-testid="compute-sizes-note">{sizeNote}</div>}
         </FormRow>
       </FormSection>
       <FormSection title="Administrator account">

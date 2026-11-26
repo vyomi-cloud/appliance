@@ -36,6 +36,7 @@ import SharedDiagnosticSettings from "../../kit/DiagnosticSettings.jsx";
 import SharedAdvisor from "../../kit/Advisor.jsx";
 import SharedSupportPanel from "../../kit/SupportPanel.jsx";
 import { ResourceRecommendations } from "../defender/Pages.jsx";
+import ResourceIam from "../../kit/ResourceIam.jsx";
 
 export const MENU = [
   { id: "overview", label: "Overview" },
@@ -109,7 +110,7 @@ export default function ResourceGroupBlade({ params }) {
     const P = {
       overview: () => <Overview a={a} reload={reload} self={self} name={name} />,
       activitylog: () => <SharedActivityLog scope={a.id} name={name} />,
-      iam: () => <AccessControlIam name={name} />,
+      iam: () => <ResourceIam a={a} capId="azure.resourcegroups.access_control_iam" />,
       tags: () => <Tags a={a} reload={reload} />,
       deployments: () => <Deployments name={name} />,
       locks: () => <Locks name={name} />,
@@ -387,109 +388,6 @@ function Tags({ a, reload }) {
 // id); Check access / My access run the real checkAccess decision algorithm. ──
 const CURRENT_USER = "admin@vyomi.local";    // the one simulated signed-in identity (see web_engine._record_event)
 
-function AccessControlIam({ name }) {
-  const notify = useNotify();
-  const [tab, setTab] = useState("check");
-  const [dlg, setDlg] = useState(null);
-  const [add, setAdd] = useState(false);
-  const [sel, setSel] = useState(new Set());
-  const assignments = useAsync(() => api.listRoleAssignments(name), [name]);
-  const definitions = useAsync(() => api.listRoleDefinitions(name), [name]);
-  const rows = assignments.data || [];
-  const roleNameOf = (r) => r.properties?.roleName || r.properties?.roleDefinitionId?.split("/").pop();
-  const toggle = (n) => setSel((s) => { const k = new Set(s); k.has(n) ? k.delete(n) : k.add(n); return k; });
-  const removeSelected = async () => {
-    for (const n of sel) await api.deleteRoleAssignment(name, n);
-    notify.success(`Removed ${sel.size} role assignment${sel.size === 1 ? "" : "s"}.`, "Remove succeeded");
-    setSel(new Set());
-    assignments.reload();
-  };
-  return (
-    <>
-      <div className="vy-panel-title">Access control (IAM)</div>
-      <div className="vy-cmdbar" role="toolbar" aria-label="Access control commands">
-        <ToolbarButton icon={<Add20Regular />} onClick={() => setAdd(true)}>Add</ToolbarButton>
-        <ToolbarButton onClick={() => downloadCsv("role-assignments.csv",
-          [{ key: "principal", label: "Name" }, { key: "role", label: "Role" }, { key: "scope", label: "Scope" }],
-          rows.map((r) => ({ principal: r.properties?.principalId, role: roleNameOf(r), scope: r.properties?.scope })))}>
-          Download role assignments
-        </ToolbarButton>
-        <ToolbarButton icon={<ArrowClockwise20Regular />} onClick={() => { assignments.reload(); definitions.reload(); }}>Refresh</ToolbarButton>
-        <ToolbarButton icon={<Delete20Regular />} disabled={!sel.size} onClick={removeSelected}>Remove</ToolbarButton>
-      </div>
-      <TabList selectedValue={tab} onTabSelect={(_, d) => setTab(d.value)} aria-label="Access control (IAM) tabs">
-        <Tab value="check">Check access</Tab>
-        <Tab value="assignments">Role assignments</Tab>
-        <Tab value="roles">Roles</Tab>
-        <Tab value="deny">Deny assignments</Tab>
-        <Tab value="classic">Classic administrators</Tab>
-      </TabList>
-      {tab === "check" && (
-        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Check access">
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <section className="vy-section"><h3>My access</h3>
-              <p style={{ fontSize: 13 }}>The roles {CURRENT_USER} has on this resource group.</p>
-              <Button onClick={() => setDlg("mine")}>View my access</Button>
-            </section>
-            <section className="vy-section"><h3>Check access</h3>
-              <p style={{ fontSize: 13 }}>Check whether a specific user can perform a specific action on this resource group.</p>
-              <Button onClick={() => setDlg("check")}>Check access</Button>
-            </section>
-          </div>
-        </CapabilityContainer>
-      )}
-      {tab === "assignments" && (
-        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Role assignments">
-          <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by name or email" aria-label="Search by name or email" />
-          <table className="vy-grid"><thead><tr><th /><th>Name</th><th>Type</th><th>Role</th><th>Scope</th><th>Condition</th></tr></thead>
-            <tbody>
-              {assignments.loading ? <tr><td colSpan={6}><Spinner size="tiny" /></td></tr> : rows.map((r) => (
-                <tr key={r.name}>
-                  <td><Checkbox checked={sel.has(r.name)} onChange={() => toggle(r.name)} aria-label={`Select ${r.properties?.principalId}`} /></td>
-                  <td>{r.properties?.principalId}</td><td>{r.properties?.principalType}</td>
-                  <td>{roleNameOf(r)}</td><td>{r.properties?.scope}</td><td>None</td>
-                </tr>
-              ))}
-              {!assignments.loading && !rows.length && <tr><td colSpan={6} className="vy-muted">No role assignments found for this scope.</td></tr>}
-            </tbody>
-          </table>
-        </CapabilityContainer>
-      )}
-      {tab === "roles" && (
-        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Roles">
-          <Input size="small" style={{ margin: "8px 0", width: 260 }} placeholder="Search by role name, description, permission, or ID" aria-label="Search by role name, description, permission, or ID" />
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Type</th><th>Category</th><th>Details</th></tr></thead>
-            <tbody>
-              {definitions.loading ? <tr><td colSpan={5}><Spinner size="tiny" /></td></tr> : (definitions.data || []).map((r) => (
-                <tr key={r.name}><td>{r.name}</td><td>{r.properties?.description || "--"}</td><td>{r.properties?.type}</td><td>General</td><td>{r.assignmentCount} assignment{r.assignmentCount === 1 ? "" : "s"}</td></tr>
-              ))}
-              {!definitions.loading && !(definitions.data || []).length && <tr><td colSpan={5} className="vy-muted">No roles found.</td></tr>}
-            </tbody>
-          </table>
-        </CapabilityContainer>
-      )}
-      {tab === "deny" && (
-        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Deny assignments">
-          <table className="vy-grid"><thead><tr><th>Name</th><th>Description</th><th>Principal</th><th>Scope</th></tr></thead>
-            <tbody><tr><td colSpan={4} className="vy-muted">No deny assignments found.</td></tr></tbody>
-          </table>
-        </CapabilityContainer>
-      )}
-      {tab === "classic" && (
-        <CapabilityContainer id="azure.resourcegroups.access_control_iam" title="Classic administrators">
-          <InfoBar>No classic administrators are configured for this subscription.</InfoBar>
-        </CapabilityContainer>
-      )}
-      <AddRoleAssignmentDialog open={add} onClose={() => setAdd(false)} roles={definitions.data || []}
-        onCreate={async (roleName, principalId) => {
-          await api.putRoleAssignment(name, api.uid(), { properties: { roleName, principalId, principalType: "User" } });
-          assignments.reload();
-        }} />
-      <CheckAccessDialog open={!!dlg} mine={dlg === "mine"} onClose={() => setDlg(null)}
-        onCheck={(principalId, action) => api.checkAccess(name, principalId, action)} />
-    </>
-  );
-}
 
 function AddRoleAssignmentDialog({ open, onClose, onCreate, roles }) {
   const notify = useNotify();

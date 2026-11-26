@@ -24,6 +24,7 @@ import ResourceTable from "../../kit/ResourceTable.jsx";
 import { ErrorAlert, KeyValue, NotSimulatedContainer } from "../../kit/common.jsx";
 import { CapabilityContainer, saveNotice } from "../../kit/Capability.jsx";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 export default function TopicDetail({ params, query }) {
   const name = params.name;
@@ -56,7 +57,7 @@ export default function TopicDetail({ params, query }) {
         ]} />
         <Tabs activeTabId={tab} onChange={({ detail }) => setTab(detail.activeTabId)} tabs={[
           { id: "subscriptions", label: "Subscriptions", content: <SubscriptionsTab arn={arn} name={name} /> },
-          { id: "access-policy", label: "Access policy", content: <AccessPolicyTab arn={arn} attrs={attrs} reload={t.reload} /> },
+          { id: "access-policy", label: "Access policy", content: <ResourcePolicyTab kind="sns-topic" args={{ arn }} onChanged={t.reload} /> },
           { id: "data-protection-policy", label: "Data protection policy", content: <DataProtectionTab arn={arn} reload={t.reload} /> },
           { id: "delivery-policy", label: "Delivery policy (HTTP/S)", content: <DeliveryPolicyTab arn={arn} attrs={attrs} reload={t.reload} /> },
           { id: "delivery-status-logging", label: "Delivery status logging", content: <DeliveryStatusTab arn={arn} attrs={attrs} reload={t.reload} /> },

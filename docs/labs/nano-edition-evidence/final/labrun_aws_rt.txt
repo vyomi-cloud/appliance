@@ -1,0 +1,109 @@
+[vyomi] deploy dir /var/lib/cloudlearn/deployments is not writable; instance workspaces go to /private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/808d2878-fee3-409c-8be9-52dbc4c4b641/scratchpad/wt/deployments
+rds: pyarrow missing — StartExportTask will fail (no Parquet engine)
+== chapter 10
+  saved  vymodels.py
+  PASS  python try_models.py  -> notional cost so far: $0.00063 over 5 calls
+  saved  chaos.py
+  PASS  python fail_models.py  -> failure lab passed: retries are bounded, validation fails fast, spend is capped
+  saved  iamkit.py
+  BLOCKED  python iam_models.py  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)
+== chapter 3
+  saved  install.sh
+  saved  mcp_client.py
+  saved  agents.py
+  saved  agent_main.py
+[wire_ingress] unified engine for: ['azure_acr', 'azure_blob', 'azure_cosmos', 'azure_graph', 'azure_keyvault', 'azure_servicebus', 'azure_table', 'dynamodb', 'events', 'gcp_compute', 'gcp_firestore', 'gcp_iam', 'gcp_kms', 'gcp_pubsub', 'gcp_secrets', 'gcs', 'guardduty', 'iam', 'kms', 'lambda', 'rds', 's3', 'scheduler', 'schemas', 'secretsmanager', 'securityhub', 'sns', 'sqs']
+[engine] MinIO (http://cloudlearn-minio:9000) not reachable — object bytes stay in the appliance state store only (persistent); write-through resumes when it returns
+  PASS  python deploy_runtime.py  -> runtime status READY
+  saved  ask_agent.py
+  PASS  python invoke_agent.py  -> the same session reuses its process: True
+  PASS  python stop_session.py  -> stopped session b; runtime still READY
+  PASS  python runaway.py  -> runaway protection verified
+  BLOCKED  python iam_runtime.py  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)
+== chapter 7
+  PASS  python tables.py  -> created approval-ledger
+  PASS  python seed.py  -> seeded facilities-work-orders 3
+  saved  asset_status.py
+  saved  request_approval.py
+  saved  create_work_order.py
+  PASS  python deploy_tools.py  -> deployed facilities-create-work-order
+  PASS  python call_tools.py  -> found: True | status: RUNNING | open work orders: 1
+  PASS  python tool_contract.py  -> tool contract verified
+  BLOCKED  python iam_tools.py  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)
+== chapter 14
+  saved  rag_design.py
+  saved  rag-design.json
+  PASS  python show_design.py  -> design OK
+== chapter 12
+  PASS  python upload_docs.py  -> uploaded 4 documents to s3://facilities-docs/docs/
+  PASS  python vector_store.py  -> collection facilities-kb arn:aws:aoss:us-east-1:123456789012:collection/i678i5zr9j
+  PASS  python knowledge_base.py  -> data source BS3B5N9NS6
+  PASS  python ingest.py  -> ingestion COMPLETE | documents scanned: 4
+  saved  ingest_docs.py
+  PASS  python event_driven.py  -> new upload started ingestion job #2 through S3 event -> Lambda
+  PASS  python reingest.py  -> idempotent ingestion verified
+  PASS  python dlq_ingest.py  -> dead-letter handling verified
+== chapter 6
+  PASS  python search.py  -> every hit has text and a source: True
+  PASS  python rerank.py  -> rerank returned 2 results; best index 0 -> the elevator SOP
+  saved  kb_search.py
+  PASS  python deploy_kb_search.py  -> tool returned 3 cited results; first source: s3://facilities-docs/docs/boiler-sop.md
+== chapter 11
+  PASS  python guardrail.py  -> guardrail 410f47c728b4
+  PASS  python output_guardrail.py  -> email removed: True
+  PASS  python grounded_answer.py  -> agent answer passes the output guardrail: True
+  PASS  python retrieve_and_generate.py  -> citation blocks: 1 | source documents cited: ['s3://facilities-docs/docs/boiler-sop.md', 's3://facil
+  saved  screen.py
+  PASS  python refusal.py  -> refusal verified
+  PASS  python poisoned_doc.py  -> poisoned document handled
+== chapter 9
+  PASS  python memory_create.py  -> memory facilities_memory-jmxm2sddxh ACTIVE
+  PASS  python memory_events.py  -> replayed 2 events for session s1
+  PASS  python memory_recall.py  -> retention: events expire after 30 days
+  PASS  python memory_guard.py  -> memory write gate verified
+== chapter 4
+  PASS  python gateway.py  -> 2 targets ['READY', 'READY']
+  PASS  python mcp_list.py  -> MCP tools/list: ['asset-status___asset_status', 'kb-search___kb_search']
+  PASS  python mcp_call.py  -> tools/call asset-status___asset_status -> found: True | status: RUNNING | isError: False
+  PASS  python cedar_policy.py  -> policy engine facilities_policies-s7u44rdg7c with a Cedar permit policy
+  PASS  python agent_via_gateway.py  -> tools reached through the gateway: True
+  FAIL  python cedar_enforce.py  -> 
+    Traceback (most recent call last):
+  File "/private/var/folders/ls/m88_d41j5sz14pg5skbfr4980000gn/T/vy-labrun-hadytw70/cedar_enforce.py", line 28, in <module>
+    read = next(n for n in names if "asset_status" in n)
+StopIteration
+
+== chapter 5
+  PASS  python approver_inbox.py  -> request-approval now publishes to the inbox
+  PASS  python state_machine.py  -> state machine arn:aws:states:us-east-1:123456789012:stateMachine:work-order-approval
+  PASS  python request_work_order.py  -> work orders written before approval: 0
+  PASS  python approve.py  -> work order: OPEN
+  PASS  python reject.py  -> work orders written despite rejection: 0
+  PASS  python history.py  -> history: ExecutionStarted, ChoiceStateEntered, ChoiceStateExited, TaskStateEntered, TaskScheduled, T
+  PASS  python expiry.py  -> expiry verified: no work order, request closed
+  PASS  python risk_levels.py  -> risk levels verified
+  BLOCKED  python iam_approval.py  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)
+== chapter 1
+  PASS  python cognito_setup.py  -> id token is a JWT: True (1001 chars)
+  PASS  python waf.py  -> web ACL arn:aws:wafv2:us-east-1:123456789012:regional/webacl/facilities-acl/840d9352-3a52-4763-a826-
+  PASS  python api_gateway.py  -> api 1537c51190 stage prod, Cognito authorizer, WAF attached
+  PASS  python call_with_token.py  -> HTTP 200 | results: 3 | top source: s3://facilities-docs/docs/boiler-sop.md
+  PASS  python call_without_token.py  -> anonymous call rejected with HTTP 401 (401 or 403: True )
+  PASS  python token_attacks.py  -> token attacks verified
+== chapter 2
+  PASS  python input_guardrail.py  -> denied word: GUARDRAIL_INTERVENED
+  PASS  python inbox_channel.py  -> inbox delivered: inbox smoke test
+  PASS  python guardrail_bypass.py  -> input screen verified
+== chapter 8
+  PASS  python trace_agent.py  -> structured log carries the trace id: True
+  PASS  python evaluators.py  -> evaluators available: 13
+  PASS  python cost_meter.py  -> cost control verified
+== chapter 13
+  PASS  python kms_protect.py  -> SSE-KMS object written
+  PASS  python trail.py  -> trail facilities-trail logging: True
+  PASS  python audit.py  -> approval is fully audited: True
+  PASS  python key_rotation.py  -> key rotation verified
+  PASS  python audit_chain.py  -> tamper evidence verified
+  BLOCKED  python audit_who.py  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)
+  BLOCKED  python ship_it.py  (needs the full appliance for IAM Enforce / audit: run with --endpoint <appliance or Mesh>)
+1 FAILED

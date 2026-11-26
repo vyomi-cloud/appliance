@@ -29,6 +29,7 @@ export const SERVICES = [
   { id: "loganalytics", title: "Log Analytics workspaces", type: "Microsoft.OperationalInsights/workspaces", category: "Management and governance", icon: "loganalytics", load: () => import("./loganalytics/index.jsx") },
   { id: "defender", title: "Microsoft Defender for Cloud", type: "Microsoft.Security", category: "Security", icon: "defender", load: () => import("./defender/index.jsx") },
   { id: "entra", title: "Microsoft Entra ID", type: "Identity", category: "Identity", icon: "entra", load: () => import("./entra/index.jsx") },
+  { id: "managementgroups", title: "Management groups", type: "Microsoft.Management/managementGroups", category: "Management and governance", icon: "subscriptions", load: () => import("./managementgroups/index.jsx") },
   { id: "subscriptions", title: "Subscriptions", type: "Microsoft.Resources/subscriptions", category: "Management and governance", icon: "subscriptions", load: () => import("./subscriptions/index.jsx") },
   { id: "cost", title: "Cost Management", type: "Microsoft.CostManagement", category: "Management and governance", icon: "cost", load: () => import("./cost/index.jsx") },
   { id: "cognitiveservices", title: "Azure AI services", type: "Microsoft.CognitiveServices/accounts", category: "AI + machine learning", icon: "cognitiveservices", load: () => import("./cognitiveservices/index.jsx") },

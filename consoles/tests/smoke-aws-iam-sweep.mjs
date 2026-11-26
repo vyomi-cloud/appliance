@@ -24,7 +24,7 @@ const results = [];
 const check = (name, ok, detail = "") => { results.push({ name, ok }); console.log(`${ok ? "PASS" : "FAIL"} ${name}${detail ? " - " + String(detail).slice(0, 160) : ""}`); };
 
 await mkdir(OUT, { recursive: true });
-const browser = await pw.chromium.launch();
+const browser = await pw.chromium.launch({ channel: "chrome" }).catch(() => pw.chromium.launch());
 const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
@@ -60,7 +60,7 @@ await shot("iam-dashboard");
 
 // ── 2. Account settings: password policy + STS are real
 await go("#/iam/account-settings", "Account settings");
-check("Password policy + STS + centralized root access panels are real (only Role manager carries the badge)", (await badges()) === 1 && (await body()).includes("Global endpoint session tokens"));
+check("Password policy + STS + centralized root access panels are real (Role manager is real too: no badge)", (await badges()) === 0 && (await body()).includes("Global endpoint session tokens"));
 await page.getByRole("button", { name: /Change to version 2 tokens/ }).click();
 await page.getByText("Valid in all AWS Regions (version 2)").waitFor({ timeout: 10000 });
 check("STS token version change persisted (native GetAccountSummary)", (await iam("GetAccountSummary")).text.includes("<key>GlobalEndpointTokenVersion</key><value>2</value>"));

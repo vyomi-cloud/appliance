@@ -34,10 +34,12 @@ import Labels from "./Labels.jsx";
 import Tags from "./Tags.jsx";
 import AuditLogs from "./AuditLogs.jsx";
 import OrgPolicies from "./OrgPolicies.jsx";
+import Governance from "./Governance.jsx";
 import Pam from "./Pam.jsx";
 import EssentialContacts from "./EssentialContacts.jsx";
 import PolicyTroubleshooter from "./PolicyTroubleshooter.jsx";
 import Enforcement from "./Enforcement.jsx";
+import IamActivity from "./IamActivity.jsx";
 import EffectiveAccess from "./EffectiveAccess.jsx";
 import PolicyAnalyzer from "./PolicyAnalyzer.jsx";
 import WorkloadIdentity from "./WorkloadIdentity.jsx";
@@ -76,6 +78,7 @@ export default {
     {
       section: "Resource Management",
       items: [
+        { text: "Resource hierarchy", href: "#/iam-admin/governance", icon: DomainIcon },
         { text: "Organization Policies", href: "#/iam-admin/orgpolicies", icon: PolicyIcon },
         { text: "Asset Inventory", href: "#/iam-admin/asset-inventory", icon: InventoryIcon },
         { text: "Settings", href: "#/iam-admin/settings", icon: SettingsIcon },
@@ -91,6 +94,7 @@ export default {
         { text: "Policy Troubleshooter", href: "#/iam-admin/troubleshooter", icon: TroubleshootIcon },
         { text: "Effective access", href: "#/iam-admin/effective-access", icon: QueryStatsIcon },
         { text: "Enforcement", href: "#/iam-admin/enforcement", icon: ShieldIcon },
+        { text: "Activity", href: "#/iam-admin/activity", icon: QueryStatsIcon },
       ],
     },
     {
@@ -121,12 +125,14 @@ export default {
     { pattern: "/iam-admin/labels", component: Labels },
     { pattern: "/iam-admin/tags", component: Tags },
     { pattern: "/iam-admin/audit", component: AuditLogs },
+    { pattern: "/iam-admin/governance", component: Governance },
     { pattern: "/iam-admin/orgpolicies", component: OrgPolicies },
     { pattern: "/iam-admin/pam", component: Pam },
     { pattern: "/iam-admin/essential-contacts", component: EssentialContacts },
     { pattern: "/iam-admin/troubleshooter", component: PolicyTroubleshooter },
     { pattern: "/iam-admin/effective-access", component: EffectiveAccess },
     { pattern: "/iam-admin/enforcement", component: Enforcement },
+    { pattern: "/iam-admin/activity", component: IamActivity },
     { pattern: "/iam-admin/analyzer", component: PolicyAnalyzer },
     { pattern: "/iam-admin/workload-identity-pools", component: WorkloadIdentity },
     { pattern: "/iam-admin/groups", component: Groups },

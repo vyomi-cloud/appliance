@@ -1,0 +1,36 @@
+{
+"cloud":"gcp",
+"service":"agentgateway",
+"permissions":{
+"agentregistry.aiApplications.get":{
+"stage":"SUPPORTED"
+},
+"agentregistry.bindings.fetchAvailable":{
+"stage":"SUPPORTED"
+},
+"apphubendpoint.locations.lookup":{},
+"dns.networks.targetWithPeeringZone":{
+"stage":"SUPPORTED"
+},
+"serviceextensions.callouts.invoke":{
+"stage":"TESTING"
+},
+"serviceusage.services.use":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/agentgateway.serviceAgent":{
+"title":"Agent Gateway Service Agent",
+"desc":"Grants Agent Gateway Service Agent permissions required to do DNS peering, to look up Agent Registry entities via AppHub Endpoint, and to call Prism.",
+"permissions":[
+"agentregistry.aiApplications.get",
+"agentregistry.bindings.fetchAvailable",
+"apphubendpoint.locations.lookup",
+"dns.networks.targetWithPeeringZone",
+"serviceextensions.callouts.invoke",
+"serviceusage.services.use"
+]
+}
+}
+}

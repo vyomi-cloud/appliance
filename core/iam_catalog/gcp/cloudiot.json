@@ -1,0 +1,32 @@
+{
+"cloud":"gcp",
+"service":"cloudiot",
+"permissions":{
+"cloudiottoken.tokensettings.get":{
+"stage":"SUPPORTED"
+},
+"cloudiottoken.tokensettings.update":{
+"stage":"SUPPORTED"
+},
+"logging.logEntries.create":{
+"stage":"SUPPORTED"
+},
+"logging.logEntries.route":{
+"stage":"SUPPORTED"
+},
+"pubsub.topics.publish":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{
+"roles/cloudiot.serviceAgent":{
+"title":"Cloud IoT Core Service Agent",
+"desc":"Grants the ability to manage Cloud IoT Core resources, including publishing data to Cloud Pub/Sub and writing device activity logs to Stackdriver. Warning: If this role is removed from the Cloud IoT service account, Cloud IoT Core will be unable to publish data or write device activity logs.",
+"permissions":[
+"logging.logEntries.create",
+"logging.logEntries.route",
+"pubsub.topics.publish"
+]
+}
+}
+}

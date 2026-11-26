@@ -24,6 +24,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { follow, href, navigate, useRoute } from "../../../common/router.js";
 import * as api from "./api.js";
+import ResourcePolicyTab from "../../kit/ResourcePolicyTab.jsx";
 
 const ROLE = "arn:aws:iam::123456789012:role/service-role/AWSBackupDefaultServiceRole";
 const stat = (s) => <StatusIndicator type={/COMPLETED/.test(s) ? "success" : /FAILED|EXPIRED/.test(s) ? "error" : /ABORT/.test(s) ? "stopped" : "in-progress"}>{s}</StatusIndicator>;
@@ -132,13 +133,11 @@ export function VaultDetail() {
   const name = query.name;
   const v = useAsync(() => api.getVault(name), [name]);
   const rps = useAsync(() => api.listRecoveryPoints(name), [name]);
-  const pol = useAsync(() => api.getVaultAccessPolicy(name), [name]);
   const [sel, setSel] = useState([]);
   const [restore, setRestore] = useState(null);
   const [del, setDel] = useState(false);
   const [lock, setLock] = useState(false);
   const [lk, setLk] = useState({ min: "7", max: "365", days: "" });
-  const [policy, setPolicy] = useState(null);
   const [err, setErr] = useState(null);
   const [onDemand, setOnDemand] = useState(false);
   const [od, setOd] = useState({ arn: "", ttl: "" });
@@ -163,9 +162,7 @@ export function VaultDetail() {
               <Button variant="primary" onClick={() => { setErr(null); setLock(true); }}>{x?.Locked ? "Update Vault Lock" : "Create Vault Lock"}</Button></SpaceBetween>}>Vault Lock</Header>}>
               {x?.Locked ? `Locked. Min retention ${x.MinRetentionDays ?? "-"} days, max ${x.MaxRetentionDays ?? "-"} days.` : "Vault Lock is not configured. Recovery points can be deleted at any time."}
             </Container>) },
-          { id: "pol", label: "Access policy", content: (
-            <Container header={<Header variant="h2" actions={<Button onClick={() => setPolicy(pol.data?.Policy || '{"Version":"2012-10-17","Statement":[]}')}>Edit policy</Button>}>Backup vault access policy</Header>}>
-              <Box variant="code"><pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>{pol.data?.Policy || "No access policy is set on this vault."}</pre></Box></Container>) },
+          { id: "pol", label: "Access policy", content: <ResourcePolicyTab kind="backup-vault" args={{ name }} /> },
         ]} />
       </SpaceBetween>
       <RestoreModal rp={restore} onDismiss={() => setRestore(null)} onDone={() => navigate("backup", "restore-jobs")} />
@@ -181,10 +178,6 @@ export function VaultDetail() {
           <FormField label="Maximum retention (days)"><Input value={lk.max} onChange={({ detail }) => setLk({ ...lk, max: detail.value })} /></FormField>
           <FormField label="Lock in compliance mode after (days)" description="Leave empty for governance mode (lock can still be removed). 3-365 days enables compliance mode."><Input value={lk.days} onChange={({ detail }) => setLk({ ...lk, days: detail.value })} /></FormField></SpaceBetween>
       </Modal>
-      <Modal visible={policy !== null} onDismiss={() => setPolicy(null)} size="large" header="Edit access policy"
-        footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={() => setPolicy(null)}>Cancel</Button>
-          <Button variant="primary" onClick={async () => { try { await api.putVaultAccessPolicy(name, policy); notify.success("Access policy saved."); setPolicy(null); pol.reload(); } catch (e) { notify.error(e); } }}>Save policy</Button></SpaceBetween></Box>}>
-        <Textarea rows={12} value={policy || ""} onChange={({ detail }) => setPolicy(detail.value)} spellcheck={false} /></Modal>
       <Modal visible={onDemand} onDismiss={() => setOnDemand(false)} header="Create on-demand backup"
         footer={<Box float="right"><SpaceBetween direction="horizontal" size="xs"><Button variant="link" onClick={() => setOnDemand(false)}>Cancel</Button>
           <Button variant="primary" onClick={async () => { try {

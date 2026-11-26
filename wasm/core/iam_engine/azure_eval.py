@@ -114,6 +114,7 @@ def _flat_role(d):
     if perms is None:
         perms = [{k: p.get(k, []) for k in ("actions", "notActions", "dataActions", "notDataActions")}]
     return {"id": (d.get("name") or d.get("id") or "").split("/")[-1], "roleName": p.get("roleName") or d.get("roleName") or "",
+            "assignable_scopes": list(p.get("assignableScopes") or d.get("assignableScopes") or d.get("assignable_scopes") or []),
             "permissions": [{k: list(x.get(k) or []) for k in ("actions", "notActions", "dataActions", "notDataActions")} for x in perms]}
 
 
@@ -371,8 +372,32 @@ def eval_condition(text, action, context=None):
 
 
 # ------------------------------------------------------------------ evaluation
+def _ts(v):
+    import calendar
+    m = re.match(r"^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)", str(v or ""))
+    return float(calendar.timegm(tuple(int(x) for x in m.groups()) + (0, 0, 0))) if m else None
+
+
 def _active(ra):
-    return not (str(ra.get("assignment_type") or "active").lower() == "eligible" and not ra.get("activated"))
+    """An eligible-but-not-activated assignment grants nothing; a time-bound one (PIM activation, AdminAssign with an expiry) grants only
+    inside [start_date_time, end_date_time) -- so access appears at activation and disappears at expiry with no sweeper."""
+    if str(ra.get("assignment_type") or "active").lower() == "eligible" and not ra.get("activated"):
+        return False
+    if ra.get("start_date_time") or ra.get("end_date_time"):
+        import time
+        now = time.time()
+        s, e = _ts(ra.get("start_date_time")), _ts(ra.get("end_date_time"))
+        if (s is not None and s > now) or (e is not None and e <= now):
+            return False
+    return True
+
+
+def _assignable(role, scope, state):
+    """Custom-role assignableScopes: the assignment scope must lie inside one of them ('/' or no list = anywhere, as every built-in)."""
+    asc = role.get("assignable_scopes") or []
+    if not asc or any(str(x).strip() in ("/", "") for x in asc):
+        return True
+    return any(scope_covers(x, scope, state) for x in asc)
 
 
 def _deny_applies(d, req, ids, state, data):
@@ -405,11 +430,13 @@ def _rbac(req, state):
     state = state or {}
     pr = req.get("principal") or {}
     ids = _ids(pr, state)
-    data = bool(req.get("data"))
+    # The gate always states the plane (map_azure sets data True/False). A caller that does not (effective-access / /evaluate, which only has the
+    # action string) is evaluated in both planes: an action is a control-plane action OR a data action, never both for the same role.
+    planes = [bool(req["data"])] if req.get("data") is not None else [False, True]
     ctx = req.get("context") or {}
     denies = []
     for d in state.get("deny_assignments") or []:
-        hit = _deny_applies(d, req, ids, state, data)
+        hit = next((h for h in (_deny_applies(d, req, ids, state, pl) for pl in planes) if h), None)
         if hit:
             denies.append({"source": "deny_assignment", "id": d.get("id", ""), "effect": "Deny",
                            "statement": {"scope": d.get("scope"), "matchedAction": hit, "isSystemProtected": bool(d.get("is_system_protected"))}})
@@ -424,7 +451,9 @@ def _rbac(req, state):
         role = resolve_role(state, ra.get("role_definition_id"))
         if not role:
             continue
-        hit = role_grants(role, req["action"], data)
+        if not _assignable(role, ra.get("scope"), state):      # a custom role only exists inside its assignableScopes
+            continue
+        hit = next((h for h in (role_grants(role, req["action"], pl) for pl in planes) if h), None)
         if not hit:
             continue
         if ra.get("condition") and not eval_condition(ra["condition"], req["action"], ctx):

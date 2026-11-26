@@ -16,12 +16,13 @@ import { VmManagerPanel } from "./VmManager.jsx";
 import { ErrorAlert, KeyValue, NotSimulated, PageHeader, Section, fmtDate, fmtDuration, SECTION_TABLE_BLEED } from "../../kit/common.jsx";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { hashHref } from "../../link.jsx";
+import ResourcePermissionsPanel from "../../kit/ResourcePermissionsPanel.jsx";
 import * as api from "./api.js";
 import NanoVmPanel, { isNano, pendingAttr, useNanoVmRefresh } from "../../../common/NanoVmPanel.jsx";
 import { RecommendationsTable } from "./Ext.jsx";
 import OpsAgentMetrics from "./OpsAgentMetrics.jsx";
 
-const TABS = ["Details", "Observability", "Serial port output", "SSH keys", "OS info", "Screenshot"];
+const TABS = ["Details", "Observability", "Serial port output", "SSH keys", "OS info", "Screenshot", "Permissions"];
 
 /** Real recorded activity for this instance: status duration (from its own real lifecycle
  * timestamps) + the operations the core actually performed, oldest action last. No Cloud
@@ -330,6 +331,7 @@ export default function InstanceDetail({ params }) {
       {tab === "OS info" && (
         <CapabilityContainer id="gcp.compute.instances.ssh_metadata" title="OS info"><OsInfoPanel zone={zone} name={name} /></CapabilityContainer>
       )}
+      {tab === "Permissions" && <ResourcePermissionsPanel kind="compute-instance" args={{ zone, name }} />}
       {tab === "Screenshot" && <CapabilityContainer id="gcp.compute.instances.data_plane" title="Screenshot"><ScreenshotPanel zone={zone} name={name} /></CapabilityContainer>}
 
       <DeleteDialog

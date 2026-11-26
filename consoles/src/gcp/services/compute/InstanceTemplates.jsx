@@ -14,6 +14,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { fmtDate, PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
+import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
 
 function CreateDialog({ open, onClose, onCreated }) {
   const notify = useNotify();
@@ -30,7 +31,7 @@ function CreateDialog({ open, onClose, onCreated }) {
   useEffect(() => {
     if (!open) return;
     setName(""); setTouched(false); setError(null); setMachineType("e2-medium"); setOsIdx(0); setDiskType("pd-balanced"); setDiskSize(10);
-    api.listMachineTypes(api.DEFAULT_ZONE).then(setMachineTypes).catch(() => setMachineTypes([]));
+    api.listMachineTypes(api.DEFAULT_ZONE).then((mts) => { setMachineTypes(mts); if (mts.length && !mts.some((m) => m.name === "e2-medium")) setMachineType(mts[0].name); }).catch(() => setMachineTypes([]));
   }, [open]);
 
   const nameErr = touched ? api.validResourceName(name) : null;
@@ -64,10 +65,11 @@ function CreateDialog({ open, onClose, onCreated }) {
           {error && <Alert severity="error"><b>{error.code || "Error"}</b>: {error.message}</Alert>}
           <TextField label="Name" required autoFocus value={name} onChange={(e) => setName(e.target.value.trim())}
             onBlur={() => setTouched(true)} error={!!nameErr} helperText={nameErr || " "} inputProps={{ "aria-label": "Name" }} />
+          {sizesNote(sizeSubstrate(machineTypes)) && <Typography variant="body2" color="text.secondary">{sizesNote(sizeSubstrate(machineTypes))}</Typography>}
           <FormControl fullWidth>
             <InputLabel id="it-mt-l">Machine type</InputLabel>
             <Select labelId="it-mt-l" label="Machine type" value={machineType} onChange={(e) => setMachineType(e.target.value)}>
-              {machineTypes.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {Math.round(m.memoryMb / 1024)} GB memory)</MenuItem>)}
+              {machineTypes.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {+(m.memoryMb / 1024).toFixed(2)} GB memory)</MenuItem>)}
             </Select>
           </FormControl>
           <FormControl fullWidth>

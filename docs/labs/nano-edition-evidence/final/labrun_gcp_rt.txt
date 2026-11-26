@@ -1,0 +1,202 @@
+[vyomi] deploy dir /var/lib/cloudlearn/deployments is not writable; instance workspaces go to /private/tmp/claude-501/-Users-sudhirganti-Applications-simulator-appliance-integF-packaging-tunnel/808d2878-fee3-409c-8be9-52dbc4c4b641/scratchpad/wt/deployments
+rds: pyarrow missing — StartExportTask will fail (no Parquet engine)
+I1126 11:30:17.504608 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:30:25.737992 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:30:30.292423 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:31:19.407398 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:31:36.055438 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:31:47.966940 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:31:55.179971 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:31:56.972418 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:31:57.794307 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:01.234809 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:04.104356 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:06.312429 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:09.273227 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:09.292165 35206891 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+I1126 11:32:10.821746 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:10.825957 35206972 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+I1126 11:32:15.103261 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:17.764275 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:17.849458 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:18.046124 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:19.546565 35207710 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+I1126 11:32:22.099722 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:23.781785 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:25.811234 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:30.780789 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:33.368301 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:34.571351 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:36.248501 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:36.255491 35208693 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+I1126 11:32:42.109076 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:32:55.489461 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:08.960873 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:13.474031 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:20.540425 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:25.700321 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:26.607351 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:30.293421 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:34.554566 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:33:36.884812 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:19.739711 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:37.263531 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:47.926533 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:48.783988 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:49.116741 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:50.335376 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:50.523566 35216536 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:50.696975 35216536 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:50.865782 35216536 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:51.061692 35216536 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:51.234536 35216536 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:51.412389 35216536 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:52.168434 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:52.446248 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:52.931704 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:54.437146 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:54.755881 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:55.181223 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:55.633563 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:56.196995 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:56.585957 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:57.076114 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:57.524785 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:58.322716 35201487 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:34:58.332862 35217633 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+I1126 11:34:59.145114 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:00.018691 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:00.366156 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:02.162378 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:02.500912 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:02.684883 35218065 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:03.742366 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:04.157287 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:04.639235 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:05.957229 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:06.645211 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:07.315689 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:07.674541 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:08.374367 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:09.626816 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:10.389224 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:11.246605 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:11.256886 35218622 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+I1126 11:35:12.680566 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:14.730286 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:16.040988 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:19.877821 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:22.479189 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+I1126 11:35:25.351874 35199615 fork_posix.cc:71] Other threads are currently calling into gRPC, skipping fork() handlers
+== chapter 10
+  saved  install_10.sh
+  saved  gcp.py
+  saved  vymodels.py
+  PASS  python try_models.py  -> embed: vectors of 768 numbers; paraphrase 0.60, unrelated 0.00
+== chapter 3
+  saved  install_3.sh
+  saved  starter_tools.py
+  saved  agents.py
+  PASS  python try_agent.py  -> answer: SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, c
+  saved  agent_engine_app.py
+  PASS  python deploy_agent.py  -> deployed projects/vyomi-project/locations/us-central1/reasoningEngines/6413264112322839966
+  PASS  python query_agent.py  -> spans: ['supervisor.plan', 'agent:facilities', 'agent:maintenance', 'agent:analytics', 'supervisor.s
+== chapter 7
+  saved  install_7.sh
+  PASS  python seed.py  -> seeded work-orders 3
+  saved  asset_status_fn.py
+  saved  approval_decision_fn.py
+  saved  create_work_order_fn.py
+  saved  functions.py
+[engine] fake-gcs-server (CLOUDLEARN_GCS_URL) not reachable — object bytes stay in the appliance state store only (persistent); write-through resumes when it returns
+  PASS  python deploy_tools.py  -> deployed facilities-create-work-order http://127.0.0.1:63640/gcf/vyomi-project/us-central1/facilitie
+  PASS  python call_asset_status.py  -> found: True | status: RUNNING | open work orders: 1
+  PASS  python check_write_tool.py  -> ledger: EXECUTED
+  PASS  python tool_contract.py  -> tool contract verified: 5 of 5 poisoned calls refused
+== chapter 14
+  saved  rag_design.py
+  saved  rag-design.json
+  PASS  python show_design.py  -> design OK
+== chapter 12
+  saved  install_12.sh
+  saved  docs.py
+  PASS  python upload_docs.py  -> 4 documents uploaded to gs://facilities-docs/docs/
+  saved  rag.py
+  PASS  python create_kb.py  -> indexed files: 4
+  PASS  python notify.py  -> notification: OBJECT_FINALIZE docs/notify-probe.md
+  saved  ingest_docs_fn.py
+  PASS  python deploy_pipeline.py  -> trigger facilities-docs-finalized created
+  PASS  python test_pipeline.py  -> indexed files: 4 -> 5
+  PASS  python replace_doc.py  -> original restored serves 30 psi: True
+== chapter 6
+  saved  install_6.sh
+  PASS  python search.py  -> every passage carries text and a gs:// source
+  PASS  python check_ranking.py  -> AHU question -> first hit is hvac-maintenance-manual.md
+  saved  kb_search_fn.py
+  PASS  python deploy_kb_search.py  -> kb-search returned 3 cited results
+== chapter 11
+  saved  install_11.sh
+  saved  guardrail.py
+  saved  respond.py
+  PASS  python try_response.py  -> grounded: the answer cites the boiler SOP
+  PASS  python screen_output.py  -> clean answer passes: True
+  PASS  python safe_response.py  -> safe response delivered with its citations
+  PASS  python grounded_generate.py  -> generateContent grounded on the RAG corpus
+== chapter 9
+  saved  install_9.sh
+  PASS  python memory.py  -> memory host: projects/vyomi-project/locations/us-central1/reasoningEngines/9631916559978248454
+  PASS  python session_demo.py  -> events replayed: 2
+  PASS  python remember.py  -> another user's memories: 0
+  PASS  python generate_memories.py  -> memories generated from the conversation
+== chapter 4
+  saved  install_4.sh
+  saved  mcp_server_fn.py
+  saved  gateway.py
+  PASS  python register_tools.py  -> registered: projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools
+  PASS  python create_gateway.py  -> attached: ['facilities-tools']
+  PASS  python use_gateway.py  -> asset_status via gateway: B-12 RUNNING
+  FAIL  python add_policy.py  -> read tool: DENY | write tool: DENY
+    I1126 11:34:52.171866 35216770 ev_poll_posix.cc:588] FD from fork parent still in poll list: fd(13, generation: 1)
+Traceback (most recent call last):
+  File "/private/var/folders/ls/m88_d41j5sz14pg5skbfr4980000gn/T/vy-labrun-sbkisyiz/add_policy.py", line 12, in <module>
+    assert allow["decision"] == "ALLOW" and deny["decision"] == "DENY"
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
+
+== chapter 5
+  saved  install_5.sh
+  saved  approval.py
+  PASS  python setup_inbox.py  -> topic work-order-approval -> subscription approver-inbox ready
+  PASS  python submit_request.py  -> no work order exists before approval
+  PASS  python approve_request.py  -> work order: WO-53F939 OPEN | ledger: EXECUTED by duty.manager@example.com | idempotent: True
+  PASS  python reject_request.py  -> decision: REJECTED | create refused: True | work orders written: 0
+  PASS  python expiry.py  -> approval expiry verified
+== chapter 1
+  saved  install_1.sh
+  PASS  python signin.py  -> verified: issuer https://securetoken.google.com/facilities-users | audience facilities-users | email
+  PASS  python service_account.py  -> service account agent-sa@vyomi-project.iam.gserviceaccount.com -> ID token is a JWT: True
+  PASS  python armor.py  -> policy facilities-armor with 2 rules; first rule: evaluatePreconfiguredExpr('xss-stable')
+  PASS  python api_gateway.py  -> gateway facilities-api-gw ACTIVE at facilities-api-gw-ad992370.uc.gateway.dev
+  PASS  python call_edge.py  -> unsigned token: 401
+== chapter 2
+  saved  install_2.sh
+  PASS  python intake.py  -> benign question allowed: True | prompt injection allowed: False
+  PASS  python inbox_check.py  -> redelivered after ack: False
+== chapter 8
+  saved  install_8.sh
+  PASS  python export_trace.py  -> 6 spans exported in trace 7f7f6f3b8a8e43b8b63f6463b74ef54a
+  PASS  python read_trace.py  -> trace listed by list_traces: True
+  PASS  python log_run.py  -> log entry read back; trace field ends with the trace id: True
+  PASS  python metric.py  -> metric read back: 3 tool calls
+  PASS  python log_grpc.py  -> gRPC log entry written and read back
+  PASS  python cost_meter.py  -> cost limit verified
+== chapter 13
+  saved  install_13.sh
+  PASS  python create_key.py  -> key: facilities/cryptoKeys/ledger-key with 90-day rotation
+  PASS  python seal_record.py  -> wrong context refused
+  PASS  python audit_trail.py  -> the run is in the audit log
+  PASS  python ledger_audit.py  -> executed: req-7e7853f939 approved by duty.manager@example.com -> work order WO-53F939
+  PASS  python key_rotation.py  -> key rotation verified
+  PASS  python audit_chain.py  -> audit chain verified
+  PASS  python ship_it.py  -> ship it verified: Infrastructure Manager applied 2 resources; review them, then point gcsSource at t
+1 FAILED

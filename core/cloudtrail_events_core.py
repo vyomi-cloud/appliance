@@ -68,6 +68,65 @@ def derive(svc, method, path, action, body):
     return f"{src}.amazonaws.com", name, res
 
 
+_IAM_RES = (("RoleName", "AWS::IAM::Role"), ("UserName", "AWS::IAM::User"), ("GroupName", "AWS::IAM::Group"),
+            ("PolicyArn", "AWS::IAM::Policy"), ("InstanceProfileName", "AWS::IAM::InstanceProfile"),
+            ("OpenIDConnectProviderArn", "AWS::IAM::OIDCProvider"), ("SAMLProviderArn", "AWS::IAM::SAMLProvider"),
+            ("RoleArn", "AWS::IAM::Role"))
+_SECRET_PARAMS = {"WebIdentityToken", "SAMLAssertion", "Password", "NewPassword", "OldPassword", "SecretAccessKey", "SessionToken", "TokenCode"}
+
+
+def _query_request_parameters(params):
+    """requestParameters of an IAM / STS Query call, CloudTrail style (camelCase keys; credentials and tokens are never logged)."""
+    out = {}
+    for k, v in (params or {}).items():
+        if k in ("Action", "Version") or k.startswith("__"):
+            continue
+        if k in _SECRET_PARAMS:
+            continue
+        out[k[0].lower() + k[1:]] = v
+    return out or None
+
+
+def last(store, svc, action):
+    """Newest recorded event of this service/action (None when the router did not record one)."""
+    src = f"{_SOURCE.get(svc, svc)}.amazonaws.com"
+    for ev in reversed(store[-20:]):
+        if ev.get("EventName") == action and ev.get("EventSource") == src:
+            return ev
+    return None
+
+
+def annotate(ev, action, params, caller, res, err):
+    """Add the outcome of an STS call to its CloudTrail event: userIdentity of the caller (or the federated user), requestParameters,
+    responseElements (credentials without the secret), errorCode / errorMessage on a refusal."""
+    d = json.loads(ev["CloudTrailEvent"])
+    uid = d.get("userIdentity") or {}
+    if action == "AssumeRole" and caller:
+        arn = caller.get("arn") or ""
+        uid.update({"type": "Root" if caller.get("type") == "root" else "AssumedRole" if ":assumed-role/" in arn else "IAMUser", "arn": arn,
+                    "principalId": caller.get("account", "")})
+        ev["Username"] = arn.rsplit("/", 1)[-1] if "/" in arn else "root"
+    elif action == "AssumeRoleWithWebIdentity":
+        uid.update({"type": "WebIdentityUser", "userName": "", "identityProvider": ""})
+        ev["Username"] = (params.get("RoleSessionName") or "anonymous")
+    elif action == "AssumeRoleWithSAML":
+        uid.update({"type": "SAMLUser", "userName": ""})
+        ev["Username"] = (params.get("RoleSessionName") or "anonymous")
+    d["userIdentity"] = uid
+    d["requestParameters"] = _query_request_parameters(params) or {}
+    if res:
+        c = dict(res.get("Credentials") or {})
+        c.pop("SecretAccessKey", None)
+        c.pop("SessionToken", None)
+        d["responseElements"] = {"credentials": {k[0].lower() + k[1:]: v for k, v in c.items()},
+                                 "assumedRoleUser": {k[0].lower() + k[1:]: v for k, v in (res.get("AssumedRoleUser") or {}).items()}}
+        ev["AccessKeyId"] = ev.get("AccessKeyId") or ""
+    if err:
+        d["errorCode"], d["errorMessage"] = err.code, err.message
+    ev["CloudTrailEvent"] = json.dumps(d)
+    return ev
+
+
 _KMS_SKIP = {"Plaintext", "CiphertextBlob", "Message", "Mac", "Signature"}   # real CloudTrail never logs payload bytes
 
 
@@ -88,8 +147,8 @@ def record(store: list, svc, method, path, action, body, akid, user, query_param
         return None
     source, name, res = d
     if query_params:
-        for k, rt in (("TopicArn", "AWS::SNS::Topic"), ("QueueUrl", "AWS::SQS::Queue")):
-            if query_params.get(k):
+        for k, rt in (("TopicArn", "AWS::SNS::Topic"), ("QueueUrl", "AWS::SQS::Queue")) + _IAM_RES:
+            if query_params.get(k) and (rt, query_params[k]) not in res:
                 res.append((rt, query_params[k]))
     now = time.time()
     rn = [{"ResourceType": t, "ResourceName": n} for t, n in res]
@@ -108,6 +167,8 @@ def record(store: list, svc, method, path, action, body, akid, user, query_param
         "requestID": eid, "recipientAccountId": _ACCOUNT,
         "resources": [{"type": t, "ARN": n} for t, n in res]})
     rp = _request_parameters(source, body)
+    if query_params and source in ("iam.amazonaws.com", "sts.amazonaws.com"):
+        rp = _query_request_parameters(query_params)
     if rp is not None:
         d2 = json.loads(ev["CloudTrailEvent"])
         d2["requestParameters"] = rp

@@ -1,0 +1,13 @@
+{
+"cloud":"gcp",
+"service":"cloud",
+"permissions":{
+"cloud.locations.get":{
+"stage":"SUPPORTED"
+},
+"cloud.locations.list":{
+"stage":"SUPPORTED"
+}
+},
+"roles":{}
+}

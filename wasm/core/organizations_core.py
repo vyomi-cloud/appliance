@@ -197,6 +197,16 @@ def _fix_policy_arn(o: dict, p: dict) -> None:
 
 
 # ── organization ───────────────────────────────────────────────────────────
+def _attach_defaults(store, o, target):
+    """AWS attaches FullAWSAccess (SCP) / RCPFullAWSAccess (RCP) to every root, OU and account while that policy type is enabled, so a
+    node always has an Allow to inherit-and-restrict from (a node whose only SCP is a Deny would otherwise allow nothing)."""
+    types = set(_root(o)["policy_types"])
+    cur = o["attachments"].setdefault(target, [])
+    for t, pid in ((SCP, FULL_ACCESS_ID), (RCP, FULL_ACCESS_RCP_ID)):
+        if t in types and pid in store.org_policies and pid not in cur:
+            cur.append(pid)
+
+
 def _create_organization(store, b):
     if _org(store, required=False):
         raise OrgError("AlreadyInOrganizationException", "The account is already a member of an organization.")
@@ -275,6 +285,8 @@ def _enable_policy_type(store, b):
         o["attachments"].setdefault(r["id"], [])
         if pid not in o["attachments"][r["id"]]:
             o["attachments"][r["id"]].append(pid)
+        for tgt in list(o["ous"]) + list(o["accounts"]):                 # AWS: every OU and account gets the default Allow too
+            _attach_defaults(store, o, tgt)
     _persist(store)
     return {"Root": _s_root(r)}
 
@@ -307,6 +319,7 @@ def _create_ou(store, b):
     uid = "ou-" + rootid[2:] + "-" + _rid(8)
     u = {"id": uid, "arn": _arn(store, o, "ou", uid), "name": name, "parent": parent}
     o["ous"][uid] = u
+    _attach_defaults(store, o, uid)
     _tag_into(o, uid, b.get("Tags"))
     _persist(store)
     return {"OrganizationalUnit": _s_ou(u)}
@@ -395,6 +408,7 @@ def _create_account(store, b):
     o["accounts"][aid] = {"id": aid, "arn": _arn(store, o, "account", aid), "email": email, "name": name,
                           "status": "ACTIVE", "state": "ACTIVE", "joined_method": "CREATED", "joined": _ts(),
                           "parent": _root(o)["id"], "role_name": b.get("RoleName") or "OrganizationAccountAccessRole"}
+    _attach_defaults(store, o, aid)
     _tag_into(o, aid, b.get("Tags"))
     st = _status_rec(o, name, "SUCCEEDED", aid)
     _persist(store)

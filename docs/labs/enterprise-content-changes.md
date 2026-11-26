@@ -6,7 +6,7 @@ Branch `v4/labs-enterprise-content`. Content only; the runtime (wasm/labs/*.js) 
 - `wasm/labs/data/<cloud>.json`: Mesh edition, every block. `<cloud>-nano.json`: Nano subset. Both `schema: 2`, `edition` at the top.
 - Block fields added: `edition` (["nano","mesh"] or ["mesh"]), `nano_note`, `kind` (build|harden|iam|failure|ship), `needs_appliance`.
 - Layer fields added: `blocks_total`, `blocks_nano`, `blocks_mesh_only`, `mesh_only_titles`; `minutes` grows 4 per Mesh-only block.
-- Counts: AWS 82 mesh / 60 nano; GCP 86 / 80; Azure 91 / 85. Existing blocks default to both editions; every new enterprise block is Mesh-only.
+- Counts: AWS 85 mesh / 63 nano; GCP 89 / 83; Azure 95 / 89 (includes chapter 14 Design the RAG, 3 blocks, both editions). Existing blocks default to both editions; every new enterprise block is Mesh-only.
 
 ## AWS (verified: all 13 chapters pass in-process; IAM blocks pass on a local full server)
 - Ch10: retry/backoff, `ModelUnavailable`, notional cost `Budget` in `vymodels.py` (renamed from models.py, which collided with core). Blocks: chaos.py + fail_models.py (throttling, both editions), iamkit.py, iam_models.py (least-privilege + audit "what is missing").
