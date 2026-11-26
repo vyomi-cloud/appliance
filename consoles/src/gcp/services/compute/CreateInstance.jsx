@@ -14,7 +14,7 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import { getProject } from "../../project.js";
 import ScrollTable from "../../kit/ScrollTable.jsx";
 
@@ -90,11 +90,16 @@ export default function CreateInstance() {
   useEffect(() => { api.listMachineTypes(zone).then(setMachineTypes).catch(() => setMachineTypes([])); }, [zone]);
 
   const series = machineTypes.filter((m) => api.machineFamilyFor(m.name) === family);
-  useEffect(() => { if (series.length && !series.some((m) => m.name === machineType)) setMachineType(series[0].name); }, [family, machineTypes]);
+  useEffect(() => {
+    const ok = series.filter(runnableRow);      // Nano lists every type but only some can run: keep the selection on a runnable one
+    if (ok.length && !ok.some((m) => m.name === machineType)) setMachineType(ok[0].name);
+    else if (!ok.length && series.length && !series.some((m) => m.name === machineType)) setMachineType(series[0].name);
+  }, [family, machineTypes]);
 
   const nameErr = touched ? api.validResourceName(name) : null;
   const nano = onNano(machineTypes);                                   // Nano: the in-browser VM boots one image (Alpine, 32-bit x86)
-  const osImages = nano ? [NANO_IMAGES.gcp.os] : api.OS_IMAGES;
+  const osImages = nano ? [NANO_IMAGES.gcp.os, ...api.OS_IMAGES] : api.OS_IMAGES;      // Nano: Alpine first and selected, the rest greyed out
+  const osOff = (i) => nano && i > 0;
   useEffect(() => { if (nano) setOsIdx(0); }, [nano]);
 
   const submit = async (ev) => {
@@ -178,7 +183,7 @@ export default function CreateInstance() {
         </Stack>
         <Sub title="Machine family">
           <RadioGroup row value={family} onChange={(e) => setFamily(e.target.value)} aria-label="Machine family">
-            {api.MACHINE_FAMILIES.map(([f]) => <FormControlLabel key={f} value={f} control={<Radio size="small" />} label={f} disabled={!machineTypes.some((m) => api.machineFamilyFor(m.name) === f)} />)}
+            {api.MACHINE_FAMILIES.map(([f]) => <FormControlLabel key={f} value={f} control={<Radio size="small" />} label={f} disabled={!machineTypes.some((m) => api.machineFamilyFor(m.name) === f && runnableRow(m))} title={machineTypes.some((m) => api.machineFamilyFor(m.name) === f) && !machineTypes.some((m) => api.machineFamilyFor(m.name) === f && runnableRow(m)) ? NANO_REASON : undefined} />)}
           </RadioGroup>
         </Sub>
         <Sub title="Series">
@@ -198,7 +203,7 @@ export default function CreateInstance() {
         <FormControl sx={{ minWidth: 420 }}>
           <InputLabel id="mt-l">Machine type</InputLabel>
           <Select labelId="mt-l" label="Machine type" value={machineType} onChange={(e) => setMachineType(e.target.value)}>
-            {series.map((m) => <MenuItem key={m.name} value={m.name}>{m.name} ({m.guestCpus} vCPU, {+(m.memoryMb / 1024).toFixed(2)} GB memory)</MenuItem>)}
+            {series.map((m) => <MenuItem key={m.name} value={m.name} disabled={!runnableRow(m)} title={runnableRow(m) ? undefined : NANO_REASON}>{m.name} ({m.guestCpus} vCPU, {+(m.memoryMb / 1024).toFixed(2)} GB memory){runnableRow(m) ? "" : ` (${NANO_REASON})`}</MenuItem>)}
           </Select>
         </FormControl>
       </Step>
@@ -211,7 +216,7 @@ export default function CreateInstance() {
             <FormControl sx={{ minWidth: 220 }}>
               <InputLabel id="os-l">Operating system</InputLabel>
               <Select labelId="os-l" label="Operating system" value={osIdx} onChange={(e) => setOsIdx(Number(e.target.value))}>
-                {osImages.map(([, , name], i) => <MenuItem key={i} value={i}>{name}</MenuItem>)}
+                {osImages.map(([, , name], i) => <MenuItem key={i} value={i} disabled={osOff(i)} title={osOff(i) ? NANO_REASON : undefined}>{name}{osOff(i) ? ` (${NANO_REASON})` : ""}</MenuItem>)}
               </Select>
             </FormControl>
             <TextField label="Version" value={(osImages[osIdx] || osImages[0])[3]} slotProps={{ input: { readOnly: true } }} sx={{ minWidth: 260 }} />

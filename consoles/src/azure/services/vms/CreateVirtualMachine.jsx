@@ -13,7 +13,7 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import { TagRows } from "./VmBlade.jsx";
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,13}[a-zA-Z0-9]$/;
@@ -53,7 +53,7 @@ export default function CreateVirtualMachine() {
   // On Nano the image / architecture are the one guest the browser VM runs (the form's other values would be refused by the core)
   useEffect(() => { if (nano) setF((x) => ({ ...x, image: NANO_IMAGES.azure.display, architecture: NANO_IMAGES.azure.arch, imageReference: NANO_IMAGES.azure.ref })); }, [nano]);
   // Nano / Mesh list only the sizes they can run: keep the selection on one of them
-  useEffect(() => { const d = sizes.data; if (d && d.length && !d.some((s) => s.name === f.size)) setF((x) => ({ ...x, size: d[0].name })); }, [sizes.data]);
+  useEffect(() => { const d = (sizes.data || []).filter(runnableRow); if (d.length && !d.some((s) => s.name === f.size)) setF((x) => ({ ...x, size: d[0].name })); }, [sizes.data]);
 
   const basicsErrors = () => {
     const e = [];
@@ -112,14 +112,14 @@ export default function CreateVirtualMachine() {
         </FormRow>
         <FormRow label="Image" required htmlFor="vm-image">
           {nano
-            ? <Select id="vm-image" value={NANO_IMAGES.azure.display} aria-label="Image"><option>{NANO_IMAGES.azure.display}</option></Select>
+            ? <Select id="vm-image" value={NANO_IMAGES.azure.display} aria-label="Image"><option>{NANO_IMAGES.azure.display}</option>{["Ubuntu Server 24.04 LTS - x64 Gen2", "Windows Server 2022 Datacenter", "Debian 12"].map((o) => <option key={o} disabled title={NANO_REASON}>{o} ({NANO_REASON})</option>)}</Select>
             : <Select id="vm-image" value={f.image} onChange={set("image")} aria-label="Image"><option>Ubuntu Server 24.04 LTS - x64 Gen2</option><option>Windows Server 2022 Datacenter</option><option>Debian 12</option></Select>}
         </FormRow>
         {nano && <FormRow label=""><span data-testid="compute-images-note" style={{ fontSize: 12, opacity: 0.75 }}>{IMAGES_NOTE}</span></FormRow>}
-        <FormRow label="VM architecture"><RadioGroup layout="horizontal" value={f.architecture} onChange={set("architecture")} aria-label="VM architecture">{!nano && <Radio value="Arm64" label="Arm64" />}<Radio value="x64" label="x64" /></RadioGroup></FormRow>
+        <FormRow label="VM architecture"><RadioGroup layout="horizontal" value={f.architecture} onChange={set("architecture")} aria-label="VM architecture"><Radio value="Arm64" label="Arm64" disabled={nano} title={nano ? NANO_REASON : undefined} /><Radio value="x64" label="x64" /></RadioGroup></FormRow>
         <FormRow label="Run with Azure Spot discount"><Checkbox checked={f.spot} onChange={checked("spot")} aria-label="Run with Azure Spot discount" /></FormRow>
         <FormRow label="Size" required htmlFor="vm-size">
-          <Select id="vm-size" value={f.size} onChange={set("size")} aria-label="Size">{(sizes.data || []).map((s) => <option key={s.name} value={s.name}>{s.name} ({s.numberOfCores} vcpu, {s.memoryInMB / 1024} GiB memory)</option>)}</Select>
+          <Select id="vm-size" value={f.size} onChange={set("size")} aria-label="Size">{(sizes.data || []).map((s) => <option key={s.name} value={s.name} disabled={!runnableRow(s)} title={runnableRow(s) ? undefined : NANO_REASON}>{s.name} ({s.numberOfCores} vcpu, {s.memoryInMB / 1024} GiB memory){runnableRow(s) ? "" : ` (${NANO_REASON})`}</option>)}</Select>
           {sizeNote && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }} data-testid="compute-sizes-note">{sizeNote}</div>}
         </FormRow>
       </FormSection>

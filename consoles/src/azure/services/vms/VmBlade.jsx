@@ -543,7 +543,7 @@ function Size({ a, reload }) {
         <TableBody>
           {rows.map((s) => (
             <TableRow key={s.name} aria-selected={sel === s.name}>
-              <TableCell><input type="radio" name="vmsize" checked={sel === s.name} onChange={() => setSel(s.name)} aria-label={`Select ${s.name}`} /></TableCell>
+              <TableCell><input type="radio" name="vmsize" checked={sel === s.name} onChange={() => setSel(s.name)} aria-label={`Select ${s.name}`} disabled={s.vyomiRunnable === false} title={s.vyomiRunnable === false ? "Not available on Nano: runs only in a Mesh" : undefined} /></TableCell>
               <TableCell>{s.name}</TableCell><TableCell>{s.series}</TableCell><TableCell>{s.numberOfCores}</TableCell><TableCell>{s.memoryInMB / 1024}</TableCell>
               <TableCell>{s.maxDataDiskCount}</TableCell><TableCell>{s.maxIops}</TableCell><TableCell>{s.resourceDiskSizeInMB / 1024}</TableCell>
               <TableCell>${api.estMonthlyCost(s)} (estimate)</TableCell>

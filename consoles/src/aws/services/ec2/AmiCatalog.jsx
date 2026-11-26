@@ -9,7 +9,7 @@ import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ProductBrowser } from "../../kit/MarketplaceBrowser.jsx";
 import * as mp from "../../kit/marketplaceApi.js";
 import ResourceTable from "../../kit/ResourceTable.jsx";
-import { IMAGES_NOTE } from "../../../common/computeSizes.js";
+import { IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import * as api from "./api.js";
 
 export default function AmiCatalog() {
@@ -31,7 +31,7 @@ export default function AmiCatalog() {
       filterPlaceholder='Search for an AMI by entering a search term e.g. "Windows"'
       columns={[
         { id: "ami", header: "AMI", isRowHeader: true, cell: (x) => `${x.name} (${x.imageId})` },
-        { id: "select", header: "Select", cell: (x) => <Button href={href("ec2", "launch-instance") + `?ami=${x.imageId}`} onFollow={follow}>Select</Button> },
+        { id: "select", header: "Select", cell: (x) => runnableRow(x) ? <Button href={href("ec2", "launch-instance") + `?ami=${x.imageId}`} onFollow={follow}>Select</Button> : <Button disabled disabledReason={NANO_REASON}>Select</Button> },
       ]}
       empty={{ title: "No AMIs" }}
     />

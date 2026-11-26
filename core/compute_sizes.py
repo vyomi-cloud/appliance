@@ -145,6 +145,12 @@ def azure_image_allowed(ref: dict | None) -> bool:
     return all(str(ref.get(k) or "").lower() == a[k] for k in ("publisher", "offer", "sku"))
 
 
+def lists_all(sub: str | None = None) -> bool:
+    """Nano still LISTS every size / image (the console shows the whole catalog); what it cannot run is flagged `vyomiRunnable: false`
+    so the pickers grey it out. Mesh lists only what it can run; offline is unrestricted."""
+    return (sub or substrate()) == "nano"
+
+
 def restricted(sub: str | None = None) -> bool:
     return (sub or substrate()) not in _OFF
 

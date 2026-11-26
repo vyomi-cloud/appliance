@@ -12,23 +12,26 @@ One source: `core/compute_sizes.py` (`NANO_GUEST`, `NANO_IMAGES`, `images_restri
 | Guest RAM = `memory_size: mem_mb` MiB (largest tier 1024); the rootfs lives in that RAM | `wasm/vm/vm-worker.js`, `core/compute_sizes.py` (sizes) |
 | The cloud's own image is "not booted: the OS is Alpine" | `wasm/vm/nano-vm-host.js` Connect panel text |
 
-## What each flow shows on Nano (Mesh / offline unchanged: full catalog)
+## What each flow shows on Nano (Mesh / offline unchanged)
+
+Owner rule: on Nano the FULL catalog stays visible; everything the in-browser VM cannot run is DISABLED (greyed, not selectable) with the reason
+"Not available on Nano: runs only in a Mesh", and the Alpine / i386 entry plus the Nano-runnable sizes are enabled and preselected.
+Mesh keeps its own behaviour (its size lists are still filtered to what Mesh can run, nothing disabled); offline is unrestricted.
 
 | Cloud | Flow | Nano |
 |---|---|---|
-| AWS | EC2 Launch instance, Launch template, AMI Catalog | Quick Start: only "Alpine Linux"; AMI: only `Alpine Linux 3.21 (i386) - Vyomi Nano`; Architecture: only `32-bit (x86)` (a real EC2 option); inline note (Launch instance) / header description (AMI Catalog) / field description (Launch template) |
-| GCP | Create instance, Instance template | Operating system: only `Alpine Linux`, version `Alpine Linux 3.21 (32-bit x86)`, image `projects/vyomi-nano-cloud/global/images/family/alpine-3-21-i386`; note under "Boot disk" |
-| Azure | Create a virtual machine | Image: only `Alpine Linux 3.21 (32-bit x86) - Vyomi Nano` (imageReference `vyomi:alpine-nano:3.21-i386`); VM architecture: only x64 (Arm64 hidden); note under Image |
+| AWS | Launch instance | Quick Start: Alpine Linux (enabled, selected) + the 7 usual tiles disabled with the reason; AMI list: full catalog, only `Alpine Linux 3.21 (i386) - Vyomi Nano` enabled/preselected; Architecture: `32-bit (x86)` enabled/selected, `64-bit (x86)` / `64-bit (Arm)` disabled; Instance type: every type listed, only the 6 Nano sizes enabled |
+| AWS | Launch template, AMI Catalog | AMI and Instance type pickers: same disabled options; AMI Catalog "Select" disabled for non-runnable AMIs; note in the header |
+| GCP | Create instance, Instance template | OS: Alpine Linux first/selected (Version `Alpine Linux 3.21 (32-bit x86)`), Debian/Ubuntu/Rocky/COS disabled; machine types: all listed, only f1-micro / e2-micro enabled (a machine family with no runnable type is disabled) |
+| Azure | Create a virtual machine, VM size blade | Image: Alpine first/selected, Ubuntu/Windows/Debian disabled; VM architecture: Arm64 disabled, x64 selected; Size: all listed, only B1ls / B1s enabled; the size blade's radio is disabled for the rest |
 
-The note is one line: "Nano runs VMs inside your browser: only the image below is available (Alpine Linux 3.21, 32-bit x86). Launch a Mesh for the full catalog."
-Nano is detected from what the core answered (`vyomiSubstrate: "nano"` on sizes / images); before that loads the Nano page meta decides (`onNano()` in `consoles/src/common/computeSizes.js`).
+Nano is detected from what the core answered (`vyomiSubstrate` on sizes/images); `vyomiRunnable: false` marks a row the VM cannot run (`runnableRow()` in `consoles/src/common/computeSizes.js`).
 
-## Server side (cheap and consistent, so done)
+## Server side
 
-- EC2: `DescribeImages` lists only i386 AMIs (the Alpine quick-start; a named `ImageId` still describes, so existing instances keep their AMI name); `DescribeInstanceTypes` adds `i386` to the supported architectures; `RunInstances` with an AMI that is not i386 -> `Unsupported` 400; no `ImageId` defaults to the Alpine AMI; an instance inherits `architecture: i386`.
-- GCE: `images.list/get` on `vyomi-nano-cloud` serves the Alpine image, public projects (debian-cloud, ubuntu-os-cloud ...) are hidden; `instances.insert` / `instanceTemplates.insert` with another public image -> 404 `NOT_FOUND` ("The resource 'projects/.../global/images/...' was not found"); project-local images (made from a Nano disk) are accepted.
-- Azure: `virtualMachines` PUT with a marketplace `imageReference` other than the Alpine one -> 400 `PlatformImageNotFound`; a custom image `id` or no reference is accepted.
-- Not enforced server side: AWS launch-template ImageId, GCP `disks.insert` sourceImage (the console never sends it: CreateDisk makes a blank disk), Azure VM-update paths.
+- Listing: on Nano (`compute_sizes.lists_all()`) EC2 `DescribeInstanceTypes` / `DescribeImages`, GCE `machineTypes.list|get` / `images.list`, Azure `vmSizes` return the whole catalog and add `vyomiRunnable` per row; the runnable types also advertise `i386`. Mesh still lists only what it can run.
+- Enforcement is unchanged and still native: EC2 `RunInstances` non-i386 AMI or non-runnable size -> `Unsupported` 400; GCE insert / template insert of another public image -> 404 `NOT_FOUND`, other machine type -> 400 `INVALID_ARGUMENT`; Azure VM PUT -> 400 `PlatformImageNotFound` (image) / 409 `SkuNotAvailable` (size). No `ImageId` defaults to Alpine; an instance inherits `architecture: i386`.
+- Not enforced: AWS launch-template ImageId, GCP `disks.insert` sourceImage, Azure VM update paths.
 
 ## Fix found on the way
 
@@ -37,6 +40,6 @@ Nano is detected from what the core answered (`vyomiSubstrate: "nano"` on sizes 
 ## Tests
 
 - `tests/conformance/test_compute_images_core.py` (AWS / GCP / Azure on nano, mesh, offline).
-- `consoles/tests/smoke-compute-images.mjs` (real Nano preview + a Mesh-substrate dev server): lists, notes, launch payloads, native rejections, Mesh unchanged.
+- `consoles/tests/smoke-compute-images.mjs` (real Nano preview + a Mesh-substrate dev server): entries present AND disabled (not absent), preselection, notes, launch payloads, native rejections, Mesh unchanged. `smoke-compute-sizes.mjs` now counts enabled options only on Nano.
 - `consoles/tests/smoke-nano-browservm.mjs` updated to create its VMs with the Alpine image / a Nano size, and boots each cloud's VM to a shell prompt.
 - Generated: `wasm/v4/{aws,gcp,azure}` rebuilt with `cd consoles && node build.mjs`; `wasm/core/*` with `python3 wasm/build_cores.py`.

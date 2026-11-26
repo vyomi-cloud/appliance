@@ -2544,7 +2544,7 @@ def _seed_amis(m: dict) -> None:
     if m["seeded_amis"] and any(i.get("source") == "quickstart" for i in m["images"].values()) and (not nano or _ami_id_for(_nano_ami_spec()) in m["images"]):
         return
     m["seeded_amis"] = True
-    for spec in ([_nano_ami_spec()] if nano else _QUICKSTART_AMIS):
+    for spec in (([_nano_ami_spec()] + _QUICKSTART_AMIS) if nano else _QUICKSTART_AMIS):
         # STABLE ids (like a real region's quickstart AMIs): a store that is re-created (Nano reload, worker restart, a model
         # restored without its images) must hand out the SAME ids, or a launch form that listed AMIs earlier gets
         # InvalidAMIID.NotFound on RunInstances.
@@ -3242,15 +3242,13 @@ def _describe_images(store, params):
     ids = [v for k, v in params.items() if k.startswith("ImageId.")]
     owners = [v for k, v in params.items() if k.startswith("Owner.")]
     rows = list(m["images"].values())
-    if ids:     # a named image still describes (an existing instance may reference one); only the listing is restricted
+    if ids:
         _require_ids(ids, rows, "InvalidAMIID.NotFound", "image")
         rows = [i for i in rows if i["id"] in ids]
-    else:
-        rows = [i for i in rows if _image_runs(i)]      # Nano: only the images the in-browser VM can boot
     if owners:
         rows = [i for i in rows if ("self" in owners and i["owner_id"] == OWNER_ID) or i["owner_id"] in owners]
-    mark = "<vyomiSubstrate>nano</vyomiSubstrate>" if _nano_images() else ""
-    items = "".join(_image_xml(i)[:-len("</item>")] + mark + "</item>" for i in rows)
+    # Nano lists every image and flags the ones its VM cannot boot (vyomiRunnable=false); RunInstances still refuses them
+    items = "".join(_image_xml(i)[:-len("</item>")] + (f"<vyomiSubstrate>nano</vyomiSubstrate><vyomiRunnable>{str(_image_runs(i)).lower()}</vyomiRunnable>" if _nano_images() else "") + "</item>" for i in rows)
     return _envelope("DescribeImages", f"<imagesSet>{items}</imagesSet>")
 
 
@@ -4099,11 +4097,17 @@ def _describe_instance_types(store, params):
     from core import compute_sizes as _cs
     types = [v for k, v in params.items() if k.startswith("InstanceType.")]
     ok = _cs.allowed_names("aws")          # None on an unrestricted appliance; the Nano / Mesh runnable set otherwise
-    rows = {k: v for k, v in _INSTANCE_TYPES.items() if (not types or k in types) and (ok is None or k in ok)}
-    if _nano_images():      # the in-browser guest is 32-bit x86 (i386)
-        rows = {k: dict(v, arch=list(v["arch"]) + ["i386"]) for k, v in rows.items()}
-    mark = f"<vyomiSubstrate>{_cs.substrate()}</vyomiSubstrate>" if ok is not None else ""
-    return _envelope("DescribeInstanceTypes", f"<instanceTypeSet>{''.join(_instance_type_xml(k, v, mark) for k, v in rows.items())}</instanceTypeSet>")
+    nano = _cs.lists_all()                 # Nano lists every type and flags the ones its VM cannot run (vyomiRunnable=false)
+    rows = {k: v for k, v in _INSTANCE_TYPES.items() if (not types or k in types) and (ok is None or nano or k in ok)}
+    sub = _cs.substrate()
+
+    def _mark(k):
+        if ok is None:
+            return ""
+        return f"<vyomiSubstrate>{sub}</vyomiSubstrate>" + (f"<vyomiRunnable>{str(k in ok).lower()}</vyomiRunnable>" if nano else "")
+    if nano:      # the in-browser guest is 32-bit x86 (i386)
+        rows = {k: (dict(v, arch=list(v["arch"]) + ["i386"]) if k in ok else v) for k, v in rows.items()}
+    return _envelope("DescribeInstanceTypes", f"<instanceTypeSet>{''.join(_instance_type_xml(k, v, _mark(k)) for k, v in rows.items())}</instanceTypeSet>")
 
 
 def _describe_availability_zones(store, params):

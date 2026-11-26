@@ -19,7 +19,7 @@ import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { nanoVmOn } from "../../../common/NanoVmPanel.jsx";
 import { follow, href, navigate } from "../../../common/router.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import { ErrorAlert, NotSimulated } from "../../kit/common.jsx";
 import * as api from "./api.js";
 
@@ -74,10 +74,11 @@ export default function LaunchInstance({ query }) {
   const effectiveAmiId = amiId || quickImage?.imageId || "";
   const searchedImages = search ? images.filter((i) => i.name?.toLowerCase().includes(search.toLowerCase())) : images;
   const visibleTypes = allGen ? types : types.filter((t) => t.InstanceType !== "t2.small" && t.InstanceType !== "m4.large");
+  const typeOpt = (t) => ({ ...opt(t.InstanceType, `${t.InstanceType} (${t.VCpuCount} vCPU, ${+(t.MemoryMiB / 1024).toFixed(2)} GiB Memory)`), ...(runnableRow(t) ? {} : { disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }) });
   const macOs = quickChoice === "macOS";
   const sizeNote = sizesNote(sizeSubstrate(types));
   // Nano / Mesh list only the sizes they can run: keep the selection on one of them
-  useEffect(() => { if (visibleTypes.length && !visibleTypes.some((t) => t.InstanceType === instanceType)) setInstanceType(visibleTypes[0].InstanceType); }, [cat.data, allGen]);
+  useEffect(() => { const ok = visibleTypes.filter(runnableRow); if (ok.length && !ok.some((t) => t.InstanceType === instanceType)) setInstanceType(ok[0].InstanceType); }, [cat.data, allGen]);
 
   const build = () => {
     const perms = [];
@@ -151,17 +152,17 @@ export default function LaunchInstance({ query }) {
                 </FormField>
                 <FormField label="Quick Start">
                   <RadioGroup value={quickChoice} onChange={({ detail }) => { setQuickStart(detail.value); setAmiId(""); }}
-                    items={(nano ? [NANO_IMAGES.aws.quickStart] : ["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"]).map((v) => ({ value: v, label: v }))} />
+                    items={(nano ? [NANO_IMAGES.aws.quickStart] : []).concat(["Amazon Linux", "macOS", "Ubuntu", "Windows", "Red Hat", "SUSE Linux", "Debian"]).map((v) => ({ value: v, label: v, ...(nano && v !== NANO_IMAGES.aws.quickStart ? { disabled: true, description: NANO_REASON } : {}) }))} />
                 </FormField>
                 {macOs && <Alert type="info">macOS requires a Dedicated Host, which Vyomi doesn't model — pick another Quick Start option to launch.</Alert>}
                 <FormField label="Amazon Machine Image (AMI)" description="Free tier eligible">
                   <Select selectedOption={effectiveAmiId ? opt(effectiveAmiId, images.find((i) => i.imageId === effectiveAmiId)?.name || effectiveAmiId) : null}
                     onChange={({ detail }) => setAmiId(detail.selectedOption.value)}
-                    options={searchedImages.map((i) => opt(i.imageId, `${i.name} (${i.imageId})`))} loadingText="Loading AMIs" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Amazon Machine Image (AMI)" />
+                    options={searchedImages.map((i) => ({ ...opt(i.imageId, `${i.name} (${i.imageId})`), ...(runnableRow(i) ? {} : { disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }) }))} loadingText="Loading AMIs" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Amazon Machine Image (AMI)" />
                 </FormField>
                 <FormField label="Architecture">
                   <Select selectedOption={nano ? opt(NANO_IMAGES.aws.arch) : opt(arch, arch)} onChange={({ detail }) => setArch(detail.selectedOption.value)}
-                    options={nano ? [opt(NANO_IMAGES.aws.arch)] : [opt("64-bit (x86)"), opt("64-bit (Arm)")]} ariaLabel="Architecture" />
+                    options={nano ? [opt(NANO_IMAGES.aws.arch), { ...opt("64-bit (x86)"), disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }, { ...opt("64-bit (Arm)"), disabled: true, disabledReason: NANO_REASON, description: NANO_REASON }] : [opt("64-bit (x86)"), opt("64-bit (Arm)")]} ariaLabel="Architecture" />
                 </FormField>
               </SpaceBetween>
             </Container>
@@ -170,7 +171,7 @@ export default function LaunchInstance({ query }) {
               <SpaceBetween size="l">
                 <FormField label="Instance type" description={sizeNote || undefined}>
                   <Select selectedOption={opt(instanceType)} onChange={({ detail }) => setInstanceType(detail.selectedOption.value)}
-                    options={visibleTypes.map((t) => opt(t.InstanceType, `${t.InstanceType} (${t.VCpuCount} vCPU, ${+(t.MemoryMiB / 1024).toFixed(2)} GiB Memory)`))}
+                    options={visibleTypes.map(typeOpt)}
                     loadingText="Loading instance types" statusType={cat.loading ? "loading" : "finished"} ariaLabel="Instance type" />
                 </FormField>
                 <Checkbox checked={allGen} onChange={({ detail }) => setAllGen(detail.checked)}>All generations</Checkbox>

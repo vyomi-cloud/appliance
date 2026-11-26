@@ -1188,11 +1188,15 @@ def _vm_sizes() -> list:
     sub = cs.substrate()
     out = []
     for name, shape in sorted(instance_catalog.AZURE.items()):
-        if name not in rows:
+        if name not in rows and not cs.lists_all(sub):       # Mesh lists only what it can run; Nano lists all, flagged
             continue
         e = _vm_size_entry(name, shape)
         if cs.restricted(sub):
-            e.update({"vyomiSubstrate": sub, "vyomiRunVcpu": rows[name]["run_vcpu"], "vyomiRunMemoryMB": rows[name]["run_mem_mb"]})
+            e.update({"vyomiSubstrate": sub})
+            if name in rows:
+                e.update({"vyomiRunVcpu": rows[name]["run_vcpu"], "vyomiRunMemoryMB": rows[name]["run_mem_mb"]})
+            if cs.lists_all(sub):
+                e["vyomiRunnable"] = name in rows
         out.append(e)
     return out
 

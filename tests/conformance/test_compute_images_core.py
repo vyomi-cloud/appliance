@@ -42,7 +42,9 @@ def run() -> int:
         os.environ["VYOMI_COMPUTE_SUBSTRATE"] = "nano"
         s = types.SimpleNamespace()
         names, archs, body = _aws_images(s)
-        _check("nano aws: only the Alpine i386 AMI is listed", names == [a["aws"]["name"]] and archs == ["i386"])
+        _check("nano aws: the full AMI catalog is listed, Alpine i386 first-class", a["aws"]["name"] in names and len(names) >= 7 and archs.count("i386") == 1)
+        flags = re.findall(r"<architecture>([^<]*)</architecture>.*?<vyomiRunnable>(\w+)</vyomiRunnable>", body, re.S)
+        _check("nano aws: only the i386 AMI is runnable, every other flagged false", [f for f in flags if f[1] == "true"] == [("i386", "true")] and len(flags) == len(names))
         _check("nano aws: substrate marker", "<vyomiSubstrate>nano</vyomiSubstrate>" in body)
         ami = re.search(r"<imageId>([^<]+)</imageId>", body).group(1)
         r = vpc.dispatch(s, {"Action": "RunInstances", "ImageId": ami, "InstanceType": "t3.micro", "MinCount": "1", "MaxCount": "1"})
@@ -54,7 +56,7 @@ def run() -> int:
         m["images"][x86] = {**m["images"][ami], "id": x86, "name": "Amazon Linux 2023", "architecture": "x86_64"}
         r = vpc.dispatch(s, {"Action": "RunInstances", "ImageId": x86, "InstanceType": "t3.micro", "MinCount": "1", "MaxCount": "1"})
         _check("nano aws: an x86_64 AMI is refused with Unsupported (400)", r.status == 400 and "<Code>Unsupported</Code>" in r.body)
-        _check("nano aws: the x86_64 AMI is not listed", x86 not in _aws_images(s)[2])
+        _check("nano aws: the x86_64 AMI is listed but flagged not runnable", x86 in _aws_images(s)[2])
         _check("nano aws: instance types advertise i386", "<item>i386</item>" in vpc.dispatch(s, {"Action": "DescribeInstanceTypes"}).body)
         for sub in ("mesh", "offline"):
             os.environ["VYOMI_COMPUTE_SUBSTRATE"] = sub
@@ -66,8 +68,9 @@ def run() -> int:
         st = gce.ComputeStore()
         g = a["gcp"]
         lst = json.loads(gce.dispatch(st, "GET", "/compute/v1/projects/%s/global/images" % g["project"], {}, {}, b"").body)["items"]
-        _check("nano gcp: the Nano image project lists only the Alpine image", [i["name"] for i in lst] == [g["name"]] and lst[0]["vyomiSubstrate"] == "nano")
-        _check("nano gcp: debian-cloud lists no images", json.loads(gce.dispatch(st, "GET", "/compute/v1/projects/debian-cloud/global/images", {}, {}, b"").body).get("items", []) == [])
+        _check("nano gcp: the Nano image project lists the Alpine image, runnable", [i["name"] for i in lst] == [g["name"]] and lst[0]["vyomiRunnable"] is True)
+        deb = json.loads(gce.dispatch(st, "GET", "/compute/v1/projects/debian-cloud/global/images", {}, {}, b"").body)["items"]
+        _check("nano gcp: debian-cloud still lists, flagged not runnable", deb and all(i["vyomiRunnable"] is False for i in deb))
         ok = _gce_post(st, "ok1", "projects/%s/global/images/family/%s" % (g["project"], g["family"]))
         _check("nano gcp: insert with the Alpine family works", ok.status == 200)
         bad = _gce_post(st, "bad1", "projects/debian-cloud/global/images/family/debian-12")

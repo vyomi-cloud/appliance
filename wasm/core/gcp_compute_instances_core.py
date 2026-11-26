@@ -220,7 +220,7 @@ def list_regions(project):
 def machine_type_view(project, zone, name):
     from core import compute_sizes as _cs
     shape = MACHINE_SHAPES.get(name)
-    if not shape or not _cs.is_allowed("gcp", name):      # Nano / Mesh list only what the substrate can run
+    if not shape or (not _cs.is_allowed("gcp", name) and not _cs.lists_all()):      # Mesh lists only what it can run; Nano lists all, flagged
         return None
     family = name.split("-")[0].upper()
     return {
@@ -229,6 +229,7 @@ def machine_type_view(project, zone, name):
         "guestCpus": shape["vcpu"], "memoryMb": shape["ram_mb"], "zone": zone, "isSharedCpu": shape["family"] == "burstable",
         "selfLink": _selflink("projects/%s/zones/%s/machineTypes/%s" % (project, zone, name)),
         **({"vyomiSubstrate": _cs.substrate()} if _cs.restricted() else {}),
+        **({"vyomiRunnable": _cs.is_allowed("gcp", name)} if _cs.lists_all() else {}),
     }
 
 
@@ -1534,7 +1535,12 @@ def _public_image(project, family, name, desc):
     return {"kind": "compute#image", "id": str(zlib.crc32(full.encode()) * 1000003), "creationTimestamp": "2024-11-12T00:00:00.000-08:00",
             "name": name, "description": desc, "sourceType": "RAW", "status": "READY", "archiveSizeBytes": "4000000000",
             "diskSizeGb": "10", "family": family, "selfLink": _selflink(full), "labelFingerprint": "42WmSpB8rSM=",
-            **({"vyomiSubstrate": "nano"} if project == "vyomi-nano-cloud" else {})}
+            **({"vyomiSubstrate": "nano", "vyomiRunnable": project == "vyomi-nano-cloud"} if _nano_listing() else {})}
+
+
+def _nano_listing():
+    from core import compute_sizes as _cs
+    return _cs.images_restricted()
 
 
 def _public_images_map():
@@ -1542,8 +1548,8 @@ def _public_images_map():
     from core import compute_sizes as _cs
     if not _cs.images_restricted():
         return PUBLIC_IMAGES
-    a = _cs.NANO_IMAGES["gcp"]
-    return {a["project"]: [(a["family"], a["name"], a["description"])]}
+    a = _cs.NANO_IMAGES["gcp"]          # Nano lists the whole catalog (the console greys the ones the VM cannot boot) plus its own image
+    return {**PUBLIC_IMAGES, a["project"]: [(a["family"], a["name"], a["description"])]}
 
 
 def _nano_image_block(store, project, src):

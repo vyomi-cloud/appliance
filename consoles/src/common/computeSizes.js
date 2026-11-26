@@ -29,4 +29,7 @@ export const NANO_IMAGES = {
   azure: { display: "Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", arch: "x64", ref: { publisher: "vyomi", offer: "alpine-nano", sku: "3.21-i386", version: "latest" } },
 };
 
-export const IMAGES_NOTE = "Nano runs VMs inside your browser: only the image below is available (Alpine Linux 3.21, 32-bit x86). Launch a Mesh for the full catalog.";
+export const NANO_REASON = "Not available on Nano: runs only in a Mesh";
+export const IMAGES_NOTE = "Nano runs VMs inside your browser: only Alpine Linux 3.21 (32-bit x86) can run here. Everything else is greyed out; launch a Mesh for the full catalog.";
+/** A size / image row the substrate can run. Nano lists everything and flags the rest `vyomiRunnable: false` (core/compute_sizes.py); other substrates never flag. */
+export const runnableRow = (r) => !(r && (r.vyomiRunnable === false || r.vyomiRunnable === "false" || r.Runnable === false));
