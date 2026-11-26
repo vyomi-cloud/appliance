@@ -49,6 +49,7 @@
      "openai": "facilities-openai"
     }
    },
+   "requires": [],
    "checks": [
     "deployments listed",
     "embeddings return a vector",
@@ -408,6 +409,9 @@
      "capp_env": "facilities-env"
     }
    },
+   "requires": [
+    10
+   ],
    "checks": [
     "agents exist",
     "a run completes",
@@ -795,6 +799,9 @@
      "work_orders": "workorders"
     }
    },
+   "requires": [
+    10
+   ],
    "checks": [
     "functions listed",
     "asset-status returns a seeded asset",
@@ -1265,6 +1272,9 @@
      "design": "rag-design.json"
     }
    },
+   "requires": [
+    10
+   ],
    "checks": [
     "rag-design.json is saved next to your code",
     "show_design.py prints design OK",
@@ -1581,6 +1591,11 @@
      "index": "facilities-kb"
     }
    },
+   "requires": [
+    10,
+    7,
+    14
+   ],
    "checks": [
     "documents uploaded",
     "index filled by the indexer",
@@ -2099,6 +2114,12 @@
      "index": "facilities-kb"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12
+   ],
    "checks": [
     "BM25 ranks correctly",
     "vector and hybrid queries work",
@@ -2443,6 +2464,13 @@
     ],
     "names": {}
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "answer cites its sources",
     "harmful output flagged",
@@ -2786,6 +2814,14 @@
      "memory": "longtermmemory"
     }
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "thread history in order",
     "a fact is recalled in a new session"
@@ -3135,6 +3171,13 @@
      "apim": "facilities-apim"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "catalogue lists the operations",
     "read tool reaches the function",
@@ -3280,7 +3323,7 @@
      "text": "MCP (Model Context Protocol) is how agent frameworks discover tools. APIM can publish an existing REST API as an MCP server: create a second API of type `mcp` whose source is `tools`, and its operations become MCP tools. Then speak plain JSON-RPC 2.0 to it: `tools/list` to discover, `tools/call` to run one.",
      "file": "mcp_server.py",
      "lang": "python",
-     "code": "import json\nfrom azure.mgmt.apimanagement.models import ApiCreateOrUpdateParameter\nfrom azlab import rid, RG\nfrom gw import apim, SERVICE, mcp\n\napim().api.begin_create_or_update(RG, SERVICE, \"tools-mcp\", ApiCreateOrUpdateParameter(\n    display_name=\"facilities-tools-mcp\", path=\"mcp\", protocols=[\"https\"], subscription_required=True, api_type=\"mcp\",\n    source_api_id=rid(\"Microsoft.ApiManagement\", \"service\", SERVICE) + \"/apis/tools\")).result()\nnames = sorted(t[\"name\"] for t in mcp(\"tools/list\")[\"tools\"])\nprint(\"MCP tools/list:\", names)\ntool = next(n for n in names if n.replace(\"-\", \"_\").endswith(\"asset_status\"))\nres = mcp(\"tools/call\", {\"name\": tool, \"arguments\": {\"asset_id\": \"B-12\"}})\nprint(\"MCP tools/call\", tool, \"-> isError:\", bool(res.get(\"isError\")), \"| status:\", json.loads(res[\"content\"][0][\"text\"])[\"asset\"][\"status\"])\n",
+     "code": "import json\nfrom azure.mgmt.apimanagement.models import ApiCreateOrUpdateParameter\nfrom azlab import rid, RG\nfrom gw import apim, SERVICE, mcp\n\napim().api.begin_create_or_update(RG, SERVICE, \"tools-mcp\", ApiCreateOrUpdateParameter(\n    display_name=\"facilities-tools-mcp\", path=\"mcp\", protocols=[\"https\"], subscription_required=True, api_type=\"mcp\",\n    source_api_id=rid(\"Microsoft.ApiManagement\", \"service\", SERVICE) + \"/apis/tools\")).result()\nnames = sorted(t[\"name\"] for t in mcp(\"tools/list\")[\"tools\"])\nprint(\"MCP tools/list:\", names)\ntool = next((n for n in names if n.replace(\"-\", \"_\").endswith(\"asset_status\")), None)\nif tool is None:\n    raise SystemExit(\"the 'asset_status' tool was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.\")\nres = mcp(\"tools/call\", {\"name\": tool, \"arguments\": {\"asset_id\": \"B-12\"}})\nprint(\"MCP tools/call\", tool, \"-> isError:\", bool(res.get(\"isError\")), \"| status:\", json.loads(res[\"content\"][0][\"text\"])[\"asset\"][\"status\"])\n",
      "run": "python mcp_server.py",
      "expect": "| status: RUNNING",
      "needs_runtime": false,
@@ -3492,6 +3535,13 @@
      "ledger": "approvalledger"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6
+   ],
    "checks": [
     "request parks as PENDING",
     "nothing written before approval",
@@ -3899,6 +3949,14 @@
      "waf": "facilitieswaf"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6,
+    4
+   ],
    "checks": [
     "token verifies against the tenant keys",
     "call without key rejected",
@@ -4280,6 +4338,14 @@
      "inbox": "approver-inbox"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6,
+    5
+   ],
    "checks": [
     "benign allowed, violent flagged",
     "violent prompt refused",
@@ -4606,6 +4672,16 @@
      "insights": "facilities-ai"
     }
    },
+   "requires": [
+    10,
+    3,
+    7,
+    14,
+    12,
+    6,
+    5,
+    2
+   ],
    "checks": [
     "spans readable with KQL",
     "log line readable",
@@ -5037,6 +5113,15 @@
      "key": "ledger-key"
     }
    },
+   "requires": [
+    10,
+    7,
+    14,
+    12,
+    6,
+    5,
+    2
+   ],
    "checks": [
     "key exists",
     "wrap/unwrap round trip",

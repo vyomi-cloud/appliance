@@ -392,7 +392,9 @@ import os
 import gcp
 
 client = gcp.vertex_client("v1beta1")
-listed = next(e for e in client.agent_engines.list() if e.api_resource.display_name == "facilities_supervisor")
+listed = next((e for e in client.agent_engines.list() if e.api_resource.display_name == "facilities_supervisor"), None)
+if listed is None:
+    raise SystemExit("the agent runtime 'facilities_supervisor' was not found. Deploy the chapter 'Agent Runtime' first (its Deploy this chapter button), then run this step again.")
 engine = client.agent_engines.get(name=listed.api_resource.name)     # get() returns the engine with its registered query method attached
 out = engine.query(prompt="Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?", user="maria")
 print("hosted in a separate process:", out["pid"] != os.getpid())
@@ -1285,7 +1287,9 @@ for _ in range(20):
         break
     time.sleep(0.5)
 print("catalogue:", sorted(names))
-status_tool = next(n for n in names if n.endswith("asset_status"))
+status_tool = next((n for n in names if n.endswith("asset_status")), None)
+if status_tool is None:
+    raise SystemExit("the 'asset_status' tool was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
 res = gateway.mcp(url, "tools/call", {"name": status_tool, "arguments": {"asset_id": "B-12"}})
 assert not res.get("isError"), res
 out = json.loads(res["content"][0]["text"])

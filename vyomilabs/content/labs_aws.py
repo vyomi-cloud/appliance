@@ -636,7 +636,9 @@ import boto3
 
 _ac = boto3.client("bedrock-agentcore-control")
 _dp = boto3.client("bedrock-agentcore")
-ARN = next(r["agentRuntimeArn"] for r in _ac.list_agent_runtimes()["agentRuntimes"] if r["agentRuntimeName"] == "facilities_supervisor")
+ARN = next((r["agentRuntimeArn"] for r in _ac.list_agent_runtimes()["agentRuntimes"] if r["agentRuntimeName"] == "facilities_supervisor"), None)
+if ARN is None:
+    raise SystemExit("the agent runtime 'facilities_supervisor' was not found. Deploy the chapter 'Agent Runtime' first (its Deploy this chapter button), then run this step again.")
 QUESTION = "Boiler B-12 is at 34 psi. What does the SOP say, and please raise a work order for it. How many work orders are open?"
 
 
@@ -674,7 +676,9 @@ import boto3
 
 ac = boto3.client("bedrock-agentcore-control")
 dp = boto3.client("bedrock-agentcore")
-arn = next(r["agentRuntimeArn"] for r in ac.list_agent_runtimes()["agentRuntimes"] if r["agentRuntimeName"] == "facilities_supervisor")
+arn = next((r["agentRuntimeArn"] for r in ac.list_agent_runtimes()["agentRuntimes"] if r["agentRuntimeName"] == "facilities_supervisor"), None)
+if arn is None:
+    raise SystemExit("the agent runtime 'facilities_supervisor' was not found. Deploy the chapter 'Agent Runtime' first (its Deploy this chapter button), then run this step again.")
 dp.stop_runtime_session(agentRuntimeArn=arn, runtimeSessionId="facilities-session-" + "b" * 20)
 print("stopped session b; runtime still", ac.get_agent_runtime(agentRuntimeId=arn.split("/")[-1])["status"])
 ''', run="python stop_session.py", expect="runtime still READY"),
@@ -771,7 +775,9 @@ import time
 import boto3
 
 ag = boto3.client("bedrock-agent")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 ds = ag.list_data_sources(knowledgeBaseId=kb)["dataSourceSummaries"][0]["dataSourceId"]
 
 job = ag.start_ingestion_job(knowledgeBaseId=kb, dataSourceId=ds)["ingestionJob"]
@@ -803,7 +809,9 @@ import zipfile
 import boto3
 
 lam, s3, ag = boto3.client("lambda"), boto3.client("s3"), boto3.client("bedrock-agent")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 ds = ag.list_data_sources(knowledgeBaseId=kb)["dataSourceSummaries"][0]["dataSourceId"]
 
 buf = io.BytesIO()
@@ -841,7 +849,9 @@ import rag_design
 
 ag = boto3.client("bedrock-agent")
 rt = boto3.client("bedrock-agent-runtime")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 
 
 def search(q, k=None):
@@ -943,7 +953,9 @@ import boto3
 import rag_design
 
 lam, ag = boto3.client("lambda"), boto3.client("bedrock-agent")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 buf = io.BytesIO()
 with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
     z.write("kb_search.py")
@@ -1042,7 +1054,9 @@ from guardrail import ensure_guardrail
 from vymodels import CHAT_MODEL
 
 ag = boto3.client("bedrock-agent")
-kb = next(k for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb")["knowledgeBaseId"]
+kb = next((k["knowledgeBaseId"] for k in ag.list_knowledge_bases()["knowledgeBaseSummaries"] if k["name"] == "facilities-kb"), None)
+if kb is None:
+    raise SystemExit("the knowledge base 'facilities-kb' was not found. Deploy the chapter 'Knowledge Pipeline' first (its Deploy this chapter button), then run this step again.")
 r = boto3.client("bedrock-agent-runtime").retrieve_and_generate(
     input={"text": "What should I do when boiler pressure exceeds 30 psi?"},
     retrieveAndGenerateConfiguration={"type": "KNOWLEDGE_BASE", "knowledgeBaseConfiguration": {
@@ -1084,7 +1098,9 @@ import boto3
 
 ac = boto3.client("bedrock-agentcore-control")
 dp = boto3.client("bedrock-agentcore")
-mid = next(m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory")
+mid = next((m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory"), None)
+if mid is None:
+    raise SystemExit("the memory 'facilities_memory' was not found. Deploy the chapter 'Agent Memory' first (its Deploy this chapter button), then run this step again.")
 
 for actor, session, role, text in (
         ("maria", "s1", "USER", "I am the duty engineer for site HQ-1. I prefer P1 work orders for any boiler pressure fault."),
@@ -1104,7 +1120,9 @@ import boto3
 
 ac = boto3.client("bedrock-agentcore-control")
 dp = boto3.client("bedrock-agentcore")
-mid = next(m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory")
+mid = next((m["id"] for m in ac.list_memories()["memories"] if m["id"].startswith("facilities_memory") or m.get("name") == "facilities_memory"), None)
+if mid is None:
+    raise SystemExit("the memory 'facilities_memory' was not found. Deploy the chapter 'Agent Memory' first (its Deploy this chapter button), then run this step again.")
 
 import time
 time.sleep(1)                       # extraction is asynchronous on real AWS; the simulator finishes within a moment
@@ -1168,7 +1186,9 @@ import boto3
 import mcp_client
 
 ac = boto3.client("bedrock-agentcore-control")
-gid = next(g["gatewayId"] for g in ac.list_gateways()["items"] if g["name"] == "facilities-gateway")
+gid = next((g["gatewayId"] for g in ac.list_gateways()["items"] if g["name"] == "facilities-gateway"), None)
+if gid is None:
+    raise SystemExit("the gateway 'facilities-gateway' was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
 tools = mcp_client.call(gid, "tools/list")["tools"]
 print("MCP tools/list:", sorted(t["name"] for t in tools))
 ''', run="python mcp_list.py", expect="MCP tools/list:"),
@@ -1181,10 +1201,16 @@ import boto3
 import mcp_client
 
 ac = boto3.client("bedrock-agentcore-control")
-gid = next(g["gatewayId"] for g in ac.list_gateways()["items"] if g["name"] == "facilities-gateway")
-name = next(t["name"] for t in mcp_client.call(gid, "tools/list")["tools"] if "asset_status" in t["name"])
+gid = next((g["gatewayId"] for g in ac.list_gateways()["items"] if g["name"] == "facilities-gateway"), None)
+if gid is None:
+    raise SystemExit("the gateway 'facilities-gateway' was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
+name = next((t["name"] for t in mcp_client.call(gid, "tools/list")["tools"] if "asset_status" in t["name"]), None)
+if name is None:
+    raise SystemExit("the 'asset_status' tool was not found. Deploy the chapter 'Agent Gateway' first (its Deploy this chapter button), then run this step again.")
 res = mcp_client.call(gid, "tools/call", {"name": name, "arguments": {"asset_id": "B-12"}})
 out = json.loads(res["content"][0]["text"])
+if "found" not in out:
+    raise SystemExit("the tool returned %s instead of an asset. The tool's Lambda function (facilities-asset-status) is probably missing: deploy the chapter 'Tools' first, then run this step again." % json.dumps(out)[:200])
 print("tools/call", name, "-> found:", out["found"], "| status:", out["asset"]["status"], "| isError:", bool(res.get("isError")))
 ''', run="python mcp_call.py", expect="found: True | status: RUNNING | isError: False", needs_runtime=True),
  b("Restrict tool use with a Cedar policy", "A policy engine evaluates Cedar policies on every tool call. This one permits only the read-only `asset_status` tool; anything not permitted is denied by default, so the write path stays out of the gateway.",
@@ -1334,7 +1360,9 @@ for _ in range(20):
         break
 print("approval request in the inbox:", msg["request_id"], "-", msg["summary"][:60])
 
-sm = next(s for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval")["stateMachineArn"]
+sm = next((s["stateMachineArn"] for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval"), None)
+if sm is None:
+    raise SystemExit("the state machine 'work-order-approval' was not found. Deploy the chapter 'Actions and Approval' first (its Deploy this chapter button), then run this step again.")
 ex = next(e for e in sf.list_executions(stateMachineArn=sm)["executions"] if e["name"] == msg["request_id"])["executionArn"]
 sf.send_task_success(taskToken=msg["task_token"], output=json.dumps({"decision": "approved"}))   # who approved is not typed into the output: the Enforce step records the real caller
 for _ in range(40):
@@ -1355,7 +1383,9 @@ import time
 import boto3
 
 sf, ddb = boto3.client("stepfunctions"), boto3.client("dynamodb")
-sm = next(s for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval")["stateMachineArn"]
+sm = next((s["stateMachineArn"] for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval"), None)
+if sm is None:
+    raise SystemExit("the state machine 'work-order-approval' was not found. Deploy the chapter 'Actions and Approval' first (its Deploy this chapter button), then run this step again.")
 rid = "req-reject01"
 ex = sf.start_execution(stateMachineArn=sm, name=rid, input=json.dumps(
     {"request_id": rid, "asset_id": "EL-3", "summary": "Replace elevator 3 (should be rejected)", "priority": "P3", "requester": "test"}))["executionArn"]
@@ -1380,7 +1410,9 @@ print("work orders written despite rejection:", len(wos))
 import boto3
 
 sf = boto3.client("stepfunctions")
-sm = next(s for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval")["stateMachineArn"]
+sm = next((s["stateMachineArn"] for s in sf.list_state_machines()["stateMachines"] if s["name"] == "work-order-approval"), None)
+if sm is None:
+    raise SystemExit("the state machine 'work-order-approval' was not found. Deploy the chapter 'Actions and Approval' first (its Deploy this chapter button), then run this step again.")
 ex = next(e for e in sf.list_executions(stateMachineArn=sm)["executions"] if e["status"] == "SUCCEEDED")["executionArn"]
 events = sf.get_execution_history(executionArn=ex)["events"]
 print("history:", ", ".join(e["type"] for e in events[:8]))
@@ -1421,8 +1453,12 @@ import boto3
 
 ag, cg, waf = boto3.client("apigateway"), boto3.client("cognito-idp"), boto3.client("wafv2")
 REGION, ACCOUNT = "us-east-1", "123456789012"
-pool = next(p["Id"] for p in cg.list_user_pools(MaxResults=20)["UserPools"] if p["Name"] == "facilities-users")
-acl = next(a["ARN"] for a in waf.list_web_acls(Scope="REGIONAL")["WebACLs"] if a["Name"] == "facilities-acl")
+pool = next((p["Id"] for p in cg.list_user_pools(MaxResults=20)["UserPools"] if p["Name"] == "facilities-users"), None)
+if pool is None:
+    raise SystemExit("the user pool 'facilities-users' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
+acl = next((a["ARN"] for a in waf.list_web_acls(Scope="REGIONAL")["WebACLs"] if a["Name"] == "facilities-acl"), None)
+if acl is None:
+    raise SystemExit("the web ACL 'facilities-acl' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
 fn = "arn:aws:lambda:%s:%s:function:facilities-kb-search" % (REGION, ACCOUNT)
 
 api = ag.create_rest_api(name="facilities-api")["id"]
@@ -1446,11 +1482,15 @@ import urllib.request
 import boto3
 
 cg, ag = boto3.client("cognito-idp"), boto3.client("apigateway")
-pool = next(p["Id"] for p in cg.list_user_pools(MaxResults=20)["UserPools"] if p["Name"] == "facilities-users")
+pool = next((p["Id"] for p in cg.list_user_pools(MaxResults=20)["UserPools"] if p["Name"] == "facilities-users"), None)
+if pool is None:
+    raise SystemExit("the user pool 'facilities-users' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
 cid = cg.list_user_pool_clients(UserPoolId=pool)["UserPoolClients"][0]["ClientId"]
 token = cg.initiate_auth(ClientId=cid, AuthFlow="USER_PASSWORD_AUTH",
                          AuthParameters={"USERNAME": "maria.ops@example.com", "PASSWORD": "Fac!lities-2026"})["AuthenticationResult"]["IdToken"]
-api = next(a["id"] for a in ag.get_rest_apis()["items"] if a["name"] == "facilities-api")
+api = next((a["id"] for a in ag.get_rest_apis()["items"] if a["name"] == "facilities-api"), None)
+if api is None:
+    raise SystemExit("the REST API 'facilities-api' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
 url = os.environ["AWS_ENDPOINT_URL"].rstrip("/") + "/restapis/%s/prod/_user_request_/search" % api
 req = urllib.request.Request(url, data=json.dumps({"query": "boiler pressure limit"}).encode(), method="POST",
                              headers={"Content-Type": "application/json", "Authorization": token})
@@ -1468,7 +1508,9 @@ import urllib.request
 
 import boto3
 
-api = next(a["id"] for a in boto3.client("apigateway").get_rest_apis()["items"] if a["name"] == "facilities-api")
+api = next((a["id"] for a in boto3.client("apigateway").get_rest_apis()["items"] if a["name"] == "facilities-api"), None)
+if api is None:
+    raise SystemExit("the REST API 'facilities-api' was not found. Deploy the chapter 'Access and Perimeter' first (its Deploy this chapter button), then run this step again.")
 url = os.environ["AWS_ENDPOINT_URL"].rstrip("/") + "/restapis/%s/prod/_user_request_/search" % api
 req = urllib.request.Request(url, data=json.dumps({"query": "boiler pressure limit"}).encode(), method="POST", headers={"Content-Type": "application/json"})
 try:
