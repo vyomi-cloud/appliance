@@ -14,6 +14,7 @@ import { Glyph } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
 import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
+import { WINDOWS_IMAGES_ENABLED, WINDOWS_IMAGES_REASON } from "../../../common/windowsImages.js";
 import { TagRows } from "./VmBlade.jsx";
 
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,13}[a-zA-Z0-9]$/;
@@ -108,7 +109,7 @@ export default function CreateVirtualMachine() {
           <Select id="vm-sectype" value={f.securityType} onChange={set("securityType")} aria-label="Security type">{["Standard", "Trusted launch virtual machines", "Confidential virtual machines"].map((o) => <option key={o}>{o}</option>)}</Select>
         </FormRow>
         <FormRow label="Image" required htmlFor="vm-image">
-          <Select id="vm-image" value={f.image} onChange={set("image")} aria-label="Image"><option>Ubuntu Server 24.04 LTS - x64 Gen2</option><option>Windows Server 2022 Datacenter</option><option>Debian 12</option></Select>
+          <Select id="vm-image" value={f.image} onChange={set("image")} aria-label="Image"><option>Ubuntu Server 24.04 LTS - x64 Gen2</option><option disabled={!WINDOWS_IMAGES_ENABLED} title={WINDOWS_IMAGES_REASON}>{`Windows Server 2022 Datacenter${WINDOWS_IMAGES_ENABLED ? "" : " (not supported yet)"}`}</option><option>Debian 12</option></Select>
         </FormRow>
         <FormRow label="VM architecture"><RadioGroup layout="horizontal" value={f.architecture} onChange={set("architecture")} aria-label="VM architecture"><Radio value="Arm64" label="Arm64" /><Radio value="x64" label="x64" /></RadioGroup></FormRow>
         <FormRow label="Run with Azure Spot discount"><Checkbox checked={f.spot} onChange={checked("spot")} aria-label="Run with Azure Spot discount" /></FormRow>

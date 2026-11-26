@@ -18,6 +18,22 @@ def _is_windows(props: dict) -> bool:
     return str(((props.get("storageProfile") or {}).get("osDisk") or {}).get("osType") or "").lower() == "windows"
 
 
+def reject_windows(payload: dict):
+    """Windows VM creates are disabled (core/compute_sizes.WINDOWS_IMAGES_ENABLED); returns an ARM 400 or None."""
+    try:
+        from core import compute_sizes as cs
+    except ImportError:
+        import compute_sizes as cs  # type: ignore
+    props = (payload or {}).get("properties") or {}
+    ref = (props.get("storageProfile") or {}).get("imageReference") or {}
+    win = _is_windows(props) or str(ref.get("publisher") or "").lower() == "microsoftwindowsserver" \
+        or str(ref.get("offer") or "").lower() in ("windowsserver", "windowsdesktop")
+    if not cs.windows_blocked(win):
+        return None
+    return {"status": 400, "headers": {}, "body": {"error": {"code": "OperationNotAllowed",
+            "message": "Operation 'Microsoft.Compute/virtualMachines/write' is not allowed: " + cs.windows_rejection("Windows VM images")}}}
+
+
 def validate_password(payload: dict):
     """Real-ARM adminPassword rules; returns a 400 response dict or None."""
     props = (payload or {}).get("properties") or {}

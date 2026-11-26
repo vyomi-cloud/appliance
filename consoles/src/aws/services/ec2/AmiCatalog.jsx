@@ -5,6 +5,7 @@ import Tabs from "@cloudscape-design/components/tabs";
 import Button from "@cloudscape-design/components/button";
 import { useAsync } from "../../../common/useAsync.js";
 import { href, follow } from "../../../common/router.js";
+import { WINDOWS_IMAGES_REASON, windowsDisabled } from "../../../common/windowsImages.js";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { ProductBrowser } from "../../kit/MarketplaceBrowser.jsx";
 import * as mp from "../../kit/marketplaceApi.js";
@@ -30,7 +31,7 @@ export default function AmiCatalog() {
       filterPlaceholder='Search for an AMI by entering a search term e.g. "Windows"'
       columns={[
         { id: "ami", header: "AMI", isRowHeader: true, cell: (x) => `${x.name} (${x.imageId})` },
-        { id: "select", header: "Select", cell: (x) => <Button href={href("ec2", "launch-instance") + `?ami=${x.imageId}`} onFollow={follow}>Select</Button> },
+        { id: "select", header: "Select", cell: (x) => (windowsDisabled(x) ? <Button disabled disabledReason={WINDOWS_IMAGES_REASON}>Select</Button> : <Button href={href("ec2", "launch-instance") + `?ami=${x.imageId}`} onFollow={follow}>Select</Button>) },
       ]}
       empty={{ title: "No AMIs" }}
     />

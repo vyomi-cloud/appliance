@@ -35,6 +35,13 @@ records and writes to ``properties.subnets``.
 """
 from __future__ import annotations
 
+try:                                    # Windows VM images: disabled, not removed (core/compute_sizes.WINDOWS_IMAGES_ENABLED)
+    from core import compute_sizes as _cs_win
+except ImportError:                     # pragma: no cover - flat import layout
+    import compute_sizes as _cs_win     # type: ignore
+_WIN_OFF = not _cs_win.WINDOWS_IMAGES_ENABLED
+_WIN_REASON = _cs_win.WINDOWS_IMAGES_REASON
+
 
 # ---------------------------------------------------------------------------
 # Shared field-builder helpers — keep schemas terse.
@@ -117,7 +124,7 @@ _VM_WIZARD = {
                     {"value": "ubuntu-2204", "label": "Ubuntu Server 22.04 LTS - x64 Gen2"},
                     {"value": "ubuntu-2404", "label": "Ubuntu Server 24.04 LTS - x64 Gen2"},
                     {"value": "rhel-9", "label": "Red Hat Enterprise Linux 9 - x64 Gen2"},
-                    {"value": "windows-2022", "label": "Windows Server 2022 Datacenter: Azure Edition - x64 Gen2"},
+                    {"value": "windows-2022", "label": "Windows Server 2022 Datacenter: Azure Edition - x64 Gen2", "disabled": _WIN_OFF, "disabled_reason": _WIN_REASON},
                  ]},
                 {"name": "properties.hardwareProfile.vmSize", "label": "Size",
                  "type": "vmSize", "default": "Standard_B1s", "required": True,

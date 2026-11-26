@@ -25,6 +25,7 @@ import { ErrorAlert } from "../../kit/common.jsx";
 import { TAG_I18N } from "./InstanceDetail.jsx";
 import * as api from "./api.js";
 import { sizesNote, sizeSubstrate } from "../../../common/computeSizes.js";
+import { WINDOWS_IMAGES_REASON, windowsDisabled } from "../../../common/windowsImages.js";
 
 const opt = (v) => ({ value: v, label: v });
 
@@ -175,7 +176,7 @@ export function CreateLaunchTemplate() {
           <Container header={<Header variant="h2">Application and OS Images (Amazon Machine Image)</Header>}>
             <FormField label="Amazon Machine Image (AMI)">
               <Select selectedOption={amiId ? opt(amiId) : { value: "", label: "Don't include in launch template" }} onChange={({ detail }) => setAmiId(detail.selectedOption.value)}
-                options={[{ value: "", label: "Don't include in launch template" }, ...(cat.data?.images || []).map((i) => ({ value: i.imageId, label: `${i.name} (${i.imageId})` }))]} ariaLabel="Amazon Machine Image (AMI)" />
+                options={[{ value: "", label: "Don't include in launch template" }, ...(cat.data?.images || []).map((i) => ({ value: i.imageId, label: `${i.name} (${i.imageId})`, ...(windowsDisabled(i) ? { disabled: true, description: WINDOWS_IMAGES_REASON } : {}) }))]} ariaLabel="Amazon Machine Image (AMI)" />
             </FormField>
           </Container>
           <Container header={<Header variant="h2">Instance type</Header>}>

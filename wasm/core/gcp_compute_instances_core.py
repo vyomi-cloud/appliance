@@ -325,6 +325,9 @@ def insert_instance(store, project, zone, payload):
             dname = ip.get("diskName") or "%s" % name
             dfull = "projects/%s/zones/%s/disks/%s" % (project, zone, dname)
             _si_ = ip.get("sourceImage") or ""
+            from core import compute_sizes as _csw
+            if _csw.windows_blocked(re.search(r"(^|/)windows-(cloud|sql-cloud)/|/(windows-[a-z0-9-]+|[a-z0-9-]*windows[a-z0-9-]*)$", _si_.lower())):
+                raise _E(400, "INVALID_ARGUMENT", "Invalid value for field 'resource.disks[0].initializeParams.sourceImage': '%s'. %s" % (_si_, _csw.windows_rejection("Windows images")))
             _m = re.match(r"^(?:https://[^/]+/compute/[^/]+/)?(?:projects/%s/)?global/images/([^/]+)$" % re.escape(project), _si_)
             if _m and "projects/%s/global/images/%s" % (project, _m.group(1)) not in store.images:
                 raise _E(404, "NOT_FOUND", "The resource 'projects/%s/global/images/%s' was not found" % (project, _m.group(1)))

@@ -2741,6 +2741,9 @@ def _launch_one(m: dict, params: dict, tag_specs: dict, idx: int) -> dict:
     if image is None:
         raise VpcError("InvalidAMIID.NotFound", f"The image id '[{image_id}]' does not exist.")
     _check_allowed_images(m, image)
+    from core import compute_sizes as _cs
+    if _cs.windows_blocked(image.get("platform") == "windows" or "windows" in str(image.get("name", "")).lower()):
+        raise VpcError("UnsupportedOperation", f"The image '{image_id}' is a Windows image. " + _cs.windows_rejection())
     vpc_id, default_subnet, default_sg = _ensure_default_network(m)
     subnet_id = str(params.get("SubnetId") or params.get("NetworkInterface.1.SubnetId") or default_subnet)
     subnet = m["subnets"].get(subnet_id)
