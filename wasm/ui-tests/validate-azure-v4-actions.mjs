@@ -20,9 +20,37 @@ const rec = (check, status, detail = "") => {
   rows.push({ svc: cur, check, status, detail }); if (status === "FAIL") fails++;
   console.log(`[${status === "PASS" ? "PASS" : status === "FAIL" ? "FAIL" : "NOTE"}] ${cur} :: ${check}${detail ? ` :: ${String(detail).slice(0, 160)}` : ""}`);
 };
-const { server, base } = await startServer(NANO_DIR);
+// Three substrates, one driver set:
+//   (default)           genuine Nano: serve NANO_DIR, the in-browser service worker answers /_wire.
+//   SIM_URL=<appliance> offline: serve NANO_DIR as the offline console (no in-browser engine) and proxy /_wire, /api, /subscriptions to the
+//                       running simulator, exactly as offline-ui-azure-v4-bidirectional does.
+//   DEV_BASE=<url>      consoles/dev_server.py: fast inner loop against the same cores, no service worker.
+const SIM = (process.env.SIM_URL || "").replace(/\/$/, "");
+let { server, base } = process.env.DEV_BASE ? { server: { close() {} }, base: process.env.DEV_BASE } : SIM ? { server: null, base: "" } : await startServer(NANO_DIR);
+if (SIM) {
+  const http = await import("node:http"); const { readFile } = await import("node:fs/promises"); const { existsSync } = await import("node:fs"); const { extname, join, normalize } = await import("node:path");
+  const MIME = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2" };
+  server = http.createServer(async (req, res) => {
+    try {
+      const u = new URL(req.url, "http://x");
+      if (/^\/(_wire|api|subscriptions|azure-data)\b/.test(u.pathname)) {
+        const chunks = []; for await (const c of req) chunks.push(c);
+        const r = await fetch(SIM + req.url, { method: req.method, headers: Object.fromEntries(Object.entries(req.headers).filter(([k]) => !["host", "connection", "content-length"].includes(k))), body: ["GET", "HEAD"].includes(req.method) ? undefined : Buffer.concat(chunks) });
+        res.writeHead(r.status, Object.fromEntries([...r.headers].filter(([k]) => !["content-encoding", "transfer-encoding", "content-length"].includes(k))));
+        return res.end(Buffer.from(await r.arrayBuffer()));
+      }
+      let pth = normalize(decodeURIComponent(u.pathname)); if (pth === "/") pth = "/index.html";
+      let f = join(NANO_DIR, pth); if (existsSync(f) && !extname(f)) f = join(f, "index.html");
+      if (!f.startsWith(NANO_DIR) || !existsSync(f)) { res.writeHead(404); return res.end("404"); }
+      let b = await readFile(f);
+      if (/\/v4\/\w+\/index\.html$/.test(pth)) b = Buffer.from(b.toString().replace('content="nano"', 'content="offline"').replace(/<script[^>]*nano-boot\.js[^>]*><\/script>/g, "").replace(/<script[^>]*nano-kernel\.js[^>]*><\/script>/g, "").replace(/<script>window\.__nk[^<]*<\/script>/g, ""));
+      res.writeHead(200, { "content-type": MIME[extname(f)] || "application/octet-stream", "cache-control": "no-cache" }); res.end(b);
+    } catch (e) { res.writeHead(500); res.end(String(e)); }
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r)); base = `http://127.0.0.1:${server.address().port}`;
+}
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
-const page = await (await browser.newContext()).newPage();
+const page = await (await browser.newContext(SIM ? { serviceWorkers: "block" } : {})).newPage();
 const pageErrors = []; page.on("pageerror", (e) => pageErrors.push(String(e.message).split("\n")[0]));
 // raw: send `body` as-is with that content-type; hdrs: extra headers (data-plane auth / x-vyomi-vault)
 const arm = (method, path, body, raw, hdrs) => page.evaluate(async ([m, p, b, r, h]) => {
@@ -51,16 +79,18 @@ const uiRowDelete = async (name) => {
 const ctx = { shows, uiRowDelete, arm, v, go, body, click, tab, poll, seenInUi, uiDelete, page, base, RG, P, SUB, sleep, rec };
 const SECTIONS = {};
 export const section = (id, title, fn) => { SECTIONS[id] = { title, fn }; };
-const mods = (await Promise.all(["vms", "storage", "keyvaults", "nsgs", "dns", "servicebus", "appconfiguration", "sql", "cosmos", "appservices", "functionapp", "aks", "acr", "eventgrid", "loganalytics", "containerapps", "vnets", "generic"].map((m) => import(new URL(`./azure-actions/${m}.mjs`, import.meta.url).href).catch((e) => { console.log("no driver", m, e.message.slice(0, 60)); return null; }))));
+const mods = (await Promise.all(["vms", "storage", "keyvaults", "nsgs", "dns", "servicebus", "appconfiguration", "sql", "cosmos", "appservices", "functionapp", "aks", "acr", "eventgrid", "loganalytics", "containerapps", "vnets", "resourcegroups", "apim", "cognitiveservices", "monitor", "sweepA", "shell", "generic"].map((m) => import(new URL(`./azure-actions/${m}.mjs`, import.meta.url).href).catch((e) => { console.log("no driver", m, e.message.slice(0, 60)); return null; }))));
 for (const m of mods) if (m && m.default) for (const d of [].concat(m.default)) SECTIONS[d.id] = { title: d.title, fn: d.fn };
 
 try {
   await page.goto(`${base}/v4/azure/index.html`, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 120000 });
-  await sleep(4000);
+  if (!process.env.DEV_BASE && !SIM) await page.waitForFunction(() => navigator.serviceWorker && navigator.serviceWorker.controller, null, { timeout: 120000 });
+  // nano-boot reloads the page once after the SW takes control: a fetch in that window throws "Failed to fetch". Wait until the engine answers.
+  for (let i = 0; i < 30; i++) { const ok = await page.evaluate(() => fetch("/_wire/subscriptions?api-version=2020-01-01").then((r) => r.status < 500, () => false)).catch(() => false); if (ok) break; await sleep(2000); }
+  await sleep(2000);
   cur = "(setup)";
   const hz = await arm("GET", `/subscriptions/${SUB}/resourcegroups${v("2021-04-01")}`);
-  rec("Nano engine answers ARM through the service worker (not a dev server)", hz.status === 200 ? "PASS" : "FAIL", `HTTP ${hz.status}`);
+  rec(SIM ? "simulator answers ARM through the console wire" : process.env.DEV_BASE ? "dev server answers ARM" : "Nano engine answers ARM through the service worker (not a dev server)", hz.status === 200 ? "PASS" : "FAIL", `HTTP ${hz.status}`);
   const rg = await arm("PUT", `/subscriptions/${SUB}/resourcegroups/${RG}${v("2021-04-01")}`, { location: "eastus" });
   rec("create the test resource group", rg.status < 300 ? "PASS" : "FAIL", rg.status);
   for (const [id, s] of Object.entries(SECTIONS)) {
@@ -74,7 +104,7 @@ cur = "(run)"; rec("no uncaught page errors", pageErrors.length ? "NOTE" : "PASS
 rec("CLI->UI via az against an in-browser engine", "NOT-AUTOMATED", "az cannot reach the in-browser engine without the tunnel relay; covered by the offline wrapper");
 
 const outDir = new URL("../../tests/conformance/hourly/out/", import.meta.url).pathname; mkdirSync(outDir, { recursive: true });
-writeFileSync(outDir + "azure-v4-actions.json", JSON.stringify({ at: new Date().toISOString(), mode: "nano", rows }, null, 1));
+writeFileSync(outDir + "azure-v4-actions.json", JSON.stringify({ at: new Date().toISOString(), mode: SIM ? "offline" : process.env.DEV_BASE ? "dev" : "nano", rows }, null, 1));
 const by = {}; for (const r of rows) (by[r.svc] ||= []).push(r);
 let md = "# Azure v4 console actions (genuine Nano)\n\n| Service | Check | Result | Detail |\n|---|---|---|---|\n";
 for (const [svc, rs] of Object.entries(by)) for (const r of rs) md += `| ${svc} | ${r.check} | ${r.status} | ${String(r.detail).replace(/\|/g, "/").slice(0, 120)} |\n`;

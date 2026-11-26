@@ -23,7 +23,9 @@ const BASE = new URL(".", import.meta.url).pathname.replace(/\/$/, "");
 const wasControlledAtStart = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
 // Which cloud this console is — drives the live resource census we persist for
 // the dashboard's per-cloud footprint pies (null on non-console pages).
-const CONSOLE_PROVIDER = (location.pathname.match(/\/(aws|gcp|azure)-console\.html/) || [])[1] || null;
+// v4 consoles live at /v4/<cloud>/ (the legacy <cloud>-console.html pages are gone for AWS): match both, or no census is ever written
+// and Nano's cost_savings / host-distribution stay at zero for v4 users.
+const CONSOLE_PROVIDER = (location.pathname.match(/\/(aws|gcp|azure)-console\.html/) || location.pathname.match(/\/v4\/(aws|gcp|azure)(?:\/|$)/) || [])[1] || null;
 // The console-next SPA is served at BASE/console-next/ — detect it so bootBackend
 // imports the SPA after Pyodide + the SW are ready (slice 1). CONSOLE_PROVIDER
 // stays null on this page (its census is provider-scoped, N/A for the SPA shell).

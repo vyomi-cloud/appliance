@@ -274,7 +274,7 @@
     },
     {
       "id": "nano-ui-crawl",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "not retargeted: the v3 generic click-through crawler (toolbar/row actions, toggles, drawers) has no v4 DOM equivalent yet; tab-walk is covered by nano-ui-aws-real-tabs and spec fidelity by consoles/tests/ui-conformance.mjs",
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
@@ -339,7 +339,6 @@
     },
     {
       "id": "offline-request-metrics",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "offline",
       "cloud": "aws",
       "kind": "core",
@@ -348,20 +347,19 @@
     },
     {
       "id": "nano-ui-azure-metrics",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-metrics.mjs",
+      "cmd": "ONLY=metrics NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
       "id": "offline-ui-azure-metrics",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "cmd retargeted to SIM_URL mode (ONLY=metrics): passes against consoles/dev_server.py as the simulator, not yet run against a real offline appliance",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-metrics.mjs",
+      "cmd": "ONLY=metrics NANO_DIR=$PWD/wasm SIM_URL={ENDPOINT} node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
@@ -374,16 +372,15 @@
     },
     {
       "id": "nano-ui-aws-metrics",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-aws-metrics.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-metrics.mjs node tests/conformance/nightly/aws-v4-detail.mjs",
       "timeout": 600
     },
     {
       "id": "offline-ui-aws-metrics",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-metrics",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -392,7 +389,7 @@
     },
     {
       "id": "nano-ui-aws-api",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nightly-aws-v4-roundtrip (create/list/delete of every core service over the v4 wire)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -401,7 +398,7 @@
     },
     {
       "id": "nano-ui-aws-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (s3 profile walks every bucket tab)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -487,7 +484,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-apigw-lists",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-vpc-details-tab (subnets/route tables/igw lists) and nano-ui-aws-real-tabs (apigw/httpapi Resources/Stages tabs)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -496,7 +493,7 @@
     },
     {
       "id": "nano-ui-aws-compute-reload",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-rds-persist (lambda, api gateway, vpc survive a Nano reload; eventbridge rule not re-asserted)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -505,7 +502,7 @@
     },
     {
       "id": "nano-ui-azure-savings",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: asserted the legacy /api/spaces cost_savings counter fed by the v3 console; no v4 Azure console reads cost_savings (grep consoles/src/azure), v4 Cost Management is a different feature",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -514,7 +511,7 @@
     },
     {
       "id": "nano-ui-aws-compute-savings",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-budget-savings (sqs/lambda/api gateway/vpc move cost_savings on Nano; eventbridge rule not re-asserted)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -523,7 +520,6 @@
     },
     {
       "id": "nano-ui-aws-ec2-detail-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -532,7 +528,7 @@
     },
     {
       "id": "offline-ui-aws-ec2-detail-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-ec2-detail-tabs",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -557,7 +553,6 @@
     },
     {
       "id": "nano-ui-aws-real-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -566,7 +561,7 @@
     },
     {
       "id": "offline-ui-aws-real-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-real-tabs",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -575,7 +570,7 @@
     },
     {
       "id": "offline-ui-aws-sqs-dlq-tab",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-sqs-dlq-tab",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -584,7 +579,7 @@
     },
     {
       "id": "nano-ui-aws-sqs-dlq-tab",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "blocked, product gap: v4 console DLQ tab renders \"-\" for a queue without a redrive policy, real SQS says \"Disabled\" (consoles/src/aws/services/sqs/QueueDetail.jsx DlqTab); the sqs profile of nano-ui-aws-real-tabs prints it as a SKIP",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -593,7 +588,6 @@
     },
     {
       "id": "nano-ui-aws-rds-connectivity-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -602,7 +596,7 @@
     },
     {
       "id": "offline-ui-aws-rds-connectivity-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-rds-connectivity-tabs",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -611,7 +605,6 @@
     },
     {
       "id": "nano-ui-aws-vpc-details-tab",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -620,7 +613,7 @@
     },
     {
       "id": "offline-ui-aws-vpc-details-tab",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-vpc-details-tab",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -629,7 +622,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-sg-iam-cells",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-vpc-details-tab (sg id/name) and nano-ui-aws-real-tabs (iam ARN)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -638,7 +631,7 @@
     },
     {
       "id": "offline-ui-aws-vpc-sg-iam-cells",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-vpc-details-tab",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -783,7 +776,7 @@
     },
     {
       "id": "nano-ui-azure-flat-create",
-      "pending": "old Nano console (wasm/azure-console.html), not the v4 console; retarget to /v4/azure/ or retire after the v4 release (needs owner decision, see needs-decision.md)",
+      "pending": "retired: v3 flat create blade (NSG / Role Definition) no longer exists in v4; NSG wizard create is covered offline by offline-ui-azure-v4-bidirectional and NSG rules by nano-ui-azure-nsg-rules; Nano wizard create is not automated yet",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -792,7 +785,7 @@
     },
     {
       "id": "offline-ui-azure-flat-create",
-      "pending": "old Nano console (wasm/azure-console.html), not the v4 console; retarget to /v4/azure/ or retire after the v4 release (needs owner decision, see needs-decision.md)",
+      "pending": "retired: covered by offline-ui-azure-v4-bidirectional (v4 wizard create of NSG and every service, then ARM GET); the v3 flat create blade no longer exists and role definitions are managed in the v4 IAM blade",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
@@ -801,7 +794,7 @@
     },
     {
       "id": "nano-ui-azure-dp-detail",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-azure-storage-console; v4 data-plane items are tabs of their parent blade, there is no /providers/undefined detail route to guard",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -810,7 +803,7 @@
     },
     {
       "id": "nano-ui-azure-rail-last",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: guarded the v3 #rail and fixed bottom Nano banner swallowing clicks; the v4 shell has no left rail and its status bar is in flow",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -819,25 +812,24 @@
     },
     {
       "id": "nano-ui-azure-rg-nav",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-rg-nav.mjs",
+      "cmd": "ONLY=home,resourcegroups NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
       "id": "offline-ui-azure-rg-nav",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "cmd retargeted to SIM_URL mode (ONLY=home,resourcegroups): passes against dev_server as the simulator, not yet run against a real offline appliance",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-rg-nav.mjs",
+      "cmd": "ONLY=home,resourcegroups NANO_DIR=$PWD/wasm SIM_URL={ENDPOINT} node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
       "id": "nano-ui-azure-keyvault-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retargeted to ONLY=keyvaults of validate-azure-v4-actions.mjs (Nano): all checks pass except API->UI secret deleted over the API still listed in the v4 secrets list; fix the console, then set cmd ONLY=keyvaults and drop pending",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -895,16 +887,15 @@
     },
     {
       "id": "nano-ui-azure-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tabs.mjs",
+      "cmd": "ONLY=tabs NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-azure-dp",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-azure-storage-console (blob containers and blobs); v4 has no separate data-plane resource pages, containers and secrets are tabs of the parent blade",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -913,25 +904,23 @@
     },
     {
       "id": "nano-ui-azure-home",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-home.mjs",
+      "cmd": "ONLY=home NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-budget-savings",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-nano-budget-savings.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-nano-savings.mjs node tests/conformance/nightly/v4-nano-run.mjs",
       "timeout": 300
     },
     {
       "id": "nano-ui-reload-backend",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: guarded the v3 per-page Pyodide backend race after reload; v4 Nano cores run in the service worker and every nano-ui-azure-* suite hard-reloads then reads",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -940,11 +929,10 @@
     },
     {
       "id": "nano-ui-azure-storage-console",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-storage-console-api.mjs",
+      "cmd": "ONLY=storage NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
@@ -975,7 +963,7 @@
     },
     {
       "id": "nano-ui-aws-elbv2",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (elbv2 profile); UI create/delete flow not re-asserted",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1010,7 +998,7 @@
     },
     {
       "id": "nano-ui-aws-logs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (logs profile) and nightly-aws-v4-roundtrip (cloudwatch)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1045,7 +1033,7 @@
     },
     {
       "id": "nano-ui-aws-ssm",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (ssm profile) and nightly-aws-v4-roundtrip (ssm)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1080,7 +1068,7 @@
     },
     {
       "id": "nano-ui-aws-event-delivery",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by offline-post-create-aws-event-delivery (same events/lambda/stepfunctions cores; Nano Pyodide sandbox itself not re-asserted)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1114,7 +1102,7 @@
     },
     {
       "id": "nano-ui-aws-stepfunctions",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (states profile) and nightly-aws-v4-roundtrip (states)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1349,7 +1337,7 @@
     },
     {
       "id": "nano-ui-azure-app",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "not retargeted yet: azure-actions has no containerapps driver (Container Apps v4 UI is covered offline by offline-ui-azure-v4-bidirectional and offline-post-create-azure-container-app, not on Nano)",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1384,11 +1372,10 @@
     },
     {
       "id": "nano-ui-azure-appconfiguration",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-appconfiguration.mjs",
+      "cmd": "ONLY=appconfiguration NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
@@ -1419,7 +1406,7 @@
     },
     {
       "id": "nano-ui-azure-cognitiveservices",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "driver azure-actions/cognitiveservices.mjs written; ARM-side checks pass in Nano and everything passes on dev_server, but in Nano the Deploy-model dialog has no gpt-4o option (default qwen3-4b not deployable in-browser) so the UI->API deploy leg fails; fix then set cmd ONLY=cognitiveservices",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1454,11 +1441,10 @@
     },
     {
       "id": "nano-ui-azure-dns",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-dns.mjs",
+      "cmd": "ONLY=dns NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
@@ -1489,11 +1475,10 @@
     },
     {
       "id": "nano-ui-azure-monitor",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-monitor.mjs",
+      "cmd": "ONLY=monitor NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
@@ -1524,16 +1509,15 @@
     },
     {
       "id": "nano-ui-azure-operationalinsights",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-operationalinsights.mjs",
+      "cmd": "ONLY=loganalytics NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-aws-lambda-row",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (lambda profile: row cells, detail, tabs)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1542,7 +1526,7 @@
     },
     {
       "id": "nano-ui-aws-ec2-row",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-ec2-detail-tabs (row cells, detail, tabs)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1551,7 +1535,7 @@
     },
     {
       "id": "nano-ui-aws-apigw-row",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (apigw/httpapi profiles)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1560,7 +1544,7 @@
     },
     {
       "id": "nano-ui-aws-detail-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1569,7 +1553,7 @@
     },
     {
       "id": "offline-ui-aws-detail-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: headless 4.0.0 appliance serves no console (MESH-CODESPACES-GITHUB-APP.md s10; core/mesh.py _UI_PREFIXES); the v4 console runs on Nano, covered by nano-ui-aws-real-tabs",
       "target": "offline",
       "cloud": "aws",
       "kind": "ui",
@@ -1578,7 +1562,7 @@
     },
     {
       "id": "nano-ui-aws-vpc-row",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-vpc-details-tab",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1587,7 +1571,7 @@
     },
     {
       "id": "nano-ui-aws-eventbridge-row",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (rule + events bus profiles)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1596,7 +1580,7 @@
     },
     {
       "id": "nano-ui-aws-settings-tabs",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (ddb/sqs/secret/kms tabs load unset settings with no wire error); saved-edit-survives-reload not re-asserted",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1605,7 +1589,7 @@
     },
     {
       "id": "nano-ui-aws-iam-detail",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (iam profile asserts the user ARN)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1640,7 +1624,7 @@
     },
     {
       "id": "nano-ui-azure-nsg-roledef-create",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by offline-ui-azure-v4-bidirectional (NSG wizard create) and nano-ui-azure-nsg-rules; role definitions live in the v4 IAM blade (IAM suites), not a flat form",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1649,20 +1633,18 @@
     },
     {
       "id": "nano-ui-azure-tags-tab",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-tags-tab.mjs",
+      "cmd": "ONLY=tags NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 600
     },
     {
       "id": "nano-ui-azure-nsg-rules",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-nsg-rules.mjs",
+      "cmd": "ONLY=nsgs NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
@@ -1791,7 +1773,7 @@
     },
     {
       "id": "nano-post-create-aws-ec2-ssh",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "not retargeted: needs the v4 EC2 launch wizard + Connect modal driven through a real vyomi-tunnel >= 1.1 and an in-browser v86 VM, which a headless run cannot supply here; offline twin is offline-post-create-aws-ec2-ssh",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1809,7 +1791,7 @@
     },
     {
       "id": "nano-post-create-azure-vm-ssh",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: needs the vyomi-tunnel relay (RELAY_HTTP) and in-browser VM compute; offline twin is offline-post-create-azure-vm-ssh, Nano VM connect UI lives in wasm/vm/nano-vm-host.js (separate stream)",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
@@ -1826,7 +1808,7 @@
     },
     {
       "id": "nano-ui-aws-kinesis",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (kinesis profile) and nightly-aws-v4-roundtrip (kinesis)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1861,7 +1843,7 @@
     },
     {
       "id": "nano-ui-aws-apigatewayv2",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (httpapi profile: HTTP API created with apigatewayv2)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1896,7 +1878,7 @@
     },
     {
       "id": "nano-ui-aws-cloudwatch",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (alarm + logs profiles) and nightly-aws-v4-roundtrip",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -1939,7 +1921,7 @@
     },
     {
       "id": "nano-ui-aws-sns",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (sns profile) and nightly-aws-v4-roundtrip (sns); publish/SMS-sandbox flows not re-asserted",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -2007,7 +1989,7 @@
     },
     {
       "id": "nano-ui-aws-secrets-created",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "retired: covered by nano-ui-aws-real-tabs (secret profile: no blank row cell)",
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
@@ -2016,38 +1998,36 @@
     },
     {
       "id": "nano-ui-azure-resource-group-detail",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-resource-group-detail.mjs",
+      "cmd": "ONLY=resourcegroups NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
       "id": "offline-ui-azure-resource-group-detail",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "cmd retargeted to SIM_URL mode (ONLY=resourcegroups): passes against dev_server as the simulator, not yet run against a real offline appliance",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-resource-group-detail.mjs",
+      "cmd": "ONLY=resourcegroups NANO_DIR=$PWD/wasm SIM_URL={ENDPOINT} node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
       "id": "nano-ui-azure-apim-appinsights",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
+      "cmd": "ONLY=apim NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
       "id": "offline-ui-azure-apim-appinsights",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
+      "pending": "cmd retargeted to SIM_URL mode (ONLY=apim): not run against a simulator since the unique-name fix; the Nano twin nano-ui-azure-apim-appinsights passes",
       "target": "offline",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "VYOMI_CONSOLE_URL={ENDPOINT}/console/azure node wasm/ui-tests/validate-azure-apim-appinsights.mjs",
+      "cmd": "ONLY=apim NANO_DIR=$PWD/wasm SIM_URL={ENDPOINT} node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
@@ -2060,11 +2040,10 @@
     },
     {
       "id": "nano-sweepA-azure",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "azure",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-sweepA-nano.mjs",
+      "cmd": "ONLY=sweepA NANO_DIR=$PWD/wasm node wasm/ui-tests/validate-azure-v4-actions.mjs",
       "timeout": 300
     },
     {
@@ -2205,7 +2184,6 @@
     },
     {
       "id": "nano-ui-drawer",
-      "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire",
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
@@ -2303,7 +2281,7 @@
     {"id": "aws-iam-list-member-shape-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_iam_list_member_shape_core.py", "timeout": 120},
     {"id": "nightly-aws-v4-roundtrip", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 2400},
     {"id": "nightly-aws-tunnel-recovery", "target": "offline", "cloud": "aws", "kind": "api", "pending": "written (aws-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/aws-tunnel-recovery.py", "timeout": 900},
-    {"id": "nano-ui-aws-rds-persist", "target": "nano", "cloud": "aws", "kind": "ui", "pending": "script removed with the legacy v3 console (0218b1f16, rule 12); retarget to the v4 console (/v4/<cloud>/) or retire", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-rds-persist.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-rds-persist", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-rds-persist.mjs", "timeout": 600},
     {"id": "aws-nano-registry-pglite-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_nano_registry_pglite_core.py", "timeout": 120},
     {"id": "offline-api-apigateway-v1-gateway", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},
     {"id": "nano-api-apigateway-v1-gateway", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},
@@ -2313,20 +2291,20 @@
     {"id": "gcp-eventarc-nano-http-bridge", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_eventarc_nano_http.py", "timeout": 120},
     {"id": "nano-ui-gateway-eventarc-portal-e2e", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "live script already targets the v4 console (/nano/v4/gcp/); kept pending only for infrastructure: it needs the portal serving the vendored Nano bundle plus a signed-in cl_session cookie, run by hand against a portal on a COPY of the DB (not run here: :8099 is off limits)", "cmd": "PORTAL=$PORTAL COOKIE=$COOKIE MODE=sw WS_PKG=$PWD/relay-deps/ws node wasm/relay/e2e-gateway-portal.mjs", "timeout": 900},
     {"id": "nano-core-hosted-gw-egress-live", "target": "nano", "cloud": "gcp", "kind": "core", "pending": "live script, not a v3-console suite; kept pending only for infrastructure: needs `wrangler dev` (workerd) running the real worker.js plus outbound internet to example.com; wrangler is not installed on this machine", "cmd": "WS_PKG=$PWD/relay-deps/ws node wasm/relay/test-worker-gw-live.mjs", "timeout": 300},
-    {"id": "bidi-aws-cli-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "CLI<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "bidi-aws-sdk-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "SDK<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "bidi-aws-api-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "API<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "crawl-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "generic crawler step: click toolbar/row actions, flip toggles, open dropdowns, flag any that error/do nothing", "cmd": "true", "timeout": 60},
-    {"id": "validation-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "UI form validation: invalid input refused with field-level real-cloud wording, no stack traces/[object Object]", "cmd": "true", "timeout": 60},
+    {"id": "bidi-aws-cli-ui", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "SDKPY=wasm/ui-tests/_aws_roundtrip_cli.py ONLY=s3,sqs,sns,dynamodb,secretsmanager,iam,ssm,kinesis,cloudwatch,eventbridge node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 60},
+    {"id": "bidi-aws-sdk-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "retired: covered by nightly-aws-v4-roundtrip (boto3 <-> v4 console, 23 services)", "cmd": "true", "timeout": 60},
+    {"id": "bidi-aws-api-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "retired: covered by nightly-aws-v4-roundtrip (the v4 console speaks only the native wire, so the API leg is the SDK leg)", "cmd": "true", "timeout": 60},
+    {"id": "crawl-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "not retargeted: v4 action crawler (toolbar/row actions, toggles) not written; tab-walk covered by nano-ui-aws-real-tabs", "cmd": "true", "timeout": 60},
+    {"id": "validation-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "script written (wasm/ui-tests/validate-aws-v4-validation.mjs) but 13/17 on its first run: SNS accepts an invalid topic name (a real-console rejection is missing) and the valid-name control steps for SQS/DynamoDB/IAM need driver fixes; not registered live until green", "cmd": "true", "timeout": 60},
     {"id": "bidi-gcp-cli-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip (UI <-> native wire create/list/delete both ways for 17 GCP services; gcloud, the SDKs and the v4 console share that one wire) and nightly-gcp-compute-vertex-bidi", "cmd": "true", "timeout": 60},
     {"id": "bidi-gcp-sdk-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip and nightly-gcp-compute-vertex-bidi (the native REST wire is exactly what the Google client libraries call); the native-SDK conformance suites offline-sdk-go-gcp / offline-sdk-java-gcp cover the SDK side", "cmd": "true", "timeout": 60},
     {"id": "bidi-gcp-api-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: covered by nightly-gcp-v4-roundtrip (UI <-> native REST API both ways) and nightly-gcp-compute-vertex-bidi", "cmd": "true", "timeout": 60},
     {"id": "crawl-gcp-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "placeholder (cmd true) kept pending: the generic click-everything crawler is the cloud=all suite nano-ui-crawl, which is itself pending until ui_crawler.mjs (absent from the trunk) is rebuilt for the v4 consoles, outside the gcp-only scope; wire the gcp shard there, not here. The offline appliance has no browser console", "cmd": "true", "timeout": 60},
     {"id": "validation-gcp-ui", "target": "offline", "cloud": "gcp", "kind": "ui", "pending": "retired: wire-level validation (real Google-shaped 4xx, no stack traces / undefined / [object Object]) is covered by nightly-gcp-validation; the v4 console's own create forms are exercised by nightly-gcp-v4-roundtrip step A", "cmd": "true", "timeout": 60},
-    {"id": "bidi-azure-cli-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "CLI<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "bidi-azure-sdk-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "SDK<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "bidi-azure-api-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "API<->UI bi-directional data comparison for every service (create in one, read in other, delete both ways); only core types covered today", "cmd": "true", "timeout": 60},
-    {"id": "crawl-azure-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "generic crawler step: click toolbar/row actions, flip toggles, open dropdowns, flag any that error/do nothing", "cmd": "true", "timeout": 60},
-    {"id": "validation-azure-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "UI form validation: invalid input refused with field-level real-cloud wording, no stack traces/[object Object]", "cmd": "true", "timeout": 60}
+    {"id": "bidi-azure-cli-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "retired: covered by offline-ui-azure-v4-bidirectional (CLI->UI via az rest, API->UI, UI->API, delete)", "cmd": "true", "timeout": 60},
+    {"id": "bidi-azure-sdk-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "retired: placeholder (cmd true); no Azure SDK->UI driver exists for v4, SDKs share the ARM wire the API->UI suites drive; build a real one when needed", "cmd": "true", "timeout": 60},
+    {"id": "bidi-azure-api-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "retired: covered by offline-ui-azure-v4-bidirectional and the nano-ui-azure-* v4 actions suites (API->UI and UI->API per service)", "cmd": "true", "timeout": 60},
+    {"id": "crawl-azure-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "retired: placeholder (cmd true); the generic crawler (ui_crawler.mjs, nano-ui-crawl) was removed with the v3 console and is not rebuilt for v4 yet", "cmd": "true", "timeout": 60},
+    {"id": "validation-azure-ui", "target": "offline", "cloud": "azure", "kind": "ui", "pending": "retired: placeholder (cmd true); no v4 form-validation suite exists yet", "cmd": "true", "timeout": 60}
   ]
 }
