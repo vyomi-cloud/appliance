@@ -43,7 +43,7 @@ Run evidence: genuine Nano, headless system Chrome, `ONLY=<ids> NANO_DIR=$PWD/wa
 | nano-post-create-azure-vm-ssh | C | needs tunnel relay + VM compute; offline twin exists |
 | bidi-azure-sdk-ui, crawl-azure-ui, validation-azure-ui | C | placeholders (cmd true) with no v4 implementation |
 
-Counts (35 suites): 14 A now passing and live, 4 A retargeted but still pending (keyvault-tabs, cognitiveservices + 4 offline = 6 entries), 1 pending, 7 B, 8 C-ish retired.
+Counts (35 suites): A passing and live 14; A retargeted but still pending 6 (keyvault-tabs, cognitiveservices, 4 offline); pending, no driver 1 (nano-ui-azure-app); B 7; C 7.
 
 ## Known gaps found
 - v4 key vault secrets list keeps an API-deleted secret (keyvaults driver).
