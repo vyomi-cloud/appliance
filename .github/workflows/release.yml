@@ -136,34 +136,8 @@ jobs:
           mkdir -p dist
           python3 scripts/gen_services_json.py "${{ steps.ver.outputs.version }}" dist/services.json
 
-      # `vyomi mcp` (MCP server for AI coding agents) is the compiled cmd/vyomi
-      # binary. Windows gets it inside vyomi.exe (MSI); macOS/Linux packages run
-      # the bash launcher, so ship the binary per OS/arch under
-      # packaging/docker/mcp/ (picked up by the tarball, the Homebrew formulas
-      # and the .deb/.rpm builds below) and as standalone release assets.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: cmd/vyomi/go.mod
-          cache-dependency-path: cmd/vyomi/go.mod
-      - name: Build vyomi-mcp (macOS/Linux/Windows)
-        # Never let this block the release: packaging tolerates missing binaries
-        # (formula + .deb/.rpm skip them; `vyomi mcp` then prints a clear error).
-        continue-on-error: true
-        run: |
-          VER="${{ steps.ver.outputs.version }}"
-          # Embed THIS release's version + service registry in the MCP knowledge.
-          python3 scripts/gen_mcp_matrix.py
-          mkdir -p dist
-          for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; do
-            os="${target%/*}"; arch="${target#*/}"; ext=""
-            [ "$os" = windows ] && ext=".exe"
-            out="packaging/docker/mcp/$os-$arch/vyomi-mcp$ext"
-            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
-              go -C cmd/vyomi build -trimpath -ldflags "-s -w" -o "../../$out" .
-            cp "$out" "dist/vyomi-mcp-$VER-$os-$arch$ext"
-          done
-          rm -rf packaging/docker/mcp/windows-amd64   # Windows ships vyomi.exe in the MSI
-          ls -l packaging/docker/mcp/*/ dist/vyomi-mcp-*
+      # The MCP server (`vyomi-mcp`) is no longer distributed with the appliance: it ships only inside the vyomi-tunnel
+      # npm package (`vyomi-tunnel mcp`, built by tunnel-release.yml / scripts/build_tunnel_mcp.sh).
 
       - name: Build source tarball
         run: |

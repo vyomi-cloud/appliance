@@ -21,21 +21,14 @@ case "${1:-up}" in
     ;;
 esac
 
-# `vyomi mcp`: the MCP server for AI coding agents (Claude Code, Cursor, ...).
-# A compiled helper shipped per OS/arch next to the compose file; it speaks
-# JSON-RPC on stdout, so nothing may be printed here except on failure (stderr).
-# Needs neither Docker nor the compose file, so it runs before both are checked.
+# `vyomi mcp` moved: the MCP server ships only inside vyomi-tunnel (`vyomi-tunnel mcp`). VYOMI_MCP_BIN still
+# overrides, for development. Needs neither Docker nor the compose file, so it runs before both are checked.
 if [ "${1:-}" = "mcp" ]; then
   shift
-  _self="$(cd "$(dirname "$0")" && pwd)"
-  case "$(uname -s)" in Darwin) _os=darwin ;; Linux) _os=linux ;; *) _os=unknown ;; esac
-  case "$(uname -m)" in x86_64|amd64) _arch=amd64 ;; arm64|aarch64) _arch=arm64 ;; *) _arch=unknown ;; esac
-  for _m in "${VYOMI_MCP_BIN:-}" \
-            "/usr/share/vyomi-docker/mcp/$_os-$_arch/vyomi-mcp" \
-            "$_self/../share/vyomi-docker/mcp/$_os-$_arch/vyomi-mcp"; do
-    if [ -n "$_m" ] && [ -x "$_m" ]; then exec "$_m" "$@"; fi
-  done
-  echo "vyomi: no MCP server binary for $_os-$_arch in this install (reinstall vyomi-docker, or set VYOMI_MCP_BIN)." >&2
+  if [ -n "${VYOMI_MCP_BIN:-}" ] && [ -x "${VYOMI_MCP_BIN}" ]; then exec "${VYOMI_MCP_BIN}" "$@"; fi
+  echo "vyomi: the MCP server now ships in vyomi-tunnel, not in this install." >&2
+  echo "  install it:  npm i -g vyomi-tunnel   (or: brew install vyomi-cloud/tap/vyomi-tunnel)" >&2
+  echo "  then run:    claude mcp add --scope user vyomi -- vyomi-tunnel mcp" >&2
   exit 1
 fi
 
