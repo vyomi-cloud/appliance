@@ -1096,7 +1096,12 @@ def check_minio_mirror(endpoint: str) -> None:
             grade("aws.s3.minio", "object.get.via-minio-direct", 200,
                   got == payload, f"bytes={len(got)} match={got == payload}")
     except Exception as e:
-        grade("aws.s3.minio", "object.get.via-minio-direct", 0, False, f"err={e!r}")
+        # The MinIO container is not published on the host in every stack (docker-compose.cloudlite.yml keeps it on
+        # vyomi-net only): an unreachable host port is an environment limit, not a simulator defect -> SKIP.
+        if type(e).__name__ == "EndpointConnectionError":
+            record("aws.s3.minio", "object.get.via-minio-direct", SKIP, f"MinIO host port not published ({minio_url})")
+        else:
+            grade("aws.s3.minio", "object.get.via-minio-direct", 0, False, f"err={e!r}")
 
 
 def check_iam_eval_all(endpoint: str) -> None:

@@ -228,8 +228,14 @@ func main() {
 		MessageAttributes: map[string]types.MessageAttributeValue{"k": {DataType: aws.String("String"), StringValue: aws.String("v")}}})
 	chk("Publish returns a MessageId", err == nil && aws.ToString(pub.MessageId) != "", fmt.Sprint(err))
 	delivered := false
-	for _, d := range deliveries(endpoint) {
-		delivered = delivered || (d.Kind == "Notification" && d.Protocol == "email" && d.Message == "go-hello")
+	// Push protocols (email/HTTP/Lambda) are delivered asynchronously (as on real SNS): poll the log.
+	for i := 0; i < 40 && !delivered; i++ {
+		for _, d := range deliveries(endpoint) {
+			delivered = delivered || (d.Kind == "Notification" && d.Protocol == "email" && d.Message == "go-hello")
+		}
+		if !delivered {
+			time.Sleep(250 * time.Millisecond)
+		}
 	}
 	chk("Publish was delivered to the email subscription (message log)", delivered, "")
 	_, err = c.Publish(ctx, &sns.PublishInput{TopicArn: aws.String(arn), Message: aws.String("")})
