@@ -8322,6 +8322,14 @@ def _catalog_memory_mb(instance_type: str, cloud: str) -> int:
 def _docker_instance_memory_mb(instance: dict) -> int:
     """RAM (MB) a Docker-backed instance is started with (single source for the container limit AND the mesh cap).
     Explicit memory wins; in mesh mode the instance TYPE's real memory (catalog) is used and counted, else 1024."""
+    try:   # fixed-slot host profile (Cloud Shell): every instance is the profile's size, whatever type it asks for
+        from core import mesh as _mp
+        if _mp.mesh_mode():
+            _ps = _mp.profile_instance_size()
+            if _ps:
+                return int(_ps["mem_mb"])
+    except Exception:
+        pass
     try:
         explicit = int(instance.get("memory_mb") or instance.get("memory") or 0)
     except (TypeError, ValueError):
@@ -8428,6 +8436,13 @@ def _docker_instance_obj(instance: dict):
             _mv = _cs.mesh_vcpus(instance.get("instance_type") or instance.get("machine_type") or instance.get("machineType")
                                  or instance.get("vm_size") or "", _mesh_cloud_of(instance))
             cpus = _mv or cpus
+    except Exception:
+        pass
+    try:   # fixed-slot host profile: the container's CPU limit is the profile's too (same source as the slot count)
+        from core import mesh as _mp2
+        _ps2 = _mp2.profile_instance_size() if _mp2.mesh_mode() else None
+        if _ps2:
+            cpus = float(_ps2["cpus"])
     except Exception:
         pass
     mem = _docker_instance_memory_mb(instance)

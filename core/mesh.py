@@ -298,10 +298,64 @@ def _memory_split(cap_mb: int) -> dict:
     return {"compute": int(cap_mb * (1 - AI_SHARE)), "ai": int(cap_mb * AI_SHARE)}
 
 
+# ---- host profiles: a host whose compute is a FIXED-SIZE slot pool (v4/cloudshell-capacity) -------------------------------
+# VYOMI_MESH_HOST_PROFILE=cloudshell: Mesh compute on a Google Cloud Shell VM. Every instance is the same size, CPU is an
+# ENFORCED budget (slots), the AI pack never loads (no LLM on this host), and a reserve is held back for Docker + the agent.
+# Numbers are what was MEASURED on one Cloud Shell session (4 vCPU, 15,994 MB total, 13,111 MB available at idle, 4.8 GB
+# persistent /home, ~10 GB free on /, no /dev/kvm). session_max_s / weekly_hours are Google's DOCUMENTED figures (pages
+# disagree: 50 vs 60 h/week, idle 20/40/60 min), NOT enforced here: the console shows them as nominal.
+HOST_PROFILES: dict[str, dict] = {
+    "cloudshell": {"instance_cpus": 0.5, "instance_mem_mb": 2048, "reserve_mem_mb": 4096, "reserve_cpus": 1.0,
+                   "session_max_s": 12 * 3600, "weekly_hours_nominal": 50},
+}
+_PROFILE_ENV = {"instance_cpus": ("VYOMI_MESH_PROFILE_INSTANCE_CPUS", float), "instance_mem_mb": ("VYOMI_MESH_PROFILE_INSTANCE_MB", int),
+                "reserve_mem_mb": ("VYOMI_MESH_PROFILE_RESERVE_MB", int), "reserve_cpus": ("VYOMI_MESH_PROFILE_RESERVE_CPUS", float)}
+_PROCESS_STARTED = time.time()
+
+
+def host_profile() -> Optional[dict]:
+    """The active host profile (name + sizes, env-overridable) or None for the normal 70%/50-50 budget."""
+    name = os.environ.get("VYOMI_MESH_HOST_PROFILE", "").strip().lower()
+    base = HOST_PROFILES.get(name)
+    if not base:
+        return None
+    p = {"name": name, **base}
+    for key, (env, cast) in _PROFILE_ENV.items():
+        raw = os.environ.get(env)
+        if raw:
+            try:
+                v = cast(raw)
+                if v > 0:
+                    p[key] = v
+            except ValueError:
+                pass
+    return p
+
+
+def _profile_cpus() -> int:
+    return int(os.environ.get("VYOMI_MESH_CPUS") or 0) or os.cpu_count() or 1
+
+
+def _profile_slots(p: dict, cap_mb: int) -> int:
+    """Instances the host can hold: the smaller of what RAM and CPU allow (never negative)."""
+    by_mem = int(cap_mb // p["instance_mem_mb"])
+    by_cpu = int(max(0.0, _profile_cpus() - p["reserve_cpus"]) // p["instance_cpus"])
+    return max(0, min(by_mem, by_cpu))
+
+
+def profile_instance_size() -> Optional[dict]:
+    """Fixed per-instance size under a host profile ({cpus, mem_mb}), None otherwise (callers keep their own sizing)."""
+    p = host_profile()
+    return {"cpus": p["instance_cpus"], "mem_mb": int(p["instance_mem_mb"])} if p else None
+
+
 def resource_budget() -> dict:
     host_mb = host_memory_mb()
     limit_mb = container_memory_limit_mb()
     cap_mb = int(host_mb * CAP_FRACTION)
+    prof = host_profile()
+    if prof:                              # fixed-slot host: all of RAM minus the reserve is compute (no AI pack here)
+        cap_mb = max(0, host_mb - int(prof["reserve_mem_mb"]))
     if limit_mb:                         # Docker: min(70% host, Docker VM limit)
         cap_mb = min(cap_mb, limit_mb)
     cap_env = os.environ.get("VYOMI_MESH_CAP_MB")          # explicit mesh budget (e.g. 8192 on a 2-core/8GB Codespace)
@@ -314,7 +368,7 @@ def resource_budget() -> dict:
         disk_free_gb = round(du.free / 1e9, 1)
     except Exception:
         disk_cap_gb = disk_free_gb = 0.0
-    return {
+    out = {
         "cap_fraction": CAP_FRACTION,
         "host_memory_mb": host_mb,
         "docker_vm_limit_mb": limit_mb,
@@ -323,6 +377,12 @@ def resource_budget() -> dict:
         "cpu_cap_cores": round(cpus * CAP_FRACTION, 2),   # shared / overcommittable (not enforced)
         "disk_quota_gb": disk_cap_gb, "disk_free_gb": disk_free_gb,
     }
+    if prof:
+        out["memory_split_mb"] = {"compute": int(cap_mb), "ai": 0}
+        out["cpu_cap_cores"] = round(max(0.0, cpus - prof["reserve_cpus"]), 2)
+        out["profile"] = {"name": prof["name"], "instance_cpus": prof["instance_cpus"], "instance_mem_mb": int(prof["instance_mem_mb"]),
+                          "slots_total": _profile_slots(prof, cap_mb)}
+    return out
 
 
 class MeshCapacityError(Exception):
@@ -362,6 +422,44 @@ def _purge_locked(now: Optional[float] = None) -> None:
             _LEDGER[kind].pop(ident, None)
 
 
+def _slots_exhausted_locked(kind: str, n: int, exclude: Optional[str] = None) -> bool:
+    """Host profile only: would `n` more compute instances exceed the fixed slot pool? (caller holds _LEDGER_LOCK)"""
+    if kind != "compute":
+        return False
+    prof = host_profile()
+    if not prof:
+        return False
+    held = len([i for i in _LEDGER["compute"] if i != exclude])
+    return held + n > _profile_slots(prof, resource_budget()["memory_cap_mb"])
+
+
+def capacity() -> dict:
+    """What the console shows for a fixed-slot host: slots total/used/free, RAM + CPU in use, session time left.
+    `session.left_s` counts from VYOMI_MESH_SESSION_STARTED (epoch s) or this process's start; weekly hours are NOMINAL
+    (Google's documented figure, not read from the user's account)."""
+    prof = host_profile()
+    bud = resource_budget()
+    with _LEDGER_LOCK:
+        _purge_locked()
+        held = len(_LEDGER["compute"])
+        mem_used = sum(_LEDGER["compute"].values())
+    if not prof:
+        return {"profile": None, "memory_cap_mb": bud["memory_cap_mb"], "memory_used_mb": mem_used}
+    total = _profile_slots(prof, bud["memory_cap_mb"])
+    try:
+        started = float(os.environ.get("VYOMI_MESH_SESSION_STARTED") or _PROCESS_STARTED)
+    except ValueError:
+        started = _PROCESS_STARTED
+    left = max(0, int(prof["session_max_s"] - (time.time() - started)))
+    return {"profile": prof["name"],
+            "instance": {"cpus": prof["instance_cpus"], "mem_mb": int(prof["instance_mem_mb"])},
+            "slots": {"total": total, "used": held, "free": max(0, total - held)},
+            "memory": {"cap_mb": bud["memory_cap_mb"], "used_mb": mem_used, "reserve_mb": int(prof["reserve_mem_mb"])},
+            "cpu": {"cap_cores": bud["cpu_cap_cores"], "used_cores": round(held * prof["instance_cpus"], 2)},
+            "session": {"max_s": int(prof["session_max_s"]), "left_s": left, "nominal": True},
+            "weekly_hours_nominal": prof["weekly_hours_nominal"]}
+
+
 def usage() -> dict:
     with _LEDGER_LOCK:
         _purge_locked()
@@ -394,6 +492,8 @@ def allocate(kind: str, ident: str, mb: int, **kw) -> None:
         on = mesh_mode() if kw.get("enforce") is None else kw["enforce"]
         if on and used + int(mb) > budget:
             raise MeshCapacityError(kw.get("cloud", "aws"), kind, int(mb), max(0, budget - used), kw.get("zone", "-"))
+        if on and _slots_exhausted_locked(kind, 1, exclude=ident):
+            raise MeshCapacityError(kw.get("cloud", "aws"), kind, int(mb), 0, kw.get("zone", "-"))
         _LEDGER[kind][ident] = int(mb)
         _EXPIRES[kind].pop(ident, None)
 
@@ -413,6 +513,8 @@ def reserve_slots(kind: str, n: int, mb: int, *, cloud: str = "aws", zone: str =
         used = sum(_LEDGER[kind].values())
         if used + n * int(mb) > budget:
             raise MeshCapacityError(cloud, kind, n * int(mb), max(0, budget - used), zone)
+        if _slots_exhausted_locked(kind, n):
+            raise MeshCapacityError(cloud, kind, n * int(mb), 0, zone)
         ids = [f"{SLOT_PREFIX}{uuid.uuid4().hex[:12]}" for _ in range(n)]
         deadline = time.monotonic() + SLOT_TTL_S
         for i in ids:
@@ -632,6 +734,7 @@ def status() -> dict:
         "tunnel": _relay_info(), "nano_ui": NANO_URL, **endpoints(),
         "ai": _ai_status(on),
         "llm": _llm_label(),
+        "capacity": capacity() if host_profile() else None,   # fixed-slot host (Cloud Shell): slots / RAM / CPU / session left
     }
 
 
@@ -710,6 +813,11 @@ def register(app) -> None:
     def _status(request: Request):
         g = _guard(request)
         return g or _cors(JSONResponse(status()), request)
+
+    @app.get("/mesh/capacity", include_in_schema=False)
+    def _capacity(request: Request):
+        g = _guard(request)
+        return g or _cors(JSONResponse(capacity()), request)
 
     @app.post("/mesh/pair/start", include_in_schema=False)
     def _start(request: Request):
