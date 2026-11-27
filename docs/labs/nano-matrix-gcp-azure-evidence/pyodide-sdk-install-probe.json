@@ -1,0 +1,342 @@
+{
+ "gcp": [
+  {
+   "pkg": "google-genai",
+   "mod": "google.genai",
+   "install": "ValueError: Requested 'idna>=3.18', but idna==3.7 is already installed",
+   "import": "See https://pyodide.org/en/stable/usage/loading-packages.html for more details."
+  },
+  {
+   "pkg": "google-auth",
+   "mod": "google.auth",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "google-api-core",
+   "mod": "google.api_core",
+   "install": "ValueError: Requested 'requests<3.0.0,>=2.33.0', but requests==2.31.0 is already installed",
+   "import": "ModuleNotFoundError: No module named 'google.api_core'"
+  },
+  {
+   "pkg": "google-cloud-aiplatform",
+   "mod": "vertexai",
+   "install": "ValueError: Requested 'requests<3.0.0,>=2.33.0', but requests==2.31.0 is already installed",
+   "import": "ModuleNotFoundError: No module named 'vertexai'"
+  },
+  {
+   "pkg": "google-cloud-pubsub",
+   "mod": "google.cloud.pubsub_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-firestore",
+   "mod": "google.cloud.firestore",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-storage",
+   "mod": "google.cloud.storage",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-kms",
+   "mod": "google.cloud.kms",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-logging",
+   "mod": "google.cloud.logging",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-monitoring",
+   "mod": "google.cloud.monitoring_v3",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-trace",
+   "mod": "google.cloud.trace_v2",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-functions",
+   "mod": "google.cloud.functions_v2",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-eventarc",
+   "mod": "google.cloud.eventarc_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-api-gateway",
+   "mod": "google.cloud.apigateway_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-compute",
+   "mod": "google.cloud.compute_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-iam",
+   "mod": "google.cloud.iam_admin_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-modelarmor",
+   "mod": "google.cloud.modelarmor_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "google-cloud-discoveryengine",
+   "mod": "google.cloud.discoveryengine_v1",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'google.cloud'"
+  },
+  {
+   "pkg": "pyyaml",
+   "mod": "yaml",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "cryptography",
+   "mod": "cryptography.fernet",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "langgraph",
+   "mod": "langgraph.graph",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'langgraph'"
+  },
+  {
+   "pkg": "functions-framework",
+   "mod": "functions_framework",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'functions_framework'"
+  }
+ ],
+ "azure": [
+  {
+   "pkg": "azure-core",
+   "mod": "azure.core",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-identity",
+   "mod": "azure.identity",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-resource",
+   "mod": "azure.mgmt.resource",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-cognitiveservices",
+   "mod": "azure.mgmt.cognitiveservices",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-apimanagement",
+   "mod": "azure.mgmt.apimanagement",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-frontdoor",
+   "mod": "azure.mgmt.frontdoor",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-network",
+   "mod": "azure.mgmt.network",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-servicebus",
+   "mod": "azure.mgmt.servicebus",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-search",
+   "mod": "azure.mgmt.search",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-web",
+   "mod": "azure.mgmt.web",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-storage",
+   "mod": "azure.mgmt.storage",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-eventgrid",
+   "mod": "azure.mgmt.eventgrid",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-appcontainers",
+   "mod": "azure.mgmt.appcontainers",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-loganalytics",
+   "mod": "azure.mgmt.loganalytics",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-applicationinsights",
+   "mod": "azure.mgmt.applicationinsights",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-monitor",
+   "mod": "azure.mgmt.monitor",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-mgmt-keyvault",
+   "mod": "azure.mgmt.keyvault",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-ai-agents",
+   "mod": "azure.ai.agents",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-ai-contentsafety",
+   "mod": "azure.ai.contentsafety",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-servicebus",
+   "mod": "azure.servicebus",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-data-tables",
+   "mod": "azure.data.tables",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-storage-blob",
+   "mod": "azure.storage.blob",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-search-documents",
+   "mod": "azure.search.documents",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-keyvault-keys",
+   "mod": "azure.keyvault.keys",
+   "install": "ValueError: Requested 'cryptography>=44.0.2', but cryptography==42.0.5 is already installed",
+   "import": "ModuleNotFoundError: No module named 'azure.keyvault'"
+  },
+  {
+   "pkg": "azure-monitor-opentelemetry-exporter",
+   "mod": "azure.monitor.opentelemetry.exporter",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'azure.monitor'"
+  },
+  {
+   "pkg": "azure-monitor-query",
+   "mod": "azure.monitor.query",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "azure-functions",
+   "mod": "azure.functions",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "openai",
+   "mod": "openai",
+   "install": "ValueError: Requested 'typing-extensions<5,>=4.14', but typing-extensions==4.11.0 is already installed",
+   "import": "ModuleNotFoundError: No module named 'openai'"
+  },
+  {
+   "pkg": "PyJWT",
+   "mod": "jwt",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "cryptography",
+   "mod": "cryptography.hazmat.primitives.ciphers.aead",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "langgraph",
+   "mod": "langgraph.graph",
+   "install": "You can use `await micropip.install(..., keep_going=True)` to get a list of all packages with missing wheels.",
+   "import": "ModuleNotFoundError: No module named 'langgraph'"
+  },
+  {
+   "pkg": "fastapi",
+   "mod": "fastapi",
+   "install": "ValueError: Requested 'typing-extensions>=4.16.0', but typing-extensions==4.11.0 is already installed",
+   "import": "ModuleNotFoundError: No module named 'fastapi'"
+  },
+  {
+   "pkg": "uvicorn",
+   "mod": "uvicorn",
+   "install": "ok",
+   "import": "ok"
+  },
+  {
+   "pkg": "requests",
+   "mod": "requests",
+   "install": "ok",
+   "import": "ok"
+  }
+ ]
+}

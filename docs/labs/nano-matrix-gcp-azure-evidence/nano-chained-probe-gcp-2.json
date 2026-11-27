@@ -1,0 +1,121 @@
+[
+ {
+  "label": "functions",
+  "m": "POST",
+  "u": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl",
+  "status": 200,
+  "head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/c6721f723893-1/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"c6721f723893-1/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "label": "functions",
+  "m": "PUT",
+  "u": "/gcf-upload/gcf-v2-sources-421047385945-us-central1/c6721f723893-1/function-source.zip",
+  "status": 200,
+  "head": ""
+ },
+ {
+  "label": "functions",
+  "m": "POST",
+  "u": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-asset-status",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/operations/e2d31f74-423b-f5c0-0245-6021f3ec49dd\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:46:21.653000Z\", \"endTime\": \"2026-11-25T17:46:21.653000Z\", \"target\": \"projects/"
+ },
+ {
+  "label": "functions",
+  "m": "GET",
+  "u": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-asset-status",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/locations/us-central1/functions/facilities-asset-status\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"c6721f723893-1/function-source.zi"
+ },
+ {
+  "label": "functions-state",
+  "m": "",
+  "u": "",
+  "status": 0,
+  "head": "{\"state\":\"ACTIVE\",\"url\":\"http://localhost/gcf/nano-project/us-central1/facilities-asset-status\"}"
+ },
+ {
+  "label": "functions-invoke(nano-project)",
+  "m": "POST",
+  "u": "/gcf/nano-project/us-central1/facilities-asset-status",
+  "status": 403,
+  "head": "Error: Forbidden\nYour client does not have permission to get URL / from this server."
+ },
+ {
+  "label": "functions-invoke(vyomi-project)",
+  "m": "POST",
+  "u": "/gcf/vyomi-project/us-central1/facilities-asset-status",
+  "status": 404,
+  "head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-asset-status not found\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "label": "pubsub",
+  "m": "PUT",
+  "u": "/v1/projects/vyomi-project/topics/topic-one",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/topics/topic-one\"}"
+ },
+ {
+  "label": "pubsub",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/topics/topic-one:publish",
+  "status": 200,
+  "head": "{\"messageIds\": [\"1795628784136001\"]}"
+ },
+ {
+  "label": "pubsub",
+  "m": "PUT",
+  "u": "/v1/projects/vyomi-project/subscriptions/sub-one",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/subscriptions/sub-one\", \"topic\": \"projects/nano-project/topics/topic-one\", \"pushConfig\": {}, \"ackDeadlineSeconds\": 10, \"messageRetentionDuration\": \"604800s\", \"expirationPolicy\": {\"ttl\": \"2678400s\"}}"
+ },
+ {
+  "label": "pubsub",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/subscriptions/sub-one:pull",
+  "status": 200,
+  "head": "{}"
+ },
+ {
+  "label": "iam",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/serviceAccounts",
+  "status": 200,
+  "head": "{\"name\": \"projects/nano-project/serviceAccounts/agent-sa@nano-project.iam.gserviceaccount.com\", \"projectId\": \"nano-project\", \"uniqueId\": \"367464781649032600595\", \"email\": \"agent-sa@nano-project.iam.gserviceaccount.com\", \"displayName\": \"agent\", \"description\": \"\", \"etag\": \"c62SecG9QCE=\", \"oauth2Client"
+ },
+ {
+  "label": "iam(nano-project SA)",
+  "m": "POST",
+  "u": "/v1/projects/-/serviceAccounts/agent-sa%40nano-project.iam.gserviceaccount.com:generateIdToken",
+  "status": 200,
+  "head": "{\"token\": \"eyJhbGciOiJSUzI1NiIsImtpZCI6IjFhNDc3ZWM4ZTIzNmFjNjZmMTg3M2UyYjg0MTliODYzZmM2OTU4NTkiLCJ0eXAiOiJKV1QifQ.eyJhdWQiOiJodHRwczovL3giLCJhenAiOiJhZ2VudC1zYUBuYW5vLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJleHAiOjE3OTU2MzIzODQsImlhdCI6MTc5NTYyODc4NCwiaXNzIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY2"
+ },
+ {
+  "label": "project-id",
+  "m": "GET",
+  "u": "/storage/v1/b?project=some-other-project",
+  "status": 403,
+  "head": "{\"error\": {\"code\": 403, \"message\": \"The caller does not have storage.buckets.list access to the Google Cloud project. Permission 'storage.buckets.list' denied on resource (or it may not exist).\", \"errors\": [{\"message\": \"The caller does not have storage.buckets.list access to the Google Cloud project"
+ },
+ {
+  "label": "models",
+  "m": "GET",
+  "u": "/v1beta1/publishers",
+  "status": 200,
+  "head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"pub"
+ },
+ {
+  "label": "models",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/gemini-2.0-flash:generateContent",
+  "status": 503,
+  "head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}"
+ },
+ {
+  "label": "models-embed",
+  "m": "POST",
+  "u": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/text-embedding-005:predict",
+  "status": 200,
+  "head": "{\"predictions\": [{\"embeddings\": {\"values\": [-0.0867183580994606, 0.03311825916171074, 0.018308669328689575, 0.06514111161231995, -0.02445134148001671, -0.059994928538799286, 0.04904146119952202, 0.00025013863341882825, -0.04823235794901848, -0.02967565692961216, -0.032512299716472626, 0.018177282065"
+ }
+]

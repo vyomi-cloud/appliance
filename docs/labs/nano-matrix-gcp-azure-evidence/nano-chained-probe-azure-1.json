@@ -1,0 +1,205 @@
+[
+ {
+  "label": "arm-rg",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourcegroups/rg-facilities?api-version=2025-04-01",
+  "status": 201,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities\",\"name\":\"rg-facilities\",\"type\":\"Microsoft.Resources/resourceGroups\",\"location\":\"eastus\",\"tags\":{},\"properties\":{\"provisioningState\":\"Succeeded\"}}"
+ },
+ {
+  "label": "openai",
+  "m": "GET",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.CognitiveServices/locations/eastus/models?api-ve",
+  "status": 200,
+  "head": "{\"value\":[{\"kind\":\"OpenAI\",\"skuName\":\"S0\",\"isDefaultVersion\":true,\"maxCapacity\":1000,\"vyomiAvailability\":{\"state\":\"available\",\"label\":\"Web LLM (in browser)\",\"available\":true},\"vyomiLicense\":{\"license\":\"Apache License 2.0\",\"licenseId\":\"Apache-2.0\",\"licenseUrl\":\"https://www.apache."
+ },
+ {
+  "label": "openai-models",
+  "m": "",
+  "u": "",
+  "status": 0,
+  "head": "[\"smollm2-360m\",\"qwen2.5-0.5b\",\"llama3.2-1b\",\"qwen2.5-1.5b\",\"all-minilm-l6-v2\",\"smollm2-360m\",\"qwen2.5-0.5b\",\"llama3.2-1b\",\"qwen2.5-1.5b\",\"all-minilm-l6-v2\"]"
+ },
+ {
+  "label": "openai",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.CognitiveServices/a",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.CognitiveServices/accounts/facilities-openai\",\"name\":\"facilities-openai\",\"type\":\"Microsoft.CognitiveServices/accounts\",\"kind\":\"OpenAI\",\"location\":\"eastus\",\"etag\":\"\\\"0c89b7c"
+ },
+ {
+  "label": "openai",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.CognitiveServices/a",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.CognitiveServices/accounts/facilities-openai/deployments/chat\",\"name\":\"chat\",\"type\":\"Microsoft.CognitiveServices/accounts/deployments\",\"etag\":\"\\\"287ec5af00fc4536a2245b1971a"
+ },
+ {
+  "label": "openai-chat",
+  "m": "POST",
+  "u": "/openai/deployments/chat/chat/completions?api-version=2024-10-21",
+  "status": 401,
+  "head": "{\"error\": {\"code\": \"401\", \"message\": \"Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API.\"}}"
+ },
+ {
+  "label": "openai-embed",
+  "m": "POST",
+  "u": "/openai/deployments/embed/embeddings?api-version=2024-10-21",
+  "status": 401,
+  "head": "{\"error\": {\"code\": \"401\", \"message\": \"Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API.\"}}"
+ },
+ {
+  "label": "openai-unknown",
+  "m": "POST",
+  "u": "/openai/deployments/nope/chat/completions?api-version=2024-10-21",
+  "status": 401,
+  "head": "{\"error\": {\"code\": \"401\", \"message\": \"Access denied due to missing subscription key. Make sure to include subscription key when making requests to an API.\"}}"
+ },
+ {
+  "label": "keyvault-arm",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.KeyVault/vaults/fac",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.KeyVault/vaults/facilities-kv\",\"name\":\"facilities-kv\",\"type\":\"Microsoft.KeyVault/vaults\",\"location\":\"eastus\",\"tags\":{},\"properties\":{\"tenantId\":\"00000000-0000-0000-0000-000"
+ },
+ {
+  "label": "keyvault-7.5",
+  "m": "POST",
+  "u": "/keys/ledger-key/create?api-version=7.5",
+  "status": 200,
+  "head": "{\"key\": {\"kid\": \"https://vault.vault.azure.net/keys/ledger-key/92ab65f4b52645e49de2c0f3ec40af37\", \"kty\": \"RSA\", \"key_ops\": [\"encrypt\", \"decrypt\", \"sign\", \"verify\", \"wrapKey\", \"unwrapKey\"], \"n\": \"iZ9ROhi0I0uDF4oSinNsGGCDVumuc7H3oGzytvnuza1IpCqlGZUk-e4yqN-IqiCTM--b1PIw9x0T1FFg0hjp1"
+ },
+ {
+  "label": "keyvault-dated",
+  "m": "POST",
+  "u": "/keys/ledger-key2/create?api-version=2026-04-01",
+  "status": 404,
+  "head": "{\"type\": \"https://azconfig.io/errors/not-found\", \"title\": \"The configuration store was not found.\", \"name\": \"\", \"detail\": \"No App Configuration store named ''.\", \"status\": 404}"
+ },
+ {
+  "label": "entra",
+  "m": "POST",
+  "u": "/v1.0/applications",
+  "status": 201,
+  "head": "{\"id\": \"e7f2811d-5424-4add-9354-ca77dfc25a77\", \"appId\": \"615d6ef8-3764-49de-ae11-c10c77d45875\", \"displayName\": \"facilities-users\", \"signInAudience\": \"AzureADMyOrg\", \"web\": {\"redirectUris\": []}, \"spa\": {\"redirectUris\": []}, \"publicClient\": {\"redirectUris\": []}, \"identifierUris\": ["
+ },
+ {
+  "label": "entra",
+  "m": "POST",
+  "u": "/v1.0/applications/e7f2811d-5424-4add-9354-ca77dfc25a77/addPassword",
+  "status": 200,
+  "head": "{\"keyId\": \"27056f30-27d4-4f84-a52d-5032702cd3ad\", \"displayName\": \"x\", \"startDateTime\": \"2026-11-25T17:55:40Z\", \"endDateTime\": \"\", \"hint\": \"327\", \"secretText\": \"327f6ce622864a99ab628c576d3aa8e0ed16fad18f\"}"
+ },
+ {
+  "label": "entra-token",
+  "m": "POST",
+  "u": "/facilities-tenant/oauth2/v2.0/token",
+  "status": 200,
+  "head": "{\"token_type\": \"Bearer\", \"expires_in\": 3599, \"ext_expires_in\": 3599, \"access_token\": \"eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsImtpZCI6IkY0VWdrYWdvaU1iZnJnb1VRSWVmckk5ZmdCMCIsIng1dCI6IkY0VWdrYWdvaU1iZnJnb1VRSWVmckk5ZmdCMCJ9.eyJhdWQiOiJhcGk6Ly9mYWNpbGl0aWVzLWFwaSIsImlzcyI6Imh0dHBzOi8vb"
+ },
+ {
+  "label": "functions-arm",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Web/serverfarms/fac",
+  "status": 201,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Web/serverfarms/facilities-tools-plan\",\"name\":\"facilities-tools-plan\",\"type\":\"Microsoft.Web/serverfarms\",\"properties\":{\"status\":\"Ready\",\"provisioningState\":\"Succeeded\",\"num"
+ },
+ {
+  "label": "functions-arm",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Web/sites/facilitie",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Web/sites/facilities-tools\",\"name\":\"facilities-tools\",\"type\":\"Microsoft.Web/sites\",\"kind\":\"functionapp,linux\",\"location\":\"eastus\",\"tags\":{},\"properties\":{\"serverFarmId\":\"/s"
+ },
+ {
+  "label": "functions-zip",
+  "m": "POST",
+  "u": "/azure-data/functions/facilities-tools/api/zipdeploy",
+  "status": 200,
+  "head": "Deployment successful."
+ },
+ {
+  "label": "functions-list",
+  "m": "GET",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Web/sites/facilitie",
+  "status": 200,
+  "head": "{\"value\":[]}"
+ },
+ {
+  "label": "functions-call",
+  "m": "POST",
+  "u": "/azure-data/functions/facilities-tools/api/asset-status",
+  "status": 500,
+  "head": "Error: RuntimeError: Entry point 'asset-status' not found in function source"
+ },
+ {
+  "label": "functions-trivial",
+  "m": "POST",
+  "u": "/azure-data/functions/facilities-tools/api/zipdeploy",
+  "status": 400,
+  "head": "{\"error\": \"Body is not a zip archive\"}"
+ },
+ {
+  "label": "search-arm",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Search/searchServic",
+  "status": 201,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Search/searchServices/facilities-search\",\"name\":\"facilities-search\",\"type\":\"Microsoft.Search/searchServices\",\"location\":\"eastus\",\"tags\":{},\"sku\":{\"name\":\"basic\"},\"propertie"
+ },
+ {
+  "label": "search-data",
+  "m": "PUT",
+  "u": "/azure-data/search/facilities-search/indexes('facilities-kb')?api-version=2024-07-01",
+  "status": 404,
+  "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist.</Message><Resource>/azure-data</Resource><RequestId>82DA8BC7A7E541AD</RequestId></Error>"
+ },
+ {
+  "label": "loganalytics-query",
+  "m": "POST",
+  "u": "/azure-data/loganalytics/v1/workspaces/abc/query",
+  "status": 405,
+  "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Resource>/azure-data/loganalytics/v1/workspaces/abc/query</Resource><RequestId>D9B1E4EB5ED9483C</RequestId></Error>"
+ },
+ {
+  "label": "appinsights-track",
+  "m": "POST",
+  "u": "/v2.1/track",
+  "status": 405,
+  "head": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Resource>/v2.1/track</Resource><RequestId>0A6EBC2AA41B47A2</RequestId></Error>"
+ },
+ {
+  "label": "servicebus-arm",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.ServiceBus/namespac",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.ServiceBus/namespaces/facilities-bus\",\"name\":\"facilities-bus\",\"type\":\"Microsoft.ServiceBus/namespaces\",\"location\":\"eastus\",\"tags\":{},\"properties\":{\"provisioningState\":\"Succ"
+ },
+ {
+  "label": "servicebus-arm",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.ServiceBus/namespac",
+  "status": 201,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.ServiceBus/namespaces/facilities-bus/topics/work-order-approval\",\"name\":\"work-order-approval\",\"type\":\"Microsoft.ServiceBus/namespaces/topics\",\"location\":\"eastus\",\"tags\":{},"
+ },
+ {
+  "label": "frontdoor-waf",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Network/FrontDoorWe",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.Network/FrontDoorWebApplicationFirewallPolicies/facilitieswaf\",\"name\":\"facilitieswaf\",\"type\":\"Microsoft.Network/FrontDoorWebApplicationFirewallPolicies\",\"location\":\"global\""
+ },
+ {
+  "label": "containerapps",
+  "m": "PUT",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.App/managedEnvironm",
+  "status": 200,
+  "head": "{\"id\":\"/subscriptions/00000000-0000-0000-0000-cloudlearn01/resourceGroups/rg-facilities/providers/Microsoft.App/managedEnvironments/facilities-env\",\"name\":\"facilities-env\",\"type\":\"Microsoft.App/managedEnvironments\",\"location\":\"eastus\",\"kind\":\"Managed\",\"tags\":{},\"properties\":{\"pro"
+ },
+ {
+  "label": "monitor-activitylog",
+  "m": "GET",
+  "u": "/subscriptions/00000000-0000-0000-0000-cloudlearn01/providers/Microsoft.Insights/eventtypes/management/values?api-versio",
+  "status": 200,
+  "head": "{\"value\":[{\"eventName\":{\"value\":\"Microsoft.App/managedEnvironments/write\",\"localizedValue\":\"Microsoft.App/managedEnvironments/write\"},\"operationName\":{\"value\":\"Microsoft.App/managedEnvironments/write\",\"localizedValue\":\"Microsoft.App/managedEnvironments/write: PUT Microsoft.App/ma"
+ }
+]

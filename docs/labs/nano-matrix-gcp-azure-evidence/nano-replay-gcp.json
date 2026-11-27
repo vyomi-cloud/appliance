@@ -1,0 +1,1640 @@
+[
+ {
+  "tag": "10:try_models.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "10:try_models.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"OK\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 15, \"candidatesTokenCount\": 1, \"totalTokenCount\": 16}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"bd1b471d030c4096b8fb\"}"
+ },
+ {
+  "tag": "10:try_models.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"functionCall\": {\"name\": \"asset_status\", \"args\": {\"asset_id\": \"B-12\"}}}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 16, \"candidatesTokenCount\": 35, \"totalTokenCount\": 51}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"c10bed660ad8436d8fe1\"}"
+ },
+ {
+  "tag": "10:try_models.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/nomic-embed-text:predict",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Publisher Model `projects/vyomi-project/locations/us-central1/publishers/google/models/nomic-embed-text` was not found or your project does not have access to it.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"predictions\": [{\"embeddings\": {\"values\": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0"
+ },
+ {
+  "tag": "3:try_agent.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "3:try_agent.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"[\\\"facilities\\\", \\\"maintenance\\\", \\\"analytics\\\"]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 192, \"candidatesTokenCount\": 11, \"totalTokenCount\": 203}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"1564baf5d84f4a9ab0be\"}"
+ },
+ {
+  "tag": "3:try_agent.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 387, \"candidatesTokenCount\": 89, \"totalTokenCount\": 476}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"5dc3d817a5a74589ad5c\"}"
+ },
+ {
+  "tag": "3:deploy_agent.py",
+  "method": "POST",
+  "path": "/storage/v1/b?project=vyomi-project&prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-agent-staging\", \"name\": \"facilities-agent-staging\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-agent-staging\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:42:56.000Z\", \"updated\": \"2026-11-25T17:42:56.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}",
+  "ref_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-agent-staging\", \"name\": \"facilities-agent-staging\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-agent-staging\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:41:31.000Z\", \"updated\": \"2026-11-25T17:41:31.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}"
+ },
+ {
+  "tag": "3:deploy_agent.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926/operations/ae-90dab5b69ec14d4e\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.CreateReasoningEngineOperationMetadata\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:42:56.124000Z\", \"updateTime\": \"2026-11-25T17:42:56.124000Z\"}}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"pr",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108/operations/ae-0c79fceb912140b2\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.CreateReasoningEngineOperationMetadata\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:41:33.814969Z\", \"updateTime\": \"2026-11-25T17:41:33.814969Z\"}}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"pr"
+ },
+ {
+  "tag": "3:deploy_agent.py",
+  "method": "GET",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108/operations/ae-0c79fceb912140b2",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926/operations/ae-90dab5b69ec14d4e\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.CreateReasoningEngineOperationMetadata\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:42:56.124000Z\", \"updateTime\": \"2026-11-25T17:42:56.124000Z\"}}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"pr",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108/operations/ae-0c79fceb912140b2\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.CreateReasoningEngineOperationMetadata\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:41:33.814969Z\", \"updateTime\": \"2026-11-25T17:41:33.814969Z\"}}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"pr"
+ },
+ {
+  "tag": "3:query_agent.py",
+  "method": "GET",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag",
+  "ref_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag"
+ },
+ {
+  "tag": "3:query_agent.py",
+  "method": "GET",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"agent_engine_app\", \"entr",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"agent_engine_app\", \"entr"
+ },
+ {
+  "tag": "3:query_agent.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108:query",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Running a source-packaged agent needs the sandboxed subprocess runtime (offline appliance / Mesh); Nano's browser runtime cannot spawn Python processes. Use a Vyomi agent spec (spec.vyomiAgentSpec) on Nano.\", \"status\": \"FAILED_PRECONDITION\"}}",
+  "ref_head": "{\"output\": {\"answer\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\", \"route\": [\"facilities\", \"maintenance\", \"analytics\"], \"citations\": [{\"n\": 1, \"source\": \"gs://facilities-docs/docs/boiler-sop.md\", \"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressur"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/c6721f723893-1/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"c6721f723893-1/function-source.zip\", \"generation\": \"1\"}}",
+  "ref_head": "{\"uploadUrl\": \"http://127.0.0.1:49480/gcf-upload/gcf-v2-sources-252795227008-us-central1/ccce7d3ffd87-1/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"ccce7d3ffd87-1/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "PUT",
+  "path": "/gcf-upload/gcf-v2-sources-252795227008-us-central1/ccce7d3ffd87-1/function-source.zip",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Upload bucket gcf-v2-sources-252795227008-us-central1 does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-asset-status?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 404,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-asset-status in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-asset-status in region us-central1 in project vyomi-project does not exist\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-asset-status&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Could not read the function source gs://gcf-v2-sources-252795227008-us-central1/ccce7d3ffd87-1/function-source.zip (HTTP 404). Upload it to the URL from generateUploadUrl first.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/895de2da-76aa-ed8d-6e45-3e3a364efdfe\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:41:45.570284Z\", \"endTime\": \"2026-11-25T17:41:45.570294Z\", \"target\": \"projects/vyomi-project/locations/us-central1/functions/facilities-asset-status\", \"verb\": \"create\", \"cancelRequested\": false, \"apiVersion\": \"v2\", \"requestResource\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.Function\", \"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-asset-status\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"s"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/0fb1ef9f73bd-2/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"0fb1ef9f73bd-2/function-source.zip\", \"generation\": \"1\"}}",
+  "ref_head": "{\"uploadUrl\": \"http://127.0.0.1:49480/gcf-upload/gcf-v2-sources-252795227008-us-central1/502ad4210daf-2/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"502ad4210daf-2/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "PUT",
+  "path": "/gcf-upload/gcf-v2-sources-252795227008-us-central1/502ad4210daf-2/function-source.zip",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Upload bucket gcf-v2-sources-252795227008-us-central1 does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 404,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project vyomi-project does not exist\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-approval-decision&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Could not read the function source gs://gcf-v2-sources-252795227008-us-central1/502ad4210daf-2/function-source.zip (HTTP 404). Upload it to the URL from generateUploadUrl first.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/0025cfc5-2479-0c3e-d7a2-774d53ac7d06\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:41:45.588874Z\", \"endTime\": \"2026-11-25T17:41:45.588879Z\", \"target\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"verb\": \"create\", \"cancelRequested\": false, \"apiVersion\": \"v2\", \"requestResource\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.Function\", \"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"ha"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/97da3ba4510f-3/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"97da3ba4510f-3/function-source.zip\", \"generation\": \"1\"}}",
+  "ref_head": "{\"uploadUrl\": \"http://127.0.0.1:49480/gcf-upload/gcf-v2-sources-252795227008-us-central1/d44aa4ca4d15-3/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "PUT",
+  "path": "/gcf-upload/gcf-v2-sources-252795227008-us-central1/d44aa4ca4d15-3/function-source.zip",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Upload bucket gcf-v2-sources-252795227008-us-central1 does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 404,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project vyomi-project does not exist\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "tag": "7:deploy_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-create-work-order&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Could not read the function source gs://gcf-v2-sources-252795227008-us-central1/d44aa4ca4d15-3/function-source.zip (HTTP 404). Upload it to the URL from generateUploadUrl first.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/de8b5953-cd61-9e05-2961-3fa2713430c2\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:41:45.603279Z\", \"endTime\": \"2026-11-25T17:41:45.603284Z\", \"target\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"verb\": \"create\", \"cancelRequested\": false, \"apiVersion\": \"v2\", \"requestResource\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.Function\", \"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"ha"
+ },
+ {
+  "tag": "7:call_asset_status.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-asset-status?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-asset-status in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-asset-status\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"ccce7d3ffd87-1/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API_ENDP"
+ },
+ {
+  "tag": "7:call_asset_status.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-asset-status",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-asset-status not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"found\": true, \"asset\": {\"status\": \"RUNNING\", \"type\": \"boiler\", \"name\": \"Boiler B-12\", \"pressure_psi\": 34, \"site\": \"HQ-1\", \"asset_id\": \"B-12\", \"last_inspection\": \"2026-08-02\"}, \"work_orders\": [{\"status\": \"OPEN\", \"title\": \"Quarterly PRV inspection\", \"work_order_id\": \"WO-000102\", \"priority\": \"P2\", \"requester\": \"seed\", \"asset_id\": \"B-12\"}]}"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": false, \"error\": \"refused: ledger status is PENDING, a work order needs APPROVED\"}"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"502ad4210daf-2/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-approval-decision",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": false, \"error\": \"decision must be APPROVE or REJECT from an authorised approver\"}"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"502ad4210daf-2/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-approval-decision",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"request_id\": \"req-ch7test01\", \"status\": \"APPROVED\", \"approver\": \"duty.manager@example.com\"}"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"work_order_id\": \"WO-TEST01\"}"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "7:check_write_tool.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"work_order_id\": \"WO-TEST01\", \"idempotent\": true}"
+ },
+ {
+  "tag": "12:upload_docs.py",
+  "method": "POST",
+  "path": "/storage/v1/b?project=vyomi-project&prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:42:59.000Z\", \"updated\": \"2026-11-25T17:42:59.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}",
+  "ref_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:41:50.000Z\", \"updated\": \"2026-11-25T17:41:50.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}"
+ },
+ {
+  "tag": "12:create_kb.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{}"
+ },
+ {
+  "tag": "12:create_kb.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096/operations/2506ddd572a74e5a\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\"}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"em",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/operations/9762afdf1f954fe9\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:41:50.905114Z\", \"updateTime\": \"2026-11-25T17:41:50.905118Z\"}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:50.905092Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"em"
+ },
+ {
+  "tag": "12:create_kb.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles:import?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"No Cloud Storage objects match `gs://facilities-docs/docs/`.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/operations/851e03a655404cd3\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesOperationMetadata\", \"ragCorpusId\": \"1619845393724246\", \"createTime\": \"2026-11-25T17:41:50.908336Z\", \"updateTime\": \"2026-11-25T17:41:50.912420Z\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:41:50.908336Z\", \"updateTime\": \"2026-11-25T17:41:50.912424Z\"}}, \"done\": true, \"response\": {\"importedRagFilesCount\": \"4\", \"failedRagFilesCount\": \"0\", \"skippedRagFilesCount\": \"0\", \"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesResponse\"}}"
+ },
+ {
+  "tag": "12:create_kb.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{\"ragFiles\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles/7838411745552054\", \"displayName\": \"boiler-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:41:50.909028Z\", \"updateTime\": \"2026-11-25T17:41:50.909028Z\", \"fileStatus\": {\"state\": \"ACTIVE\"}, \"gcsSource\": {\"uris\": [\"gs://facilities-docs/docs/boiler-sop.md\"]}, \"sizeBytes\": \"353\", \"vyomiChunks\": 1}, {\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles/5821015131787849\", \"displayName\": \"elevator-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:41:50.910096Z\", \"updateTime\": \"2026-11-25T17:41:50.910096Z\", \"fileStatus\": {\"state\": \"ACTIVE\"}, \"gc"
+ },
+ {
+  "tag": "12:notify.py",
+  "method": "POST",
+  "path": "/storage/v1/b/facilities-docs/notificationConfigs?prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Invalid Pub/Sub topic: projects/vyomi-project/topics/facilities-doc-events does not exist or the service account lacks publish permission.\", \"errors\": [{\"domain\": \"global\", \"reason\": \"invalid\", \"message\": \"Invalid Pub/Sub topic: projects/vyomi-project/topics/facilities-doc-events does not exist or the service account lacks publish permission.\"}]}}",
+  "ref_head": "{\"kind\": \"storage#notification\", \"id\": \"1\", \"topic\": \"//pubsub.googleapis.com/projects/vyomi-project/topics/facilities-doc-events\", \"payload_format\": \"JSON_API_V1\", \"etag\": \"TyiklfvJ\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs/notificationConfigs/1\", \"event_types\": [\"OBJECT_FINALIZE\"]}"
+ },
+ {
+  "tag": "12:notify.py",
+  "method": "GET",
+  "path": "/storage/v1/b/facilities-docs?projection=noAcl&prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:42:59.000Z\", \"updated\": \"2026-11-25T17:42:59.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}",
+  "ref_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:41:50.000Z\", \"updated\": \"2026-11-25T17:41:50.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}"
+ },
+ {
+  "tag": "12:notify.py",
+  "method": "DELETE",
+  "path": "/storage/v1/b/facilities-docs/o/docs%2Fnotify-probe.md?prettyPrint=false",
+  "ref_status": 204,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"No such object: facilities-docs/docs/notify-probe.md\", \"errors\": [{\"domain\": \"global\", \"reason\": \"notFound\", \"message\": \"No such object: facilities-docs/docs/notify-probe.md\"}]}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "12:deploy_pipeline.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:50.908336Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 4, \"chunks\": 4, \"embedded\": 4}}]}"
+ },
+ {
+  "tag": "12:deploy_pipeline.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/d1196566ebcd-4/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"d1196566ebcd-4/function-source.zip\", \"generation\": \"1\"}}",
+  "ref_head": "{\"uploadUrl\": \"http://127.0.0.1:49480/gcf-upload/gcf-v2-sources-252795227008-us-central1/40e839e60566-4/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"40e839e60566-4/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "tag": "12:deploy_pipeline.py",
+  "method": "PUT",
+  "path": "/gcf-upload/gcf-v2-sources-252795227008-us-central1/40e839e60566-4/function-source.zip",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Upload bucket gcf-v2-sources-252795227008-us-central1 does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "12:deploy_pipeline.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-ingest-docs?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 404,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-ingest-docs in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-ingest-docs in region us-central1 in project vyomi-project does not exist\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "tag": "12:deploy_pipeline.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-ingest-docs&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Could not read the function source gs://gcf-v2-sources-252795227008-us-central1/40e839e60566-4/function-source.zip (HTTP 404). Upload it to the URL from generateUploadUrl first.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/aba57e01-0094-db0c-bc14-7b0a344f629b\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:41:52.208752Z\", \"endTime\": \"2026-11-25T17:41:52.208758Z\", \"target\": \"projects/vyomi-project/locations/us-central1/functions/facilities-ingest-docs\", \"verb\": \"create\", \"cancelRequested\": false, \"apiVersion\": \"v2\", \"requestResource\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.Function\", \"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-ingest-docs\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"sou"
+ },
+ {
+  "tag": "12:deploy_pipeline.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/triggers?triggerId=facilities-docs-finalized&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Destination Cloud Run service 'facilities-ingest-docs' does not exist in us-central1.\", \"status\": \"FAILED_PRECONDITION\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/operation-253ebfcfb8b9418a\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.eventarc.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:41:52.216934Z\", \"endTime\": \"2026-11-25T17:41:52.216941Z\", \"target\": \"projects/vyomi-project/locations/us-central1/triggers/facilities-docs-finalized\", \"verb\": \"create\", \"apiVersion\": \"v1\"}, \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.cloud.eventarc.v1.Trigger\", \"name\": \"projects/vyomi-project/locations/us-central1/triggers/facilities-docs-finalized\", \"uid\": \"c0452b85-8808-4092-bc15-1d0cdef0c42a\", \"createTime\": \"2026-11-25T17:41:52.216833Z\", \"updateTime\": \"2026-11-"
+ },
+ {
+  "tag": "12:test_pipeline.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:50.908336Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 4, \"chunks\": 4, \"embedded\": 4}}]}"
+ },
+ {
+  "tag": "12:test_pipeline.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{\"ragFiles\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles/7838411745552054\", \"displayName\": \"boiler-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:41:50.909028Z\", \"updateTime\": \"2026-11-25T17:41:50.909028Z\", \"fileStatus\": {\"state\": \"ACTIVE\"}, \"gcsSource\": {\"uris\": [\"gs://facilities-docs/docs/boiler-sop.md\"]}, \"sizeBytes\": \"353\", \"vyomiChunks\": 1}, {\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles/5821015131787849\", \"displayName\": \"elevator-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:41:50.910096Z\", \"updateTime\": \"2026-11-25T17:41:50.910096Z\", \"fileStatus\": {\"state\": \"ACTIVE\"}, \"gc"
+ },
+ {
+  "tag": "12:test_pipeline.py",
+  "method": "GET",
+  "path": "/storage/v1/b/facilities-docs?projection=noAcl&prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:42:59.000Z\", \"updated\": \"2026-11-25T17:42:59.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}",
+  "ref_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:41:50.000Z\", \"updated\": \"2026-11-25T17:41:50.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}"
+ },
+ {
+  "tag": "12:test_pipeline.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{\"ragFiles\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles/7838411745552054\", \"displayName\": \"boiler-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:41:50.909028Z\", \"updateTime\": \"2026-11-25T17:41:50.909028Z\", \"fileStatus\": {\"state\": \"ACTIVE\"}, \"gcsSource\": {\"uris\": [\"gs://facilities-docs/docs/boiler-sop.md\"]}, \"sizeBytes\": \"353\", \"vyomiChunks\": 1}, {\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles/5821015131787849\", \"displayName\": \"elevator-sop.md\", \"description\": \"\", \"createTime\": \"2026-11-25T17:41:50.910096Z\", \"updateTime\": \"2026-11-25T17:41:50.910096Z\", \"fileStatus\": {\"state\": \"ACTIVE\"}, \"gc"
+ },
+ {
+  "tag": "12:replace_doc.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:54.625845Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "12:replace_doc.py",
+  "method": "GET",
+  "path": "/storage/v1/b/facilities-docs?projection=noAcl&prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:42:59.000Z\", \"updated\": \"2026-11-25T17:42:59.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}",
+  "ref_head": "{\"kind\": \"storage#bucket\", \"id\": \"facilities-docs\", \"name\": \"facilities-docs\", \"selfLink\": \"https://www.googleapis.com/storage/v1/b/facilities-docs\", \"projectNumber\": \"000000000000\", \"metageneration\": \"1\", \"location\": \"US\", \"locationType\": \"multi-region\", \"storageClass\": \"STANDARD\", \"etag\": \"CAE=\", \"timeCreated\": \"2026-11-25T17:41:50.000Z\", \"updated\": \"2026-11-25T17:41:50.000Z\", \"iamConfiguration\": {\"bucketPolicyOnly\": {\"enabled\": false}, \"uniformBucketLevelAccess\": {\"enabled\": false}, \"publicAccessPrevention\": \"inherited\"}}"
+ },
+ {
+  "tag": "12:replace_doc.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles:import?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"No Cloud Storage objects match `gs://facilities-docs/docs/boiler-sop.md`.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/operations/262fde421d184cbc\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesOperationMetadata\", \"ragCorpusId\": \"1619845393724246\", \"createTime\": \"2026-11-25T17:41:57.624232Z\", \"updateTime\": \"2026-11-25T17:41:57.624501Z\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:41:57.624232Z\", \"updateTime\": \"2026-11-25T17:41:57.624504Z\"}}, \"done\": true, \"response\": {\"importedRagFilesCount\": \"0\", \"failedRagFilesCount\": \"0\", \"skippedRagFilesCount\": \"1\", \"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesResponse\"}}"
+ },
+ {
+  "tag": "12:replace_doc.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# Boiler SOP rev 2 Boiler pressure limit is now 25 psi after the 2026 revision.\", \"distance\": 0.473639, \"score\": 0.526361}, {\"sourceUri\": \"gs://facilities-docs/docs/safety-bulletin-2026-11.md\", \"sourceDisplayName\": \"safety-bulletin-2026-11.md\", \"text\": \"# Bulletin 2026-11 Chilled water loop flush is scheduled for Saturday. Notify tenants on floors 3 to 5.\", \"distance\": 0.937863, \"score\": 0.062137}, {\"sourceUri\": \"gs://facilities-docs/docs/fire-safety-sop.md\", \"sourceDisplayName\": \"fire-safety-sop.md\", \"text\": \"# SOP-310 Fire safety and evacuation Fire alarm panel"
+ },
+ {
+  "tag": "12:replace_doc.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/ragFiles:import?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"No Cloud Storage objects match `gs://facilities-docs/docs/boiler-sop.md`.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246/operations/0df47f70eea547fc\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesOperationMetadata\", \"ragCorpusId\": \"1619845393724246\", \"createTime\": \"2026-11-25T17:41:58.536695Z\", \"updateTime\": \"2026-11-25T17:41:58.536987Z\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:41:58.536695Z\", \"updateTime\": \"2026-11-25T17:41:58.536991Z\"}}, \"done\": true, \"response\": {\"importedRagFilesCount\": \"0\", \"failedRagFilesCount\": \"0\", \"skippedRagFilesCount\": \"1\", \"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.ImportRagFilesResponse\"}}"
+ },
+ {
+  "tag": "12:replace_doc.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"distance\": 0.795266, \"score\": 0.204734}, {\"sourceUri\": \"gs://facilities-docs/docs/safety-bulletin-2026-11.md\", \"sourceDisplayName\": \"safety-bulletin-2026-11.md\", \"text\": \"# Bulletin 2026-11 Chilled water loop flush"
+ },
+ {
+  "tag": "6:search.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "6:search.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"distance\": 0.786967, \"score\": 0.213033}, {\"sourceUri\": \"gs://facilities-docs/docs/hvac-maintenance-manual.md\", \"sourceDisplayName\": \"hvac-maintenance-manual.md\", \"text\": \"# MM-220 HVAC air handling unit maintenance"
+ },
+ {
+  "tag": "6:search.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/hvac-maintenance-manual.md\", \"sourceDisplayName\": \"hvac-maintenance-manual.md\", \"text\": \"# MM-220 HVAC air handling unit maintenance manual (AHU-7) Replace the AHU-7 filter every 60 days or when differential pressure exceeds 250 Pa. Inspect belts and bearings quarterly. A supply air temperature drift greater than 3 degrees C indicates a failing chilled water valve. Raise a P2 work order for chilled water valve replacement. Spare valves are stocked in store room S-2.\", \"distance\": 0.546043, \"score\": 0.453957}, {\"sourceUri\": \"gs://facilities-docs/docs/safety-bulletin-2026-11.md\", \"sourceDisplayName\": \"safety-bulletin-2026-11.m"
+ },
+ {
+  "tag": "6:check_ranking.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "6:check_ranking.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"distance\": 0.786967, \"score\": 0.213033}, {\"sourceUri\": \"gs://facilities-docs/docs/hvac-maintenance-manual.md\", \"sourceDisplayName\": \"hvac-maintenance-manual.md\", \"text\": \"# MM-220 HVAC air handling unit maintenance"
+ },
+ {
+  "tag": "6:check_ranking.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/hvac-maintenance-manual.md\", \"sourceDisplayName\": \"hvac-maintenance-manual.md\", \"text\": \"# MM-220 HVAC air handling unit maintenance manual (AHU-7) Replace the AHU-7 filter every 60 days or when differential pressure exceeds 250 Pa. Inspect belts and bearings quarterly. A supply air temperature drift greater than 3 degrees C indicates a failing chilled water valve. Raise a P2 work order for chilled water valve replacement. Spare valves are stocked in store room S-2.\", \"distance\": 0.546043, \"score\": 0.453957}, {\"sourceUri\": \"gs://facilities-docs/docs/safety-bulletin-2026-11.md\", \"sourceDisplayName\": \"safety-bulletin-2026-11.m"
+ },
+ {
+  "tag": "6:deploy_kb_search.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "6:deploy_kb_search.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/325cb8b49ce7-5/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"325cb8b49ce7-5/function-source.zip\", \"generation\": \"1\"}}",
+  "ref_head": "{\"uploadUrl\": \"http://127.0.0.1:49480/gcf-upload/gcf-v2-sources-252795227008-us-central1/a63f9a498f64-5/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"a63f9a498f64-5/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "tag": "6:deploy_kb_search.py",
+  "method": "PUT",
+  "path": "/gcf-upload/gcf-v2-sources-252795227008-us-central1/a63f9a498f64-5/function-source.zip",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Upload bucket gcf-v2-sources-252795227008-us-central1 does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "6:deploy_kb_search.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-kb-search?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 404,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-kb-search in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-kb-search in region us-central1 in project vyomi-project does not exist\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "tag": "6:deploy_kb_search.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-kb-search&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Could not read the function source gs://gcf-v2-sources-252795227008-us-central1/a63f9a498f64-5/function-source.zip (HTTP 404). Upload it to the URL from generateUploadUrl first.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/9da4b1d5-3c90-78f0-2ee5-5d136bafee23\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:42:02.072251Z\", \"endTime\": \"2026-11-25T17:42:02.072257Z\", \"target\": \"projects/vyomi-project/locations/us-central1/functions/facilities-kb-search\", \"verb\": \"create\", \"cancelRequested\": false, \"apiVersion\": \"v2\", \"requestResource\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.Function\", \"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-kb-search\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\""
+ },
+ {
+  "tag": "6:deploy_kb_search.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-kb-search",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-kb-search not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"results\": [{\"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"score\": 0.207639, \"source\": \"gs://facilities-docs/docs/boiler-sop.md\"}, {\"text\": \"# SOP-310 Fire safety and evacuation Fire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of the affected zone. Fire extinguishers are inspected annually. Sprinkler valve clo"
+ },
+ {
+  "tag": "11:try_response.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "11:try_response.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "11:try_response.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"distance\": 0.786967, \"score\": 0.213033}, {\"sourceUri\": \"gs://facilities-docs/docs/hvac-maintenance-manual.md\", \"sourceDisplayName\": \"hvac-maintenance-manual.md\", \"text\": \"# MM-220 HVAC air handling unit maintenance"
+ },
+ {
+  "tag": "11:try_response.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 325, \"candidatesTokenCount\": 89, \"totalTokenCount\": 414}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"9de7daf3c8bc47509f68\"}"
+ },
+ {
+  "tag": "11:screen_output.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/facilities-guardrail\", \"createTime\": \"2026-11-25T17:43:03.598000Z\", \"updateTime\": \"2026-11-25T17:43:03.598000Z\", \"labels\": {}, \"filterConfig\": {\"raiSettings\": {\"raiFilters\": [{\"filterType\": 17, \"confidenceLevel\": 2}]}, \"sdpSettings\": {\"basicConfig\": {\"filterEnforcement\": 1}}, \"piAndJailbreakFilterSettings\": {\"filterEnforcement\": 1, \"confidenceLevel\": 2}}, \"templateMetadata\": {}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/facilities-guardrail\", \"createTime\": \"2026-11-25T17:42:05.140752Z\", \"updateTime\": \"2026-11-25T17:42:05.140752Z\", \"labels\": {}, \"filterConfig\": {\"raiSettings\": {\"raiFilters\": [{\"filterType\": 17, \"confidenceLevel\": 2}]}, \"sdpSettings\": {\"basicConfig\": {\"filterEnforcement\": 1}}, \"piAndJailbreakFilterSettings\": {\"filterEnforcement\": 1, \"confidenceLevel\": 2}}, \"templateMetadata\": {}}"
+ },
+ {
+  "tag": "11:screen_output.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail:sanitizeModelResponse?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"sanitizationResult\": {\"filterMatchState\": 2, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 2, \"matchState\": 1, \"messageItems\": [{\"message\": \"Prompt injection and jailbreak detection apply to user prompts only.\", \"messageType\": 1}]}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 2, \"findings\": [{\"infoType\": \"US_SOCIAL_SECURITY_NUMBER\", \"likelihood\": 4, \"location\": {\"byteRange\": {\"start\": \"40\", \"end\": \"51\"}}}]}}}}, \"invocationResult\": 1}}",
+  "ref_head": "{\"sanitizationResult\": {\"filterMatchState\": 2, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 2, \"matchState\": 1, \"messageItems\": [{\"message\": \"Prompt injection and jailbreak detection apply to user prompts only.\", \"messageType\": 1}]}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 2, \"findings\": [{\"infoType\": \"US_SOCIAL_SECURITY_NUMBER\", \"likelihood\": 4, \"location\": {\"byteRange\": {\"start\": \"40\", \"end\": \"51\"}}}]}}}}, \"invocationResult\": 1}}"
+ },
+ {
+  "tag": "11:screen_output.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail:sanitizeModelResponse?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"sanitizationResult\": {\"filterMatchState\": 1, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 2, \"matchState\": 1, \"messageItems\": [{\"message\": \"Prompt injection and jailbreak detection apply to user prompts only.\", \"messageType\": 1}]}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}",
+  "ref_head": "{\"sanitizationResult\": {\"filterMatchState\": 1, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 2, \"matchState\": 1, \"messageItems\": [{\"message\": \"Prompt injection and jailbreak detection apply to user prompts only.\", \"messageType\": 1}]}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 409,
+  "nano_status": 409,
+  "nano_head": "{\"error\": {\"code\": 409, \"message\": \"Resource 'facilities-guardrail' already exists.\", \"status\": \"ALREADY_EXISTS\"}}",
+  "ref_head": "{\"error\": {\"code\": 409, \"message\": \"Resource 'facilities-guardrail' already exists.\", \"status\": \"ALREADY_EXISTS\"}}"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/facilities-guardrail\", \"createTime\": \"2026-11-25T17:43:03.598000Z\", \"updateTime\": \"2026-11-25T17:43:03.598000Z\", \"labels\": {}, \"filterConfig\": {\"raiSettings\": {\"raiFilters\": [{\"filterType\": 17, \"confidenceLevel\": 2}]}, \"sdpSettings\": {\"basicConfig\": {\"filterEnforcement\": 1}}, \"piAndJailbreakFilterSettings\": {\"filterEnforcement\": 1, \"confidenceLevel\": 2}}, \"templateMetadata\": {}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/facilities-guardrail\", \"createTime\": \"2026-11-25T17:42:05.140752Z\", \"updateTime\": \"2026-11-25T17:42:05.140752Z\", \"labels\": {}, \"filterConfig\": {\"raiSettings\": {\"raiFilters\": [{\"filterType\": 17, \"confidenceLevel\": 2}]}, \"sdpSettings\": {\"basicConfig\": {\"filterEnforcement\": 1}}, \"piAndJailbreakFilterSettings\": {\"filterEnforcement\": 1, \"confidenceLevel\": 2}}, \"templateMetadata\": {}}"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1:retrieveContexts?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"contexts\": {\"contexts\": []}}",
+  "ref_head": "{\"contexts\": {\"contexts\": [{\"sourceUri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"sourceDisplayName\": \"boiler-sop.md\", \"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"distance\": 0.786967, \"score\": 0.213033}, {\"sourceUri\": \"gs://facilities-docs/docs/hvac-maintenance-manual.md\", \"sourceDisplayName\": \"hvac-maintenance-manual.md\", \"text\": \"# MM-220 HVAC air handling unit maintenance"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 325, \"candidatesTokenCount\": 89, \"totalTokenCount\": 414}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"97ba35470d56439788a0\"}"
+ },
+ {
+  "tag": "11:safe_response.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail:sanitizeModelResponse?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"sanitizationResult\": {\"filterMatchState\": 1, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 2, \"matchState\": 1, \"messageItems\": [{\"message\": \"Prompt injection and jailbreak detection apply to user prompts only.\", \"messageType\": 1}]}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}",
+  "ref_head": "{\"sanitizationResult\": {\"filterMatchState\": 1, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 2, \"matchState\": 1, \"messageItems\": [{\"message\": \"Prompt injection and jailbreak detection apply to user prompts only.\", \"messageType\": 1}]}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}"
+ },
+ {
+  "tag": "11:grounded_generate.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "11:grounded_generate.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "11:grounded_generate.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"Stub model reply (deterministic): What should I do when boiler pressure exceeds 30 psi?\"}]}, \"index\": 0, \"finishReason\": \"STOP\", \"groundingMetadata\": {\"retrievalQueries\": [\"What should I do when boiler pressure exceeds 30 psi?\"], \"groundingChunks\": [{\"retrievedContext\": {\"uri\": \"gs://facilities-docs/docs/boiler-sop.md\", \"title\": \"boiler-sop.md\", \"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance"
+ },
+ {
+  "tag": "9:memory.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/reasoningEngines?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag",
+  "ref_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag"
+ },
+ {
+  "tag": "9:memory.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/reasoningEngines?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/operations/ae-05e8b7828b6e4fbf\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.CreateReasoningEngineOperationMetadata\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:43:09.098000Z\", \"updateTime\": \"2026-11-25T17:43:09.098000Z\"}}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273\", \"displayName\": \"facilities_memory\", \"description\": \"\", \"spec\": {\"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_AGENT_SPEC\", \"value\": \"{\\\"instructions\\\": \\\"Facilities memory host.\\\", \\\"max_steps\\\": 2, \\\"tools\\\": []}\"}]}, \"classMethods\": ",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/operations/ae-66fd31ae5d0a4501\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.CreateReasoningEngineOperationMetadata\", \"genericMetadata\": {\"createTime\": \"2026-11-25T17:42:08.668376Z\", \"updateTime\": \"2026-11-25T17:42:08.668376Z\"}}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573\", \"displayName\": \"facilities_memory\", \"description\": \"\", \"spec\": {\"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_AGENT_SPEC\", \"value\": \"{\\\"instructions\\\": \\\"Facilities memory host.\\\", \\\"max_steps\\\": 2, \\\"tools\\\": []}\"}]}, \"classMethods\": "
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/reasoningEngines?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag",
+  "ref_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/sessions/137763613929925813/operations/dd2942f5bf214ee1\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:43:09.455000Z\", \"updateTime\": \"2026-11-25T17:43:09.455000Z\"}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/sessions/137763613929925813\", \"userId\": \"maria\", \"sessionState\": {}, \"updateTime\": \"2026-11-25T17:43:09.454000Z\", \"createTime\": \"2026-11-25T17:43:09.454000Z\", \"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1beta1.Session\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875/operations/c42c3305245f4eb2\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:42:11.674659Z\", \"updateTime\": \"2026-11-25T17:42:11.674662Z\"}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875\", \"userId\": \"maria\", \"sessionState\": {}, \"updateTime\": \"2026-11-25T17:42:11.674621Z\", \"createTime\": \"2026-11-25T17:42:11.674622Z\", \"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1beta1.Session\"}}"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "GET",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/sessions/137763613929925813\", \"userId\": \"maria\", \"sessionState\": {}, \"updateTime\": \"2026-11-25T17:43:09.454000Z\", \"createTime\": \"2026-11-25T17:43:09.454000Z\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875\", \"userId\": \"maria\", \"sessionState\": {}, \"updateTime\": \"2026-11-25T17:42:11.674621Z\", \"createTime\": \"2026-11-25T17:42:11.674622Z\"}"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"[\\\"facilities\\\", \\\"maintenance\\\"]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 175, \"candidatesTokenCount\": 7, \"totalTokenCount\": 182}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"863de08b983c4637b441\"}"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 299, \"candidatesTokenCount\": 89, \"totalTokenCount\": 388}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"033e45ac82734428943a\"}"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875:appendEvent",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{}"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875:appendEvent",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{}"
+ },
+ {
+  "tag": "9:session_demo.py",
+  "method": "GET",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875/events",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"sessionEvents\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/sessions/137763613929925813/events/298591628332880030\", \"author\": \"user\", \"invocationId\": \"23b09cff\", \"timestamp\": \"2026-11-25T17:42:11.723239Z\", \"content\": {\"parts\": [{\"text\": \"Boiler B-12 is at 34 psi. What does the SOP say?\"}], \"role\": \"user\"}}, {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/sessions/137763613929925813/events/395173995878356232\", \"author\": \"agent\", \"invocationId\": \"0e9aa234\", \"timestamp\": \"2026-11-25T17:42:11.728786Z\", \"content\": {\"parts\": [{\"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pre",
+  "ref_head": "{\"sessionEvents\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875/events/210753442458808395\", \"author\": \"user\", \"invocationId\": \"23b09cff\", \"timestamp\": \"2026-11-25T17:42:11.723239Z\", \"content\": {\"parts\": [{\"text\": \"Boiler B-12 is at 34 psi. What does the SOP say?\"}], \"role\": \"user\"}}, {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/sessions/805621122721403875/events/792760927535167572\", \"author\": \"agent\", \"invocationId\": \"0e9aa234\", \"timestamp\": \"2026-11-25T17:42:11.728786Z\", \"content\": {\"parts\": [{\"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pre"
+ },
+ {
+  "tag": "9:remember.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/reasoningEngines?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag",
+  "ref_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag"
+ },
+ {
+  "tag": "9:remember.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/memories/3320103744114973999/operations/35f310b5cd864f00\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:43:10.495000Z\", \"updateTime\": \"2026-11-25T17:43:10.495000Z\"}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/memories/3320103744114973999\", \"displayName\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"fact\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:43:10.494000Z\", \"up",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories/6847933991346597692/operations/1420b81a87304607\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:42:14.410524Z\", \"updateTime\": \"2026-11-25T17:42:14.410536Z\"}, \"done\": true, \"response\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories/6847933991346597692\", \"displayName\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"fact\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:42:14.409405Z\", \"up"
+ },
+ {
+  "tag": "9:remember.py",
+  "method": "GET",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories/6847933991346597692",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/memories/3320103744114973999\", \"displayName\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"fact\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:43:10.494000Z\", \"updateTime\": \"2026-11-25T17:43:10.494000Z\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories/6847933991346597692\", \"displayName\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"fact\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:42:14.409405Z\", \"updateTime\": \"2026-11-25T17:42:14.409405Z\"}"
+ },
+ {
+  "tag": "9:remember.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories:retrieve",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"retrievedMemories\": [{\"memory\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/9608813872414392273/memories/3320103744114973999\", \"displayName\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"fact\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:43:10.494000Z\", \"updateTime\": \"2026-11-25T17:43:10.494000Z\"}, \"distance\": 0.928905}]}",
+  "ref_head": "{\"retrievedMemories\": [{\"memory\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories/6847933991346597692\", \"displayName\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"fact\": \"Maria Ops prefers the boiler B-12 report on Mondays\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:42:14.409405Z\", \"updateTime\": \"2026-11-25T17:42:14.409405Z\"}, \"distance\": 1.0}]}"
+ },
+ {
+  "tag": "9:remember.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories:retrieve",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"retrievedMemories\": []}",
+  "ref_head": "{\"retrievedMemories\": []}"
+ },
+ {
+  "tag": "9:generate_memories.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/reasoningEngines?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8112467580870051926\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag",
+  "ref_head": "{\"reasoningEngines\": [{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/8587556235721674108\", \"displayName\": \"facilities_supervisor\", \"description\": \"\", \"spec\": {\"agentFramework\": \"custom\", \"classMethods\": [{\"api_mode\": \"\", \"name\": \"query\", \"parameters\": {\"required\": [\"prompt\"], \"properties\": {\"user\": {\"type\": \"string\"}, \"prompt\": {\"type\": \"string\"}}, \"type\": \"object\"}}], \"deploymentSpec\": {\"env\": [{\"name\": \"VYOMI_ENDPOINT\", \"value\": \"http://127.0.0.1:49480\"}, {\"name\": \"GOOGLE_CLOUD_PROJECT\", \"value\": \"vyomi-project\"}, {\"name\": \"GOOGLE_CLOUD_REGION\", \"value\": \"us-central1\"}], \"secretEnv\": []}, \"sourceCodeSpec\": {\"inlineSource\": {}, \"pythonSpec\": {\"entrypointModule\": \"ag"
+ },
+ {
+  "tag": "9:generate_memories.py",
+  "method": "POST",
+  "path": "/v1beta1/projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories:generate",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/operations/131eb5344bee48ba\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.aiplatform.v1.GenericOperationMetadata\", \"createTime\": \"2026-11-25T17:42:17.622633Z\", \"updateTime\": \"2026-11-25T17:42:17.622651Z\"}, \"done\": true, \"response\": {\"generatedMemories\": [{\"memory\": {\"name\": \"projects/vyomi-project/locations/us-central1/reasoningEngines/1973623409287069573/memories/4668476893244369310\", \"displayName\": \"Stub model reply (deterministic): Conversation:\", \"fact\": \"Stub model reply (deterministic): Conversation:\", \"scope\": {\"user_id\": \"maria\"}, \"createTime\": \"2026-11-25T17:42:17.620544Z\", \"updat"
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/ragCorpora?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/3212362060262096\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:42:59.332000Z\", \"updateTime\": \"2026-11-25T17:42:59.332000Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 0, \"chunks\": 0, \"embedded\": 0}}]}",
+  "ref_head": "{\"ragCorpora\": [{\"name\": \"projects/vyomi-project/locations/us-central1/ragCorpora/1619845393724246\", \"displayName\": \"facilities-kb\", \"description\": \"Facilities SOPs and manuals\", \"createTime\": \"2026-11-25T17:41:50.905092Z\", \"updateTime\": \"2026-11-25T17:41:58.536695Z\", \"corpusStatus\": {\"state\": \"ACTIVE\"}, \"vectorDbConfig\": {\"ragManagedDb\": {}}, \"vyomiStats\": {\"files\": 5, \"chunks\": 5, \"embedded\": 5}}]}"
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions:generateUploadUrl?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"uploadUrl\": \"http://localhost/gcf-upload/gcf-v2-sources-421047385945-us-central1/2c744602cd81-6/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-421047385945-us-central1\", \"object\": \"2c744602cd81-6/function-source.zip\", \"generation\": \"1\"}}",
+  "ref_head": "{\"uploadUrl\": \"http://127.0.0.1:49480/gcf-upload/gcf-v2-sources-252795227008-us-central1/c7861ad19dca-6/function-source.zip\", \"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"c7861ad19dca-6/function-source.zip\", \"generation\": \"1\"}}"
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "PUT",
+  "path": "/gcf-upload/gcf-v2-sources-252795227008-us-central1/c7861ad19dca-6/function-source.zip",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Upload bucket gcf-v2-sources-252795227008-us-central1 does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": ""
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-tools-mcp?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 404,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-tools-mcp in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-tools-mcp in region us-central1 in project vyomi-project does not exist\", \"status\": \"NOT_FOUND\"}}"
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions?functionId=facilities-tools-mcp&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Could not read the function source gs://gcf-v2-sources-252795227008-us-central1/c7861ad19dca-6/function-source.zip (HTTP 404). Upload it to the URL from generateUploadUrl first.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/db71b954-40af-6994-f4b9-4e7c7db42e93\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.OperationMetadata\", \"createTime\": \"2026-11-25T17:42:18.756391Z\", \"endTime\": \"2026-11-25T17:42:18.756397Z\", \"target\": \"projects/vyomi-project/locations/us-central1/functions/facilities-tools-mcp\", \"verb\": \"create\", \"cancelRequested\": false, \"apiVersion\": \"v2\", \"requestResource\": {\"@type\": \"type.googleapis.com/google.cloud.functions.v2.Function\", \"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-tools-mcp\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\""
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-tools-mcp",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-tools-mcp not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"tools\": [{\"name\": \"kb_search\", \"description\": \"Search the facilities knowledge base (read-only).\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"]}}, {\"name\": \"asset_status\", \"description\": \"Look up an asset and its work orders (read-only).\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}}]}}"
+ },
+ {
+  "tag": "4:register_tools.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/mcpServers?mcpServerId=facilities-tools",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\", \"displayName\": \"Facilities tools (MCP)\", \"description\": \"kb_search, asset_status\", \"endpoint\": \"http://127.0.0.1:49480/gcf/vyomi-project/us-central1/facilities-tools-mcp\", \"state\": \"ACTIVE\", \"createTime\": \"2026-11-25T17:43:12.389000Z\", \"vyomiExtension\": true, \"authentication\": {\"apiKey\": {\"header\": \"Authorization\"}}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\", \"displayName\": \"Facilities tools (MCP)\", \"description\": \"kb_search, asset_status\", \"endpoint\": \"http://127.0.0.1:49480/gcf/vyomi-project/us-central1/facilities-tools-mcp\", \"state\": \"ACTIVE\", \"createTime\": \"2026-11-25T17:42:18.954026Z\", \"vyomiExtension\": true, \"authentication\": {\"apiKey\": {\"header\": \"Authorization\"}}}"
+ },
+ {
+  "tag": "4:create_gateway.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways?agentGatewayId=facilities-gateway",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:create_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:create_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:create_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [], \"policy\": null, \"state\": \"ACTIVE\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:create_gateway.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway:attachMcpServer",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": null, \"state\": \"ACTIVE\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:create_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": null, \"state\": \"CREATING\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": null, \"state\": \"ACTIVE\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:use_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": null, \"state\": \"ACTIVE\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"attachedPolicy\": null}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": null, \"state\": \"ACTIVE\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"attachedPolicy\": null}"
+ },
+ {
+  "tag": "4:use_gateway.py",
+  "method": "POST",
+  "path": "/gateways/gcp-facilities-gateway-smktw0mbny/mcp",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"message\": \"Gateway gcp-facilities-gateway-smktw0mbny not found\"}",
+  "ref_head": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"tools\": [{\"name\": \"facilities-tools___kb_search\", \"description\": \"Search the facilities knowledge base (read-only).\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"query\": {\"type\": \"string\"}}, \"required\": [\"query\"]}}, {\"name\": \"facilities-tools___asset_status\", \"description\": \"Look up an asset and its work orders (read-only).\", \"inputSchema\": {\"type\": \"object\", \"properties\": {\"asset_id\": {\"type\": \"string\"}}, \"required\": [\"asset_id\"]}}]}}"
+ },
+ {
+  "tag": "4:use_gateway.py",
+  "method": "POST",
+  "path": "/gateways/gcp-facilities-gateway-smktw0mbny/mcp",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"message\": \"Gateway gcp-facilities-gateway-smktw0mbny not found\"}",
+  "ref_head": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"content\": [{\"type\": \"text\", \"text\": \"{\\\"found\\\": true, \\\"asset\\\": {\\\"site\\\": \\\"HQ-1\\\", \\\"type\\\": \\\"boiler\\\", \\\"pressure_psi\\\": 34, \\\"status\\\": \\\"RUNNING\\\", \\\"last_inspection\\\": \\\"2026-08-02\\\", \\\"asset_id\\\": \\\"B-12\\\", \\\"name\\\": \\\"Boiler B-12\\\"}, \\\"work_orders\\\": [{\\\"priority\\\": \\\"P2\\\", \\\"title\\\": \\\"Quarterly PRV inspection\\\", \\\"status\\\": \\\"OPEN\\\", \\\"work_order_id\\\": \\\"WO-000102\\\", \\\"requester\\\": \\\"seed\\\", \\\"asset_id\\\": \\\"B-12\\\"}]}\"}], \"isError\": false}}"
+ },
+ {
+  "tag": "4:add_policy.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentPolicies?agentPolicyId=facilities-read-only-tools",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentPolicies/facilities-read-only-tools\", \"displayName\": \"read-only facilities tools\", \"description\": \"\", \"cedarPolicy\": \"permit(principal, action == AgentCore::Action::\\\"facilities-tools___kb_search\\\", resource);\\npermit(principal, action == AgentCore::Action::\\\"facilities-tools___asset_status\\\", resource);\", \"enforcementMode\": \"ENFORCE\", \"state\": \"ACTIVE\", \"createTime\": \"2026-11-25T17:43:14.108000Z\", \"vyomiExtension\": true, \"attachedGateways\": [], \"engine\": \"cedar\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentPolicies/facilities-read-only-tools\", \"displayName\": \"read-only facilities tools\", \"description\": \"\", \"cedarPolicy\": \"permit(principal, action == AgentCore::Action::\\\"facilities-tools___kb_search\\\", resource);\\npermit(principal, action == AgentCore::Action::\\\"facilities-tools___asset_status\\\", resource);\", \"enforcementMode\": \"ENFORCE\", \"state\": \"ACTIVE\", \"createTime\": \"2026-11-25T17:42:23.153756Z\", \"vyomiExtension\": true, \"attachedGateways\": [], \"engine\": \"cedar\"}"
+ },
+ {
+  "tag": "4:add_policy.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentPolicies/facilities-read-only-tools:test",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"decision\": \"ALLOW\", \"reason\": \"explicit-permit\", \"engine\": \"cedar\"}",
+  "ref_head": "{\"decision\": \"ALLOW\", \"reason\": \"explicit-permit\", \"engine\": \"cedar\"}"
+ },
+ {
+  "tag": "4:add_policy.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentPolicies/facilities-read-only-tools:test",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"decision\": \"DENY\", \"reason\": \"denied by default: no policy permits the request\", \"engine\": \"cedar\"}",
+  "ref_head": "{\"decision\": \"DENY\", \"reason\": \"denied by default: no policy permits the request\", \"engine\": \"cedar\"}"
+ },
+ {
+  "tag": "4:add_policy.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway:attachPolicy",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:43:12.561000Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": \"projects/vyomi-project/locations/us-central1/agentPolicies/facilities-read-only-tools\", \"state\": \"ACTIVE\", \"mcpEndpoint\": \"/gateways/gcp-facilities-gateway-kit9ydnylc/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-kit9ydnylc\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-to",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/agentGateways/facilities-gateway\", \"displayName\": \"Facilities gateway\", \"description\": \"\", \"protocols\": [\"MCP\"], \"authorization\": {\"type\": \"NONE\"}, \"createTime\": \"2026-11-25T17:42:19.289964Z\", \"vyomiExtension\": true, \"mcpServers\": [\"projects/vyomi-project/locations/us-central1/mcpServers/facilities-tools\"], \"policy\": \"projects/vyomi-project/locations/us-central1/agentPolicies/facilities-read-only-tools\", \"state\": \"ACTIVE\", \"mcpEndpoint\": \"http://127.0.0.1:49480/gateways/gcp-facilities-gateway-smktw0mbny/mcp\", \"agentCoreGatewayId\": \"gcp-facilities-gateway-smktw0mbny\", \"attachedMcpServers\": [\"projects/vyomi-project/locations/us-central1/mc"
+ },
+ {
+  "tag": "5:submit_request.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "5:submit_request.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"[\\\"facilities\\\", \\\"maintenance\\\"]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 178, \"candidatesTokenCount\": 7, \"totalTokenCount\": 185}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"ce3e8a44eff84ea39659\"}"
+ },
+ {
+  "tag": "5:submit_request.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 349, \"candidatesTokenCount\": 89, \"totalTokenCount\": 438}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"42d1064900384e2b99a3\"}"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": false, \"error\": \"refused: ledger status is PENDING, a work order needs APPROVED\"}"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"502ad4210daf-2/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-approval-decision",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": false, \"error\": \"decision must be APPROVE or REJECT from an authorised approver\"}"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"502ad4210daf-2/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-approval-decision",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"request_id\": \"req-7826358766\", \"status\": \"APPROVED\", \"approver\": \"duty.manager@example.com\"}"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"work_order_id\": \"WO-358766\"}"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:approve_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"work_order_id\": \"WO-358766\", \"idempotent\": true}"
+ },
+ {
+  "tag": "5:reject_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-approval-decision\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"502ad4210daf-2/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:reject_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-approval-decision",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-approval-decision not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": true, \"request_id\": \"req-78a8ee49f6\", \"status\": \"REJECTED\", \"approver\": \"duty.manager@example.com\"}"
+ },
+ {
+  "tag": "5:reject_request.py",
+  "method": "GET",
+  "path": "/v2/projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order in region us-central1 in project nano-project does not exist\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/functions/facilities-create-work-order\", \"description\": \"\", \"buildConfig\": {\"runtime\": \"python312\", \"entryPoint\": \"handler\", \"source\": {\"storageSource\": {\"bucket\": \"gcf-v2-sources-252795227008-us-central1\", \"object\": \"d44aa4ca4d15-3/function-source.zip\", \"generation\": \"1\"}}, \"environmentVariables\": {}, \"dockerRepository\": \"\", \"workerPool\": \"\", \"automaticUpdatePolicy\": {}, \"build\": \"projects/252795227008/locations/us-central1/builds/00000001\"}, \"serviceConfig\": {\"timeoutSeconds\": 120, \"availableMemory\": \"512M\", \"availableCpu\": \"1\", \"environmentVariables\": {\"GOOGLE_CLOUD_PROJECT\": \"vyomi-project\", \"ASSETS_COLLECTION\": \"assets\", \"VERTEX_API"
+ },
+ {
+  "tag": "5:reject_request.py",
+  "method": "POST",
+  "path": "/gcf/vyomi-project/us-central1/facilities-create-work-order",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Function facilities-create-work-order not found\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"ok\": false, \"error\": \"refused: ledger status is REJECTED, a work order needs APPROVED\"}"
+ },
+ {
+  "tag": "1:signin.py",
+  "method": "POST",
+  "path": "/v1/accounts:signUp?key=vyomi-local",
+  "ref_status": 200,
+  "nano_status": 500,
+  "nano_head": "{\"__type\": \"InternalFailure\", \"message\": \"nano /_wire: ImportError: cannot import name 'app_context' from 'core' (/core/__init__.py)\"}",
+  "ref_head": "{\"kind\": \"identitytoolkit#SignupNewUserResponse\", \"email\": \"maria.ops@example.com\", \"localId\": \"65b99152d6ab0db265c6a7db8b3b\", \"idToken\": \"eyJhbGciOiJSUzI1NiIsImtpZCI6InZ5b21pLXNlY3VyZXRva2VuLTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vZmFjaWxpdGllcy11c2VycyIsImF1ZCI6ImZhY2lsaXRpZXMtdXNlcnMiLCJhdXRoX3RpbWUiOjE3OTU2Mjg1NTAsInVzZXJfaWQiOiI2NWI5OTE1MmQ2YWIwZGIyNjVjNmE3ZGI4YjNiIiwic3ViIjoiNjViOTkxNTJkNmFiMGRiMjY1YzZhN2RiOGIzYiIsImlhdCI6MTc5NTYyODU1MCwiZXhwIjoxNzk1NjMyMTUwLCJlbWFpbCI6Im1hcmlhLm9wc0BleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZmlyZWJhc2UiOnsiaWRlbnRpdGllcyI6eyJlbWFpbCI6WyJtYXJpYS5vcHNAZXhhbXBsZS5jb20iXX0sInNpZ25faW5fcHJvdmlkZXIiOiJwYXNzd29yZCJ9fQ"
+ },
+ {
+  "tag": "1:signin.py",
+  "method": "POST",
+  "path": "/v1/accounts:signInWithPassword?key=vyomi-local",
+  "ref_status": 200,
+  "nano_status": 500,
+  "nano_head": "{\"__type\": \"InternalFailure\", \"message\": \"nano /_wire: ImportError: cannot import name 'app_context' from 'core' (/core/__init__.py)\"}",
+  "ref_head": "{\"kind\": \"identitytoolkit#VerifyPasswordResponse\", \"localId\": \"65b99152d6ab0db265c6a7db8b3b\", \"email\": \"maria.ops@example.com\", \"displayName\": \"\", \"registered\": true, \"idToken\": \"eyJhbGciOiJSUzI1NiIsImtpZCI6InZ5b21pLXNlY3VyZXRva2VuLTEiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL3NlY3VyZXRva2VuLmdvb2dsZS5jb20vZmFjaWxpdGllcy11c2VycyIsImF1ZCI6ImZhY2lsaXRpZXMtdXNlcnMiLCJhdXRoX3RpbWUiOjE3OTU2Mjg1NTAsInVzZXJfaWQiOiI2NWI5OTE1MmQ2YWIwZGIyNjVjNmE3ZGI4YjNiIiwic3ViIjoiNjViOTkxNTJkNmFiMGRiMjY1YzZhN2RiOGIzYiIsImlhdCI6MTc5NTYyODU1MCwiZXhwIjoxNzk1NjMyMTUwLCJlbWFpbCI6Im1hcmlhLm9wc0BleGFtcGxlLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwiZmlyZWJhc2UiOnsiaWRlbnRpdGllcyI6eyJlbWFpbCI6WyJtYXJpYS5vcHNAZXhhbXBsZS5jb20iXX0sIn"
+ },
+ {
+  "tag": "1:signin.py",
+  "method": "GET",
+  "path": "/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
+  "ref_status": 200,
+  "nano_status": 500,
+  "nano_head": "{\"__type\": \"InternalFailure\", \"message\": \"nano /_wire: ImportError: cannot import name 'app_context' from 'core' (/core/__init__.py)\"}",
+  "ref_head": "{\"vyomi-securetoken-1\": \"-----BEGIN CERTIFICATE-----\\nMIIDPTCCAiWgAwIBAgIBATANBgkqhkiG9w0BAQsFADBhMS8wLQYDVQQDDCZzZWN1\\ncmV0b2tlbkBzeXN0ZW0uZ3NlcnZpY2VhY2NvdW50LmNvbTEuMCwGA1UECgwlVnlv\\nbWkgc2ltdWxhdG9yIChwdWJsaWMgZW11bGF0b3Iga2V5KTAgFw0yNDAxMDEwMDAw\\nMDBaGA8yMDk5MTIzMTAwMDAwMFowYTEvMC0GA1UEAwwmc2VjdXJldG9rZW5Ac3lz\\ndGVtLmdzZXJ2aWNlYWNjb3VudC5jb20xLjAsBgNVBAoMJVZ5b21pIHNpbXVsYXRv\\nciAocHVibGljIGVtdWxhdG9yIGtleSkwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAw\\nggEKAoIBAQCxCYkEx91EOQssq3j82gh1wxN5s23o5lEztc8IZ21IHyO9KYEpppiC\\nAw1bB9BUbdJKj3+4PQYdqPba15/u+lkvtqhhjlcMXM1HqIxxyFJZt0g96kWrvzNy\\n8Oz4mOt0c47C6HHxwF3l/fOvnsPyVunA1TCF7hVrqUKgNI0K9ODhG0lERCwGR66v\\nTqyRxoEEx9lu7S0afN/X0EaS5Eam4OJ5awjYu+k6EnwCxC33/UXM"
+ },
+ {
+  "tag": "1:service_account.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/serviceAccounts",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/nano-project/serviceAccounts/agent-sa@nano-project.iam.gserviceaccount.com\", \"projectId\": \"nano-project\", \"uniqueId\": \"223565225153259950134\", \"email\": \"agent-sa@nano-project.iam.gserviceaccount.com\", \"displayName\": \"facilities agent\", \"description\": \"\", \"etag\": \"P4Ug0uUCTz8=\", \"oauth2ClientId\": \"223565225153259950134\", \"disabled\": false, \"createTime\": \"2026-11-25T17:43:18.058Z\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/serviceAccounts/agent-sa@vyomi-project.iam.gserviceaccount.com\", \"projectId\": \"vyomi-project\", \"uniqueId\": \"171994844817513477742\", \"email\": \"agent-sa@vyomi-project.iam.gserviceaccount.com\", \"displayName\": \"facilities agent\", \"description\": \"\", \"etag\": \"QcrwE91rSBg=\", \"oauth2ClientId\": \"171994844817513477742\", \"disabled\": false, \"createTime\": \"2026-11-25T17:42:30.583Z\"}"
+ },
+ {
+  "tag": "1:service_account.py",
+  "method": "POST",
+  "path": "/v1/projects/-/serviceAccounts/agent-sa%40vyomi-project.iam.gserviceaccount.com:generateIdToken?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 403,
+  "nano_head": "{\"error\": {\"code\": 403, \"message\": \"Permission 'iam.serviceAccounts.getAccessToken' denied on resource (or it may not exist).\", \"status\": \"PERMISSION_DENIED\"}}",
+  "ref_head": "{\"token\": \"eyJhbGciOiJSUzI1NiIsImtpZCI6Ijc5MGQwNzM5YzQxZTNlNzdmNWE1ZWIwOGIyNDMwNDVmOGQ5MzA2ZGYiLCJ0eXAiOiJKV1QifQ.eyJhdWQiOiJodHRwczovL2ZhY2lsaXRpZXMuZXhhbXBsZS5jb20iLCJhenAiOiJhZ2VudC1zYUB2eW9taS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwiZXhwIjoxNzk1NjMyMTUwLCJpYXQiOjE3OTU2Mjg1NTAsImlzcyI6Imh0dHBzOi8vYWNjb3VudHMuZ29vZ2xlLmNvbSIsInN1YiI6ImM3ZDhkNmU2NTI3MTE2MGQzMjc2MiIsImVtYWlsIjoiYWdlbnQtc2FAdnlvbWktcHJvamVjdC5pYW0uZ3NlcnZpY2VhY2NvdW50LmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlfQ.aIByUi-_NlpixL_ymJa-ZV-3KhMmjQjK453If0UyD47lRKb69nuTOUJvLVLhoQGCwHNgnX4AaTWHHKqnQL9rpfB4BDbPDf83OOs5jNbixSN7L2cJ2zFMppC2SnYyAbo9m9fuapHWsw5WqmoaVohEUWnJQ0CxyL7U8mCgBhWHI4jcBvW84kafaoEo75pBmYkzHyWS9PB7-djS09nUcBhvYvzfHGg"
+ },
+ {
+  "tag": "1:armor.py",
+  "method": "POST",
+  "path": "/compute/v1/projects/vyomi-project/global/securityPolicies",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"kind\": \"compute#operation\", \"id\": \"5000000000000000002\", \"name\": \"operation-1700000000002\", \"operationType\": \"insert\", \"targetLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/securityPolicies/facilities-armor\", \"targetId\": \"4000000000000000001\", \"status\": \"DONE\", \"user\": \"admin@vyomi.cloud\", \"progress\": 100, \"insertTime\": \"2026-11-25T17:43:18.636000Z\", \"startTime\": \"2026-11-25T17:43:18.636000Z\", \"endTime\": \"2026-11-25T17:43:18.636000Z\", \"selfLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/operations/operation-1700000000002\"}",
+  "ref_head": "{\"kind\": \"compute#operation\", \"id\": \"5000000000000000002\", \"name\": \"operation-1700000000002\", \"operationType\": \"insert\", \"targetLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/securityPolicies/facilities-armor\", \"targetId\": \"4000000000000000001\", \"status\": \"DONE\", \"user\": \"admin@vyomi.cloud\", \"progress\": 100, \"insertTime\": \"2026-11-25T17:42:31.832900Z\", \"startTime\": \"2026-11-25T17:42:31.832906Z\", \"endTime\": \"2026-11-25T17:42:31.832910Z\", \"selfLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/operations/operation-1700000000002\"}"
+ },
+ {
+  "tag": "1:armor.py",
+  "method": "GET",
+  "path": "/compute/v1/projects/vyomi-project/global/securityPolicies/facilities-armor",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"facilities-armor\", \"rules\": [{\"match\": {\"expr\": {\"expression\": \"evaluatePreconfiguredExpr('xss-stable')\"}}, \"action\": \"deny(403)\", \"priority\": 1000}, {\"match\": {\"config\": {\"srcIpRanges\": [\"*\"]}, \"versionedExpr\": \"SRC_IPS_V1\"}, \"action\": \"allow\", \"priority\": 2147483647}], \"description\": \"facilities edge policy\", \"kind\": \"compute#securityPolicy\", \"id\": \"4000000000000000001\", \"creationTimestamp\": \"2026-11-25T17:43:18.636000Z\", \"selfLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/securityPolicies/facilities-armor\"}",
+  "ref_head": "{\"name\": \"facilities-armor\", \"rules\": [{\"match\": {\"expr\": {\"expression\": \"evaluatePreconfiguredExpr('xss-stable')\"}}, \"action\": \"deny(403)\", \"priority\": 1000}, {\"match\": {\"config\": {\"srcIpRanges\": [\"*\"]}, \"versionedExpr\": \"SRC_IPS_V1\"}, \"action\": \"allow\", \"priority\": 2147483647}], \"description\": \"facilities edge policy\", \"kind\": \"compute#securityPolicy\", \"id\": \"4000000000000000001\", \"creationTimestamp\": \"2026-11-25T17:42:31.832784Z\", \"selfLink\": \"https://www.googleapis.com/compute/v1/projects/vyomi-project/global/securityPolicies/facilities-armor\"}"
+ },
+ {
+  "tag": "1:api_gateway.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/global/apis?apiId=facilities-api&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/nano-project/locations/global/operations/apigw-8920020329b5430c\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:43:18.975000Z\", \"endTime\": \"2026-11-25T17:43:18.975000Z\", \"target\": \"projects/nano-project/locations/global/apis/facilities-api\", \"verb\": \"create\", \"requestedCancellation\": false, \"apiVersion\": \"v1\"}, \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.Api\", \"name\": \"projects/nano-project/locations/global/apis/facilities-api\", \"createTime\": \"2026-11-25T17:43:18.975000Z\", \"updateTime\": \"2026-11-25T17:43:18.975000Z\", \"displayName\": \"facilities-api\", \"labels\": {}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/global/operations/apigw-74c284e61dfb47c4\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:42:32.390852Z\", \"endTime\": \"2026-11-25T17:42:32.390852Z\", \"target\": \"projects/vyomi-project/locations/global/apis/facilities-api\", \"verb\": \"create\", \"requestedCancellation\": false, \"apiVersion\": \"v1\"}, \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.Api\", \"name\": \"projects/vyomi-project/locations/global/apis/facilities-api\", \"createTime\": \"2026-11-25T17:42:32.390752Z\", \"updateTime\": \"2026-11-25T17:42:32.390752Z\", \"displayName\": \"facilities-api\", \"labels\":"
+ },
+ {
+  "tag": "1:api_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/global/apis/facilities-api?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/nano-project/locations/global/apis/facilities-api\", \"createTime\": \"2026-11-25T17:43:18.975000Z\", \"updateTime\": \"2026-11-25T17:43:18.975000Z\", \"displayName\": \"facilities-api\", \"labels\": {}, \"state\": \"ACTIVE\", \"managedService\": \"facilities-api-9428c4f66f.apigateway.nano-project.cloud.goog\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/global/apis/facilities-api\", \"createTime\": \"2026-11-25T17:42:32.390752Z\", \"updateTime\": \"2026-11-25T17:42:32.390752Z\", \"displayName\": \"facilities-api\", \"labels\": {}, \"state\": \"ACTIVE\", \"managedService\": \"facilities-api-b0b6e597ca.apigateway.vyomi-project.cloud.goog\"}"
+ },
+ {
+  "tag": "1:api_gateway.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/global/apis/facilities-api/configs?apiConfigId=cfg1&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Cannot parse the OpenAPI document: unexpected list item at line 12.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/global/operations/apigw-7f531cc7e37d4777\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:42:32.411836Z\", \"endTime\": \"2026-11-25T17:42:32.411836Z\", \"target\": \"projects/vyomi-project/locations/global/apis/facilities-api/configs/cfg1\", \"verb\": \"create\", \"requestedCancellation\": false, \"apiVersion\": \"v1\"}, \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.ApiConfig\", \"name\": \"projects/vyomi-project/locations/global/apis/facilities-api/configs/cfg1\", \"createTime\": \"2026-11-25T17:42:32.411781Z\", \"updateTime\": \"2026-11-25T17:42:32.411781Z\", \"displayNa"
+ },
+ {
+  "tag": "1:api_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/global/apis/facilities-api/configs/cfg1?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Resource 'projects/nano-project/locations/global/apis/facilities-api/configs/cfg1' was not found.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/global/apis/facilities-api/configs/cfg1\", \"createTime\": \"2026-11-25T17:42:32.411781Z\", \"updateTime\": \"2026-11-25T17:42:32.411781Z\", \"displayName\": \"cfg1\", \"labels\": {}, \"state\": \"ACTIVE\", \"gatewayServiceAccount\": \"\", \"serviceConfigId\": \"cfg1-d7c87a\", \"routes\": [{\"method\": \"POST\", \"path\": \"/search\", \"operationId\": \"search\", \"backend\": \"https://us-central1-vyomi-project.cloudfunctions.net/facilities-kb-search\"}], \"policy\": {\"securityDefinitions\": [{\"name\": \"firebase\", \"type\": \"oauth2\", \"in\": null, \"keyName\": null, \"issuer\": \"https://securetoken.google.com/facilities-users\", \"jwksUri\": \"https://www.googleapis.com/service_accounts/v1/metadata/x509/secur"
+ },
+ {
+  "tag": "1:api_gateway.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/gateways?gatewayId=facilities-api-gw&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"API config 'projects/nano-project/locations/global/apis/facilities-api/configs/cfg1' was not found.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/operations/apigw-586e46bef52b43da\", \"metadata\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.OperationMetadata\", \"createTime\": \"2026-11-25T17:42:32.417024Z\", \"endTime\": \"2026-11-25T17:42:32.417024Z\", \"target\": \"projects/vyomi-project/locations/us-central1/gateways/facilities-api-gw\", \"verb\": \"create\", \"requestedCancellation\": false, \"apiVersion\": \"v1\"}, \"done\": true, \"response\": {\"@type\": \"type.googleapis.com/google.cloud.apigateway.v1.Gateway\", \"name\": \"projects/vyomi-project/locations/us-central1/gateways/facilities-api-gw\", \"createTime\": \"2026-11-25T17:42:32.416984Z\", \"updateTime\": \"2026-11-25T17:42:32.416984Z\", \"displayN"
+ },
+ {
+  "tag": "1:api_gateway.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/gateways/facilities-api-gw?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"error\": {\"code\": 404, \"message\": \"Resource 'projects/nano-project/locations/us-central1/gateways/facilities-api-gw' was not found.\", \"status\": \"NOT_FOUND\"}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/gateways/facilities-api-gw\", \"createTime\": \"2026-11-25T17:42:32.416984Z\", \"updateTime\": \"2026-11-25T17:42:32.416984Z\", \"displayName\": \"facilities-api-gw\", \"labels\": {}, \"apiConfig\": \"projects/vyomi-project/locations/global/apis/facilities-api/configs/cfg1\", \"state\": \"ACTIVE\", \"defaultHostname\": \"facilities-api-gw-ad992370.uc.gateway.dev\"}"
+ },
+ {
+  "tag": "1:call_edge.py",
+  "method": "POST",
+  "path": "/gcpgw/facilities-api-gw/search",
+  "ref_status": 200,
+  "nano_status": 404,
+  "nano_head": "{\"code\":404,\"message\":\"No gateway serves this host.\"}",
+  "ref_head": "{\"results\": [{\"text\": \"# SOP-101 Boiler plant operation (Site HQ-1, Building A) If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6.\", \"score\": 0.207639, \"source\": \"gs://facilities-docs/docs/boiler-sop.md\"}, {\"text\": \"# SOP-310 Fire safety and evacuation Fire alarm panels are tested monthly. When an alarm sounds, security must verify within 2 minutes and start evacuation of the affected zone. Fire extinguishers are inspected annually. Sprinkler valve clo"
+ },
+ {
+  "tag": "1:call_edge.py",
+  "method": "POST",
+  "path": "/gcpgw/facilities-api-gw/search",
+  "ref_status": 401,
+  "nano_status": 404,
+  "nano_head": "{\"code\":404,\"message\":\"No gateway serves this host.\"}",
+  "ref_head": "Jwt is missing"
+ },
+ {
+  "tag": "1:call_edge.py",
+  "method": "POST",
+  "path": "/gcpgw/facilities-api-gw/search",
+  "ref_status": 401,
+  "nano_status": 404,
+  "nano_head": "{\"code\":404,\"message\":\"No gateway serves this host.\"}",
+  "ref_head": "Jwt verification fails"
+ },
+ {
+  "tag": "1:call_edge.py",
+  "method": "POST",
+  "path": "/gcpgw/facilities-api-gw/search",
+  "ref_status": 401,
+  "nano_status": 404,
+  "nano_head": "{\"code\":404,\"message\":\"No gateway serves this host.\"}",
+  "ref_head": "Jwt is missing"
+ },
+ {
+  "tag": "1:call_edge.py",
+  "method": "POST",
+  "path": "/gcpgw/facilities-api-gw/search",
+  "ref_status": 401,
+  "nano_status": 404,
+  "nano_head": "{\"code\":404,\"message\":\"No gateway serves this host.\"}",
+  "ref_head": "Jwt verification fails"
+ },
+ {
+  "tag": "2:intake.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates?templateId=facilities-guardrail&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 409,
+  "nano_status": 409,
+  "nano_head": "{\"error\": {\"code\": 409, \"message\": \"Resource 'facilities-guardrail' already exists.\", \"status\": \"ALREADY_EXISTS\"}}",
+  "ref_head": "{\"error\": {\"code\": 409, \"message\": \"Resource 'facilities-guardrail' already exists.\", \"status\": \"ALREADY_EXISTS\"}}"
+ },
+ {
+  "tag": "2:intake.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/facilities-guardrail\", \"createTime\": \"2026-11-25T17:43:03.598000Z\", \"updateTime\": \"2026-11-25T17:43:03.598000Z\", \"labels\": {}, \"filterConfig\": {\"raiSettings\": {\"raiFilters\": [{\"filterType\": 17, \"confidenceLevel\": 2}]}, \"sdpSettings\": {\"basicConfig\": {\"filterEnforcement\": 1}}, \"piAndJailbreakFilterSettings\": {\"filterEnforcement\": 1, \"confidenceLevel\": 2}}, \"templateMetadata\": {}}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/templates/facilities-guardrail\", \"createTime\": \"2026-11-25T17:42:05.140752Z\", \"updateTime\": \"2026-11-25T17:42:05.140752Z\", \"labels\": {}, \"filterConfig\": {\"raiSettings\": {\"raiFilters\": [{\"filterType\": 17, \"confidenceLevel\": 2}]}, \"sdpSettings\": {\"basicConfig\": {\"filterEnforcement\": 1}}, \"piAndJailbreakFilterSettings\": {\"filterEnforcement\": 1, \"confidenceLevel\": 2}}, \"templateMetadata\": {}}"
+ },
+ {
+  "tag": "2:intake.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail:sanitizeUserPrompt?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"sanitizationResult\": {\"filterMatchState\": 1, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 1, \"matchState\": 1}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}",
+  "ref_head": "{\"sanitizationResult\": {\"filterMatchState\": 1, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 1, \"matchState\": 1}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}"
+ },
+ {
+  "tag": "2:intake.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/templates/facilities-guardrail:sanitizeUserPrompt?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"sanitizationResult\": {\"filterMatchState\": 2, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 1, \"matchState\": 2, \"confidenceLevel\": 2}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}",
+  "ref_head": "{\"sanitizationResult\": {\"filterMatchState\": 2, \"filterResults\": {\"rai\": {\"raiFilterResult\": {\"executionState\": 1, \"matchState\": 1, \"raiFilterTypeResults\": {\"DANGEROUS\": {\"confidenceLevel\": \"CONFIDENCE_LEVEL_UNSPECIFIED\", \"matchState\": 1}}}}, \"pi_and_jailbreak\": {\"piAndJailbreakFilterResult\": {\"executionState\": 1, \"matchState\": 2, \"confidenceLevel\": 2}}, \"sdp\": {\"sdpFilterResult\": {\"inspectResult\": {\"executionState\": 1, \"matchState\": 1, \"findings\": []}}}}, \"invocationResult\": 1}}"
+ },
+ {
+  "tag": "8:export_trace.py",
+  "method": "GET",
+  "path": "/v1beta1/publishers",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"publisherModels\": [{\"name\": \"publishers/huggingface/models/smollm2-360m\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/huggingface/models/smollm2-360m@default\", \"displayName\": \"SmolLM2 360M\", \"description\": \"Runs in your browser, nothing to install\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Web LLM (in browser)\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apache License 2.0\", \"licenseId\": \"Apache-2.0",
+  "ref_head": "{\"publisherModels\": [{\"name\": \"publishers/qwen/models/qwen3-4b\", \"versionId\": \"default\", \"openSourceCategory\": \"THIRD_PARTY_OWNED_OSS\", \"launchStage\": \"GA\", \"versionState\": \"VERSION_STATE_STABLE\", \"supportedActions\": {\"openGenerationAiStudio\": {\"referenceUri\": \"#/vertex-ai/studio\"}}, \"publisherModelTemplate\": \"projects/{project}/locations/{location}/publishers/qwen/models/qwen3-4b@default\", \"displayName\": \"Qwen3 4B Instruct 2507\", \"description\": \"Quick turns, tool calls, cheap routing and classification steps (Apache-2.0, commercially usable default)\", \"servedByVyomi\": true, \"vyomiAvailability\": {\"state\": \"available\", \"label\": \"Available\", \"available\": true}, \"vyomiLicense\": {\"license\": \"Apa"
+ },
+ {
+  "tag": "8:export_trace.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"[\\\"facilities\\\", \\\"maintenance\\\", \\\"analytics\\\"]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 192, \"candidatesTokenCount\": 11, \"totalTokenCount\": 203}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"d79516291ed74f59b1fc\"}"
+ },
+ {
+  "tag": "8:export_trace.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/publishers/google/models/qwen3-4b:generateContent",
+  "ref_status": 200,
+  "nano_status": 503,
+  "nano_head": "{\"error\": {\"code\": 503, \"message\": \"No in-browser model is loaded. Open Amazon Bedrock > Overview > Local model, pick a model (for example SmolLM2 360M) and choose 'Load in-browser model (WebLLM)'. It needs a WebGPU browser and is cleared when the page reloads.\", \"status\": \"UNAVAILABLE\"}}",
+  "ref_head": "{\"candidates\": [{\"content\": {\"role\": \"model\", \"parts\": [{\"text\": \"SOP-101 Boiler plant operation (Site HQ-1, Building A). If boiler pressure exceeds 30 psi, close the main steam valve, notify the duty engineer and raise a P1 work order. The pressure relief valve (PRV) must be inspected every 90 days. Record the inspection in the maintenance log. Never bypass the low-water cutoff. Boiler B-12 serves floors 1 to 6. [1]\"}]}, \"index\": 0, \"finishReason\": \"STOP\"}], \"usageMetadata\": {\"promptTokenCount\": 387, \"candidatesTokenCount\": 89, \"totalTokenCount\": 476}, \"modelVersion\": \"qwen3-4b\", \"responseId\": \"59d4ee5973704ed89e28\"}"
+ },
+ {
+  "tag": "8:export_trace.py",
+  "method": "POST",
+  "path": "/v2/projects/vyomi-project/traces:batchWrite?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{}"
+ },
+ {
+  "tag": "8:read_trace.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/traces/a3443644c31349d2b5f1780eece0eae4?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"projectId\": \"nano-project\", \"traceId\": \"a3443644c31349d2b5f1780eece0eae4\", \"spans\": [{\"spanId\": \"5986803804708684122\", \"kind\": \"SPAN_KIND_UNSPECIFIED\", \"name\": \"supervisor.plan\", \"startTime\": \"2026-11-25T17:42:35.649175Z\", \"endTime\": \"2026-11-25T17:42:35.713616Z\", \"parentSpanId\": \"14936546939930299972\", \"labels\": {\"kind\": \"agent\"}}, {\"spanId\": \"14936546939930299972\", \"kind\": \"SPAN_KIND_UNSPECIFIED\", \"name\": \"facilities-supervisor\", \"startTime\": \"2026-11-25T17:42:35.649175Z\", \"endTime\": \"2026-11-25T17:42:35.719478Z\"}, {\"spanId\": \"5378350030584366584\", \"kind\": \"SPAN_KIND_UNSPECIFIED\", \"name\": \"agent:facilities\", \"startTime\": \"2026-11-25T17:42:35.714096Z\", \"endTime\": \"2026-11-25T17:42:35.7142",
+  "ref_head": "{\"projectId\": \"vyomi-project\", \"traceId\": \"a3443644c31349d2b5f1780eece0eae4\", \"spans\": [{\"spanId\": \"5986803804708684122\", \"kind\": \"SPAN_KIND_UNSPECIFIED\", \"name\": \"supervisor.plan\", \"startTime\": \"2026-11-25T17:42:35.649175Z\", \"endTime\": \"2026-11-25T17:42:35.713616Z\", \"parentSpanId\": \"14936546939930299972\", \"labels\": {\"kind\": \"agent\"}}, {\"spanId\": \"14936546939930299972\", \"kind\": \"SPAN_KIND_UNSPECIFIED\", \"name\": \"facilities-supervisor\", \"startTime\": \"2026-11-25T17:42:35.649175Z\", \"endTime\": \"2026-11-25T17:42:35.719478Z\"}, {\"spanId\": \"5378350030584366584\", \"kind\": \"SPAN_KIND_UNSPECIFIED\", \"name\": \"agent:facilities\", \"startTime\": \"2026-11-25T17:42:35.714096Z\", \"endTime\": \"2026-11-25T17:42:35.714"
+ },
+ {
+  "tag": "8:read_trace.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/traces?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"traces\": [{\"projectId\": \"nano-project\", \"traceId\": \"a3443644c31349d2b5f1780eece0eae4\"}]}",
+  "ref_head": "{\"traces\": [{\"projectId\": \"vyomi-project\", \"traceId\": \"a8f54b2b4573453491622b5d4f480d31\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"8db5ea8478e04ca6b059f6ac24cd8e15\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"a3443644c31349d2b5f1780eece0eae4\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"96276049612540e3891076e18af98078\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"28d4bd3ed987435eb6e49561644bb2f7\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"7f4253efa31e4f13ac1107d96529e670\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"29fa48b7340a49169d802a6da85a460b\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"e49edfebe03545b3b9537dae63bd565f\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"83d7c103e7f84"
+ },
+ {
+  "tag": "8:read_trace.py",
+  "method": "GET",
+  "path": "/v1/projects/vyomi-project/traces?pageToken=100&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"traces\": []}",
+  "ref_head": "{\"traces\": [{\"projectId\": \"vyomi-project\", \"traceId\": \"544e842ed03a4ee9bfeb0eec3332b841\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"522b535a2f294c209578204765b7cc31\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"1546741dd4a6416fb44c2a1b5e561c62\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"1421faa9e69d49608dc3931bb3f96517\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"4749c4799f2940b2b2b7ef52f4e534c2\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"8aed1a6b79574ce0879916853263f6a1\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"bbb93070445149f396977a4ba6d697bf\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"9abe746bf6c14b3f89d94ebc7af5da8d\"}, {\"projectId\": \"vyomi-project\", \"traceId\": \"54e08c9726224"
+ },
+ {
+  "tag": "8:log_run.py",
+  "method": "POST",
+  "path": "/v2/entries:write?prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{}",
+  "ref_head": "{}"
+ },
+ {
+  "tag": "8:log_run.py",
+  "method": "POST",
+  "path": "/v2/entries:list?prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"entries\": [{\"logName\": \"projects/nano-project/logs/facilities-agent\", \"resource\": {\"type\": \"global\", \"labels\": {\"project_id\": \"vyomi-project\"}}, \"jsonPayload\": {\"logging.googleapis.com/diagnostic\": {\"instrumentation_source\": [{\"name\": \"python\", \"version\": \"3.17.1\"}]}}, \"severity\": \"DEFAULT\", \"receiveTimestamp\": \"2026-11-25T17:43:23.639Z\", \"timestamp\": \"2026-11-25T17:43:23.639Z\", \"insertId\": \"3d282c134fe94bf08762\", \"labels\": {}}, {\"logName\": \"projects/nano-project/logs/facilities-agent\", \"resource\": {\"type\": \"global\", \"labels\": {\"project_id\": \"vyomi-project\"}}, \"severity\": \"INFO\", \"trace\": \"projects/nano-project/traces/a3443644c31349d2b5f1780eece0eae4\", \"jsonPayload\": {\"event\": \"agent_run\",",
+  "ref_head": "{\"entries\": [{\"logName\": \"projects/vyomi-project/logs/facilities-agent\", \"resource\": {\"type\": \"global\", \"labels\": {\"project_id\": \"vyomi-project\"}}, \"jsonPayload\": {\"logging.googleapis.com/diagnostic\": {\"instrumentation_source\": [{\"name\": \"python\", \"version\": \"3.17.1\"}]}}, \"severity\": \"DEFAULT\", \"receiveTimestamp\": \"2026-11-25T17:42:36.972Z\", \"timestamp\": \"2026-11-25T17:42:36.972Z\", \"insertId\": \"8d9fce2d31c6450fbe8a\", \"labels\": {}}, {\"logName\": \"projects/vyomi-project/logs/facilities-agent\", \"resource\": {\"type\": \"global\", \"labels\": {\"project_id\": \"vyomi-project\"}}, \"severity\": \"INFO\", \"trace\": \"projects/vyomi-project/traces/a3443644c31349d2b5f1780eece0eae4\", \"jsonPayload\": {\"event\": \"agent_ru"
+ },
+ {
+  "tag": "13:create_key.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/keyRings?keyRingId=facilities&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities\", \"createTime\": \"2026-11-25T17:43:24.000000Z\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/keyRings/facilities\", \"createTime\": \"2026-11-25T17:42:38.000000Z\"}"
+ },
+ {
+  "tag": "13:create_key.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys?cryptoKeyId=ledger-key&%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key\", \"purpose\": \"ENCRYPT_DECRYPT\", \"createTime\": \"2026-11-25T17:43:24.000000Z\", \"versionTemplate\": {\"protectionLevel\": \"SOFTWARE\", \"algorithm\": \"GOOGLE_SYMMETRIC_ENCRYPTION\"}, \"primary\": {\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key/cryptoKeyVersions/1\", \"state\": \"ENABLED\", \"protectionLevel\": \"SOFTWARE\", \"algorithm\": \"GOOGLE_SYMMETRIC_ENCRYPTION\", \"createTime\": \"2026-11-25T17:43:24.000000Z\", \"generateTime\": \"2026-11-25T17:43:24.000000Z\"}, \"rotationPeriod\": \"7776000s\", \"nextRotationTime\": \"2027-02-23T17:42:38Z\", \"destroyScheduledDuration\": \"86400s\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key\", \"purpose\": \"ENCRYPT_DECRYPT\", \"createTime\": \"2026-11-25T17:42:38.000000Z\", \"versionTemplate\": {\"protectionLevel\": \"SOFTWARE\", \"algorithm\": \"GOOGLE_SYMMETRIC_ENCRYPTION\"}, \"primary\": {\"name\": \"projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key/cryptoKeyVersions/1\", \"state\": \"ENABLED\", \"protectionLevel\": \"SOFTWARE\", \"algorithm\": \"GOOGLE_SYMMETRIC_ENCRYPTION\", \"createTime\": \"2026-11-25T17:42:38.000000Z\", \"generateTime\": \"2026-11-25T17:42:38.000000Z\"}, \"rotationPeriod\": \"7776000s\", \"nextRotationTime\": \"2027-02-23T17:42:38Z\", \"destroyScheduledDuration\": \"86400s\"}"
+ },
+ {
+  "tag": "13:seal_record.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key:encrypt?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"name\": \"projects/nano-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key/cryptoKeyVersions/1\", \"ciphertext\": \"VllLMQBpcHJvamVjdHMvbmFuby1wcm9qZWN0L2xvY2F0aW9ucy91cy1jZW50cmFsMS9rZXlSaW5ncy9mYWNpbGl0aWVzL2NyeXB0b0tleXMvbGVkZ2VyLWtleS9jcnlwdG9LZXlWZXJzaW9ucy8xYS2W+2/mLQCh9mNuZo1Hpsk7aYPUsAhV8posbs6Eu7JSvqBTPEkQOPRCVEVhgfddrmmy1mgjXKJ9iD9pIUNc3b/uxUi6bCiQMzjgiON9zLuliGmX7m8ByW3Y1JM/anGBWBQEEGMx/MIylgvwYZ2/QQZhBJbbsjr25J5mfCwWLypSEvU/\", \"ciphertextCrc32c\": \"1407226077\", \"protectionLevel\": \"SOFTWARE\"}",
+  "ref_head": "{\"name\": \"projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key/cryptoKeyVersions/1\", \"ciphertext\": \"VllLMQBqcHJvamVjdHMvdnlvbWktcHJvamVjdC9sb2NhdGlvbnMvdXMtY2VudHJhbDEva2V5UmluZ3MvZmFjaWxpdGllcy9jcnlwdG9LZXlzL2xlZGdlci1rZXkvY3J5cHRvS2V5VmVyc2lvbnMvMcRRHPIAikNvBK9HIcLyFmX/Obs3D0uuyw/00yTSbV1I6x3gvdAg7fwFz3NPXjuyQpEhj3klg1dcomgOfWFTD6BFxsQNs79/HBNLSfUTTtu3eXbAEIfFpPQfsPdb/W5igUgZ/GwyFyaDxmh6xkxlQi61Fej/35C0EykGCphmJbd0WmEpMg==\", \"ciphertextCrc32c\": \"1730732440\", \"protectionLevel\": \"SOFTWARE\"}"
+ },
+ {
+  "tag": "13:seal_record.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key:decrypt?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 200,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Decryption failed: the ciphertext is for a different CryptoKey.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"plaintext\": \"N1RoZE9hbXgxZDJQcnJnUGhYblhqalQwd3VUTWFUbVpoQjZORXNoSWlKZz0=\", \"plaintextCrc32c\": \"2991331069\", \"usedPrimary\": true, \"protectionLevel\": \"SOFTWARE\"}"
+ },
+ {
+  "tag": "13:seal_record.py",
+  "method": "POST",
+  "path": "/v1/projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys/ledger-key:decrypt?%24alt=json%3Benum-encoding%3Dint",
+  "ref_status": 400,
+  "nano_status": 400,
+  "nano_head": "{\"error\": {\"code\": 400, \"message\": \"Decryption failed: the ciphertext is for a different CryptoKey.\", \"status\": \"INVALID_ARGUMENT\"}}",
+  "ref_head": "{\"error\": {\"code\": 400, \"message\": \"Decryption failed: the ciphertext is invalid or the additional_authenticated_data does not match.\", \"status\": \"INVALID_ARGUMENT\"}}"
+ },
+ {
+  "tag": "13:audit_trail.py",
+  "method": "POST",
+  "path": "/v2/entries:list?prettyPrint=false",
+  "ref_status": 200,
+  "nano_status": 200,
+  "nano_head": "{\"entries\": [{\"logName\": \"projects/nano-project/logs/cloudaudit.googleapis.com%2Factivity\", \"resource\": {\"type\": \"audited_resource\", \"labels\": {\"service\": \"cloudkms.googleapis.com\", \"method\": \"google.cloud.kms.v1.KeyManagementService.CreateCryptoKey\"}}, \"severity\": \"NOTICE\", \"timestamp\": \"2026-11-25T17:43:24.949000Z\", \"insertId\": \"1a773e69c74249cd8f23\", \"protoPayload\": {\"@type\": \"type.googleapis.com/google.cloud.audit.AuditLog\", \"serviceName\": \"cloudkms.googleapis.com\", \"methodName\": \"google.cloud.kms.v1.KeyManagementService.CreateCryptoKey\", \"resourceName\": \"projects/nano-project/locations/us-central1/keyRings/facilities/cryptoKeys\", \"authenticationInfo\": {\"principalEmail\": \"admin@vyomi.loc",
+  "ref_head": "{\"entries\": [{\"logName\": \"projects/vyomi-project/logs/cloudaudit.googleapis.com%2Factivity\", \"resource\": {\"type\": \"audited_resource\", \"labels\": {\"service\": \"cloudkms.googleapis.com\", \"method\": \"google.cloud.kms.v1.KeyManagementService.CreateCryptoKey\"}}, \"severity\": \"NOTICE\", \"timestamp\": \"2026-11-25T17:42:38.271785Z\", \"insertId\": \"313a9b702d9b4d4d88df\", \"protoPayload\": {\"@type\": \"type.googleapis.com/google.cloud.audit.AuditLog\", \"serviceName\": \"cloudkms.googleapis.com\", \"methodName\": \"google.cloud.kms.v1.KeyManagementService.CreateCryptoKey\", \"resourceName\": \"projects/vyomi-project/locations/us-central1/keyRings/facilities/cryptoKeys\", \"authenticationInfo\": {\"principalEmail\": \"admin@vyomi.l"
+ }
+]
