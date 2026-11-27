@@ -1,6 +1,19 @@
 {
- "at": "2026-11-27T02:34:28+00:00",
+ "at": "2026-11-27T03:34:26+00:00",
  "baseline": false,
- "changes": [],
- "errors": []
+ "changes": [
+  {
+   "cloud": "azure",
+   "service": "cognitiveservices",
+   "kind": "spec-commit",
+   "key": "azure:cognitiveservices:5180038a18",
+   "title": "Azure cognitiveservices: Align Cognitive Services C# SDK names and resource IDs (#48529)",
+   "link": "https://github.com/Azure/azure-rest-api-specs/commit/5180038a181bfc8f94374b2623b05f431a0f7a04",
+   "actionable": false
+  }
+ ],
+ "errors": [
+  "maven/com.google.cloud:google-cloud-pubsub: The read operation timed out",
+  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out"
+ ]
 }
