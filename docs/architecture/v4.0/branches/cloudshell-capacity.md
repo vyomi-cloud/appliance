@@ -11,7 +11,7 @@ Cloud Shell hosts the Docker instances only (no LLM pool: it has about 14 GB of 
 - RAM budget = host RAM - 4096 MB reserve (Docker + agent), all of it compute, AI bucket 0.
 - CPU is an ENFORCED slot budget: slots = min(RAM / 2048, (cpus - 1) / 0.5). Measured Cloud Shell (4 vCPU, 15,994 MB) = 5 slots.
 - A launch beyond the slots gets the cloud's own capacity error (InsufficientInstanceCapacity / ZONE_RESOURCE_POOL_EXHAUSTED / AllocationFailed).
-- `GET /mesh/capacity`: slots, RAM, CPU, session time left (12 h cap, nominal), weekly hours (50, nominal).
+- `GET /mesh/capacity` (and the same block as `capacity` in `/mesh/status`, which the browser already polls): slots, RAM, CPU, session time left (12 h cap, nominal), weekly hours (50, nominal).
 - Env overrides: `VYOMI_MESH_PROFILE_INSTANCE_CPUS`, `_INSTANCE_MB`, `_RESERVE_MB`, `_RESERVE_CPUS`.
 - No profile set: behaviour is unchanged.
 
@@ -25,4 +25,4 @@ No provisioner that starts Cloud Shell or Mesh on it (needs the spike: `cloudshe
 No console UI for `/mesh/capacity` yet.
 
 ## Tests
-`tests/conformance/test_mesh_cloudshell_capacity.py` (30 checks, hermetic). `test_mesh_capacity.py` has 2 failures that also fail on untouched trunk (GCP within-budget, Azure resize SkuNotAvailable).
+`tests/conformance/test_mesh_cloudshell_capacity.py` (32 checks, hermetic). `test_mesh_capacity.py` has 2 failures that also fail on untouched trunk (GCP within-budget, Azure resize SkuNotAvailable).

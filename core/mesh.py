@@ -734,6 +734,7 @@ def status() -> dict:
         "tunnel": _relay_info(), "nano_ui": NANO_URL, **endpoints(),
         "ai": _ai_status(on),
         "llm": _llm_label(),
+        "capacity": capacity() if host_profile() else None,   # fixed-slot host (Cloud Shell): slots / RAM / CPU / session left
     }
 
 
