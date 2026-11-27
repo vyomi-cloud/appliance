@@ -1,6 +1,6 @@
 # Vyomi service pipeline
 
-_Updated 2026-11-27 19:39 UTC · refreshes after every pipeline run_
+_Updated 2026-11-27 20:38 UTC · refreshes after every pipeline run_
 
 ## At a glance
 
@@ -10,7 +10,7 @@ _Updated 2026-11-27 19:39 UTC · refreshes after every pipeline run_
 - **Queued:** 41 services (P1 first, then P2)
 - **Consoles really implemented:** offline 97% · Nano 97%
 - **Hourly tests:** 291 of 292 suites passing (run 15:10 UTC)
-- **Upstream watch:** 124 open changes from the real clouds to adopt
+- **Upstream watch:** 128 open changes from the real clouds to adopt
 
 ## By cloud
 
@@ -82,7 +82,7 @@ _Updated 2026-11-27 19:39 UTC · refreshes after every pipeline run_
 | EC2 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 29 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ec2) | before gate |
 | S3 | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 5 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+s3) | before gate |
 | IAM | — | not audited | ✅ 11/11 · ✅ 11/11 | 0 · 0 | ⚠️ 10 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+iam) | before gate |
-| RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 2 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+rds) | before gate |
+| RDS | — | not audited | 🧩 17/18 · 🧩 17/18 | 0 · 0 | ⚠️ 3 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+rds) | before gate |
 | DynamoDB | — | not audited | 🧩 18/19 · 🧩 18/19 | 0 · 0 | ✅ watched | before gate |
 | SQS | — | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | before gate |
 | Lambda | — | not audited | 🧩 15/16 · 🧩 15/16 | 0 · 0 | ⚠️ 7 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+lambda) | before gate |
@@ -96,7 +96,7 @@ _Updated 2026-11-27 19:39 UTC · refreshes after every pipeline run_
 | Systems Manager | in-process | 🟡 Parameter Store real; Run Command reports Success without running | 🧩 9/10 · 🧩 9/10 | 0 · 0 | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+ssm) | [v3.0.12](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.12) |
 | Step Functions | workflow-engine · in-process · + temporal engine | ✅ ASL interpreter runs executions and calls Lambda; Wait doesn't sleep | 🧩 11/12 · 🧩 11/12 | 0 · 0 | ✅ watched | [v3.0.13](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.13) |
 | API Gateway V2 | caddy · Lite | not audited | 🧩 12/13 · 🧩 12/13 | 0 · 0 | ✅ watched | [v3.0.25](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.25) |
-| Amazon CloudWatch | victoriametrics · Lite · + vmalert agent | not audited | — | – · – | ⚠️ 4 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudwatch) | [v3.0.26](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.26) |
+| Amazon CloudWatch | victoriametrics · Lite · + vmalert agent | not audited | — | – · – | ⚠️ 7 drift](https://github.com/vyomi-cloud/appliance/issues?q=is%3Aopen+label%3Aupstream-drift+cloudwatch) | [v3.0.26](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.26) |
 | Amazon SNS | nats · Lite | not audited | 🧩 9/10 · 🧩 9/10 | 0 · 0 | ✅ watched | [v3.0.28](https://github.com/vyomi-cloud/appliance/releases/tag/v3.0.28) |
 
 ### GCP
