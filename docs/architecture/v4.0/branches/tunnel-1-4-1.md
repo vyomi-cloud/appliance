@@ -14,6 +14,7 @@ was moved to 4.1.1 on 2026-11-27 (mcp-hosted-release run 45939473618, image 0.1.
 | Tunnel version 1.4.0 -> 1.4.1: the five strings `tunnel-release.yml` stamps for an RC, plus the package and the MCP Registry entry | `packaging/tunnel/bin/{vyomi-tunnel,mesh-cli,credentials,creds-sync}.mjs`, `packaging/tunnel/package.json`, `packaging/tunnel/server.json` (2) |
 | Plugin pin `vyomi-tunnel@1.4.1` (check_agent_plugins.py requires pins == package.json) | `integrations/claude-plugins/plugins/vyomi/{.mcp.json,mcp.json,README.md,skills/vyomi-mesh/SKILL.md,skills/vyomi-setup/SKILL.md}` |
 | Plugin version 4.3.1 -> 4.3.2, all manifests in step | `integrations/claude-plugins/**/*.json` (11 fields) |
+| Fix the release's `homes` gate, broken by #707: its local-Mesh token is now v2 (Ed25519) and needs `cryptography`, which the Linux job's Python lacked | `.github/workflows/tunnel-release.yml` (install it), `tools/mcp-eval/prerelease-it.sh` (a mint failure is now its own FAIL row naming the fix, not a later "/mesh/status never said mesh:true") |
 
 ## Design decisions
 | Decision | Alternatives rejected | Why |
@@ -31,4 +32,5 @@ was moved to 4.1.1 on 2026-11-27 (mcp-hosted-release run 45939473618, image 0.1.
 - `scripts/check_agent_plugins.py`: manifests consistent.
 - `scripts/sync_claude_plugins.py <public mirror clone> --tunnel-version 1.4.1` (report only): `vyomi 4.3.1 -> 4.3.2`, `vyomi-cloud 4.3.1 -> 4.3.2`, `changed=true`, no guard error (before this branch it failed: "content changed but the version did not").
 - `vyomi-tunnel --version` prints `vyomi-tunnel 1.4.1`; `test-tunnel-credentials.mjs` passed.
-- `tunnel-release.yml` dry run on this branch (every gate, `npm publish --dry-run`): see the PR.
+- `tunnel-release.yml` dry run 1 (45940460849): every gate green except linux `homes` (`No module named 'cryptography'`); fixed here, dry run 2 on the fix: see the PR.
+- The mint step: refused with a clear error on a Python without cryptography, mints a v2 token with it. `bash -n` and `shellcheck -S warning` clean.
