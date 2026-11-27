@@ -72,7 +72,9 @@ const uiDelete = async (name, openHash, btn = /^Delete$/) => {
 const shows = async (re, ms = 15000) => !!(await poll(async () => (re.test(await body()) ? true : null), ms, 1000));
 const uiRowDelete = async (name) => {
   const row = page.getByRole("row", { name: new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")) }).first();
-  await row.waitFor({ timeout: 15000 }); await row.getByRole("checkbox").check({ force: true });
+  await row.waitFor({ timeout: 15000 });
+  // the welcome banner + bottom dock can leave the row under the fixed dock: centre it, and retry until the box is really ticked
+  for (let i = 0; i < 6; i++) { await row.evaluate((el) => el.scrollIntoView({ block: "center" })); await row.getByRole("checkbox").check({ force: true }).catch(() => {}); if (await row.getByRole("checkbox").isChecked().catch(() => false)) break; await sleep(700); }
   await click(/^Delete$/); const dlg = page.getByRole("dialog").last();
   await dlg.getByLabel("Confirm deletion").fill(name); await dlg.getByRole("button", { name: /^Delete$/ }).dispatchEvent("click");
 };

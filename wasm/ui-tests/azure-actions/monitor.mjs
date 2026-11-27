@@ -18,7 +18,7 @@ export default { id: "monitor", title: "Monitor", fn: async ({ shows, arm, v, go
   { const t = await body(); rec("API->UI: the rule row shows its signal type, severity and status", /Metric/.test(t) && /Warning|2/.test(t) && /Enabled/.test(t) ? "PASS" : "FAIL"); }
   try {
     const row = page.getByRole("row", { name: new RegExp(ru) }).first(); await row.waitFor({ timeout: 15000 });
-    for (let i = 0; i < 6; i++) { const cb = row.getByRole("checkbox"); await cb.click({ force: true }).catch(() => {}); if (await cb.isChecked().catch(() => false)) break; await sleep(700); }
+    for (let i = 0; i < 6; i++) { const cb = row.getByRole("checkbox"); await row.evaluate((el) => el.scrollIntoView({ block: "center" })); await cb.click({ force: true }).catch(() => {}); if (await cb.isChecked().catch(() => false)) break; await sleep(700); }
     await click(/^Delete$/); const dlg = page.getByRole("dialog").last();
     const conf = dlg.getByLabel("Confirm deletion"); if (await conf.count()) await conf.fill(ru);
     await dlg.getByRole("button", { name: /^Delete$/ }).dispatchEvent("click");
