@@ -523,7 +523,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-ec2-detail-tabs.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-detail.mjs ONLY=ec2 node tests/conformance/nightly/aws-v4-detail.mjs",
       "timeout": 600
     },
     {
@@ -556,7 +556,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-real-tabs.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-detail.mjs node tests/conformance/nightly/aws-v4-detail.mjs",
       "timeout": 900
     },
     {
@@ -591,7 +591,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-rds-connectivity-tabs.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-detail.mjs ONLY=rds node tests/conformance/nightly/aws-v4-detail.mjs",
       "timeout": 600
     },
     {
@@ -608,7 +608,7 @@
       "target": "nano",
       "cloud": "aws",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-aws-vpc-details-tab.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-detail.mjs ONLY=vpc,subnet,sg,igw,rtb node tests/conformance/nightly/aws-v4-detail.mjs",
       "timeout": 600
     },
     {
@@ -2187,7 +2187,7 @@
       "target": "nano",
       "cloud": "all",
       "kind": "ui",
-      "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-drawer.mjs",
+      "cmd": "SCRIPT=wasm/ui-tests/validate-v4-nano-drawer.mjs node tests/conformance/nightly/v4-nano-run.mjs",
       "timeout": 600
     },
     {
@@ -2281,7 +2281,7 @@
     {"id": "aws-iam-list-member-shape-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_iam_list_member_shape_core.py", "timeout": 120},
     {"id": "nightly-aws-v4-roundtrip", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 2400},
     {"id": "nightly-aws-tunnel-recovery", "target": "offline", "cloud": "aws", "kind": "api", "pending": "written (aws-tunnel-recovery.py) but needs the Codespace leg: NIGHTLY_CODESPACES_PAT + NIGHTLY_TUNNEL_FAULTS=1 (dimension 6)", "cmd": "VYOMI_BASE_URL={ENDPOINT} python3 tests/conformance/nightly/aws-tunnel-recovery.py", "timeout": 900},
-    {"id": "nano-ui-aws-rds-persist", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "NANO_DIR=$PWD/wasm RELAY_HTTP={RELAY} node wasm/ui-tests/validate-nano-rds-persist.mjs", "timeout": 600},
+    {"id": "nano-ui-aws-rds-persist", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "SCRIPT=wasm/ui-tests/validate-aws-v4-nano-persist.mjs node tests/conformance/nightly/v4-nano-run.mjs", "timeout": 600},
     {"id": "aws-nano-registry-pglite-core", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_nano_registry_pglite_core.py", "timeout": 120},
     {"id": "offline-api-apigateway-v1-gateway", "target": "offline", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=. python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},
     {"id": "nano-api-apigateway-v1-gateway", "target": "nano", "cloud": "aws", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_apigateway_gateway_v1.py", "timeout": 120},
@@ -2291,7 +2291,7 @@
     {"id": "gcp-eventarc-nano-http-bridge", "target": "nano", "cloud": "gcp", "kind": "api", "cmd": "PYTHONPATH=wasm python3 tests/conformance/test_eventarc_nano_http.py", "timeout": 120},
     {"id": "nano-ui-gateway-eventarc-portal-e2e", "target": "nano", "cloud": "gcp", "kind": "ui", "pending": "live script already targets the v4 console (/nano/v4/gcp/); kept pending only for infrastructure: it needs the portal serving the vendored Nano bundle plus a signed-in cl_session cookie, run by hand against a portal on a COPY of the DB (not run here: :8099 is off limits)", "cmd": "PORTAL=$PORTAL COOKIE=$COOKIE MODE=sw WS_PKG=$PWD/relay-deps/ws node wasm/relay/e2e-gateway-portal.mjs", "timeout": 900},
     {"id": "nano-core-hosted-gw-egress-live", "target": "nano", "cloud": "gcp", "kind": "core", "pending": "live script, not a v3-console suite; kept pending only for infrastructure: needs `wrangler dev` (workerd) running the real worker.js plus outbound internet to example.com; wrangler is not installed on this machine", "cmd": "WS_PKG=$PWD/relay-deps/ws node wasm/relay/test-worker-gw-live.mjs", "timeout": 300},
-    {"id": "bidi-aws-cli-ui", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "SDKPY=wasm/ui-tests/_aws_roundtrip_cli.py ONLY=s3,sqs,sns,dynamodb,secretsmanager,iam,ssm,kinesis,cloudwatch,eventbridge node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 60},
+    {"id": "bidi-aws-cli-ui", "target": "nano", "cloud": "aws", "kind": "ui", "cmd": "SDKPY=wasm/ui-tests/_aws_roundtrip_cli.py ONLY=s3,sqs,sns,dynamodb,secretsmanager,iam,ssm,kinesis,cloudwatch,eventbridge node tests/conformance/nightly/aws-v4-roundtrip.mjs", "timeout": 600},
     {"id": "bidi-aws-sdk-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "retired: covered by nightly-aws-v4-roundtrip (boto3 <-> v4 console, 23 services)", "cmd": "true", "timeout": 60},
     {"id": "bidi-aws-api-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "retired: covered by nightly-aws-v4-roundtrip (the v4 console speaks only the native wire, so the API leg is the SDK leg)", "cmd": "true", "timeout": 60},
     {"id": "crawl-aws-ui", "target": "offline", "cloud": "aws", "kind": "ui", "pending": "not retargeted: v4 action crawler (toolbar/row actions, toggles) not written; tab-walk covered by nano-ui-aws-real-tabs", "cmd": "true", "timeout": 60},
