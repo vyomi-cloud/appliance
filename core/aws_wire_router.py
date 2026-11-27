@@ -2700,15 +2700,19 @@ class AwsWireRouter:
             if svc in ("gcp-gcs",):         # Organization Policy request gate (core/gcp_orgpolicy_core.py): constraints with an engine hook
                 try:
                     from core import gcp_orgpolicy_core as _orgp
+                except Exception:        # a bundle without the module must not break the call (the except clause below names _orgp)
+                    _orgp = None
+                if _orgp is not None:
                     try:
-                        _jb = json.loads(body) if body[:1] == b"{" else {}
+                        try:
+                            _jb = json.loads(body) if body[:1] == b"{" else {}
+                        except Exception:
+                            _jb = {}
+                        _orgp.request_gate(self.gcp_rm, method, path, query or {}, _jb)
+                    except _orgp.Violation as _v:
+                        return _orgp.violation_response(_v)
                     except Exception:
-                        _jb = {}
-                    _orgp.request_gate(self.gcp_rm, method, path, query or {}, _jb)
-                except _orgp.Violation as _v:
-                    return _orgp.violation_response(_v)
-                except Exception:
-                    pass
+                        pass
             if svc == "gcp-identityplatform":   # the API key names the project; certs also list the service-account key ids
                 r = mod.dispatch(store, method, path, query or {}, headers or {}, bytes(body), ctx={
                     "default_project": gcp_proj.project_id(), "iamc_store": self.gcp_iamc,
