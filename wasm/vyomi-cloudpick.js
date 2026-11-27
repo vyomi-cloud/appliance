@@ -28,10 +28,23 @@
   function go(id, c) {
     return fetch('/api/spaces/' + id + '/switch', { method: 'POST' }).catch(function () {}).then(function () { (window.top || window).location.href = consolePath(c); });
   }
+  // The plan (Pro = ONE cloud) comes from the portal's account record, which loads a moment after this script runs. Until it is known,
+  // VyomiMesh.cloudAllowed() lets every cloud through, so a default saved on the Free plan (e.g. AWS) would be opened and then bounced.
+  // Wait for it (max 2.5 s; offline / not signed in resolves at once and is not gated).
+  function accountReady() {
+    var M = window.VyomiMesh;
+    if (!(M && M.loadAccount)) return Promise.resolve();
+    return Promise.race([Promise.resolve(M.loadAccount()).catch(function () {}), new Promise(function (r) { setTimeout(r, 2500); })]);
+  }
+  function usableSpaces() {
+    return Promise.all([jget('/api/spaces'), jget('/api/runtime/tier'), accountReady()]).then(function (r) {
+      return ((r[0] && r[0].spaces) || []).filter(function (x) { return canUse(provOf(x), r[1]); });
+    });
+  }
   // Open the saved default space (rejects if it is gone or its cloud is not in the plan).
   function enter() {
     var id = getDefault();
-    return Promise.all([jget('/api/spaces'), jget('/api/runtime/tier')]).then(function (r) {
+    return Promise.all([jget('/api/spaces'), jget('/api/runtime/tier'), accountReady()]).then(function (r) {
       var sp = ((r[0] && r[0].spaces) || []).filter(function (x) { return x.space_id === id; })[0];
       if (!id || !sp) throw new Error('no default space');
       var c = provOf(sp);
@@ -65,7 +78,7 @@
   function viaDash(view) {
     try { if (view !== 'console') sessionStorage.setItem('vyomi.openView', view); } catch (e) {}   // 'console' = just enter it, no dialog
     enter().catch(function () {
-      return Promise.all([jget('/api/spaces'), jget('/api/runtime/tier')]).then(function (r) {
+      return Promise.all([jget('/api/spaces'), jget('/api/runtime/tier'), accountReady()]).then(function (r) {
         var sp = ((r[0] && r[0].spaces) || []).filter(function (x) { return canUse(provOf(x), r[1]); })[0];
         if (sp) return go(sp.space_id, provOf(sp));
         (window.top || window).location.href = consolePath('aws');
@@ -78,7 +91,14 @@
     if (od && !/[?&]embed=1/.test(location.search)) { viaDash(od[1]); return; }
     if (/[?&]embed=1/.test(location.search) || (window.__vyHash !== undefined ? window.__vyHash : location.hash)) { de.classList.remove('vy-entering'); return; }
     if (!getDefault()) { open(); return; }
-    enter().catch(function () { open(); });
+    enter().catch(function () {
+      // Saved default is gone or outside the plan: a plan with exactly one usable space (Pro = one cloud) goes straight there and
+      // that space becomes the default; anything else gets the chooser.
+      usableSpaces().then(function (list) {
+        if (list.length === 1) { setDefault(list[0].space_id); return go(list[0].space_id, provOf(list[0])); }
+        open();
+      }, open);
+    });
   }
   window.VyomiCloudPick = { open: open, getDefault: getDefault, setDefault: setDefault, enter: enter };
   if (s && s.hasAttribute('data-entry')) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', entry); else entry(); }
