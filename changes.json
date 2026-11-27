@@ -1,33 +1,20 @@
 {
- "at": "2026-11-27T21:34:58+00:00",
+ "at": "2026-11-27T22:35:18+00:00",
  "baseline": false,
  "changes": [
   {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/s3",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/s3:v1.116.2",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/s3: v1.116.1 \u2192 v1.116.2",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/dynamodb:v1.74.3",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/dynamodb: v1.74.2 \u2192 v1.74.3",
-   "actionable": false
-  },
-  {
-   "cloud": "sdk",
-   "service": "go:github.com/aws/aws-sdk-go-v2/service/sqs",
-   "kind": "release",
-   "key": "ver:go:github.com/aws/aws-sdk-go-v2/service/sqs:v1.53.2",
-   "title": "go:github.com/aws/aws-sdk-go-v2/service/sqs: v1.53.1 \u2192 v1.53.2",
+   "cloud": "aws",
+   "service": "Amazon EC2, CloudWatch",
+   "kind": "announcement",
+   "key": "feed:aws:1a96cdaf4f6c",
+   "title": "Amazon CloudWatch announces basic OpenTelemetry enrichment at no additional cost",
+   "link": "https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-opentelemetry-enrichment/",
+   "detail": "Amazon CloudWatch now offers basic OpenTelemetry enrichment for AWS service metrics at no additional cost. Basic enrichment turns the metrics that AWS services publish to CloudWatch into OpenTelemetry data points you can query with PromQL. It covers metrics that identify a resource, such as Amazon EC2 CPUUtilization with an InstanceId dimension. Enriched metrics get resource attributes for the Amazon Resource Name, cloud provider, Region, and account ID, plus an instrumentation scope naming the source service. Your original CloudWatch dimensions become data point attributes. To query AWS resou",
    "actionable": false
   }
  ],
  "errors": [
-  "maven/com.azure.resourcemanager:azure-resourcemanager-appconfiguration: The read operation timed out"
+  "maven/com.google.cloud:google-cloud-storage: The read operation timed out",
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
  ]
 }

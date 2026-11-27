@@ -1,3 +1,14 @@
+### Upstream watch — 2026-11-27T22:35:18+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**1 change(s), 0 actionable.**
+- · `announcement` Amazon CloudWatch announces basic OpenTelemetry enrichment at no additional cost ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/amazon-cloudwatch-opentelemetry-enrichment/))
+
+Sources that failed this run (2): maven/com.google.cloud:google-cloud-storage: The read operation timed out; maven/com.azure:azure-data-appconfiguration: The read operation timed out
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-27T21:34:58+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2997,17 +3008,4 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 ### Upstream watch — 2026-11-15T23:11:29+00:00
 
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**1 change(s), 0 actionable.**
-- · `release` cli:azure: azure-cli-2.92.0 → azure-cli-2.93.0
-
-Sources that failed this run (2): maven/software.amazon.awssdk:dynamodb: The read operation timed out; maven/com.azure:azure-storage-blob: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-15T22:11:36+00:00
-
-Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
-**0 change(s), 0 actionable.**
 
