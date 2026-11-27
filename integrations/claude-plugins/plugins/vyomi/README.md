@@ -12,7 +12,7 @@ say yes, and it never changes production config.
 The MCP server starts with:
 
 ```
-npx -y vyomi-tunnel@1.4.0 mcp
+npx -y vyomi-tunnel@1.4.1 mcp
 ```
 
 - npx downloads the `vyomi-tunnel` npm package, version 1.4.0 exactly, on the first start and runs it from the
@@ -28,7 +28,7 @@ npx -y vyomi-tunnel@1.4.0 mcp
 
 | Host | When | Why |
 |---|---|---|
-| registry.npmjs.org | First start (then cached) | npx downloads `vyomi-tunnel@1.4.0` |
+| registry.npmjs.org | First start (then cached) | npx downloads `vyomi-tunnel@1.4.1` |
 | 127.0.0.1 | Each status or reach call | Health checks of your local simulator: the Nano tunnel on port 8090 (`/health`) and a local mesh or offline appliance on port 9000 (`/healthz`). The settings it proposes point your SDKs at 127.0.0.1 (ports 8090, 9000, and 9443 for TLS). |
 | vyomi.cloud | Only when Vyomi tunnel credentials exist (`~/.vyomi/credentials`) | The status and reach tools run `vyomi-tunnel list mesh`, which asks the Vyomi portal for your Mesh session. The request is signed with your access key; the secret key is never sent. The MCP server itself only checks that the credentials file exists and never reads it. |
 | relay.vyomi.cloud | Only when you set `VYOMI_ENDPOINT` to a Nano cloud relay URL | Health check of that relay |
@@ -88,7 +88,7 @@ Cursor: teams can import the [plugin repository](https://github.com/vyomi-cloud/
 marketplace and install `vyomi` from it. Everyone else can add the MCP server to `~/.cursor/mcp.json`:
 
 ```
-{ "mcpServers": { "vyomi": { "command": "npx", "args": ["-y", "vyomi-tunnel@1.4.0", "mcp"] } } }
+{ "mcpServers": { "vyomi": { "command": "npx", "args": ["-y", "vyomi-tunnel@1.4.1", "mcp"] } } }
 ```
 
 To reach Vyomi Nano you also need the tunnel running on your machine; the `vyomi-nano` skill walks you through it.
