@@ -173,8 +173,13 @@ public class SnsConformance {
         PublishResponse pub = run("Publish", () -> sns.publish(b -> b.topicArn(arn).message("java-hello").subject("greeting")
                 .messageAttributes(Map.of("k", MessageAttributeValue.builder().dataType("String").stringValue("v").build()))));
         chk("Publish returns a MessageId", pub != null && !pub.messageId().isEmpty());
-        chk("Publish was delivered to the email subscription (message log)",
-                deliveries(endpoint).contains("\"message\":\"java-hello\""));
+        // Push protocols (email/HTTP/Lambda) are delivered asynchronously (as on real SNS): poll the log.
+        boolean emailDelivered = false;
+        for (int i = 0; i < 40 && !emailDelivered; i++) {
+            emailDelivered = deliveries(endpoint).contains("\"message\":\"java-hello\"");
+            if (!emailDelivered) { try { Thread.sleep(250); } catch (InterruptedException ie) { break; } }
+        }
+        chk("Publish was delivered to the email subscription (message log)", emailDelivered);
         expectError("Publish rejects an empty message", "InvalidParameter", () -> sns.publish(b -> b.topicArn(arn).message("")));
         expectError("Publish to a missing topic", "NotFound", () -> sns.publish(b -> b.topicArn(arn + "-missing").message("x")));
         PublishBatchResponse pb = sns.publishBatch(b -> b.topicArn(arn).publishBatchRequestEntries(
