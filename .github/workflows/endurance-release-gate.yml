@@ -1,5 +1,5 @@
 name: Endurance release gate
-# Installing: lives in ci/v4/ because the integrator token cannot push under .github/workflows; the owner moves it to .github/workflows/ (activates from the next release).
+# Active: moved from ci/v4/ on 2026-11-27. `workflow_run` triggers read this file from the DEFAULT branch, so it starts gating releases once it is on `main`.
 # Every release must be all green on the vyomi-endurance checks. Runs after each "Release" workflow (tag vX.Y.Z), on
 # demand, and on PRs that touch the simulator cores / estate. A red run opens (or comments on) a GitHub issue labelled
 # `release-gate` so the failure is never silent.
