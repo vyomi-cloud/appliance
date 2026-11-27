@@ -500,6 +500,18 @@ jobs:
           fi
           grep -c 'sdk-pass-rate' /tmp/RELEASE-CHECKS.md || true
 
+      # One machine-readable `checks-total` line for the portal's "Checks run in the latest release": every row, Nano UI suite and SDK check
+      # the report states (the portal used to count only the table rows, 277 of 1844 for v4.1.1).
+      - name: Total checks (rows + UI suites + SDK)
+        run: |
+          if [ ! -f scripts/release_checks_total.py ]; then
+            git fetch -q origin ${{ needs.resolve.outputs.checks_ref }} && git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- scripts/release_checks_total.py || true
+          fi
+          if [ -f scripts/release_checks_total.py ]; then
+            { echo; python3 scripts/release_checks_total.py /tmp/RELEASE-CHECKS.md; } >> /tmp/RELEASE-CHECKS.md || echo "::warning::checks total failed"
+          fi
+          grep 'checks-total' /tmp/RELEASE-CHECKS.md || true
+
       - name: Commit to release/v${{ needs.resolve.outputs.ver }}
         run: |
           B="release/v$VER"
