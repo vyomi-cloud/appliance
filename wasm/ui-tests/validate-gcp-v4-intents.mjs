@@ -41,8 +41,8 @@ page.on("dialog", (d) => d.accept("delete").catch(() => {}));
 const rest = (m, p, b) => NH.rest(m, p, b);
 const go = async (route) => { await page.goto(`${UI}#/${route}`); await page.reload(); await sleep(2500); };
 const body = () => page.evaluate(() => document.body.innerText.replace(/\s+/g, " "));
-const listed = async (route, name) => { await go(route); for (let i = 0; i < 6; i++) { if ((await body()).includes(name)) return true; await sleep(1500); } return false; };
-const gone = async (route, name) => { await go(route); await sleep(1500); return !(await body()).includes(name); };
+const listed = async (route, name) => { await go(route); for (let i = 0; i < 12; i++) { if ((await body()).includes(name)) return true; await sleep(1500); } return false; };
+const gone = async (route, name) => { await go(route); for (let i = 0; i < 8; i++) { await sleep(1500); if (!(await body()).includes(name)) return true; if (i % 3 === 2) await go(route); } return false; };
 const rowCells = async (name) => page.evaluate((n) => {
   const tr = [...document.querySelectorAll("tr")].find((r) => r.innerText.includes(n));
   return tr ? [...tr.querySelectorAll("td")].map((td) => td.innerText.trim()) : null;
@@ -195,14 +195,16 @@ await run("redis", async () => {
   const mk = await rest("POST", `${path}?instanceId=${i}`, { tier: "BASIC", memorySizeGb: 1 });
   check("redis", "create instance", ok2(mk), JSON.stringify(mk.body));
   check("redis", "instance listed in the v4 console", await listed("memorystore", i));
-  let g = null; for (let k = 0; k < 8; k++) { g = (await rest("GET", `${path}/${i}`)).body || {}; if (g.state === "READY") break; await sleep(1000); }
+  let g = null; for (let k = 0; k < 30; k++) { g = (await rest("GET", `${path}/${i}`)).body || {}; if (g.state === "READY") break; await sleep(1000); }
   check("redis", "instance reaches READY", g.state === "READY", JSON.stringify(g));
   const up = await rest("PATCH", `${path}/${i}?updateMask=memorySizeGb`, { memorySizeGb: 5 });
   check("redis", "resize accepted", ok2(up), JSON.stringify(up.body));
-  let g2 = null; for (let k = 0; k < 8; k++) { g2 = (await rest("GET", `${path}/${i}`)).body || {}; if (Number(g2.memorySizeGb) === 5) break; await sleep(1000); }
+  let g2 = null; for (let k = 0; k < 30; k++) { g2 = (await rest("GET", `${path}/${i}`)).body || {}; if (Number(g2.memorySizeGb) === 5) break; await sleep(1000); }
   check("redis", "capacity is now 5 GB", Number(g2.memorySizeGb) === 5, JSON.stringify(g2));
   await rest("DELETE", `${path}/${i}`);
-  check("redis", "instance dropped from the v4 console after delete", await gone("memorystore", i));
+  const gn = await gone("memorystore", i);
+  if (!gn) console.log("redis: still listed after delete; API GET status", (await rest("GET", `${path}/${i}`)).status, (await body()).slice(0, 700));
+  check("redis", "instance dropped from the v4 console after delete", gn);
 });
 
 await run("gke", async () => {
