@@ -6,7 +6,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "vyomi-tunnel@1.4.0",
+        "vyomi-tunnel@1.4.1",
         "mcp"
       ]
     }

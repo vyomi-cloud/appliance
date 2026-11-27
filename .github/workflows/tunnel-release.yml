@@ -137,6 +137,8 @@ jobs:
         with: { node-version: '22' }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
+      - name: Python test deps (the homes stage mints a v2 session token, which needs cryptography)
+        run: python3 -m pip install -q cryptography
       - uses: docker/setup-qemu-action@v3      # linux/arm64 container on an amd64 runner
       - uses: actions/download-artifact@v4
         with: { name: vyomi-tunnel-tarball, path: .it }

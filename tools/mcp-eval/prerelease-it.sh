@@ -246,11 +246,16 @@ services:
     volumes:
       - $ROOT/tools/mcp-eval/it-trust-test-key:/opt/vyomi-it:ro
 EOF
-  python3 - "$ROOT" > "$envf" <<'EOF'
+  # v2 (Ed25519) signing needs the cryptography package on THIS machine's python3 (v1 HMAC needed only the stdlib).
+  if ! python3 - "$ROOT" > "$envf" 2>>"$IT_DIR/log.txt" <<'EOF'
 import sys, time
 sys.path.insert(0, sys.argv[1]); from tests.mesh_testkey import mint   # v2, public test key (v1 retired, F2)
 print("VYOMI_MESH_SESSION_KEY="); print("VYOMI_MESH_SESSION_TOKEN=" + mint("local-max", "max", time.time() + 8 * 3600))
 EOF
+  then
+    rec homes mesh-token FAIL "could not mint the test session token: python3 needs the cryptography package (pip install cryptography; see $IT_DIR/log.txt)"
+    rm -f "$envf"; stage_homes_down; return 0
+  fi
   chmod 600 "$envf"
   check homes mesh-up "compose up ($proj, :$MESH_PORT)" docker compose -p "$proj" --env-file "$envf" \
     -f "$ROOT/codespace/.devcontainer/mesh/docker-compose.mesh.yml" -f "$ov" up -d --pull never simulator || { stage_homes_down; return 0; }
