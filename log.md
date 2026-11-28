@@ -1,3 +1,11 @@
+### Upstream watch — 2026-11-28T16:35:22+00:00
+
+Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
+
+**0 change(s), 0 actionable.**
+
+Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
+
 ### Upstream watch — 2026-11-28T15:35:23+00:00
 
 Tracking 4299 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
@@ -2998,13 +3006,3 @@ Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
 Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
 
 **1 change(s), 0 actionable.**
-- · `announcement` AgentCore runtime instances are now available in six more AWS Regions ([link](https://aws.amazon.com/about-aws/whats-new/2026/11/agentcore-aws-regions/))
-
-Sources that failed this run (1): maven/software.amazon.awssdk:sqs: The read operation timed out
-
-Filed 0 backlog issue(s) labelled `upstream-drift`; 0 pending.
-
-### Upstream watch — 2026-11-16T18:12:03+00:00
-
-Tracking 4276 AWS + GCP operations, 18 Azure spec areas, 53 SDK/CLI packages and 3 lifecycle feeds.
-
