@@ -4967,7 +4967,8 @@ class AzureArm:
         if action == "listreadonlykeys":
             return _ok({k: keys[k] for k in ("primaryReadonlyMasterKey", "secondaryReadonlyMasterKey")})
         if action == "listconnectionstrings":
-            uri = f"https://{account_name}.documents.azure.com:443/"
+            from core import public_origin as _po   # Cosmos data plane is served at the root of the origin the client reached
+            uri = (_po.origin() + "/") if _po.origin() else f"https://{account_name}.documents.azure.com:443/"
             cs = lambda desc, key: {"connectionString": f"AccountEndpoint={uri};AccountKey={key};", "description": desc}
             return _ok({"connectionStrings": [
                 cs("Primary SQL Connection String", keys["primaryMasterKey"]),

@@ -15,6 +15,9 @@ sys.path.insert(0, ROOT)
 from core import aws_wire_router as w  # noqa: E402
 
 R = w.AwsWireRouter()
+KNOWN_GAPS = ["DAX cluster endpoint (proprietary DAX protocol)", "Redshift address:5439 (no SQL engine)", "ElastiCache / Memorystore Redis endpoints (no Redis engine)",
+              "Azure SQL `*.database.windows.net:1433` (no TDS engine)", "Azure Service Bus / Key Vault host-style endpoints (use the tunnel's amqp bridge / `*.vault.localtest.me`)",
+              "Cloud Run container images are not executed (the front door answers 202 with the reason; Python-source services run)"]
 
 
 class H(BaseHTTPRequestHandler):
@@ -99,9 +102,83 @@ def main():
         return ep
     check("OpenSearch: index + search through the domain Endpoint", opensearch)
 
+    def cosmos():
+        from azure.cosmos import CosmosClient
+        sid = requests.get(EP + "/subscriptions?api-version=2020-01-01").json()["value"][0]["subscriptionId"]
+        b = f"{EP}/subscriptions/{sid}/resourceGroups/sdk-check"
+        a = b + "/providers/Microsoft.DocumentDB/databaseAccounts/sdkcos1?api-version=2023-04-15"
+        requests.put(a, json={"location": "eastus", "kind": "GlobalDocumentDB", "properties": {"databaseAccountOfferType": "Standard", "locations": [{"locationName": "eastus", "failoverPriority": 0}]}})
+        ep = requests.get(a).json()["properties"]["documentEndpoint"].rstrip("/")
+        key = requests.post(b + "/providers/Microsoft.DocumentDB/databaseAccounts/sdkcos1/listKeys?api-version=2023-04-15").json()["primaryMasterKey"]
+        ct = CosmosClient(ep, key, connection_verify=False).create_database("db1").create_container("c1", partition_key={"paths": ["/pk"], "kind": "Hash"})
+        ct.create_item({"id": "1", "pk": "a", "v": 1})
+        assert [i["v"] for i in ct.query_items("SELECT * FROM c", enable_cross_partition_query=True)] == [1]
+        return ep
+    check("azure-cosmos: create + query through documentEndpoint", cosmos)
+
+    def ecr():
+        import base64
+        e = boto3.client("ecr", **kw)
+        uri = e.create_repository(repositoryName="sdk-check")["repository"]["repositoryUri"]
+        assert uri.startswith(EP.split("://", 1)[1]), uri
+        t = e.get_authorization_token()["authorizationData"][0]
+        assert t["proxyEndpoint"] == EP, t["proxyEndpoint"]
+        usr = tuple(base64.b64decode(t["authorizationToken"]).decode().split(":", 1))
+        assert requests.get(EP + "/v2/", auth=usr).status_code == 200
+        return uri
+    check("ECR: repositoryUri/proxyEndpoint -> the registry /v2/ answers", ecr)
+
+    def cloudfront():
+        s3 = boto3.client("s3", **kw)
+        s3.create_bucket(Bucket="sdk-site")
+        s3.put_object(Bucket="sdk-site", Key="index.html", Body=b"<h1>hi</h1>", ContentType="text/html")
+        d = boto3.client("cloudfront", **kw).create_distribution(DistributionConfig={
+            "CallerReference": "sdk1", "Comment": "t", "Enabled": True, "DefaultRootObject": "index.html",
+            "Origins": {"Quantity": 1, "Items": [{"Id": "o1", "DomainName": "sdk-site.s3.amazonaws.com", "S3OriginConfig": {"OriginAccessIdentity": ""}}]},
+            "DefaultCacheBehavior": {"TargetOriginId": "o1", "ViewerProtocolPolicy": "allow-all",
+                                     "ForwardedValues": {"QueryString": False, "Cookies": {"Forward": "none"}}, "MinTTL": 0}})["Distribution"]
+        r = requests.get("http://" + d["DomainName"] + "/")
+        assert r.status_code == 200 and "<h1>hi</h1>" in r.text, (r.status_code, r.text[:60])
+        return d["DomainName"]
+    check("CloudFront: GET https://<DomainName>/ serves the S3 origin", cloudfront)
+
+    def elb():
+        import io, zipfile
+        z = io.BytesIO()
+        with zipfile.ZipFile(z, "w") as f:
+            f.writestr("index.py", "def handler(e, c):\n  return {'statusCode': 200, 'headers': {'content-type': 'text/plain'}, 'body': 'hello from ' + e['path']}\n")
+        role = boto3.client("iam", **kw).create_role(RoleName="sdk-elb", AssumeRolePolicyDocument="{}")["Role"]["Arn"]
+        fa = boto3.client("lambda", **kw).create_function(FunctionName="sdk-web", Runtime="python3.12", Role=role, Handler="index.handler", Code={"ZipFile": z.getvalue()})["FunctionArn"]
+        e, ec2 = boto3.client("elbv2", **kw), boto3.client("ec2", **kw)
+        vpc = ec2.create_vpc(CidrBlock="10.0.0.0/16")["Vpc"]["VpcId"]
+        sn = [ec2.create_subnet(VpcId=vpc, CidrBlock=f"10.0.{i}.0/24", AvailabilityZone=f"us-east-1{'ab'[i]}")["Subnet"]["SubnetId"] for i in range(2)]
+        lb = e.create_load_balancer(Name="sdk-alb", Subnets=sn)["LoadBalancers"][0]
+        tg = e.create_target_group(Name="sdk-tg", TargetType="lambda")["TargetGroups"][0]["TargetGroupArn"]
+        e.register_targets(TargetGroupArn=tg, Targets=[{"Id": fa}])
+        ls = e.create_listener(LoadBalancerArn=lb["LoadBalancerArn"], Port=80, Protocol="HTTP", DefaultActions=[
+            {"Type": "fixed-response", "FixedResponseConfig": {"StatusCode": "404", "ContentType": "text/plain", "MessageBody": "nope"}}])["Listeners"][0]["ListenerArn"]
+        e.create_rule(ListenerArn=ls, Priority=1, Conditions=[{"Field": "path-pattern", "Values": ["/app/*"]}], Actions=[{"Type": "forward", "TargetGroupArn": tg}])
+        a, b = requests.get("http://" + lb["DNSName"] + "/app/x"), requests.get("http://" + lb["DNSName"] + "/other")
+        assert (a.status_code, a.text) == (200, "hello from /app/x") and (b.status_code, b.text) == (404, "nope"), (a.status_code, a.text[:40], b.status_code)
+        return lb["DNSName"]
+    check("ALB: rule -> Lambda target, default -> fixed-response via DNSName", elb)
+
+    def run():
+        P = "nano-project"
+        requests.post(EP + f"/v2/projects/{P}/locations/us-central1/services?serviceId=sdkrun", json={"template": {"containers": [{"image": "us-docker.pkg.dev/cloudrun/container/hello"}]}})
+        u = requests.get(EP + f"/v2/projects/{P}/locations/us-central1/services/sdkrun").json()["uri"]
+        assert u.startswith(EP + "/_run/"), u
+        requests.post(EP + f"/v2/projects/{P}/locations/us-central1/services/sdkrun:setIamPolicy", json={"policy": {"bindings": [{"role": "roles/run.invoker", "members": ["allUsers"]}]}})
+        assert requests.get(u + "/").status_code in (200, 202)
+        return u
+    check("Cloud Run: service uri is the /_run/ front door and answers", run)
+
     print("## Endpoint URLs work with the real SDKs\n\n| Status | Check | Detail |\n|---|---|---|")
     for ok, name, detail in rows:
         print(f"| {'✅' if ok else '❌'} | {name} | {detail} |")
+    print("\n**Known gaps** (the simulator has no data plane behind these, so their endpoint fields keep the realistic cloud name):\n")
+    for g in KNOWN_GAPS:
+        print(f"- {g}")
     return 0 if all(r[0] for r in rows) else 1
 
 

@@ -513,7 +513,7 @@ jobs:
           fi
           # the same URLs, exercised with the real SDKs (boto3, azure-storage-blob/-queue) against the router on a loopback port
           if [ -f scripts/check_endpoint_sdk.py ]; then
-            python3 -m pip -q install boto3 azure-storage-blob azure-storage-queue requests >/dev/null 2>&1 || true
+            python3 -m pip -q install boto3 azure-storage-blob azure-storage-queue azure-cosmos requests >/dev/null 2>&1 || true
             python3 scripts/check_endpoint_sdk.py > /tmp/endpoint-sdk.md 2>/dev/null || echo "::warning::endpoint SDK check has failures"
             { echo; cat /tmp/endpoint-sdk.md; } >> /tmp/RELEASE-CHECKS.md; cat /tmp/endpoint-sdk.md >> "$GITHUB_STEP_SUMMARY"
           fi

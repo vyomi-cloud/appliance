@@ -946,6 +946,49 @@ def invoke_service(store, project, location, sid, event=None, headers=None, inte
     return {"status": 200, "body": out.get("result")}
 
 
+_RUN_URL = re.compile(rb"https://([a-z0-9][a-z0-9-]*-\d+)\.([a-z0-9-]+)\.run\.app")
+
+
+def public_urls(body: bytes, origin: str) -> bytes:
+    """Rewrite `https://<svc>-<projnum>.<region>.run.app` in a response to `<origin>/_run/<region>/<svc>-<projnum>`, the front door that
+    serve() answers on the host the client reached (the real *.run.app name has no DNS pointing at the simulator)."""
+    if not origin or not body:
+        return body
+    return _RUN_URL.sub(lambda m: (origin + "/_run/" + m.group(2).decode() + "/" + m.group(1).decode()).encode(), body)
+
+
+def serve(store, path, method, query, headers, body):
+    """`/_run/<region>/<service>-<project number>/<path>`: deliver the HTTP request to the service's serving revision through
+    invoke_service (IAM invoker check included). Python-source services run for real; container images are not executed (202 + reason)."""
+    parts = path[len("/_run/"):].split("/", 2)
+    if len(parts) < 2:
+        return {"status": 404, "headers": {"content-type": "text/plain"}, "body": b"Not found"}
+    loc, tag, rest = parts[0], parts[1], (parts[2] if len(parts) > 2 else "")
+    hit = next(((f, v) for f, v in store.services.items()
+                if (v.get("uri") or "").startswith(f"https://{tag}.{loc}.run.app")), None)
+    if not hit:
+        return {"status": 404, "headers": {"content-type": "text/html"},
+                "body": b"<html><body><h1>Error 404 (Not Found)</h1><p>The requested URL was not found on this server.</p></body></html>"}
+    fp = hit[0].split("/")
+    raw = bytes(body or b"")
+    try:
+        txt = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        txt = raw.decode("latin-1")
+    event = {"method": method.upper(), "path": "/" + rest, "query": dict(query or {}), "headers": {str(k).lower(): v for k, v in (headers or {}).items()}, "body": txt}
+    try:
+        out = invoke_service(store, fp[1], fp[3], fp[5], event, headers=headers)
+    except _E as e:
+        return {"status": e.status if hasattr(e, "status") else 403, "headers": {"content-type": "application/json"},
+                "body": json.dumps({"error": {"message": str(e)}}).encode()}
+    b = out["body"]
+    if isinstance(b, dict) and "statusCode" in b:
+        return {"status": int(b["statusCode"]), "headers": dict(b.get("headers") or {"content-type": "text/plain"}), "body": str(b.get("body", "")).encode()}
+    if isinstance(b, (dict, list)):
+        return {"status": out["status"], "headers": {"content-type": "application/json"}, "body": json.dumps(b).encode()}
+    return {"status": out["status"], "headers": {"content-type": "text/plain"}, "body": str(b if b is not None else "").encode()}
+
+
 def _rev_suffix(svc_full, n):
     return "%s-%05d-%s" % (svc_full.rsplit("/", 1)[-1], n, "".join(
         "abcdefghijklmnopqrstuvwxyz"[int(c, 16) % 26] for c in _h("rev", svc_full, n)[:3]))

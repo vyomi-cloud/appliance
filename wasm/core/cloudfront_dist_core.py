@@ -361,9 +361,71 @@ def _validate_dist(st, el, self_id=None):
     return aliases
 
 
+def _domain(d):
+    """DomainName as shown to the user: `<simulator host>/_cf/<id>` so `https://<DomainName>/index.html` is served by edge() below
+    (the real `d….cloudfront.net` name has no DNS pointing at the simulator). Real name only when there is no request."""
+    from core import public_origin as _po
+    host = _po.origin().split("://", 1)[-1]
+    return f"{host}/_cf/{d['id']}" if host else d["domain"]
+
+
+def edge(s3, method, path, headers=None):
+    """The CloudFront edge: GET/HEAD /_cf/<distribution id>/<path>. Picks the cache behavior by PathPattern (else the default), resolves
+    its origin and serves the object from the simulator's S3 (origin domain `<bucket>.s3...`, OriginPath applied, DefaultRootObject
+    for `/`). Custom (non-S3) origins are not reachable from here and answer 502 with the reason."""
+    import fnmatch
+    import xml.etree.ElementTree as ET
+    def _resp(status, body, ctype="application/xml", extra=None):
+        h = {"content-type": ctype, **(extra or {})}
+        return {"status": status, "headers": h, "body": body if isinstance(body, bytes) else body.encode()}
+    def _err(status, code, msg):
+        return _resp(status, f"<?xml version=\"1.0\" encoding=\"UTF-8\"?><Error><Code>{code}</Code><Message>{msg}</Message></Error>")
+    if method.upper() not in ("GET", "HEAD"):
+        return _err(403, "MethodNotAllowed", "The edge serves GET and HEAD only.")
+    did, _, rest = path[len("/_cf/"):].partition("/")
+    d = _st(s3)["dists"].get(did)
+    if not d:
+        return _err(404, "NoSuchDistribution", f"The distribution {did} does not exist.")
+    if d.get("status") != "Deployed":
+        return _err(403, "DistributionDisabled", "The distribution is not deployed.")
+    cfg = ET.fromstring(f"<r>{d['cfg']}</r>")
+    key = "/" + rest.split("?", 1)[0]
+    if key == "/":
+        root = (cfg.findtext("DefaultRootObject") or "").strip()
+        if not root:
+            return _err(403, "AccessDenied", "No DefaultRootObject is configured for this distribution.")
+        key = "/" + root.lstrip("/")
+    target = None
+    for cb in cfg.findall("./CacheBehaviors/Items/CacheBehavior"):
+        if fnmatch.fnmatchcase(key, cb.findtext("PathPattern") or "\0"):
+            target = cb.findtext("TargetOriginId")
+            break
+    target = target or cfg.findtext("./DefaultCacheBehavior/TargetOriginId")
+    origin = next((o for o in cfg.findall("./Origins/Items/Origin") if o.findtext("Id") == target), None)
+    if origin is None:
+        return _err(502, "OriginNotFound", f"TargetOriginId {target} does not resolve to an origin.")
+    dn = (origin.findtext("DomainName") or "").strip()
+    m = re.match(r"^(.+?)\.s3[.-][a-z0-9.-]*amazonaws\.com$", dn) or re.match(r"^(.+?)\.s3\.amazonaws\.com$", dn)
+    if not m:
+        return _err(502, "CustomOriginUnreachable", f"Origin {dn} is not an S3 bucket; the simulator edge serves S3 origins only.")
+    path_prefix = (origin.findtext("OriginPath") or "").rstrip("/")
+    try:
+        from core import s3_object_core as _s3c
+    except ImportError:
+        import s3_object_core as _s3c          # type: ignore
+    r = _s3c.dispatch(s3, method.upper(), f"/{m.group(1)}{path_prefix}{key}", {}, {}, b"")
+    hdrs = {str(k).lower(): v for k, v in (getattr(r, "headers", None) or {}).items()}
+    ctype = hdrs.get("content-type") or "application/octet-stream"
+    if r.status != 200:
+        return _err(403 if r.status in (403, 404) else r.status, "AccessDenied" if r.status in (403, 404) else "OriginError",
+                    f"The origin returned {r.status} for {key}.")
+    return _resp(200, bytes(r.body or b""), ctype, {"x-cache": "Miss from cloudfront", "via": f"1.1 {did}.cloudfront.net (CloudFront)",
+                                                      **({"etag": hdrs["etag"]} if hdrs.get("etag") else {})})
+
+
 def _dist_xml(d):
     return (f"<Id>{d['id']}</Id><ARN>arn:aws:cloudfront::{ACCOUNT}:distribution/{d['id']}</ARN><Status>{d['status']}</Status><LastModifiedTime>{_iso(d['modified'])}</LastModifiedTime>"
-            f"<InProgressInvalidationBatches>0</InProgressInvalidationBatches><DomainName>{d['domain']}</DomainName>"
+            f"<InProgressInvalidationBatches>0</InProgressInvalidationBatches><DomainName>{_domain(d)}</DomainName>"
             "<ActiveTrustedSigners><Enabled>false</Enabled><Quantity>0</Quantity></ActiveTrustedSigners><ActiveTrustedKeyGroups><Enabled>false</Enabled><Quantity>0</Quantity></ActiveTrustedKeyGroups>"
             f"<DistributionConfig>{d['cfg']}</DistributionConfig>")
 
@@ -435,7 +497,7 @@ def _dist_summary(d):
     c = d["cfg"]
     root = ET.fromstring("<r>" + c + "</r>")
     return (f"<DistributionSummary><Id>{d['id']}</Id><ARN>arn:aws:cloudfront::{ACCOUNT}:distribution/{d['id']}</ARN><Status>{d['status']}</Status><LastModifiedTime>{_iso(d['modified'])}</LastModifiedTime>"
-            f"<DomainName>{d['domain']}</DomainName>{_sub(c, 'Aliases') or '<Aliases><Quantity>0</Quantity></Aliases>'}{_sub(c, 'Origins')}{_sub(c, 'DefaultCacheBehavior')}"
+            f"<DomainName>{_domain(d)}</DomainName>{_sub(c, 'Aliases') or '<Aliases><Quantity>0</Quantity></Aliases>'}{_sub(c, 'Origins')}{_sub(c, 'DefaultCacheBehavior')}"
             f"{_sub(c, 'CacheBehaviors') or '<CacheBehaviors><Quantity>0</Quantity></CacheBehaviors>'}{_sub(c, 'CustomErrorResponses') or '<CustomErrorResponses><Quantity>0</Quantity></CustomErrorResponses>'}"
             f"<Comment>{esc(_txt(root, 'Comment', ''))}</Comment><PriceClass>{_txt(root, 'PriceClass', 'PriceClass_All')}</PriceClass><Enabled>{_txt(root, 'Enabled', 'true')}</Enabled>"
             f"{_sub(c, 'ViewerCertificate') or '<ViewerCertificate><CloudFrontDefaultCertificate>true</CloudFrontDefaultCertificate></ViewerCertificate>'}"

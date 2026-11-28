@@ -18,8 +18,15 @@
 ## Already working (not touched)
 - Databases: `vyomi-tunnel` `db-tcp` bridge (RDS + Cloud SQL, Postgres/MySQL) and `DbConnect.jsx` show `postgresql://user:pw@127.0.0.1:5432/db`; Service Bus over the tunnel's `amqp` bridge; EC2/GCE/Azure VMs over `vm-tcp` SSH.
 
+## Data planes added so the URL works through the tunnel (all SDK/HTTP-verified by `scripts/check_endpoint_sdk.py`)
+- ECR: `repositoryUri` / `proxyEndpoint` / `downloadUrl` = request host (the registry `/v2/` API already served any host for `AWS:<token>`).
+- Cosmos: ARM `documentEndpoint` + `listConnectionStrings` AccountEndpoint = origin (SQL API is served at the origin root).
+- CloudFront: `DomainName` = `<host>/_cf/<distId>`; `cloudfront_dist_core.edge()` serves GET/HEAD from the S3 origin (cache behavior by PathPattern, OriginPath, DefaultRootObject). Custom origins answer 502 with the reason.
+- ALB: `DNSName` = `<host>/_elb/<name>`; `elbv2_core.serve()` evaluates listener rules (path/host/method/header/query) -> fixed-response / redirect / forward to a LAMBDA target group. Instance/ip targets answer 503 (no network path).
+- Cloud Run: `*.run.app` -> `<origin>/_run/<region>/<svc>-<projnum>` (response rewrite `gcp_run_core.public_urls`); `serve()` -> `invoke_service` (IAM invoker check; Python-source runs, container images answer 202 + reason).
+
+## Known gaps (no data plane in the simulator; listed in every release report)
+- DAX (proprietary protocol), Redshift (no SQL engine), ElastiCache/Memorystore Redis (no engine), Azure SQL (no TDS engine), Service Bus/Key Vault host-style endpoints (tunnel `amqp` bridge / `*.vault.localtest.me` exist).
+
 ## Open issues
-- No simulator data plane exists for: ELB (`DNSName`), CloudFront (`DomainName`), ECR registry (`/v2/`), DAX, Cloud Run `*.run.app`; a rewritten URL would not work, so they keep the realistic name until a data plane is built.
-- Not bridged: Redshift, ElastiCache/Memorystore, Azure SQL (MSSQL), Cosmos.
-- Original note (display-format question) below.
-- Hostname-style endpoints with no simulator route yet (RDS/Redshift/OpenSearch/ELB/CloudFront/ECR/DAX, Cloud Run `*.run.app`, Azure blob/Service Bus/SQL hosts): display format undecided (`<tunnel-host>:<port>` vs realistic name + "connect via" hint).
+- GCP control-plane selfLinks (Cloud SQL/Compute/GKE/BigQuery) intentionally unchanged (resource identifiers).
