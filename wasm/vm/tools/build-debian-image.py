@@ -276,6 +276,11 @@ def main():
         if p.startswith(drop) or (p.startswith("usr/share/doc/") and fs[p][0] == "f" and not p.endswith("/copyright")) \
            or re.search(r"/__pycache__(/|$)", p) or re.search(r"usr/lib/python3[^/]*/(test|idlelib|tkinter|lib2to3|turtledemo)(/|$)", p):
             del fs[p]
+    # git ships ~10 statically linked 2.6 MB helpers; the ones a RAM-disk VM user never needs are left out (git clone/fetch/push over http(s)/ssh/git, commit,
+    # branch, rebase ... all stay): the dumb-http push helper, imap-send, git-daemon, git-http-backend (a server), git-shell, scalar
+    for p in ("usr/lib/git-core/git-http-push", "usr/lib/git-core/git-imap-send", "usr/lib/git-core/git-daemon", "usr/lib/git-core/git-http-backend",
+              "usr/lib/git-core/git-shell", "usr/lib/git-core/scalar", "usr/bin/git-shell", "usr/bin/scalar"):
+        fs.pop(p, None)
     # kernel NIC modules from the production Alpine guest (same kernel): virtio-net / ne2k-pci + deps, with their depmod files
     for (n, mode, uid, gid, mt, data, rdev) in oci.read_cpio(os.path.join(VM, "image", "rootfs.cpio.gz")):
         if n.startswith("lib/modules"):
@@ -285,6 +290,16 @@ def main():
     for d in ("proc", "sys", "dev", "run", "tmp", "root", "home", "mnt", "etc/dropbear"):
         fs.setdefault(d, ("d", 0o755, 0, 0, EPOCH, b""))
     fs["tmp"] = ("d", 0o1777, 0, 0, EPOCH, b"")
+    # hard links (git ships ~60 hardlinked copies of one binary, perl/perl5.36.0, ...) would be stored once per name in a newc cpio and gzip cannot
+    # dedupe copies megabytes apart: store the first name as the file and every other name as a symlink to it (same bytes, ~14 MB less)
+    seen = {}
+    for p in sorted(fs, key=lambda x: (x.count("/"), x)):
+        k, mode, uid, gid, mt, payload = fs[p]
+        if k == "f" and len(payload) > 65536:
+            if id(payload) in seen:
+                fs[p] = ("l", 0o777, uid, gid, mt, ("/" + seen[id(payload)]).encode())
+            else:
+                seen[id(payload)] = p
     # cpio
     buf = io.BytesIO(); ino = 1
     for p in sorted(fs, key=lambda x: (x.count("/"), x)):

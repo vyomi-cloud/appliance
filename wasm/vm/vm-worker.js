@@ -170,7 +170,7 @@ function wire(e) {
   let buf = "", flushT = null;
   e.add_listener("serial0-output-byte", (b) => {
     buf += String.fromCharCode(b);
-    if (IMG && IMG.kind === "console" && agentReadyResolve) { serTail = (serTail + String.fromCharCode(b)).slice(-200); if (/[#$] $/.test(serTail)) { agentReadyResolve(); } }
+    if (IMG && IMG.kind === "console" && agentReadyResolve) { serTail = (serTail + String.fromCharCode(b)).slice(-200); if (/[#$%] $/.test(serTail)) { agentReadyResolve(); } }
     if (!flushT) flushT = setTimeout(() => { broadcast({ type: "serial-out", id: inst && inst.id, data: buf }); buf = ""; flushT = null; }, 30);
   });
 }
