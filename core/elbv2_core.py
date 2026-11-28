@@ -290,7 +290,99 @@ def _action_tgs(a: dict) -> list:
 
 # ── views ──────────────────────────────────────────────────────────────────
 def _lb_view(lb: dict) -> dict:
-    return {k: v for k, v in lb.items() if not k.startswith("_")}
+    out = {k: v for k, v in lb.items() if not k.startswith("_")}
+    from core import public_origin as _po
+    host = _po.origin().split("://", 1)[-1]
+    if host:   # `https://<DNSName>/path` is served by serve() below, on the host the client reached (tunnel/LAN/localhost)
+        out["DNSName"] = f"{host}/_elb/{lb['LoadBalancerName']}"
+    return out
+
+
+def serve(store, method, path, query, headers, body, invoke_lambda=None):
+    """The ALB data plane: `/_elb/<load balancer name>/<path>`. First listener of the balancer; rules by priority then the default
+    rule; Conditions path-pattern / host-header / http-request-method / http-header / query-string are evaluated (source-ip and
+    anything else match). Actions: fixed-response, redirect (with #{...} substitution) and forward to a LAMBDA target group (ALB event ->
+    function -> response). Forward to instance / ip groups answers 503 (those targets have no network path from here)."""
+    import base64
+    import fnmatch
+    import json as _json
+    lh = {str(k).lower(): v for k, v in (headers or {}).items()}
+    def _r(status, ctype, data, extra=None):
+        return {"status": status, "headers": {"content-type": ctype, **(extra or {})}, "body": data if isinstance(data, bytes) else str(data).encode()}
+    name, _, rest = path[len("/_elb/"):].partition("/")
+    lb = next((l for l in store.load_balancers.values() if l["LoadBalancerName"] == name), None)
+    if not lb:
+        return _r(404, "text/plain", f"Load balancer {name} not found")
+    lsn = sorted((l for l in store.listeners.values() if l["LoadBalancerArn"] == lb["LoadBalancerArn"]), key=lambda l: l.get("Port") or 0)
+    if not lsn:
+        return _r(503, "text/plain", "The load balancer has no listeners")
+    ls = lsn[0]
+    req_path = "/" + rest.split("?", 1)[0]
+    q = dict(query or {})
+    def _m(pat, val):
+        return fnmatch.fnmatchcase(str(val), str(pat))
+    def _match(rule):
+        for c in rule.get("Conditions") or []:
+            f, vals = c.get("Field"), c.get("Values") or []
+            if f == "path-pattern" and not any(_m(v, req_path) for v in vals):
+                return False
+            if f == "host-header" and not any(_m(v, (lh.get("host") or "").split(":")[0]) for v in vals):
+                return False
+            if f == "http-request-method" and method.upper() not in [str(v).upper() for v in vals]:
+                return False
+            if f == "http-header":
+                hv = lh.get(str((c.get("HttpHeaderConfig") or {}).get("HttpHeaderName", "")).lower())
+                if hv is None or not any(_m(v, hv) for v in vals):
+                    return False
+            if f == "query-string":
+                pairs = (c.get("QueryStringConfig") or {}).get("Values") or []
+                if not any((p.get("Key") in (None, "") or p.get("Key") in q) and _m(p.get("Value") or "*", q.get(p.get("Key"), "")) for p in pairs):
+                    return False
+        return True
+    rules = [r for r in store.rules.values() if r.get("_listener") == ls["ListenerArn"]]
+    rules.sort(key=lambda r: (1, 0) if r.get("IsDefault") else (0, int(r["Priority"])))
+    rule = next((r for r in rules if r.get("IsDefault") or _match(r)), None)
+    acts = sorted((rule or {}).get("Actions") or ls["DefaultActions"], key=lambda a: a.get("Order", 1))
+    act = next((a for a in acts if a["Type"] in ("fixed-response", "redirect", "forward")), None)
+    if not act:
+        return _r(503, "text/plain", "No routable action")
+    if act["Type"] == "fixed-response":
+        fr = act.get("FixedResponseConfig") or {}
+        return _r(int(fr.get("StatusCode", 200)), fr.get("ContentType", "text/plain"), fr.get("MessageBody", ""))
+    host = lh.get("x-forwarded-host") or lh.get("host") or ""
+    proto = (lh.get("x-forwarded-proto") or "http").split(",")[0]
+    if act["Type"] == "redirect":
+        rc = act["RedirectConfig"]
+        sub = {"#{protocol}": proto, "#{host}": host.split(":")[0], "#{port}": host.partition(":")[2] or ("443" if proto == "https" else "80"),
+               "#{path}": req_path.lstrip("/"), "#{query}": "&".join(f"{k}={v}" for k, v in q.items())}
+        def _s(t):
+            for k, v in sub.items():
+                t = t.replace(k, v)
+            return t
+        loc = f"{_s(rc['Protocol']).lower()}://{_s(rc['Host'])}:{_s(rc['Port'])}{_s(rc['Path'])}" + (f"?{_s(rc['Query'])}" if _s(rc["Query"]) else "")
+        return _r(301 if "301" in str(rc["StatusCode"]) else 302, "text/plain", "", {"location": loc})
+    tgs = (act.get("ForwardConfig") or {}).get("TargetGroups") or [{"TargetGroupArn": act.get("TargetGroupArn"), "Weight": 1}]
+    tg = store.target_groups.get(max(tgs, key=lambda t: t.get("Weight", 1))["TargetGroupArn"])
+    if not tg or not tg.get("_targets"):
+        return _r(503, "text/plain", "Service Temporarily Unavailable: the target group has no registered targets")
+    if tg.get("TargetType") != "lambda" or invoke_lambda is None:
+        return _r(503, "text/plain", f"Service Temporarily Unavailable: {tg.get('TargetType')} targets are not reachable from the simulator's load balancer data plane (use a lambda target group)")
+    raw = body if isinstance(body, (bytes, bytearray)) else str(body or "").encode()
+    try:
+        txt = raw.decode("utf-8"); b64 = False
+    except UnicodeDecodeError:
+        txt, b64 = base64.b64encode(raw).decode(), True
+    event = {"requestContext": {"elb": {"targetGroupArn": tg["TargetGroupArn"]}}, "httpMethod": method.upper(), "path": req_path,
+             "queryStringParameters": q, "headers": lh, "body": txt, "isBase64Encoded": b64}
+    status, out = invoke_lambda(str(tg["_targets"][0]["Id"]), _json.dumps(event).encode())
+    try:
+        res = _json.loads(out)
+        data = base64.b64decode(res.get("body") or "") if res.get("isBase64Encoded") else str(res.get("body") or "").encode()
+        hd = {str(k): str(v) for k, v in (res.get("headers") or {}).items()}
+        ct = next((v for k, v in hd.items() if k.lower() == "content-type"), "text/plain")
+        return _r(int(res.get("statusCode", 200)), ct, data, {k: v for k, v in hd.items() if k.lower() != "content-type"})
+    except Exception:
+        return _r(502, "text/plain", "Bad Gateway: the Lambda target did not return an ALB response")
 
 
 def _tg_view(store, tg: dict) -> dict:

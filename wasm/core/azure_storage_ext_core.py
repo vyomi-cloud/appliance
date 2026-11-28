@@ -85,3 +85,19 @@ def apply_endpoints(rec: dict) -> None:
             pe[key] = {"blob": f"/{name}/", "web": f"/{name}/__website__/"}
         else:
             pe.pop(key, None)
+
+
+def patch_view_endpoints(out, origin: str) -> None:
+    """Fill an EMPTY primaryEndpoints with the simulator's path-style data planes (blob/queue/table at
+    `<origin>/azure-data/<svc>/<account>/`), so `properties.primaryEndpoints.blob` is a URL a client can actually use through
+    a tunnel. Applied at read time (the origin differs per request). Host-style endpoints (VYOMI_AZURE_STORAGE_SUFFIX) win."""
+    import os as _os
+    if not origin or _os.environ.get("VYOMI_AZURE_STORAGE_SUFFIX", "").strip():
+        return
+    items = out.get("value") if isinstance(out, dict) and isinstance(out.get("value"), list) else [out]
+    for rec in items:
+        if not isinstance(rec, dict) or str(rec.get("type", "")).lower() != "microsoft.storage/storageaccounts":
+            continue
+        pe = (rec.setdefault("properties", {})).setdefault("primaryEndpoints", {})
+        for svc in ("blob", "queue", "table"):
+            pe.setdefault(svc, f"{origin}/azure-data/{svc}/{rec.get('name', '')}/")

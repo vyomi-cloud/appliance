@@ -98,7 +98,9 @@ def _queue_url(store, name: str) -> str:
                 return str(url)
         except Exception:
             pass
-    return f"https://sqs.{REGION}.amazonaws.com/{store.account_id}/{name}"
+    from core import public_origin
+    base = public_origin.origin() or f"https://sqs.{REGION}.amazonaws.com"   # simulator origin (tunnel/LAN/localhost), real host only with no request
+    return f"{base}/{store.account_id}/{name}"
 
 
 def _attr_int(attrs: dict, key: str, default: int) -> int:

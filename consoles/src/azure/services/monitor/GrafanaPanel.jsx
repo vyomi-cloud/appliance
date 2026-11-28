@@ -6,10 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Button, Input } from "@fluentui/react-components";
 import { WIRE_BASE } from "../../../common/wire.js";
 import { useAsync } from "../../../common/useAsync.js";
+import { extUrl } from "../../../common/connect.js";
 
 const PROM = `${WIRE_BASE}/_obs/prom`;
 const COLORS = ["#0078d4", "#d13438", "#107c10", "#8764b8", "#ca5010", "#038387"];
-export const dataSourceUrl = () => `${location.origin}${WIRE_BASE.replace(/\/_wire$/, "")}/_obs/prom`;
+export const dataSourceUrl = () => extUrl("/_obs/prom");
 
 async function prom(path, params) {
   const r = await fetch(`${PROM}/api/v1/${path}?${new URLSearchParams(params)}`);

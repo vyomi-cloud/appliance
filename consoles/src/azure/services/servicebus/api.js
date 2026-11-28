@@ -9,6 +9,7 @@
  *                  KMS/Secrets Manager) — used only by the queue's Service Bus Explorer
  *                  (send/peek/receive/complete/defer/dead-letter; topics have no explorer here).
  */
+import { isNano } from "../../../common/connect.js";
 import { WireError, WIRE_BASE } from "../../../common/wire.js";
 import { restJson } from "../../../common/wire.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
@@ -109,7 +110,10 @@ export const listSasPolicies = async (rg, ns) => (await restJson("GET", sasPath(
 export const putSasPolicy = (rg, ns, name, rights) => restJson("PUT", sasPath(rg, ns, name), { query: q, body: { properties: { rights } } });
 export const deleteSasPolicy = (rg, ns, name) => restJson("DELETE", sasPath(rg, ns, name), { query: q });
 export const listSasKeys = (rg, ns, name) => restJson("POST", `${sasPath(rg, ns, name)}/listKeys`, { query: q, body: {} });
-export const sasConnectionString = (ns, ruleName, key) => `Endpoint=sb://${ns}.servicebus.windows.net/;SharedAccessKeyName=${ruleName};SharedAccessKey=${key}`;
+/** Nano: the SDK talks AMQP to the local relay (`vyomi-tunnel`, raw TCP 5672) -> `UseDevelopmentEmulator=true`; elsewhere the namespace host. */
+export const sasConnectionString = (ns, ruleName, key) => (isNano()
+  ? `Endpoint=sb://127.0.0.1;SharedAccessKeyName=${ruleName};SharedAccessKey=${key};UseDevelopmentEmulator=true;`
+  : `Endpoint=sb://${ns}.servicebus.windows.net/;SharedAccessKeyName=${ruleName};SharedAccessKey=${key}`);
 
 // ── Locks (Microsoft.Authorization/locks, resource-scoped extension resource) ──────────
 const LOCK_API_VERSION = "2020-05-01";

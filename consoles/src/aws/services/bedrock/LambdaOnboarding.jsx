@@ -8,6 +8,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { CapabilityContainer } from "../../kit/Capability.jsx";
 import { WIRE_BASE } from "../../../common/wire.js";
+import { sdkEndpoint } from "../../../common/connect.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { useNotify } from "../../../common/notify.jsx";
 import { navigate } from "../../../common/router.js";
@@ -22,9 +23,9 @@ export default function LambdaOnboarding() {
   const [model, setModel] = useState(null);
   const [busy, setBusy] = useState("");
   const gw = (gws.data || []).find((g) => g.name === GW);
-  const origin = `${location.origin}${WIRE_BASE.replace(/\/_wire$/, "")}`;
+  const origin = sdkEndpoint().url;
   const prompt = `Use the AWS SDK/CLI against the Vyomi endpoint ${origin} (AWS_ENDPOINT_URL=${origin}, any credentials). ` +
-    `Build and deploy Lambda functions there, then expose them as MCP tools through the AgentCore gateway "${GW}" (POST ${origin}/_wire/gateways/<gatewayId>/mcp).`;
+    `Build and deploy Lambda functions there, then expose them as MCP tools through the AgentCore gateway "${GW}" (POST ${origin}/gateways/<gatewayId>/mcp).`;
   const check = async () => {
     setBusy("model");
     try { const r = await api.converse(NOVA, "ping", { maxTokens: 4 }); setModel({ ok: true, t: `${r.usage.outputTokens} tokens, ${r.metrics.latencyMs} ms` }); }

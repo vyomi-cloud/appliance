@@ -37,6 +37,11 @@ _VS: dict[str, dict] = {}
 _MAX_CI_STEPS = 5
 
 
+def _po_origin():
+    from core import public_origin as _po
+    return _po.origin()
+
+
 def _am():
     try:
         from core import ai_models_core as m
@@ -428,7 +433,7 @@ def _connections(arm_state):
         ty = str(rec.get("_type", "")).lower()
         if ty == "microsoft.cognitiveservices/accounts" and rec.get("kind") in ("OpenAI", "AIServices"):
             nm = rec.get("name") or rid.rsplit("/", 1)[-1]
-            out.append({"name": nm, "id": rid, "type": "AzureOpenAI", "target": f"https://{nm}.openai.azure.com/", "isDefault": not out,
+            out.append({"name": nm, "id": rid, "type": "AzureOpenAI", "target": (f"{_po_origin()}/azure-data/openai/{nm}/" if _po_origin() else f"https://{nm}.openai.azure.com/"), "isDefault": not out,
                         "credentials": {"type": "ApiKey", "key": "vyomi-local-key"}, "metadata": {}})
         elif ty == "microsoft.search/searchservices":
             nm = rec.get("name") or rid.rsplit("/", 1)[-1]

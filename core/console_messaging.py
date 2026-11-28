@@ -68,7 +68,7 @@ def list_queues() -> dict:
                       if not m.get("deleted") and m.get("visible_at", 0) <= now)
         out.append({
             "queue_name": name,
-            "queue_url": q.get("queue_url", ""),
+            "queue_url": sqs_core._queue_url(_STORE, name),   # live: follows the origin the client reached
             "queue_arn": q.get("queue_arn", ""),
             "approximate_messages": visible,
             "total_messages": sum(1 for m in msgs if not m.get("deleted")),

@@ -77,6 +77,8 @@ def _gcp_capture_public_base(request) -> None:
             return
         base = f"{scheme}://{host}"
         REQUEST_PUBLIC_BASE.set(base)
+        from core import public_origin
+        public_origin.set_from_headers({"host": host, "x-forwarded-proto": scheme})
         # Only let a non-local request seed the global fallback, so the
         # container healthcheck (Host: 127.0.0.1) never pollutes it.
         if not any(host.split(":", 1)[0] == h for h in _LOCAL_HOSTS):

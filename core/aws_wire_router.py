@@ -1366,6 +1366,12 @@ class AwsWireRouter:
         if path.startswith("/v2/") and path[4:].split("/", 1)[0] in (   # API Gateway V2 control plane
                 "apis", "domainnames", "vpclinks", "tags", "portals", "portalproducts", "domainnameaccessassociations"):
             return "apigatewayv2"
+        if path.startswith("/_run/"):         # Cloud Run front door (core/gcp_run_core.serve)
+            return "run-edge"
+        if path.startswith("/_elb/"):         # ALB data plane (core/elbv2_core.serve)
+            return "elb-edge"
+        if path.startswith("/_cf/"):          # CloudFront edge (core/cloudfront_dist_core.edge)
+            return "cf-edge"
         if "/restapis" in path:               # API Gateway v1 control plane
             return "apigateway"
         if _AUTHZ_IAM.search(path):   # Azure RBAC role assignments/definitions + checkAccess
@@ -2075,6 +2081,8 @@ class AwsWireRouter:
         if _denied:
             return {"status": _denied["status"], "headers": _denied["headers"], "body": _denied["body"]}
         from core import observability_core as _obsc
+        from core import public_origin as _po
+        _po.set_from_headers(headers)   # user-facing URLs (QueueUrl, invoke URLs...) point at the simulator the client reached
         self._sched_pulse()
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:
@@ -2352,6 +2360,16 @@ class AwsWireRouter:
             from core import savingsplans_core
             return savingsplans_core.dispatch(self.vpc, method, path, bytes(body))
 
+        if svc == "run-edge":   # /_run/<region>/<service>-<project number>/<path>: Cloud Run front door
+            return gcp_run.serve(self.gcp_run, path, method, query or {}, lheaders, bytes(body))
+        if svc == "elb-edge":   # /_elb/<load balancer>/<path>: the ALB data plane (listener rules -> fixed-response / redirect / lambda targets)
+            def _call_lambda(fn, payload):
+                _x = lam.dispatch(self.lam, "POST", f"/2015-03-31/functions/{fn.rsplit(':', 1)[-1] if ':function:' not in fn else fn.split(':function:', 1)[1].split(':')[0]}/invocations", {}, {}, payload)
+                return _x.status, bytes(_x.body or b"")
+            return elbv2.serve(self.elbv2, method, path, query or {}, lheaders, bytes(body), _call_lambda)
+        if svc == "cf-edge":   # /_cf/<distribution id>/<path>: the CloudFront edge over the distribution's S3 origin
+            from core import cloudfront_dist_core as _cfd
+            return _cfd.edge(self.s3, method, path, lheaders)
         if svc == "cloudfront":
             from core import cloudfront_keys_core
             return cloudfront_keys_core.dispatch(self.s3, method, path, query or {}, headers or {}, bytes(body))
@@ -2521,6 +2539,18 @@ class AwsWireRouter:
             self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
             r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
             out = r.get("body")
+            if r["status"] < 300 and isinstance(out, (dict, list)) and "microsoft.web" in path.lower() and self.az_arm._base:
+                from core import public_origin as _po0   # App Service host names -> the /azure-data/site/<app> front door on the request host
+                _txt = json.dumps(out)
+                if "azurewebsites.net" in _txt:
+                    out = json.loads(_po0.rewrite_app_hosts(_txt, self.az_arm._base))
+            if r["status"] < 300 and isinstance(out, dict) and "databaseaccounts" in path.lower() and self.az_arm._base:
+                for _rec in (out.get("value") if isinstance(out.get("value"), list) else [out]):   # Cosmos: the SQL API is served at the origin root
+                    if isinstance(_rec, dict) and str(_rec.get("type", "")).lower() == "microsoft.documentdb/databaseaccounts":
+                        _rec.setdefault("properties", {})["documentEndpoint"] = self.az_arm._base + "/"
+            if r["status"] < 300 and isinstance(out, dict) and "storageaccounts" in path.lower():
+                from core import azure_storage_ext_core as _sx
+                _sx.patch_view_endpoints(out, self.az_arm._base)   # primaryEndpoints on the host the client reached (tunnel/LAN/localhost)
             if _SQL_DB.search(path.split("?", 1)[0]) and r["status"] < 300 and isinstance(out, dict):
                 out.setdefault("properties", {})["connectionInfo"] = self._azure_sql_conn(self.az_arm._base)
             hdrs = dict(r.get("headers") or {})
@@ -2773,7 +2803,11 @@ class AwsWireRouter:
                 hdrs["content-type"] = r.media_type
             if method.upper() != "GET":
                 self.gcp_audit(method, path, query or {}, headers or {}, bytes(body), r.status)
-            return {"status": r.status, "headers": hdrs, "body": r.body or b""}
+            _rb = r.body or b""
+            if svc == "gcp-run":
+                from core import public_origin as _po   # `*.run.app` URLs -> the /_run/ front door on the host the client reached
+                _rb = gcp_run.public_urls(bytes(_rb), _po.origin())
+            return {"status": r.status, "headers": hdrs, "body": _rb}
 
         if svc == "az-appconfig":   # App Configuration data plane ({store}.azconfig.io: /kv /keys /labels /locks /revisions /snapshots /operations)
             # Key-values live INSIDE the store's ARM record (core/azure_appconfiguration_core.py),

@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from core import lambda_core
 from core import gateway_common as gc
 
+from core import public_origin as _po
 REGION = "us-east-1"
 ACCOUNT = "000000000000"
 
@@ -687,7 +688,7 @@ def _stage_view(api, st):
         "tracingEnabled": st.get("tracingEnabled", False),
         "accessLogSettings": st.get("accessLogSettings"),
         "canarySettings": st.get("canarySettings"),
-        "invokeUrl": f"https://{api['id']}.execute-api.{REGION}.amazonaws.com/{st['stageName']}",
+        "invokeUrl": (f"{_po.origin()}/restapis/{api['id']}/{st['stageName']}/_user_request_" if _po.origin() else f"https://{api['id']}.execute-api.{REGION}.amazonaws.com/{st['stageName']}"),
     }
 
 

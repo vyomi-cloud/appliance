@@ -919,8 +919,15 @@ def export_api(c, store, api, stage, kind, q):
     doc = {("openapi" if oas3 else "swagger"): "3.0.1" if oas3 else "2.0",
            "info": {"title": api["name"], "version": api.get("version") or "1", "description": api.get("description", "")} if api.get("description") else {"title": api["name"], "version": api.get("version") or "1"},
            "paths": paths}
+    from core import public_origin as _po
+    _o = _po.origin()   # the simulator the client reached (tunnel/LAN/localhost); the real execute-api host only with no request
     if oas3:
-        doc["servers"] = [{"url": f"https://{api['id']}.execute-api.us-east-1.amazonaws.com/{{basePath}}", "variables": {"basePath": {"default": stage}}}]
+        doc["servers"] = [{"url": (f"{_o}/restapis/{api['id']}/{{basePath}}/_user_request_" if _o else f"https://{api['id']}.execute-api.us-east-1.amazonaws.com/{{basePath}}"),
+                           "variables": {"basePath": {"default": stage}}}]
+    elif _o:
+        doc["host"] = _o.split("://", 1)[1]
+        doc["basePath"] = f"/restapis/{api['id']}/{stage}/_user_request_"
+        doc["schemes"] = [_o.split("://", 1)[0]]
     else:
         doc["host"] = f"{api['id']}.execute-api.us-east-1.amazonaws.com"
         doc["basePath"] = "/" + stage

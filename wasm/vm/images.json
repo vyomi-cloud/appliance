@@ -1,0 +1,15 @@
+{
+  "_doc": "Every guest the Nano VM worker (vm-worker.js) can boot. Kept in step with core/compute_sizes.py NANO_CATALOG. 'lazy' images are fetched only when an instance of that image is first launched in a browser (never at boot); their big files are NOT in git (wasm/vm/image/<key>/ is git-ignored): build them with wasm/vm/tools/ or publish them to an image host and set base_url. kind=agent: ttyS1 command agent + dropbear; kind=console: serial shell only.",
+  "default": "alpine",
+  "images": {
+    "alpine": {"key": "alpine", "label": "Alpine Linux 3.21 (i386)", "version": "alpine3.21-i386-v5", "dir": "image", "kernel": "vmlinuz", "initrd": "rootfs.cpio.gz",
+               "kind": "agent", "provision": "alpine", "lazy": false, "min_mem_mb": 0, "os_id": "alpine", "user_hint": "login user follows the cloud",
+               "summary": "Alpine Linux 3.21, 32-bit x86: Python 3, pip, apk, git"},
+    "debian": {"key": "debian", "label": "Debian GNU/Linux 12 (i386)", "version": "debian12-i386-v1", "dir": "image/debian", "kernel": "../vmlinuz", "initrd": "rootfs.cpio.gz",
+               "kind": "agent", "provision": "debian", "lazy": true, "min_mem_mb": 512, "os_id": "debian", "base_url": "",
+               "summary": "Debian GNU/Linux 12 (bookworm), 32-bit x86: Python 3, pip, apt/dpkg, git"},
+    "buildroot": {"key": "buildroot", "label": "Buildroot 2024.05 (i386, minimal)", "version": "buildroot2024.05-i386-v1", "dir": "image/buildroot", "kernel": "bzImage", "initrd": null,
+               "cmdline": "console=ttyS0 tsc=reliable mitigations=off random.trust_cpu=on", "kind": "console", "provision": "none", "lazy": true, "min_mem_mb": 0, "os_id": "buildroot", "base_url": "",
+               "summary": "Buildroot 2024.05, 32-bit x86, minimal: busybox shell only (no git, Python, pip or package manager)"}
+  }
+}

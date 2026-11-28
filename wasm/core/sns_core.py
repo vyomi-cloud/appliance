@@ -33,6 +33,7 @@ from xml.sax.saxutils import escape as _xml_escape
 
 from core.messaging_store import MessagingStore, REGION
 from core import sqs_core
+from core import public_origin as _po
 
 SNS_NS = "http://sns.amazonaws.com/doc/2010-03-31/"
 MAX_MESSAGE_BYTES = 262144
@@ -1044,8 +1045,8 @@ def _publish_to_topic(store, topic: dict, msg: dict) -> tuple[str, str]:
     envelope = {"Type": "Notification", "MessageId": message_id, "TopicArn": arn,
                 "Message": msg["Message"], "Timestamp": _now_iso(), "SignatureVersion": "1",
                 "Signature": "vyomi-simulated-signature",
-                "SigningCertURL": f"https://sns.{REGION}.amazonaws.com/SimpleNotificationService-vyomi.pem",
-                "UnsubscribeURL": f"https://sns.{REGION}.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=%s"}
+                "SigningCertURL": f"{_po.origin() or f'https://sns.{REGION}.amazonaws.com'}/SimpleNotificationService-vyomi.pem",
+                "UnsubscribeURL": f"{_po.origin() or f'https://sns.{REGION}.amazonaws.com'}/?Action=Unsubscribe&SubscriptionArn=%s"}
     if msg.get("Subject") not in (None, ""):
         envelope["Subject"] = msg["Subject"]
     if attrs:

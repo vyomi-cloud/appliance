@@ -112,6 +112,7 @@ v4 WAVE 5b gap sweep — redundancy / data protection / request telemetry, ENFOR
 """
 from __future__ import annotations
 
+from core import public_origin as _po
 import base64
 import hashlib
 import json
@@ -482,7 +483,7 @@ def _emit_blob_event(arm_state, acct: str, container: str, blob: str, kind: str,
         e = entry or {}
         data = {"api": api if kind == "BlobCreated" else "DeleteBlob", "clientRequestId": uuid.uuid4().hex, "requestId": uuid.uuid4().hex,
                 "eTag": e.get("etag", ""), "contentType": e.get("content_type", ""), "contentLength": e.get("size", 0),
-                "blobType": e.get("blob_type", "BlockBlob"), "url": f"https://{name}.blob.core.windows.net/{container}/{blob}",
+                "blobType": e.get("blob_type", "BlockBlob"), "url": (f"{_po.origin()}/azure-data/blob/{name}/{container}/{blob}" if _po.origin() else f"https://{name}.blob.core.windows.net/{container}/{blob}"),
                 "sequencer": uuid.uuid4().hex, "storageDiagnostics": {"batchId": uuid.uuid4().hex}}
         eg.emit_system_event_async(arm_state, rid, "Microsoft.Storage." + kind, f"/blobServices/default/containers/{container}/blobs/{blob}", data)
     except Exception:

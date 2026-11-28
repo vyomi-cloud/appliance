@@ -108,8 +108,20 @@ def _now() -> float:
     return round(time.time(), 3)
 
 
+def _po_origin():
+    from core import public_origin as _po
+    return _po.origin()
+
+
+def _registry_host(region):
+    """`host[:port]` a docker client pushes/pulls against: the simulator origin the client reached (tunnel/LAN/localhost; the registry
+    API is served on any host for AWS:<token> basic auth), else the real ECR host name when there is no request."""
+    from core import public_origin as _po
+    return _po.origin().split("://", 1)[-1] or f"{ACCOUNT}.dkr.ecr.{region}.amazonaws.com"
+
+
 def _uri(name, region):
-    return f"{ACCOUNT}.dkr.ecr.{region}.amazonaws.com/{name}"
+    return f"{_registry_host(region)}/{name}"
 
 
 def _repo_arn(name, region):
@@ -794,7 +806,7 @@ def op_GetAuthorizationToken(store, st, region, p):
     st["tokens"][hashlib.sha256(pw.encode()).hexdigest()] = now + _TOKEN_TTL
     tok = base64.b64encode(f"AWS:{pw}".encode()).decode()
     return {"authorizationData": [{"authorizationToken": tok, "expiresAt": now + _TOKEN_TTL,
-                                   "proxyEndpoint": f"https://{ACCOUNT}.dkr.ecr.{region}.amazonaws.com"}]}
+                                   "proxyEndpoint": (_po_origin() or f"https://{ACCOUNT}.dkr.ecr.{region}.amazonaws.com")}]}
 
 
 def op_InitiateLayerUpload(store, st, region, p):
@@ -870,7 +882,7 @@ def op_GetDownloadUrlForLayer(store, st, region, p):
     d = p.get("layerDigest") or ""
     if d not in r["layers"]:
         raise _Err("LayersNotFoundException", f"Layer not found: {d}")
-    return {"downloadUrl": f"https://{ACCOUNT}.dkr.ecr.{region}.amazonaws.com/v2/{r['name']}/blobs/{d}", "layerDigest": d}
+    return {"downloadUrl": f"{_po_origin() or f'https://{ACCOUNT}.dkr.ecr.{region}.amazonaws.com'}/v2/{r['name']}/blobs/{d}", "layerDigest": d}
 
 
 def op_PutReplicationConfiguration(store, st, region, p):

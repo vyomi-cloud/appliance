@@ -14,7 +14,7 @@ import { ErrorAlert, NotSimulated, PageHeader } from "../../kit/common.jsx";
 import { hashHref } from "../../link.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, gcpOsList, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import { getProject } from "../../project.js";
 import ScrollTable from "../../kit/ScrollTable.jsx";
 
@@ -98,8 +98,8 @@ export default function CreateInstance() {
 
   const nameErr = touched ? api.validResourceName(name) : null;
   const nano = onNano(machineTypes);                                   // Nano: the in-browser VM boots one image (Alpine, 32-bit x86)
-  const osImages = nano ? [NANO_IMAGES.gcp.os, ...api.OS_IMAGES] : api.OS_IMAGES;      // Nano: Alpine first and selected, the rest greyed out
-  const osOff = (i) => nano && i > 0;
+  const osl = gcpOsList(nano, api.OS_IMAGES);                          // Nano: Alpine / Debian / Buildroot enabled (Alpine selected), Phase B + Google's own greyed out
+  const osImages = osl.list, osOff = osl.off;
   useEffect(() => { if (nano) setOsIdx(0); }, [nano]);
 
   const submit = async (ev) => {
@@ -216,10 +216,10 @@ export default function CreateInstance() {
             <FormControl sx={{ minWidth: 220 }}>
               <InputLabel id="os-l">Operating system</InputLabel>
               <Select labelId="os-l" label="Operating system" value={osIdx} onChange={(e) => setOsIdx(Number(e.target.value))}>
-                {osImages.map(([, , name], i) => <MenuItem key={i} value={i} disabled={osOff(i)} title={osOff(i) ? NANO_REASON : undefined}>{name}{osOff(i) ? ` (${NANO_REASON})` : ""}</MenuItem>)}
+                {osImages.map(([, , name], i) => <MenuItem key={i} value={i} disabled={osOff(i)} title={osOff(i) ? osl.reason(i) : undefined}>{name}{osOff(i) ? ` (${osl.reason(i)})` : ""}</MenuItem>)}
               </Select>
             </FormControl>
-            <TextField label="Version" value={(osImages[osIdx] || osImages[0])[3]} slotProps={{ input: { readOnly: true } }} sx={{ minWidth: 260 }} />
+            <TextField label="Version" value={(osImages[osIdx] || osImages[0])[3]} helperText={nano ? osl.summary(osImages[osIdx] || osImages[0]) : undefined} slotProps={{ input: { readOnly: true }, htmlInput: { "data-testid": "os-version" } }} sx={{ minWidth: 260 }} />
             <FormControl sx={{ minWidth: 220 }}>
               <InputLabel id="bdt-l">Boot disk type</InputLabel>
               <Select labelId="bdt-l" label="Boot disk type" value={diskType} onChange={(e) => setDiskType(e.target.value)}>
