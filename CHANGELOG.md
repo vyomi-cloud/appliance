@@ -4,6 +4,32 @@ All notable changes to Vyomi will be documented in this file.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.2] — 2026-11-28
+
+Fixes for the failures the 4.1.1 release checks reported, SDK endpoint URLs that work through the tunnel, a Nano image catalog (phase 1), and a Mesh cloudshell capacity profile.
+
+### Added
+- **Nano image catalog, phase 1**: Debian and Buildroot images verified on the AWS, GCP and Azure create flows, a per-image Connect text, and guest notices. Alpine stays the default; 64-bit and Windows guests remain disabled.
+- **Endpoint URLs follow the host the client reached**: SQS, SNS, API Gateway, ECR, Cosmos DB, CloudFront, ALB, Cloud Run, GCS (`selfLink`/`mediaLink`), Azure Storage `primaryEndpoints`, OpenSearch and the console connect strings now work through the tunnel and no longer point at the real cloud. New real-SDK release checks and a known-gaps report cover them.
+- **Vyomi Mesh cloudshell host profile**: fixed 0.5 vCPU / 2 GB instances with an enforced CPU and RAM slot budget, `GET /mesh/capacity`, and the capacity block in `/mesh/status`.
+- **Release reporting**: `RELEASE-CHECKS.md` now carries a `checks-total` marker (table rows, Nano UI suites and SDK checks), and `services.json` is generated from the v4 service inventory so the portal service counts follow each release.
+- **Endurance gate** is enabled for releases (`.github/workflows/endurance-release-gate.yml`).
+- **Nano usage** events carry an install fingerprint so the portal can count distinct browsers per day.
+
+### Changed
+- **MCP ships only inside `vyomi-tunnel`** (1.4.1, plugin 4.3.2); the standalone `vyomi-mcp` assets are dropped. The `vyomi-cloud` plugin sets `privacyPolicyUrl`.
+- **Consoles**: the bottom dock fits phone screens, and the AWS Vyomi Mesh drawer follows the real content column on wide windows. The Share-feedback button moved to the bottom-left so it no longer covers the primary action of create forms.
+- **Docs**: rule 12 in the v4 branch architecture (new features only in the v4 consoles), and a branch baseline of every open v4 branch.
+
+### Fixed
+- **Nano: `gcloud storage` returned 500 (`UnboundLocalError: _orgp`)**. The lazily imported cores were missing from the Nano core lists, and the organization-policy import is now guarded. A new test keeps the core lists complete.
+- **Release checks (4.1.1 failures)**: the SNS email check polls the async delivery log, the MinIO-direct check skips when the host port is unpublished, six AWS UI suites are repointed at the v4 scripts, the bidi suite timeout is raised, the Azure CLI smoke test uses the Nano image, Azure delete rows are no longer hidden by the dock, and GCP redis waits are longer.
+- **Cloud picker** waits for the plan before opening the saved default space.
+
+### Known limits
+- Nano runs 32-bit x86 guests only; the 64-bit and Windows images stay disabled.
+- Some 4.1.1 release-check failures could not be reproduced locally (`nano-ui-azure-metrics`, `nightly-aws-v4-roundtrip`) and are not proven fixed until the 4.1.2 checks run.
+
 ## [4.1.1] — 2026-11-27
 
 A free Nano course, Nano compute options that match what a browser VM can run, and fixes to the Vyomi Labs course. The Labs course is Pro / Max Mesh-only again.
