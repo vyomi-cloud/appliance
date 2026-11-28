@@ -1104,8 +1104,11 @@ def storage_after_put(state, rec):
         p["geoReplicationStats"] = {"status": "Live", "lastSyncTime": _now(), "canFailover": True, "canPlannedFailover": True}
         if sku.startswith("Standard_RA"):
             acct = rec["name"]
-            p["secondaryEndpoints"] = {"blob": f"https://{acct}-secondary.blob.core.windows.net/", "queue": f"https://{acct}-secondary.queue.core.windows.net/",
-                                       "table": f"https://{acct}-secondary.table.core.windows.net/", "file": f"https://{acct}-secondary.file.core.windows.net/"}
+            from core import public_origin as _po   # single-origin simulator: the secondary resolves to the same account data path
+            _o = _po.origin()
+            p["secondaryEndpoints"] = ({"blob": f"{_o}/azure-data/blob/{acct}/", "queue": f"{_o}/azure-data/queue/{acct}/", "table": f"{_o}/azure-data/table/{acct}/"} if _o else
+                                       {"blob": f"https://{acct}-secondary.blob.core.windows.net/", "queue": f"https://{acct}-secondary.queue.core.windows.net/",
+                                        "table": f"https://{acct}-secondary.table.core.windows.net/", "file": f"https://{acct}-secondary.file.core.windows.net/"})
         else:
             p.pop("secondaryEndpoints", None)
     else:

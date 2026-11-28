@@ -14,6 +14,7 @@ import {
 } from "@fluentui/react-components";
 import { Add20Regular, ArrowClockwise20Regular, ArrowDownload20Regular, ArrowUpload20Regular, Copy16Regular, Delete20Regular, Eye16Regular, EyeOff16Regular, Save20Regular, Dismiss20Regular } from "@fluentui/react-icons";
 import { useNotify } from "../../../common/notify.jsx";
+import { extUrl } from "../../../common/connect.js";
 import { href, navigate } from "../../../common/router.js";
 import { useAsync } from "../../../common/useAsync.js";
 import { locationLabel } from "../../kit/arm.js";
@@ -700,11 +701,11 @@ function Endpoints({ a }) {
       </section>
       <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
         <h3>Queue service</h3>
-        <Field label="Queue service (this Vyomi)" hint="The Queue data plane is a single namespace shared by every storage account — see Queues."><Input readOnly value={api.queueUrl("")} /></Field>
+        <Field label="Queue service (this Vyomi)" hint="The Queue data plane is a single namespace shared by every storage account — see Queues."><Input readOnly value={api.queueUrl("", a.name)} /></Field>
       </section>
       <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
         <h3>Table service</h3>
-        <Field label="Table service (this Vyomi)" hint="The Table data plane is a single namespace shared by every storage account — see Tables."><Input readOnly value={api.tableUrl("")} /></Field>
+        <Field label="Table service (this Vyomi)" hint="The Table data plane is a single namespace shared by every storage account — see Tables."><Input readOnly value={api.tableUrl("", a.name)} /></Field>
       </section>
       <section className="vy-section" style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 10 }}>
         <h3>Static website</h3>
@@ -822,8 +823,8 @@ function Networking({ a, reload }) {
               onChange={(_, d) => patch({ routingPreference: { ...p.routingPreference, publishMicrosoftEndpoints: !!d.checked } }, "Routing endpoints updated.")} />
             <Checkbox checked={!!p.routingPreference?.publishInternetEndpoints} label="Publish Internet routing endpoints"
               onChange={(_, d) => patch({ routingPreference: { ...p.routingPreference, publishInternetEndpoints: !!d.checked } }, "Routing endpoints updated.")} />
-            {p.primaryEndpoints?.microsoftEndpoints && <KV label="Microsoft routing blob endpoint" value={`${location.origin}${p.primaryEndpoints.microsoftEndpoints.blob}`} />}
-            {p.primaryEndpoints?.internetEndpoints && <KV label="Internet routing blob endpoint" value={`${location.origin}${p.primaryEndpoints.internetEndpoints.blob}`} />}
+            {p.primaryEndpoints?.microsoftEndpoints && <KV label="Microsoft routing blob endpoint" value={extUrl(`/azure-data/blob${p.primaryEndpoints.microsoftEndpoints.blob}`)} />}
+            {p.primaryEndpoints?.internetEndpoints && <KV label="Internet routing blob endpoint" value={extUrl(`/azure-data/blob${p.primaryEndpoints.internetEndpoints.blob}`)} />}
             <p className="vy-muted" style={{ fontSize: 12 }}>Vyomi is single-origin: both route-specific endpoints resolve to this account's one data path.</p>
           </div>
         </section>

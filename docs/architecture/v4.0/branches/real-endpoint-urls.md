@@ -30,3 +30,10 @@
 
 ## Open issues
 - GCP control-plane selfLinks (Cloud SQL/Compute/GKE/BigQuery) intentionally unchanged (resource identifiers).
+
+
+## Round 2 (v4/real-endpoint-urls-2): remaining core lines + console strings
+- Core: App Service host names -> `<host>/azure-data/site/<app>` (response rewrite `public_origin.rewrite_app_hosts`), Event Grid blob url, secondaryEndpoints, Cosmos dedicated gateway, Azure OpenAI agent target, Cloud Functions console URL, Infra Manager bucket selfLink.
+- Ratchet now separates EXEMPT lines (JWT issuers, audit text, `//svc.googleapis.com/..` names, control-plane selfLinks, internal artifact locations, no-request fallbacks) from KNOWN GAPS (55 lines, no data plane) and also counts bare `location.origin` in `consoles/src`.
+- Console (`consoles/src/common/connect.js` `extUrl` / `isNano`): Azure blob/queue/table/website/secondary endpoints, routing endpoints, Cosmos `AccountEndpoint`, Grafana data-source URL, GCP API Gateway invoke base, AgentCore MCP URL + Lambda onboarding prompt use the host the user's CLI reaches (the tunnel on Nano; `/nano/_wire` is a service-worker path). Service Bus SAS connection string on Nano = `Endpoint=sb://127.0.0.1;...;UseDevelopmentEmulator=true;` (tunnel raw AMQP :5672). Bundles rebuilt into `wasm/v4`.
+- Left (no engine / no route): Azure SQL `tcp:<server>.database.windows.net` strings, Monitor DCE ingestion endpoints, scm/Kudu host, Bastion/Public-IP FQDNs, DAX, Redshift, RDS `Endpoint.Address` (the console's DbConnect string is the working one), host-style Service Bus/Key Vault outside Nano, `jobRunUri` (internal scheduler target).

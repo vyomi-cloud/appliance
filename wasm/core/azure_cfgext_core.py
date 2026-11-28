@@ -647,7 +647,8 @@ def after_put(state: dict, rec: dict, payload: dict, prev: dict | None = None) -
         p["status"] = "Running"
         acct = state.get(rec["id"].lower().rsplit("/services/", 1)[0])
         host = (acct or {}).get("name", "account")
-        p["sqlDedicatedGatewayEndpoint"] = f"https://{host}.sqlx.cosmos.azure.com/"
+        from core import public_origin as _po   # the dedicated gateway is served at the origin root with the SQL API
+        p["sqlDedicatedGatewayEndpoint"] = (_po.origin() + "/") if _po.origin() else f"https://{host}.sqlx.cosmos.azure.com/"
         p["locations"] = [{"name": f"{host}-{i}", "location": (acct or {}).get("location", "East US"), "status": "Running"} for i in range(count)]
         p["instanceSize"] = size
         rec["etag"] = f'"{uuid.uuid4()}"'

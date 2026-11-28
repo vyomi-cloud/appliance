@@ -306,7 +306,7 @@ def _ok(r):
 def _h_bucket(c, res, call, project, a):
     name = a["name"]
     if _ok(call("GET", "/storage/v1/b/%s" % _enc(name))):
-        return "unchanged", {"id": name, "name": name, "self_link": "https://www.googleapis.com/storage/v1/b/%s" % name, "url": "gs://%s" % name}
+        return "unchanged", {"id": name, "name": name, "self_link": "%s/storage/v1/b/%s" % (__import__("core.public_origin", fromlist=["origin"]).origin() or "https://www.googleapis.com", name), "url": "gs://%s" % name}
     body = {"name": name, "location": a.get("location") or "US"}
     if a.get("storage_class"):
         body["storageClass"] = a["storage_class"]
@@ -317,7 +317,7 @@ def _h_bucket(c, res, call, project, a):
     s, j = call("POST", "/storage/v1/b?project=%s" % _enc(project), body)
     if s >= 300:
         raise _E(s, "FAILED_PRECONDITION", "create bucket %s: %s" % (name, _msg(j)))
-    return "created", {"id": name, "name": name, "self_link": "https://www.googleapis.com/storage/v1/b/%s" % name, "url": "gs://%s" % name}
+    return "created", {"id": name, "name": name, "self_link": "%s/storage/v1/b/%s" % (__import__("core.public_origin", fromlist=["origin"]).origin() or "https://www.googleapis.com", name), "url": "gs://%s" % name}
 
 
 def _topic_full(project, name):

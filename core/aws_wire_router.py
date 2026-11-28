@@ -2539,6 +2539,11 @@ class AwsWireRouter:
             self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
             r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
             out = r.get("body")
+            if r["status"] < 300 and isinstance(out, (dict, list)) and "microsoft.web" in path.lower() and self.az_arm._base:
+                from core import public_origin as _po0   # App Service host names -> the /azure-data/site/<app> front door on the request host
+                _txt = json.dumps(out)
+                if "azurewebsites.net" in _txt:
+                    out = json.loads(_po0.rewrite_app_hosts(_txt, self.az_arm._base))
             if r["status"] < 300 and isinstance(out, dict) and "databaseaccounts" in path.lower() and self.az_arm._base:
                 for _rec in (out.get("value") if isinstance(out.get("value"), list) else [out]):   # Cosmos: the SQL API is served at the origin root
                     if isinstance(_rec, dict) and str(_rec.get("type", "")).lower() == "microsoft.documentdb/databaseaccounts":

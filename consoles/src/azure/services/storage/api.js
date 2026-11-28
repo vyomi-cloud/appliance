@@ -7,6 +7,7 @@
  * in the AWS lens, the signature itself is not verified by the simulator. */
 import { asList, restJson, WIRE_BASE, WireError, xmlToObj } from "../../../common/wire.js";
 import { armType, getSubscription, parseId } from "../../kit/arm.js";
+import { extUrl } from "../../../common/connect.js";
 
 export const ARM = armType("Microsoft.Storage", "storageAccounts", "2023-05-01");
 export const X_MS_VERSION = "2021-12-02";
@@ -22,7 +23,7 @@ export const listKeys = async (rg, name) => (await ARM.action(rg, name, "listKey
 export const regenerateKey = async (rg, name, keyName) => (await ARM.action(rg, name, "regenerateKey", { keyName })).keys || [];
 
 /** The account's Blob endpoint on this Vyomi (path-style, same origin as the console). */
-export const blobEndpoint = (account) => `${location.origin}${WIRE_BASE}/${account}`;
+export const blobEndpoint = (account) => extUrl(`/azure-data/blob/${account}`);
 
 // ── Blob data plane ─────────────────────────────────────────────────────────────────────
 async function blob(account, method, path, { query, headers = {}, body } = {}) {
@@ -136,7 +137,7 @@ export const putBlobServiceProperties = (rg, name, properties) =>
 /** Static website endpoint on this Vyomi — a synthetic path (core/azure_blob_core.py
  * `__website__`), since a single-origin relay has no distinct per-account public hostname
  * the way `account.z#.web.core.windows.net` is a different host from `account.blob...`. */
-export const websiteEndpoint = (account) => `${location.origin}${WIRE_BASE}/${account}/__website__/`;
+export const websiteEndpoint = (account) => extUrl(`/azure-data/blob/${account}/__website__/`);
 
 // ── Lifecycle management (Microsoft.Storage/storageAccounts/managementPolicies/default) ──
 // A real nested ARM resource (ManagementPolicies_CreateOrUpdate/Get) — core/azure_blob_core.py
@@ -196,7 +197,7 @@ async function queueReq(method, path, { query, body } = {}) {
 const escXml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const msgXml = (text) => xml(text).QueueMessagesList?.QueueMessage;
 
-export const queueUrl = (name) => `${location.origin}${WIRE_BASE}/${encodeURIComponent(name)}`;
+export const queueUrl = (name, account = "vyomi") => extUrl(`/azure-data/queue/${account}/${encodeURIComponent(name)}`);   // one shared namespace; the account segment is cosmetic
 
 export async function listQueues(account) {
   const { text } = await queueReq("GET", `/${encodeURIComponent(account)}`, { query: { comp: "list" } });
@@ -236,7 +237,7 @@ async function tableReq(method, path, { query, body } = {}) {
   return data;
 }
 
-export const tableUrl = (name) => `${location.origin}${WIRE_BASE}/${encodeURIComponent(name)}`;
+export const tableUrl = (name, account = "vyomi") => extUrl(`/azure-data/table/${account}/${encodeURIComponent(name)}`);
 export const listTables = async () => (await tableReq("GET", "/Tables")).value || [];
 export const createTable = (name) => tableReq("POST", "/Tables", { body: { TableName: name } });
 export const deleteTable = (name) => tableReq("DELETE", `/Tables('${encodeURIComponent(name)}')`);
@@ -294,7 +295,7 @@ export const blobServiceFromWizard = (f) => ({
 // ── Redundancy (Microsoft.Storage/storageAccounts sku.name) — a RA-* sku really exposes a
 // read-only secondary endpoint (core/azure_blob_core.py: `{account}-secondary`) ───────────
 export const isReadAccessSku = (skuName = "") => /^(standard|premium)_ra/i.test(skuName);
-export const secondaryBlobEndpoint = (account) => `${location.origin}${WIRE_BASE}/${account}-secondary`;
+export const secondaryBlobEndpoint = (account) => extUrl(`/azure-data/blob/${account}-secondary`);
 export const listContainersSecondary = (account) => listContainers(`${account}-secondary`);
 
 // ── Soft delete / versioning / change feed — real ops over the Blob data plane ─────────

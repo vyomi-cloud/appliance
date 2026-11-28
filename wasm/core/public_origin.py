@@ -25,3 +25,15 @@ def set_from_headers(headers) -> str:
 def origin() -> str:
     """`http(s)://host[:port]` of this request ('' when unknown, e.g. a background task)."""
     return _ORIGIN.get()
+
+
+def rewrite_app_hosts(text: str, origin: str) -> str:
+    """App Service `<app>.azurewebsites.net` -> `<simulator host>/azure-data/site/<app>` (the front door that serves the app on the host the
+    client reached). With a scheme (`https://app.azurewebsites.net/api/x`) the origin is used; bare host names get host[:port]/path.
+    `<app>.scm.azurewebsites.net` has no route and is left alone."""
+    import re
+    if not origin or "azurewebsites.net" not in text:
+        return text
+    hostport = origin.split("://", 1)[-1]
+    pat = re.compile(r"(https?://)?(?<![.\w-])([a-z0-9][a-z0-9-]*)\.azurewebsites\.net")
+    return pat.sub(lambda m: (origin if m.group(1) else hostport) + "/azure-data/site/" + m.group(2), text)

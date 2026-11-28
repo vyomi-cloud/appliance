@@ -1161,7 +1161,8 @@ def describe_function(rec: dict, project: str, region: str) -> dict:
     sc.setdefault("vpcConnectorEgressSettings", "PRIVATE_RANGES_ONLY")
     sc.setdefault("maxInstanceCount", 100)
     sc.setdefault("minInstanceCount", 0)
-    sc["uri"] = "https://%s-%s.cloudfunctions.net/%s" % (region, project, name)
+    from core import public_origin as _po   # Cloud Functions are served at <origin>/gcf/<project>/<region>/<name>
+    sc["uri"] = ("%s/gcf/%s/%s/%s" % (_po.origin(), project, region, name)) if _po.origin() else "https://%s-%s.cloudfunctions.net/%s" % (region, project, name)
     out["serviceConfig"] = sc
     out["httpsTrigger"] = {"url": sc["uri"]}
     return out

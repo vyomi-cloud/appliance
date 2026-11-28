@@ -27,16 +27,47 @@ BENIGN = re.compile(r"arn:|logName|logs/|type\.googleapis|xmlns|/doc/20|schemas|
                     r"origin\(\)|public_origin|requestParameters|\"source\"|_SOURCE|raise |_err\(|Error\(|message|Message|docs?:|#")
 
 
-def static_counts():
-    out = {}
+# Lines that name a real cloud host but are NOT something a user connects to. Each pattern says why.
+EXEMPT = [
+    (r"cognito-idp\.|sts\.windows\.net|login\.microsoftonline|sts\.%s\.amazonaws", "token issuer / audience identity URLs (JWT claims)"),
+    (r"iam\.googleapis\.com|principal://|\"//[a-z]+\.googleapis\.com|f\"//[a-z]+\.googleapis\.com|\"//[a-z]+\.googleapis\.com", "audit text / full resource names (`//svc.googleapis.com/...`)"),
+    (r"cloudfront\.amazonaws\.com/2020-05-31|\.cloudfront\.net \(CloudFront\)", "control-plane Location header / `via` header"),
+    (r"selfLink|targetLink|self_link", "GCP control-plane resource identifiers (clients treat them as ids)"),
+    (r"ART_ACCOUNT|storagePath|outputBlob|vyomibootdiag|urlsafe_b64encode|Cannot connect to server", "internal artifact locations parsed by the simulator"),
+    (r"compute-1\.amazonaws\.com", "EC2 public DNS display name (the Connect tab shows the exact ssh string)"),
+    (r"vpce\.amazonaws\.com|clientvpn|privateDnsName", "private-endpoint DNS names (not connectable from outside the VPC)"),
+    (r"_o else|origin\(\) or|else f\"https|else \"https|\"domain\": f\"d\{secrets|\"Endpoint\": f\"search-|collectionEndpoint|dns = f\"\{'internal-'|\{tag\}\.\{loc\}\.run\.app|\"https://%s-%s\.%s\.run\.app\"|\"secondaryEndpoints\"|\"table\": f\"https://\{acct\}-secondary",
+     "stored / no-request fallback; the read path rewrites it to the request host"),
+    (r"rds\.\{r\}\.amazonaws\.com|\{src\}\.amazonaws\.com|disk\.csi\.azure\.com", "region/event-source names, not endpoints"),
+]
+EXEMPT_FILES = {"gcp_compute_core.py": "GCP control-plane identifiers", "gcp_compute_instances_core.py": "GCP control-plane identifiers",
+                "gcp_container_core.py": "GCP control-plane identifiers", "gcp_function_runtime.py": "function-runtime instance metadata / JWT issuers"}
+_EX = [(re.compile(p), why) for p, why in EXEMPT]
+
+
+def static_counts(detail=False):
+    out, exempt = {}, {}
     for p in sorted(glob.glob(os.path.join(ROOT, "core", "*.py"))):
-        n = 0
+        n = e = 0
         for ln in open(p, encoding="utf-8", errors="replace"):
             if HOST.search(ln) and BUILDS.search(ln) and not BENIGN.search(ln):
-                n += 1
+                if os.path.basename(p) in EXEMPT_FILES or any(rx.search(ln) for rx, _ in _EX):
+                    e += 1
+                else:
+                    n += 1
         if n:
             out[os.path.basename(p)] = n
-    return out
+        if e:
+            exempt[os.path.basename(p)] = e
+    # Console sources: a copyable endpoint must come from common/connect.js (`extUrl` / `sdkEndpoint`), which is the tunnel on Nano - a bare
+    # `location.origin` there is the page's own /nano/_wire service-worker path, unreachable from the user's CLI.
+    for p in sorted(glob.glob(os.path.join(ROOT, "consoles", "src", "**", "*.js*"), recursive=True)):
+        if p.endswith("connect.js") or ".test." in p:
+            continue
+        n = sum(1 for ln in open(p, encoding="utf-8", errors="replace") if "location.origin" in ln and not ln.lstrip().startswith(("//", "*", "/*")))
+        if n:
+            out["consoles/" + os.path.relpath(p, os.path.join(ROOT, "consoles", "src"))] = n
+    return (out, exempt) if detail else out
 
 
 def probe():
@@ -93,7 +124,7 @@ def probe():
 
 
 def main():
-    cur = static_counts()
+    cur, exempt = static_counts(detail=True)
     if "--update" in sys.argv:
         json.dump(cur, open(BASELINE, "w"), indent=1, sort_keys=True)
         print(f"baseline updated: {sum(cur.values())} hardcoded cloud-host URL lines in {len(cur)} files")
@@ -107,10 +138,11 @@ def main():
         print(f"| {'✅' if ok else '❌'} | {name} | {detail} |")
     reg = {f: (n, base.get(f, 0)) for f, n in cur.items() if n > base.get(f, 0)}
     for f, (n, b) in sorted(reg.items()):
-        print(f"| ❌ | NEW hardcoded cloud-host URL in core/{f} | {n} lines (allowed {b}) |")
+        print(f"| ❌ | NEW hardcoded cloud-host URL / bare location.origin in {f if f.startswith('consoles/') else 'core/' + f} | {n} lines (allowed {b}) |")
     bad += len(reg)
     left = sum(cur.values())
-    print(f"| {'✅' if not reg else '❌'} | No new hardcoded real-cloud URLs (ratchet) | {left} legacy lines remain in {len(cur)} files, baseline {sum(base.values())} |")
+    print(f"| {'✅' if not reg else '❌'} | No new hardcoded real-cloud URLs (ratchet) | {left} known-gap lines in {len(cur)} files (baseline {sum(base.values())}); "
+          f"{sum(exempt.values())} exempt lines (identifiers, audit text, internal locations) |")
     return 1 if bad else 0
 
 

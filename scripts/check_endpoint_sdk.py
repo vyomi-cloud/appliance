@@ -173,6 +173,18 @@ def main():
         return u
     check("Cloud Run: service uri is the /_run/ front door and answers", run)
 
+    def appservice():
+        sid = requests.get(EP + "/subscriptions?api-version=2020-01-01").json()["value"][0]["subscriptionId"]
+        b = f"{EP}/subscriptions/{sid}/resourceGroups/sdk-web"
+        requests.put(b + "?api-version=2021-04-01", json={"location": "eastus"})
+        requests.put(b + "/providers/Microsoft.Web/sites/sdkapp1?api-version=2022-09-01", json={"location": "eastus", "kind": "app", "properties": {}})
+        dh = requests.get(b + "/providers/Microsoft.Web/sites/sdkapp1?api-version=2022-09-01").json()["properties"]["defaultHostName"]
+        assert "azurewebsites.net" not in dh and "/azure-data/site/sdkapp1" in dh, dh
+        r = requests.get("http://" + dh + "/")
+        assert r.status_code in (200, 403), r.status_code   # 403 = the simulator's empty-app page (no content deployed)
+        return dh
+    check("App Service: defaultHostName is the /azure-data/site/<app> front door", appservice)
+
     print("## Endpoint URLs work with the real SDKs\n\n| Status | Check | Detail |\n|---|---|---|")
     for ok, name, detail in rows:
         print(f"| {'✅' if ok else '❌'} | {name} | {detail} |")

@@ -7,6 +7,7 @@
  *                  does, so (see core/capabilities/azure/cosmos.json: azure.cosmos.data_explorer)
  *                  every Cosmos account in this Vyomi environment shares one data-plane keyspace.
  */
+import { extUrl } from "../../../common/connect.js";
 import { restJson } from "../../../common/wire.js";
 import { armType, parseId } from "../../kit/arm.js";
 
@@ -28,7 +29,7 @@ export const regenerateKey = (rg, name, keyKind) => ARM.action(rg, name, "regene
  *  (azure.cosmos.replicate_data_globally) — ENFORCED on the ARM side. */
 export const failoverPriorityChange = (rg, name, failoverPolicies) => ARM.action(rg, name, "failoverPriorityChange", { failoverPolicies });
 
-export const accountEndpoint = (name) => `https://${name}.documents.azure.com:443/`;
+export const accountEndpoint = (name) => `${extUrl("")}/`;   // the SQL API is served at the root of the host the client reaches (all accounts, like Azurite)
 export const resourcePath = (rg, name) => ARM.path(rg, name);
 
 // ── Locks (Microsoft.Authorization/locks, resource-scoped extension resource) ──────────

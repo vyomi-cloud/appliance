@@ -1,5 +1,6 @@
 /* Bedrock AgentCore: runtimes (control plane), gateways + Lambda targets (a real MCP endpoint that invokes the Lambdas). */
 import { useEffect, useState } from "react";
+import { extUrl } from "../../../common/connect.js";
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
@@ -150,7 +151,7 @@ export function GatewayDetail({ params }) {
             <div><Box variant="awsui-key-label">Status</Box>{stat(g.status)}</div>
             <div><Box variant="awsui-key-label">Gateway ID</Box>{g.gatewayId}</div>
             <div><Box variant="awsui-key-label">Inbound auth</Box>{g.authorizerType}</div>
-            <div><Box variant="awsui-key-label">MCP endpoint (this appliance)</Box><span data-testid="mcp-url">{`${location.origin}${WIRE_BASE}/gateways/${g.gatewayId}/mcp`}</span></div>
+            <div><Box variant="awsui-key-label">MCP endpoint (this appliance)</Box><span data-testid="mcp-url">{extUrl(`/gateways/${g.gatewayId}/mcp`)}</span></div>
             <div><Box variant="awsui-key-label">ARN</Box>{g.gatewayArn}</div>
           </ColumnLayout></Container>}
         <CapabilityContainer id="bedrock.agentcore.gateway" title="Targets" actions={<Button variant="primary" onClick={() => setCreate(true)}>Add target</Button>}>

@@ -1,5 +1,6 @@
 /* API Gateway over the NATIVE API Gateway API v1 (apigateway.googleapis.com): apis, api configs (OpenAPI 2.0) and gateways.
  * The same wire the google-cloud-api-gateway SDKs and `gcloud api-gateway` speak. */
+import { extUrl } from "../../../common/connect.js";
 import { restJson, sendRaw, WIRE_BASE } from "../../../common/wire.js";
 import { getProject } from "../../project.js";
 
@@ -46,7 +47,7 @@ export const getKeyString = async (id) => (await restJson("GET", `${keysBase()}/
 
 /* Invoking a gateway. Host-style is the real `<gateway>.gateway.dev` name (not resolvable here); the path-style form is served by the
  * simulator's own router, so it is the one that works: <origin><wire>/gcpgw/<gatewayId>. */
-export const invokeBase = (gid) => `${location.origin}${WIRE_BASE}/gcpgw/${e(gid)}`;
+export const invokeBase = (gid) => extUrl(`/gcpgw/${e(gid)}`);
 export const hostBase = (host) => `https://${host}`;
 /** Send one request through the gateway (same-origin wire). Returns {status, headers, text, ms}. */
 export async function invoke(gid, method, path, { query = {}, headers = {}, body } = {}) {
