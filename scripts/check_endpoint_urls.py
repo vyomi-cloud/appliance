@@ -24,7 +24,7 @@ BASELINE = os.path.join(ROOT, "scripts", "endpoint_urls.baseline.json")
 HOST = re.compile(r"(amazonaws\.com|googleapis\.com|windows\.net|\.azure\.com|azurewebsites\.net|cloudapp\.azure|run\.app|cloudfront\.net|cloudfunctions\.net)")
 BUILDS = re.compile(r"""f["']|%s|\.format\(""")
 BENIGN = re.compile(r"arn:|logName|logs/|type\.googleapis|xmlns|/doc/20|schemas|oauth|/auth/|www-authenticate|cloudtrail|CloudTrail|"
-                    r"requestParameters|\"source\"|_SOURCE|raise |_err\(|Error\(|message|Message|docs?:|#")
+                    r"origin\(\)|public_origin|requestParameters|\"source\"|_SOURCE|raise |_err\(|Error\(|message|Message|docs?:|#")
 
 
 def static_counts():
@@ -46,12 +46,12 @@ def probe():
     tun = "check-tunnel.example.net"
     rows = []
 
-    def call(method, path, svc, body=None, target=None):
+    def call(method, path, svc, body=None, target=None, query=None):
         h = {"host": tun, "x-forwarded-proto": "https", "content-type": "application/x-amz-json-1.0",
              "authorization": f"AWS4-HMAC-SHA256 Credential=AKIA/20250101/us-east-1/{svc}/aws4_request, SignedHeaders=host, Signature=x"}
         if target:
             h["x-amz-target"] = target
-        o = r.handle(method, path, {}, h, json.dumps(body).encode() if body is not None else b"")
+        o = r.handle(method, path, query or {}, h, body if isinstance(body, bytes) else (json.dumps(body).encode() if body is not None else b""))
         return json.loads(o["body"] or b"{}")
 
     def verdict(name, url):
@@ -67,6 +67,13 @@ def probe():
     call("POST", f"/restapis/{a.get('id')}/deployments", "apigateway", {"stageName": "prod"})
     verdict("API Gateway stage -> invokeUrl on the request host",
             call("GET", f"/restapis/{a.get('id')}/stages/prod", "apigateway").get("invokeUrl"))
+    stg = f"/restapis/{a.get('id')}/stages/prod/exports/oas30"
+    verdict("API Gateway OpenAPI export -> servers[0].url on the request host",
+            ((call("GET", stg, "apigateway").get("servers") or [{}])[0]).get("url"))
+    call("POST", "/storage/v1/b?project=p", "storage", {"name": "url-check"})
+    o = call("POST", "/upload/storage/v1/b/url-check/o", "storage", b"hi", query={"uploadType": "media", "name": "a.txt"})
+    verdict("GCS bucket selfLink on the request host", call("GET", "/storage/v1/b/url-check", "storage").get("selfLink"))
+    verdict("GCS object mediaLink on the request host", o.get("mediaLink"))
     return rows
 
 

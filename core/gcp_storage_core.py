@@ -34,6 +34,7 @@ PROJECT_NUMBER = "123456789012"
 from urllib.parse import unquote
 
 from core.object_store import ObjectStore
+from core import public_origin as _po
 from core import gcp_storageinsights_core as _si   # inventory reports + Anywhere Cache
 
 
@@ -404,7 +405,7 @@ def _bucket_view(store: ObjectStore, name: str) -> dict:
         "kind": "storage#bucket",
         "id": name,
         "name": name,
-        "selfLink": f"https://www.googleapis.com/storage/v1/b/{name}",
+        "selfLink": f"{_po.origin() or 'https://www.googleapis.com'}/storage/v1/b/{name}",
         "projectNumber": "000000000000",
         "metageneration": str(meta.get("metageneration", 1)),
         "location": loc,
@@ -844,8 +845,8 @@ def _object_view(bucket: str, name: str, entry: dict) -> dict:
         "md5Hash": entry.get("md5Hash", ""),
         "crc32c": entry.get("crc32c", ""),
         "etag": entry.get("etag", _etag()),
-        "selfLink": f"https://www.googleapis.com/storage/v1/b/{bucket}/o/{enc}",
-        "mediaLink": f"https://storage.googleapis.com/download/storage/v1/b/{bucket}/o/{enc}?alt=media",
+        "selfLink": f"{_po.origin() or 'https://www.googleapis.com'}/storage/v1/b/{bucket}/o/{enc}",
+        "mediaLink": f"{_po.origin() or 'https://storage.googleapis.com'}/download/storage/v1/b/{bucket}/o/{enc}?alt=media",
         **({"metadata": entry["metadata"]} if entry.get("metadata") else {}),
         **({"retention": entry["retention"]} if entry.get("retention") else {}),
         **{k: entry[k] for k in ("contentEncoding", "contentDisposition", "contentLanguage", "cacheControl",
@@ -1145,7 +1146,7 @@ _TOPIC_RE = re.compile(r"^(?://pubsub\.googleapis\.com/)?(projects/[^/]+/topics/
 
 def _notif_view(bucket: str, nid: str, n: dict) -> dict:
     out = {"kind": "storage#notification", "id": nid, "topic": n["topic"], "payload_format": n["payload_format"],
-           "etag": n["etag"], "selfLink": f"https://www.googleapis.com/storage/v1/b/{bucket}/notificationConfigs/{nid}"}
+           "etag": n["etag"], "selfLink": f"{_po.origin() or 'https://www.googleapis.com'}/storage/v1/b/{bucket}/notificationConfigs/{nid}"}
     for k in ("event_types", "object_name_prefix", "custom_attributes"):
         if n.get(k):
             out[k] = n[k]
