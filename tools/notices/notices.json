@@ -758,6 +758,38 @@
       "note": "Built by wasm/vm/build-image.sh from Alpine packages; contains GPL-2.0 components (Linux kernel, busybox, git) among others under their own licences. Corresponding source: https://git.alpinelinux.org/aports and https://www.kernel.org/ . Counsel to confirm the source-offer wording for the shipped initramfs."
     },
     {
+      "name": "Debian guest image (kernel, python3, git, apt/dpkg, dropbear and others)",
+      "kind": "vendored",
+      "version": "Debian 12 bookworm (i386)",
+      "paths": [
+        "wasm/vm/image/debian"
+      ],
+      "licence": "mixed-os",
+      "alsoLicences": [
+        "gpl-2.0"
+      ],
+      "upstream": "https://www.debian.org/",
+      "copyright": "The respective package authors",
+      "verified": "confirm",
+      "note": "Built by wasm/vm/tools/build-debian-image.py from Debian packages (initramfs listing: wasm/vm/image/debian/manifest.json); each package keeps its own licence (see /usr/share/doc/*/copyright inside the image) and the image contains GPL-2.0 components (Linux kernel, git, dpkg, busybox). Corresponding source: https://sources.debian.org/ and `apt source <package>`. Counsel to confirm the source-offer wording for the shipped initramfs. Downloaded on first launch of a Debian instance, not bundled in the page."
+    },
+    {
+      "name": "Buildroot guest image (Linux kernel and busybox)",
+      "kind": "vendored",
+      "version": "Buildroot 2024.05.2, kernel 6.8.12 (i386)",
+      "paths": [
+        "wasm/vm/image/buildroot"
+      ],
+      "licence": "gpl-2.0",
+      "alsoLicences": [
+        "bsd-2-clause"
+      ],
+      "upstream": "https://buildroot.org/",
+      "copyright": "The Buildroot developers and the respective package authors",
+      "verified": "confirm",
+      "note": "Prebuilt single bzImage from the v86 project's Buildroot image (kernel + busybox shell only); GPL-2.0 components. Corresponding source: https://buildroot.org/downloads/ and https://www.kernel.org/ . Counsel to confirm the source-offer wording. Downloaded on first launch of a Buildroot instance."
+    },
+    {
       "name": "xterm.js",
       "kind": "vendored",
       "version": "",

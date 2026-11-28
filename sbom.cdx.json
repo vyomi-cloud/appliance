@@ -1,7 +1,7 @@
 {
  "bomFormat": "CycloneDX",
  "specVersion": "1.5",
- "serialNumber": "urn:uuid:67c7c22f-6c31-56d6-be52-25b43db31886",
+ "serialNumber": "urn:uuid:02ed788f-005c-54ec-b938-a430c776565e",
  "version": 1,
  "metadata": {
   "component": {
@@ -1695,6 +1695,81 @@
     }
    ],
    "version": "Alpine 3.21 (i386)"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:Debian guest image (kernel, python3, git, apt/dpkg, dropbear and others)",
+   "name": "Debian guest image (kernel, python3, git, apt/dpkg, dropbear and others)",
+   "supplier": {
+    "name": "The respective package authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "name": "Mixed (each OS package keeps its own licence; see /usr/share/doc/*/copyright inside the image)",
+      "url": "https://www.debian.org/legal/licenses/"
+     }
+    },
+    {
+     "license": {
+      "id": "GPL-2.0-only"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://www.debian.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/vm/image/debian"
+    }
+   ],
+   "version": "Debian 12 bookworm (i386)"
+  },
+  {
+   "type": "library",
+   "bom-ref": "component:vendored:Buildroot guest image (Linux kernel and busybox)",
+   "name": "Buildroot guest image (Linux kernel and busybox)",
+   "supplier": {
+    "name": "The Buildroot developers and the respective package authors"
+   },
+   "licenses": [
+    {
+     "license": {
+      "id": "GPL-2.0-only"
+     }
+    },
+    {
+     "license": {
+      "id": "BSD-2-Clause"
+     }
+    }
+   ],
+   "externalReferences": [
+    {
+     "type": "website",
+     "url": "https://buildroot.org/"
+    }
+   ],
+   "properties": [
+    {
+     "name": "vyomi:kind",
+     "value": "vendored"
+    },
+    {
+     "name": "vyomi:path",
+     "value": "wasm/vm/image/buildroot"
+    }
+   ],
+   "version": "Buildroot 2024.05.2, kernel 6.8.12 (i386)"
   },
   {
    "type": "library",

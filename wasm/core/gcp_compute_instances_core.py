@@ -608,7 +608,8 @@ def set_ssh_keys(store, project, zone, name, payload):
     return _operation(store, project, zone, "setMetadata", name, _selflink(full))
 
 
-_IMAGE_OS = {"alpine-3-21": ("Alpine Linux 3.21", "alpine", "3.21"), "debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12"), "debian-11": ("Debian GNU/Linux 11 (bullseye)", "debian", "11"),
+_IMAGE_OS = {"alpine-3-21": ("Alpine Linux 3.21", "alpine", "3.21"), "debian-12-i386": ("Debian GNU/Linux 12 (bookworm), 32-bit x86", "debian", "12"),
+             "buildroot-2024-i386": ("Buildroot 2024.05, 32-bit x86", "buildroot", "2024.05"), "debian-12": ("Debian GNU/Linux 12 (bookworm)", "debian", "12"), "debian-11": ("Debian GNU/Linux 11 (bullseye)", "debian", "11"),
              "ubuntu-2404": ("Ubuntu 24.04 LTS", "ubuntu", "24.04"), "ubuntu-2204": ("Ubuntu 22.04 LTS", "ubuntu", "22.04"),
              "rocky-linux-9": ("Rocky Linux 9", "rocky", "9"), "cos": ("Container-Optimized OS", "cos", "stable")}
 
@@ -665,7 +666,7 @@ def get_os_info(store, project, zone, name):
                 "hostname": g.get("hostname") or "%s.%s.c.%s.internal" % (name, zone, project),
                 "kernel": g.get("kernel", ""), "architecture": g.get("architecture") or "i686", "machineType": mt,
                 "uptimeSeconds": g.get("uptimeSeconds"), "memoryKb": g.get("memoryKb"), "reportedAt": g.get("reportedAt"),
-                "note": "Read from the running in-browser VM (v86, 32-bit x86 Alpine), not from the boot image you picked."}
+                "note": "Read from the running in-browser VM (v86, 32-bit x86), not from a real cloud image."}
     return {"kind": "vyomi#instanceOsInfo", "instance": name, "status": inst["status"], "source": "image",
             "prettyName": pretty, "id": osid, "version": ver, "hostname": "%s.%s.c.%s.internal" % (name, zone, project),
             "architecture": "x86_64", "machineType": mt,
@@ -1538,7 +1539,28 @@ def _public_image(project, family, name, desc):
     return {"kind": "compute#image", "id": str(zlib.crc32(full.encode()) * 1000003), "creationTimestamp": "2024-11-12T00:00:00.000-08:00",
             "name": name, "description": desc, "sourceType": "RAW", "status": "READY", "archiveSizeBytes": "4000000000",
             "diskSizeGb": "10", "family": family, "selfLink": _selflink(full), "labelFingerprint": "42WmSpB8rSM=",
-            **({"vyomiSubstrate": "nano", "vyomiRunnable": project == "vyomi-nano-cloud"} if _nano_listing() else {})}
+            **(_nano_image_flags(project, family) if _nano_listing() else {})}
+
+
+def nano_image_key_of(store, inst) -> str:
+    """Catalog key (core/compute_sizes.py NANO_CATALOG) of the image an instance was booted from; Alpine (the default) when it names none of them."""
+    from core import compute_sizes as _cs
+    for d in inst.get("disks", []) or []:
+        if d.get("boot"):
+            tail = "/disks/" + _last(d.get("source", ""))
+            for k, disk in (getattr(store, "disks", {}) or {}).items():
+                if k.endswith(tail):
+                    return _cs.nano_image_key(str(disk.get("sourceImage") or "")) or _cs.NANO_DEFAULT_KEY
+    return _cs.NANO_DEFAULT_KEY
+
+
+def _nano_image_flags(project, family):
+    """Nano: runnable only for a RUNNABLE catalog image of the vyomi-nano-cloud project; a Phase B image carries its reason."""
+    from core import compute_sizes as _cs
+    k = _cs.nano_image_key(family) if project == "vyomi-nano-cloud" else None
+    return {"vyomiSubstrate": "nano", "vyomiRunnable": _cs.nano_image_runnable(k),
+            **({"vyomiReason": _cs.nano_image_reason(k)} if k and _cs.nano_image_reason(k) else {}),
+            **({"vyomiImageKey": k} if k else {})}
 
 
 def _nano_listing():
@@ -1551,8 +1573,9 @@ def _public_images_map():
     from core import compute_sizes as _cs
     if not _cs.images_restricted():
         return PUBLIC_IMAGES
-    a = _cs.NANO_IMAGES["gcp"]          # Nano lists the whole catalog (the console greys the ones the VM cannot boot) plus its own image
-    return {**PUBLIC_IMAGES, a["project"]: [(a["family"], a["name"], a["description"])]}
+    # Nano lists the whole catalog (the console greys the ones the VM cannot boot) plus its own images (Alpine, Debian, Buildroot + the disabled Phase B ones)
+    specs = _cs.nano_image_specs("gcp")
+    return {**PUBLIC_IMAGES, specs[0]["project"]: [(a["family"], a["name"], a["description"]) for a in specs]}
 
 
 def _nano_image_block(store, project, src):
@@ -1562,9 +1585,9 @@ def _nano_image_block(store, project, src):
         return
     m = re.search(r"(?:^|/)projects/([^/]+)/global/images/(.+)$", src)
     prj, rest = m.groups() if m else (project, src)
-    a = _cs.NANO_IMAGES["gcp"]
-    if prj == a["project"] and rest.split("/")[-1] in (a["family"], a["name"]):
-        return
+    for a in _cs.nano_image_specs("gcp"):
+        if a["runnable"] and prj == a["project"] and rest.split("/")[-1] in (a["family"], a["name"]):
+            return
     if prj == project and "projects/%s/global/images/%s" % (project, rest) in store.images:
         return          # a customer image made in this project (from a Nano disk)
     raise _E(404, "NOT_FOUND", "The resource 'projects/%s/global/images/%s' was not found. %s" % (prj, rest, _cs.image_rejection("gcp", rest.split("/")[-1])))

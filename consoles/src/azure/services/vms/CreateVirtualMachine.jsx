@@ -13,7 +13,7 @@ import CreateWizard, { FormRow, FormSection } from "../../kit/CreateWizard.jsx";
 import { Glyph } from "../../kit/common.jsx";
 import { useSubscription } from "../../kit/subscription.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, NANO_CATALOG, NANO_DEFAULT, nanoEntryByAzureDisplay, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 import { WINDOWS_IMAGES_ENABLED, WINDOWS_IMAGES_REASON } from "../../../common/windowsImages.js";
 import { TagRows } from "./VmBlade.jsx";
 
@@ -52,7 +52,8 @@ export default function CreateVirtualMachine() {
   const sizeNote = sizesNote(sizeSubstrate(sizes.data));
   const nano = onNano(sizes.data);                     // Nano: the in-browser VM boots one image (Alpine, 32-bit x86)
   // On Nano the image / architecture are the one guest the browser VM runs (the form's other values would be refused by the core)
-  useEffect(() => { if (nano) setF((x) => ({ ...x, image: NANO_IMAGES.azure.display, architecture: NANO_IMAGES.azure.arch, imageReference: NANO_IMAGES.azure.ref })); }, [nano]);
+  useEffect(() => { if (nano) setF((x) => (nanoEntryByAzureDisplay(x.image)?.runnable ? x : { ...x, image: NANO_DEFAULT.azure.display, architecture: NANO_DEFAULT.azure.arch, imageReference: NANO_DEFAULT.azure.ref })); }, [nano]);
+  const nanoImageChange = (_, d) => { const e = nanoEntryByAzureDisplay(d.value); if (e && e.runnable) setF((x) => ({ ...x, image: e.azure.display, architecture: e.azure.arch, imageReference: e.azure.ref })); };
   // Nano / Mesh list only the sizes they can run: keep the selection on one of them
   useEffect(() => { const d = (sizes.data || []).filter(runnableRow); if (d.length && !d.some((s) => s.name === f.size)) setF((x) => ({ ...x, size: d[0].name })); }, [sizes.data]);
 
@@ -113,10 +114,11 @@ export default function CreateVirtualMachine() {
         </FormRow>
         <FormRow label="Image" required htmlFor="vm-image">
           {nano
-            ? <Select id="vm-image" value={NANO_IMAGES.azure.display} aria-label="Image"><option>{NANO_IMAGES.azure.display}</option>{["Ubuntu Server 24.04 LTS - x64 Gen2", "Windows Server 2022 Datacenter", "Debian 12"].map((o) => <option key={o} disabled title={NANO_REASON}>{o} ({NANO_REASON})</option>)}</Select>
+            ? <Select id="vm-image" value={f.image} onChange={nanoImageChange} aria-label="Image">{NANO_CATALOG.map((e) => e.runnable ? <option key={e.key} value={e.azure.display}>{e.azure.display}</option> : <option key={e.key} value={e.azure.display} disabled title={e.reason}>{e.azure.display} ({e.reason})</option>)}{["Ubuntu Server 24.04 LTS - x64 Gen2", "Windows Server 2022 Datacenter", "Debian 12"].map((o) => <option key={o} disabled title={NANO_REASON}>{o} ({NANO_REASON})</option>)}</Select>
             : <Select id="vm-image" value={f.image} onChange={set("image")} aria-label="Image"><option>Ubuntu Server 24.04 LTS - x64 Gen2</option><option disabled={!WINDOWS_IMAGES_ENABLED} title={WINDOWS_IMAGES_REASON}>{`Windows Server 2022 Datacenter${WINDOWS_IMAGES_ENABLED ? "" : " (not supported yet)"}`}</option><option>Debian 12</option></Select>}
         </FormRow>
         {nano && <FormRow label=""><span data-testid="compute-images-note" style={{ fontSize: 12, opacity: 0.75 }}>{IMAGES_NOTE}</span></FormRow>}
+        {nano && <FormRow label=""><span data-testid="image-summary" style={{ fontSize: 12 }}>{(nanoEntryByAzureDisplay(f.image) || NANO_DEFAULT).summary}</span></FormRow>}
         <FormRow label="VM architecture"><RadioGroup layout="horizontal" value={f.architecture} onChange={set("architecture")} aria-label="VM architecture"><Radio value="Arm64" label="Arm64" disabled={nano} title={nano ? NANO_REASON : undefined} /><Radio value="x64" label="x64" /></RadioGroup></FormRow>
         <FormRow label="Run with Azure Spot discount"><Checkbox checked={f.spot} onChange={checked("spot")} aria-label="Run with Azure Spot discount" /></FormRow>
         <FormRow label="Size" required htmlFor="vm-size">

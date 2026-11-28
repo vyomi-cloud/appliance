@@ -14,7 +14,7 @@ import DeleteDialog from "../../kit/DeleteDialog.jsx";
 import { fmtDate, PageHeader } from "../../kit/common.jsx";
 import { useProject } from "../../project.js";
 import * as api from "./api.js";
-import { sizesNote, sizeSubstrate, onNano, NANO_IMAGES, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
+import { sizesNote, sizeSubstrate, onNano, gcpOsList, IMAGES_NOTE, NANO_REASON, runnableRow } from "../../../common/computeSizes.js";
 
 function CreateDialog({ open, onClose, onCreated }) {
   const notify = useNotify();
@@ -28,8 +28,8 @@ function CreateDialog({ open, onClose, onCreated }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const nano = onNano(machineTypes);                                   // Nano: the in-browser VM boots one image (Alpine, 32-bit x86)
-  const osImages = nano ? [NANO_IMAGES.gcp.os, ...api.OS_IMAGES] : api.OS_IMAGES;      // Nano: Alpine first and selected, the rest greyed out
-  const osOff = (i) => nano && i > 0;
+  const osl = gcpOsList(nano, api.OS_IMAGES);                          // Nano: Alpine / Debian / Buildroot enabled (Alpine selected), Phase B + Google's own greyed out
+  const osImages = osl.list, osOff = osl.off;
 
   useEffect(() => {
     if (!open) return;
@@ -77,11 +77,12 @@ function CreateDialog({ open, onClose, onCreated }) {
           </FormControl>
           <FormControl fullWidth>
             <InputLabel id="it-os-l">Boot disk — Operating system</InputLabel>
-            <Select labelId="it-os-l" label="Boot disk — Operating system" value={nano ? 0 : osIdx} onChange={(e) => setOsIdx(e.target.value)}>
-              {osImages.map(([, , , label], i) => <MenuItem key={i} value={i} disabled={osOff(i)} title={osOff(i) ? NANO_REASON : undefined}>{label}{osOff(i) ? ` (${NANO_REASON})` : ""}</MenuItem>)}
+            <Select labelId="it-os-l" label="Boot disk — Operating system" value={osIdx} onChange={(e) => setOsIdx(e.target.value)}>
+              {osImages.map(([, , , label], i) => <MenuItem key={i} value={i} disabled={osOff(i)} title={osOff(i) ? osl.reason(i) : undefined}>{label}{osOff(i) ? ` (${osl.reason(i)})` : ""}</MenuItem>)}
             </Select>
           </FormControl>
           {nano && <Typography variant="body2" color="text.secondary" data-testid="compute-images-note">{IMAGES_NOTE}</Typography>}
+          {nano && <Typography variant="body2" color="text.secondary" data-testid="os-summary">{osl.summary(osImages[osIdx] || osImages[0])}</Typography>}
           <Stack direction="row" spacing={2}>
             <FormControl fullWidth>
               <InputLabel id="it-dt-l">Boot disk type</InputLabel>
