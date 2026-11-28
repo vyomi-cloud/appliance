@@ -911,6 +911,14 @@
       "timeout": 600
     },
     {
+      "id": "nano-ui-aws-endpoint-origin",
+      "target": "nano",
+      "cloud": "aws",
+      "kind": "ui",
+      "cmd": "NANO_DIR=$PWD/wasm node wasm/ui-tests/nano-endpoint-origin.mjs",
+      "timeout": 300
+    },
+    {
       "id": "nano-ui-budget-savings",
       "target": "nano",
       "cloud": "all",

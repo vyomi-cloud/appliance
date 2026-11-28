@@ -1099,6 +1099,10 @@ async function handleWire(request, url) {
   }
   const headers = {};
   request.headers.forEach((v, k) => { headers[k] = v; });
+  // A service worker never sees the Host header, so core/public_origin had no origin here and every user-facing URL (SQS QueueUrl, SNS,
+  // API Gateway, GCS ...) fell back to the real cloud host. The URL a user's SDK/CLI can reach on Nano is the local relay (the same
+  // address consoles/src/common/connect.js sdkEndpoint() hands out), not this page's /nano/_wire path.
+  if (!headers["x-forwarded-host"]) { headers["x-forwarded-host"] = "127.0.0.1:8090"; headers["x-forwarded-proto"] = "http"; }
   const res = await runInPage(["_wire", "wire", method,
     { method, path: wirePath, query, headers, body_b64: raw.byteLength ? b64FromBuf(raw) : "" }]);
   if (!res || typeof res.status !== "number") return json({ ok: false, error: (res && res.error) || "bad /_wire response" }, 500);
