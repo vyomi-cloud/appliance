@@ -2077,6 +2077,8 @@ class AwsWireRouter:
         if _denied:
             return {"status": _denied["status"], "headers": _denied["headers"], "body": _denied["body"]}
         from core import observability_core as _obsc
+        from core import public_origin as _po
+        _po.set_from_headers(headers)   # user-facing URLs (QueueUrl, invoke URLs...) point at the simulator the client reached
         self._sched_pulse()
         p0 = path.split("?", 1)[0]
         if p0.startswith(_obsc.BASE + "/") or p0 == _obsc.BASE:

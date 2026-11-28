@@ -42,7 +42,7 @@ CORES = [
     "sql_store.py", "mysql_dialect.py", "db_endpoints.py", "rds_core.py",                  # RDS
     "iam_store.py", "iam_core.py",                  # IAM
     "lease.py",                                     # universal lease engine (SQS visibility timeout + Service Bus peek-lock) — vendored VERBATIM; MUST precede sqs_core / azure_servicebus_core
-    "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
+    "public_origin.py", "messaging_store.py", "sqs_core.py", "sns_core.py",  # SQS + SNS (eventing)
     "rds_data_core.py",                             # RDS Data API (HTTP SQL over the relay)
     "gcp_project.py",                               # GCP: the one project (ID + number), request normalization + Resource Manager
     "gcp_storageinsights_core.py",                  # GCP: Storage Insights inventory reports + Anywhere Cache (used by gcp_storage_core)

@@ -500,6 +500,18 @@ jobs:
           fi
           grep -c 'sdk-pass-rate' /tmp/RELEASE-CHECKS.md || true
 
+      # Endpoint URLs: every URL / connection string the simulator hands out must point at the simulator (the host the client reached,
+      # e.g. a tunnel), never at the real cloud. Runtime probe + a ratchet on hardcoded real-cloud hostnames. Rows are counted by checks-total.
+      - name: Endpoint URLs (simulator host, not the real cloud)
+        run: |
+          if [ ! -f scripts/check_endpoint_urls.py ]; then
+            git fetch -q origin ${{ needs.resolve.outputs.checks_ref }} && git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- scripts/check_endpoint_urls.py scripts/endpoint_urls.baseline.json || true
+          fi
+          if [ -f scripts/check_endpoint_urls.py ]; then
+            python3 scripts/check_endpoint_urls.py > /tmp/endpoint-urls.md || echo "::warning::endpoint URL check has failures"
+            { echo; cat /tmp/endpoint-urls.md; } >> /tmp/RELEASE-CHECKS.md; cat /tmp/endpoint-urls.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # One machine-readable `checks-total` line for the portal's "Checks run in the latest release": every row, Nano UI suite and SDK check
       # the report states (the portal used to count only the table rows, 277 of 1844 for v4.1.1).
       - name: Total checks (rows + UI suites + SDK)
