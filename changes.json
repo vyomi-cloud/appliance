@@ -1,8 +1,8 @@
 {
- "at": "2026-11-28T10:35:22+00:00",
+ "at": "2026-11-28T11:35:25+00:00",
  "baseline": false,
  "changes": [],
  "errors": [
-  "maven/com.google.cloud:google-cloud-firestore: The read operation timed out"
+  "maven/com.azure:azure-data-appconfiguration: The read operation timed out"
  ]
 }
