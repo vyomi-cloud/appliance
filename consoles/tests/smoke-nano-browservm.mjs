@@ -19,6 +19,7 @@ const check = (name, ok, detail = "") => { results.push({ name, ok }); console.l
 await mkdir(OUT, { recursive: true });
 const browser = await pw.chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1300 } });
+if (process.env.COOKIE) await ctx.addCookies([{ name: "cl_session", value: process.env.COOKIE, url: BASE }]);   // portal-served Nano sits behind sign-in
 const page = await ctx.newPage();
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
