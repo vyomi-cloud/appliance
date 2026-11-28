@@ -9,6 +9,7 @@
   },
   "homepage": "https://vyomi.cloud",
   "repository": "https://github.com/vyomi-cloud/claude-plugins",
+  "privacyPolicyUrl": "https://vyomi.cloud/privacy",
   "license": "MIT",
   "keywords": [
     "aws",

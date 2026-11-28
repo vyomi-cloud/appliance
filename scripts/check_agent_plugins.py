@@ -60,7 +60,10 @@ TUNNEL_PACKAGE = ROOT / "packaging" / "tunnel" / "package.json"
 NPX_TEXT_RE = re.compile(r"(?:npx(?:\s+-y)?\s+|\"-y\",\s*\")vyomi-tunnel(?:@([^\s`\"']+))?")
 EXACT_RE = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 # What the Claude directory accepts in .claude-plugin/plugin.json from an unverified organization (only what we use).
-CLAUDE_MANIFEST_KEYS = {"name", "version", "description", "author", "homepage", "repository", "license", "keywords"}
+# `privacyPolicyUrl`: the directory itself asks for it on a plugin with a remote MCP server (note PRIVACY_URL_MISSING,
+# seen 2026-11-23 on Vyomi Cloud 4.3.1); `network` stays out (refused from an unverified org, 2026-11-22).
+CLAUDE_MANIFEST_KEYS = {"name", "version", "description", "author", "homepage", "repository", "license", "keywords",
+                        "privacyPolicyUrl"}
 # Transports that need nothing installed on the user's machine (the hosted server at https://vyomi.cloud/mcp).
 REMOTE_TYPES = {"http", "streamable-http", "sse"}
 # The host a remote server may live on: a listing must never be able to point an installed plugin somewhere else.
