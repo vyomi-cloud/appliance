@@ -81,8 +81,8 @@ for (const [sub, root] of Object.entries(SUBS)) {
   await page.screenshot({ path: `${OUT}/aws-${sub}.png`, fullPage: false });
   if (sub === "nano") {
     check("[nano] aws note shown", await page.getByText(NOTE).count() > 0);
-    check("[nano] aws Quick Start lists the full set, only Alpine Linux enabled + selected", quick.length === 8 && same(quick.filter((q) => !q.off).map((q) => q.t), ["Alpine Linux"]) && quick.find((q) => q.t === "Alpine Linux").on && quick.some((q) => q.t === "Ubuntu" && q.off), JSON.stringify(quick));
-    check("[nano] aws AMI list keeps the catalog, only the Alpine i386 AMI enabled", amis.length >= 7 && enabled(amis).length === 1 && /^Alpine Linux 3\.21 \(i386\) - Vyomi Nano \(ami-/.test(enabled(amis)[0]) && disabledOf(amis).some((a) => /Amazon Linux/.test(a)), JSON.stringify(amis));
+    check("[nano] aws Quick Start lists the full set, only Alpine Linux and Debian (the runnable OSes) enabled, Alpine selected", quick.length === 8 && same(quick.filter((q) => !q.off).map((q) => q.t), ["Alpine Linux", "Debian"]) && quick.find((q) => q.t === "Alpine Linux").on && quick.some((q) => q.t === "Ubuntu" && q.off), JSON.stringify(quick));
+    check("[nano] aws AMI list keeps the catalog, only the three 32-bit Vyomi Nano AMIs (Alpine, Debian, Buildroot) enabled", amis.length >= 7 && enabled(amis).length === 3 && /^Alpine Linux 3\.21 \(i386\) - Vyomi Nano \(ami-/.test(enabled(amis)[0]) && enabled(amis).some((a) => /^Debian 12 \(i386\)/.test(a)) && enabled(amis).some((a) => /^Buildroot 2024\.05 \(i386, minimal\)/.test(a)) && disabledOf(amis).some((a) => /^Debian 12 \(x86_64, emulated\)/.test(a)) && disabledOf(amis).some((a) => /Amazon Linux/.test(a)), JSON.stringify(amis));
     check("[nano] aws AMI preselected is Alpine", /Alpine Linux 3\.21/.test(awsSel.ami), awsSel.ami);
     check("[nano] aws Architecture lists all three, only 32-bit (x86) enabled + selected", same(archs.map((a) => a.t), ["32-bit (x86)", "64-bit (x86)", "64-bit (Arm)"]) && same(enabled(archs), ["32-bit (x86)"]) && /32-bit/.test(awsSel.arch), JSON.stringify(archs));
     check("[nano] aws Instance type lists the full catalog, only the Nano sizes enabled", types.length > 14 && same(enabled(types).map((t) => t.split(" ")[0]), AWS_RUN) && disabledOf(types).some((t) => t.startsWith("m5.2xlarge")), JSON.stringify(types.map((t) => t.t)));
@@ -129,11 +129,11 @@ for (const [sub, root] of Object.entries(SUBS)) {
   const gcpAll = Object.values(gcpMt).flat();
   if (sub === "nano") {
     check("[nano] gcp note shown", await page.getByText(NOTE).count() > 0);
-    check("[nano] gcp Operating system keeps the catalog, only Alpine enabled + selected", oses.length === 5 && same(enabled(oses), ["Alpine Linux"]) && /Alpine Linux/.test(gcpOsSel) && disabledOf(oses).some((o) => o.startsWith("Debian")), JSON.stringify(oses));
+    check("[nano] gcp Operating system keeps the catalog, only Alpine, Debian and Buildroot (Vyomi Nano) enabled, Alpine selected", oses.length === 8 && same(enabled(oses), ["Alpine Linux", "Debian GNU/Linux (Vyomi Nano)", "Buildroot Linux (Vyomi Nano)"]) && /Alpine Linux/.test(gcpOsSel) && disabledOf(oses).some((o) => o.startsWith("Debian")), JSON.stringify(oses));
     check("[nano] gcp Version is the Alpine 3.21 (32-bit x86)", await page.getByLabel("Version").first().inputValue() === "Alpine Linux 3.21 (32-bit x86)");
     check("[nano] gcp Machine types list the full catalog, only the Nano sizes enabled", gcpAll.length > 5 && same(enabled(gcpAll).map((t) => t.split(" ")[0]), GCP_RUN) && disabledOf(gcpAll).some((t) => t.startsWith("e2-standard-4")), JSON.stringify(gcpAll.map((t) => t.t)));
     check("[nano] gcp preselected machine type is a runnable one", GCP_RUN.includes(gcpTypeSel.split(" ")[0]), gcpTypeSel);
-    check("[nano] gcp disabled entries carry the reason", oses.filter((o) => o.off).every((o) => o.t.includes(REASON)));
+    check("[nano] gcp disabled entries carry a reason (Mesh-only, or the 64-bit emulation note)", oses.filter((o) => o.off).every((o) => o.t.includes(REASON) || /emulat/.test(o.t)));
     await page.getByLabel("Name").first().fill("images-smoke-gcp"); posts.length = 0;
     await page.getByRole("button", { name: "Create", exact: true }).last().click(); await page.waitForTimeout(3000);
     const ins = posts.find((p) => /\/instances/.test(p.url) && p.body);
@@ -162,7 +162,7 @@ for (const [sub, root] of Object.entries(SUBS)) {
   await page.screenshot({ path: `${OUT}/azure-${sub}.png`, fullPage: false });
   if (sub === "nano") {
     check("[nano] azure note shown", await page.getByText(NOTE).count() > 0);
-    check("[nano] azure Image keeps the catalog, only Alpine enabled + selected", imgs.length === 4 && same(enabled(imgs), ["Alpine Linux 3.21 (32-bit x86) - Vyomi Nano"]) && imgSel.startsWith("Alpine Linux 3.21") && disabledOf(imgs).some((i) => /Ubuntu/.test(i) && i.includes(REASON)), JSON.stringify(imgs));
+    check("[nano] azure Image keeps the catalog, only the three 32-bit Vyomi Nano images enabled, Alpine selected", imgs.length === 7 && same(enabled(imgs), ["Alpine Linux 3.21 (32-bit x86) - Vyomi Nano", "Debian GNU/Linux 12 (32-bit x86) - Vyomi Nano", "Buildroot 2024.05 (32-bit x86, minimal) - Vyomi Nano"]) && imgSel.startsWith("Alpine Linux 3.21") && disabledOf(imgs).some((i) => /Ubuntu/.test(i) && i.includes(REASON)), JSON.stringify(imgs));
     check("[nano] azure VM architecture lists Arm64 (disabled) and x64 (enabled, selected)", azArch.length === 2 && azArch.find((a) => /Arm64/.test(a.t)).off && !azArch.find((a) => /x64/.test(a.t)).off && azArch.find((a) => /x64/.test(a.t)).on, JSON.stringify(azArch));
     check("[nano] azure Size lists the full catalog, only the Nano sizes enabled + a runnable one selected", azSizes.length > 5 && same(enabled(azSizes).map((t) => t.split(" ")[0]), AZ_RUN) && disabledOf(azSizes).some((t) => t.startsWith("Standard_D4s_v5")) && AZ_RUN.includes(azSizeSel), JSON.stringify(azSizes.map((t) => t.t)) + azSizeSel);
     await page.getByLabel("Virtual machine name").first().fill("imgsmoke");

@@ -79,6 +79,7 @@ A.gcp = {
     return out;
   },
   async create(img) {
+    await page.goto(UI + this.home); await ready();   // later images start from a VM detail page: go home first
     await page.getByRole("heading", { name: "Welcome" }).waitFor({ timeout: 120000 });
     const project = "nano-project";   // Nano's one project (core/gcp_project.NANO_PROJECT)
     const name = `vm-${Date.now() % 100000}`, zone = "us-central1-a";

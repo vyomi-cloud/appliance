@@ -120,8 +120,10 @@
     "echo \"HN=$(hostname)\"; echo \"KR=$(uname -sr)\"; echo \"AR=$(uname -m)\"; echo \"UP=$(cut -d' ' -f1 /proc/uptime)\"; " +
     "echo \"MEM=$(grep MemTotal /proc/meminfo | tr -s ' ' | cut -d' ' -f2)\"; echo VYGA-$((1+1))-E\r";
   const probed = new Map();     // id -> {tries, done}
+  const lastTyped = new Map();   // id -> ms of the last keystroke the user (or a test) sent: the probe never types over a user
   function probeGuest(id) {
     const it = readReg()[id]; if (!it || it.cloud !== "gcp") return Promise.resolve(false);
+    if (Date.now() - (lastTyped.get(id) || 0) < 4000) return Promise.resolve(false);   // user is typing: retry later (maybeProbe retries)
     const h = attach(id);
     return new Promise((resolve) => {
       let buf = "";
@@ -573,7 +575,7 @@
   })();
 
   function onSerial(fn) { serialSubs.add(fn); return () => serialSubs.delete(fn); }
-  function serialSend(cloud, ref, data) { const it = readReg()[vmId(cloud, ref)]; if (it) attach(it.id).port.postMessage({ type: "serial-in", data }); }
+  function serialSend(cloud, ref, data) { const it = readReg()[vmId(cloud, ref)]; if (it) { lastTyped.set(it.id, Date.now()); attach(it.id).port.postMessage({ type: "serial-in", data }); } }
 
 
   // ── console view: show the VM's real power state ─────────────────────────

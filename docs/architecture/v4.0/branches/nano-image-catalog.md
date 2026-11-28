@@ -32,5 +32,22 @@ Not enabled: Tiny Core (VGA console, 12.5 s), FreeDOS, KolibriOS (not cloud imag
 - Is console-only acceptable for phase 2.
 - Legal review of container2wasm and GPL/LGPL compliance before phase 2.
 
+## Phase 1 results (2026-11-28, headless Chromium, local preview server, local image files)
+- Core tests: test_compute_images_core, test_compute_sizes_core, test_windows_images_disabled_core all pass.
+- Browser-VM smoke (every runnable image boots to a shell and is probed for exactly what it claims): AWS 37/37, GCP 37/37, Azure 38/38.
+- Compute-images UI smoke (Nano + Mesh pickers): 44/44 after updating 5 assertions from "only Alpine" to "Alpine + Debian + Buildroot enabled".
+- Boot to a shell, measured here: Debian 54-72 s, Buildroot 10-12 s (Azure reported 0 s once, unexplained; its probes still passed). The spike measured Debian in 7.7 s on a lighter setup; not reconciled.
+- Debian image is 56.7 MB gzip (git, python3, apt/dpkg), larger than the spike's 38.5 MB PoC.
+
+## Fixed along the way
+- GCP guest probe (`nano-vm-host.js`, on trunk) typed `echo VYGA...` into the shell 6 s after boot and collided with whatever the user was typing. It now waits 4 s after the last keystroke and retries.
+- Smoke harness: GCP create step did not return to the console home before creating the next image.
+- THIRD-PARTY-NOTICES + SBOM: Debian and Buildroot guest images added (wording still marked "counsel to confirm").
+
+## Seen, not caused here
+- AWS Buildroot `cat /etc/os-release` timed out once, did not repeat on a rerun (not diagnosed).
+- `tests/conformance/test_ai_notices.py` has 17 failures (vendored wheels) that fail identically on untouched trunk.
+
 ## Not done / not verified
-Nothing in this branch has been released. Phase 1 results will be recorded here once the suites have run.
+Not merged or released. Image hosting (`base_url` is still empty) is undecided, so a deployed Nano cannot fetch Debian or Buildroot yet.
+Not tested: a real portal-served Nano, other browsers, slow networks, the cold first-launch download.
