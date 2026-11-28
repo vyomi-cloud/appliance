@@ -74,6 +74,21 @@ def probe():
     o = call("POST", "/upload/storage/v1/b/url-check/o", "storage", b"hi", query={"uploadType": "media", "name": "a.txt"})
     verdict("GCS bucket selfLink on the request host", call("GET", "/storage/v1/b/url-check", "storage").get("selfLink"))
     verdict("GCS object mediaLink on the request host", o.get("mediaLink"))
+    # Azure Storage: primaryEndpoints.blob is a path-style data plane on the request host (the SDK-verified Azurite shape)
+    subs = json.loads(r.handle("GET", "/subscriptions", {"api-version": "2020-01-01"}, {"host": tun, "x-forwarded-proto": "https"}, b"")["body"])
+    sid = subs["value"][0]["subscriptionId"]
+    az = {"host": tun, "x-forwarded-proto": "https", "content-type": "application/json"}
+    rg = f"/subscriptions/{sid}/resourceGroups/url-check"
+    r.handle("PUT", rg, {"api-version": "2021-04-01"}, az, b'{"location":"eastus"}')
+    acct = json.loads(r.handle("PUT", rg + "/providers/Microsoft.Storage/storageAccounts/urlcheck1", {"api-version": "2023-01-01"}, az,
+                               b'{"location":"eastus","sku":{"name":"Standard_LRS"},"kind":"StorageV2"}')["body"])
+    blob = ((acct.get("properties") or {}).get("primaryEndpoints") or {}).get("blob", "")
+    ok = blob.startswith(f"https://{tun}/azure-data/blob/urlcheck1") and not HOST.search(blob)
+    rows.append((ok, "Azure Storage primaryEndpoints.blob on the request host", blob or "(none)"))
+    # OpenSearch: the data plane is served at the root of the origin, so the domain endpoint is the request host
+    call("POST", "/2021-01-01/opensearch/domain", "es", {"DomainName": "url-check"})
+    ep = ((call("GET", "/2021-01-01/opensearch/domain/url-check", "es").get("DomainStatus") or {}).get("Endpoint")) or ""
+    rows.append((ep == tun, "OpenSearch domain Endpoint is the request host", ep or "(none)"))
     return rows
 
 

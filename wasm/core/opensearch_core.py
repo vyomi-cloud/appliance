@@ -85,7 +85,12 @@ _VERSIONS = ["OpenSearch_2.17", "OpenSearch_2.15", "OpenSearch_2.13", "OpenSearc
 
 
 def _domain_status(d):
-    return {k: v for k, v in d.items() if not k.startswith("_")}
+    from core import public_origin as _po
+    out = {k: v for k, v in d.items() if not k.startswith("_")}
+    host = _po.origin().split("://", 1)[-1]
+    if host and out.get("Endpoint"):
+        out["Endpoint"] = host          # the data plane is served at the root of the origin the client reached (tunnel/LAN/localhost)
+    return out
 
 
 def _create_domain(st, p):
@@ -221,7 +226,13 @@ def _policy_matches(st, ptype, name, rtype="collection"):
 
 
 def _coll_detail(c):
-    return {k: v for k, v in c.items() if not k.startswith("_")}
+    from core import public_origin as _po
+    out = {k: v for k, v in c.items() if not k.startswith("_")}
+    o = _po.origin()
+    if o:
+        out["collectionEndpoint"] = o
+        out["dashboardEndpoint"] = o + "/_dashboards"
+    return out
 
 
 def serverless_dispatch(store, target, body):

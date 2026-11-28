@@ -2523,6 +2523,9 @@ class AwsWireRouter:
             self.az_arm._base = f"{lheaders.get('x-forwarded-proto', 'http')}://{host}" if host else ""
             r = self.az_arm.handle(method, path, query or {}, self._json_body(body) if body else None)
             out = r.get("body")
+            if r["status"] < 300 and isinstance(out, dict) and "storageaccounts" in path.lower():
+                from core import azure_storage_ext_core as _sx
+                _sx.patch_view_endpoints(out, self.az_arm._base)   # primaryEndpoints on the host the client reached (tunnel/LAN/localhost)
             if _SQL_DB.search(path.split("?", 1)[0]) and r["status"] < 300 and isinstance(out, dict):
                 out.setdefault("properties", {})["connectionInfo"] = self._azure_sql_conn(self.az_arm._base)
             hdrs = dict(r.get("headers") or {})

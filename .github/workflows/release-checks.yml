@@ -505,11 +505,17 @@ jobs:
       - name: Endpoint URLs (simulator host, not the real cloud)
         run: |
           if [ ! -f scripts/check_endpoint_urls.py ]; then
-            git fetch -q origin ${{ needs.resolve.outputs.checks_ref }} && git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- scripts/check_endpoint_urls.py scripts/endpoint_urls.baseline.json || true
+            git fetch -q origin ${{ needs.resolve.outputs.checks_ref }} && git checkout -q origin/${{ needs.resolve.outputs.checks_ref }} -- scripts/check_endpoint_urls.py scripts/check_endpoint_sdk.py scripts/endpoint_urls.baseline.json || true
           fi
           if [ -f scripts/check_endpoint_urls.py ]; then
             python3 scripts/check_endpoint_urls.py > /tmp/endpoint-urls.md || echo "::warning::endpoint URL check has failures"
             { echo; cat /tmp/endpoint-urls.md; } >> /tmp/RELEASE-CHECKS.md; cat /tmp/endpoint-urls.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # the same URLs, exercised with the real SDKs (boto3, azure-storage-blob/-queue) against the router on a loopback port
+          if [ -f scripts/check_endpoint_sdk.py ]; then
+            python3 -m pip -q install boto3 azure-storage-blob azure-storage-queue requests >/dev/null 2>&1 || true
+            python3 scripts/check_endpoint_sdk.py > /tmp/endpoint-sdk.md 2>/dev/null || echo "::warning::endpoint SDK check has failures"
+            { echo; cat /tmp/endpoint-sdk.md; } >> /tmp/RELEASE-CHECKS.md; cat /tmp/endpoint-sdk.md >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # One machine-readable `checks-total` line for the portal's "Checks run in the latest release": every row, Nano UI suite and SDK check
